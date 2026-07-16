@@ -1,0 +1,41 @@
+# Memory無限 Agent Rules
+
+## Objective
+
+Use Memory無限 to preserve conversation history outside the active context window and restore only the historical material needed for the current task.
+
+## Required behavior
+
+1. Save every source message before any runtime context compression.
+2. Preserve timestamp, timezone, speaker, message ID, conversation ID, turn order, and exact stored text.
+3. Keep raw records append-only. Store corrections as new linked records.
+4. Count one user message and its corresponding assistant response as one completed dialogue round.
+5. Generate a Level-1 summary after the configured number of completed rounds, normally 20.
+6. Generate a parent summary after the configured number of ungrouped child summaries, normally 10.
+7. Persist every summary and index as a file. Keep all child summaries after grouping.
+8. Include precise source ranges in every summary.
+9. Record explicit topics, conclusions, unresolved questions, and concepts only.
+10. Do not infer long-term preferences, hidden motivations, or subjective importance.
+11. Search concept and time indexes first, route through summaries, and verify against raw text before making historical claims.
+12. Clearly identify retrieval confidence as `verified`, `summary-supported`, `index-only`, or `unverified`.
+13. Keep runtime compression temporary and separate from persistent memory.
+14. Use heartbeat for validation and recovery. Keep count-based events as primary triggers.
+15. Verify summary source SHA-256 before ingestion and report source drift without rewriting history.
+16. Preview state or index reconstruction before applying it; archive the previous derived files before replacement.
+17. Treat raw or summary hash mismatches as integrity failures that require review, not automatic repair.
+
+## Authority order
+
+```text
+Raw conversation segment
+  > Level-1 summary
+  > Level-2 summary
+  > higher-level summary
+  > unverified recollection
+```
+
+When sources conflict, retrieve the raw segment, use it as authoritative, log the discrepancy, and preserve the earlier summary unchanged.
+
+## Core principle
+
+Original conversations are the source of truth. Summaries are indexes. Indexes locate history. Retrieved history supports reasoning.

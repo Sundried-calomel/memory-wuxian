@@ -1,0 +1,45 @@
+memory:
+  root_directory: "./memory"
+  timezone: "local"
+
+raw:
+  format: "markdown-json-records"
+  split_by: "day"
+  append_only: true
+  flush_after_each_message: true
+
+summaries:
+  level_1_trigger_rounds: 20
+  higher_level_trigger_count: 10
+  maximum_summary_depth: 8
+  persist_all_levels: true
+  immutable: true
+
+indexes:
+  timeline: true
+  concepts: true
+  machine_readable_jsonl: true
+
+retrieval:
+  verify_against_raw: true
+  context_messages_before: 3
+  context_messages_after: 3
+  maximum_initial_candidates: 10
+  log_queries: true
+
+heartbeat:
+  create_pending_jobs: true
+  retry_failed_jobs: true
+  validate_references: true
+  detect_overlapping_ranges: true
+
+integrity:
+  hash_algorithm: "sha256"
+  verify_raw_records: true
+  verify_summary_sources: true
+  verify_summary_files: true
+
+safety:
+  redact_secrets: true
+  atomic_writes: true
+  file_locking: true

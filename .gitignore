@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+memory/state.json
+memory/raw/**/*.md
+memory/summaries/level-*/*.md
+memory/summaries/registry.jsonl
+memory/indexes/*.jsonl
+memory/indexes/timeline.md
+memory/indexes/concepts.md
+memory/retrieval/*
+memory/pending/*
+memory/archive/*
+memory/.locks/*

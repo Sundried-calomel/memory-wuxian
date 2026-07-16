@@ -1,0 +1,8 @@
+[project]
+name = "memory-wuxian"
+version = "0.2.0"
+description = "File-backed hierarchical and verifiable conversation memory"
+requires-python = ">=3.9"
+
+[tool.unittest]
+test-directory = "tests"

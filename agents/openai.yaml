@@ -1,0 +1,4 @@
+interface:
+  display_name: "Memory無限"
+  short_description: "Persist, index, retrieve, and verify conversation history"
+  default_prompt: "Use $memory-wuxian to preserve this conversation and retrieve verified historical context when needed."
