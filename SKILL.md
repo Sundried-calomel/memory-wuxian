@@ -19,6 +19,8 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 8. Keep runtime compression separate from permanent memory.
 9. Verify SHA-256 source integrity before summary ingestion.
 10. Rebuild only derived state and indexes; never repair integrity failures by rewriting history.
+11. When Codex integration is enabled, import only user-visible dialogue and preserve native source references.
+12. Complete the primary archive write before creating its external backup snapshot.
 
 ## Operating workflow
 
@@ -30,6 +32,8 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 6. Base answers on the recovered raw segment and report the returned verification level.
 7. Run `heartbeat` for validation, pending-job recovery, and count-trigger checks. Do not use heartbeat as the primary trigger.
 8. Preview `rebuild-state` or `rebuild-indexes` before applying a recovery operation.
+9. Use `sync-codex` to import native Codex rollout JSONL incrementally. Repeated synchronization must remain idempotent.
+10. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
 
 ## Commands
 
@@ -37,6 +41,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 python3 scripts/memory_cli.py init
 python3 scripts/memory_cli.py append --speaker user --text "..."
 python3 scripts/memory_cli.py append --speaker assistant --text "..."
+python3 scripts/memory_cli.py sync-codex --session-file ~/.codex/sessions/YYYY/MM/DD/rollout-....jsonl
 python3 scripts/memory_cli.py status
 python3 scripts/memory_cli.py make-summary-job
 python3 scripts/memory_cli.py ingest-summary --job memory/pending/<job>.json --summary-json <summary>.json
@@ -48,6 +53,7 @@ python3 scripts/memory_cli.py rebuild-indexes --apply
 python3 scripts/memory_cli.py heartbeat --check-only
 python3 scripts/memory_cli.py heartbeat
 python3 scripts/memory_cli.py heartbeat --repair
+python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
 ```
 
 Pass `--root <memory-directory>` before the subcommand to use a memory archive outside this skill folder.
@@ -62,4 +68,4 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 
 ## Client integration boundary
 
-Do not claim that the skill automatically intercepts Codex client events unless the client provides and configures such a hook. The CLI reliably stores messages explicitly passed to it. An Agent integration must invoke `append` around each dialogue turn to provide automatic capture behavior.
+Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or another configured client hook. The LaunchAgent watches native rollout JSONL files and invokes the same deterministic `sync-codex` adapter every 15 seconds. It imports user messages plus visible assistant commentary/final answers; it excludes system prompts, internal reasoning, tool calls, and tool output.

@@ -29,3 +29,15 @@ Store SHA-256 for new raw records, summary source sets, and summary files. Recal
 Status: Accepted.
 
 Reconstruct derived state and indexes from persisted raw and summary files. Preview differences by default. Require `--apply` or heartbeat `--repair` for writes, and archive the previous derived files first.
+
+## D-006: Codex integration is an idempotent source adapter
+
+Status: Accepted.
+
+Read native Codex rollout JSONL incrementally and persist per-session cursors. Import user messages and visible assistant commentary/final answers. Exclude system instructions, internal reasoning, tool calls, and tool outputs. Use source-derived message IDs so retries cannot duplicate history. Count only a final assistant answer as completing a dialogue round.
+
+## D-007: Desktop backup follows the primary archive
+
+Status: Accepted.
+
+Write and index the primary archive first. After a successful mutation, create a timestamped external snapshot with a file-hash manifest and append an entry to the backup log. A backup never becomes the writable source of truth.

@@ -23,6 +23,9 @@ Use Memory無限 to preserve conversation history outside the active context win
 15. Verify summary source SHA-256 before ingestion and report source drift without rewriting history.
 16. Preview state or index reconstruction before applying it; archive the previous derived files before replacement.
 17. Treat raw or summary hash mismatches as integrity failures that require review, not automatic repair.
+18. When Codex synchronization is configured, import native rollout files incrementally and preserve source session, line, and phase metadata.
+19. Preserve visible assistant commentary, but complete a dialogue round only when the corresponding final answer is persisted.
+20. After each successful primary-archive mutation, create and log the configured desktop snapshot before reporting the write as fully backed up.
 
 ## Authority order
 

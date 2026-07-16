@@ -12,6 +12,8 @@
 8. Agent operating procedure
 9. Version-1 boundary
 10. Integrity and reconstruction
+11. Codex client integration
+12. External backup snapshots
 
 ## 1. Storage layout
 
@@ -145,3 +147,17 @@ Heartbeat modes are distinct:
 - `--repair` rebuilds only deterministic derived inconsistencies after backup.
 
 Hash mismatches, missing historical boundaries, overlapping source ranges, and corrupted summary files remain integrity failures. Repair mode reports them and does not legitimize altered history by rebuilding over them.
+
+## 11. Codex client integration
+
+Use `sync-codex` as an input adapter for native rollout JSONL. Persist one cursor per Codex session under `memory/imports/codex/`. Derive stable message IDs from session ID, source line, and speaker. Cursor loss may cause a source line to be considered again, but stable IDs must turn that retry into a no-op or an explicit content-conflict error.
+
+Import only `event_msg` records representing `user_message` or visible `agent_message` phases `commentary` and `final_answer`. Do not import session/system instructions, internal reasoning, tool calls, tool output, token counters, or maintenance events. Commentary remains part of the exact visible transcript but does not close the pending dialogue round. `final_answer` closes it.
+
+Codex Desktop does not expose an in-process post-turn hook to a plain Skill. On macOS, the supplied LaunchAgent provides equivalent automatic capture by running the incremental adapter at a short interval. The activation timestamp prevents an installation from silently importing all older sessions; explicitly selected current sessions may be backfilled once before activation.
+
+## 12. External backup snapshots
+
+When backup is enabled, complete the primary raw/index/state mutation first. Then copy the archive to a new timestamped directory outside the primary root. Exclude transient lock files. Write a manifest containing the archive state and SHA-256/size of copied files, then atomically expose the completed snapshot and append `backup-log.jsonl` in the backup root.
+
+Create one snapshot per successful synchronization batch or other logical mutation. A no-op synchronization creates no snapshot. Desktop backups are recovery copies; the workspace archive remains the writable authority.

@@ -212,6 +212,100 @@ safety:
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn("Refusing to rebuild indexes over integrity failures", refused.stderr)
 
+    def test_codex_incremental_sync_filters_internal_events_and_backs_up(self):
+        backup_root = self.base / "desktop-backups"
+        with self.config.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f'''backup:
+  enabled: true
+  directory: "{backup_root}"
+'''
+            )
+        session = self.base / "rollout-2026-07-16T10-00-00-thread-001.jsonl"
+
+        def event(timestamp, outer_type, payload):
+            return json.dumps(
+                {"timestamp": timestamp, "type": outer_type, "payload": payload},
+                ensure_ascii=False,
+            ) + "\n"
+
+        session.write_text(
+            event(
+                "2026-07-16T10:00:00Z",
+                "session_meta",
+                {"id": "thread-001", "session_id": "thread-001"},
+            )
+            + event(
+                "2026-07-16T10:00:01Z",
+                "event_msg",
+                {"type": "user_message", "message": "请记录这一轮"},
+            )
+            + event(
+                "2026-07-16T10:00:02Z",
+                "event_msg",
+                {"type": "agent_message", "phase": "commentary", "message": "正在核对。"},
+            )
+            + event(
+                "2026-07-16T10:00:03Z",
+                "event_msg",
+                {"type": "agent_reasoning", "text": "不得归档的内部推理"},
+            )
+            + event(
+                "2026-07-16T10:00:04Z",
+                "response_item",
+                {"type": "function_call_output", "output": "不得归档的工具输出"},
+            )
+            + event(
+                "2026-07-16T10:00:05Z",
+                "event_msg",
+                {"type": "agent_message", "phase": "final_answer", "message": "这一轮已记录。"},
+            ),
+            encoding="utf-8",
+        )
+
+        first = self.run_cli("sync-codex", "--session-file", str(session))
+        self.assertEqual(first["imported_messages"], 3)
+        self.assertIsNotNone(first["backup"])
+        self.assertTrue(Path(first["backup"]).joinpath("backup-manifest.json").exists())
+        status = self.run_cli("status")
+        self.assertEqual(status["total_messages"], 3)
+        self.assertEqual(status["completed_rounds"], 1)
+        self.assertEqual(self.run_cli("heartbeat", "--check-only")["status"], "ok")
+
+        raw_text = next(self.root.glob("raw/*/*/*.md")).read_text(encoding="utf-8")
+        self.assertIn("请记录这一轮", raw_text)
+        self.assertIn("正在核对。", raw_text)
+        self.assertIn("这一轮已记录。", raw_text)
+        self.assertNotIn("内部推理", raw_text)
+        self.assertNotIn("工具输出", raw_text)
+
+        repeated = self.run_cli("sync-codex", "--session-file", str(session))
+        self.assertEqual(repeated["imported_messages"], 0)
+        self.assertIsNone(repeated["backup"])
+
+        with session.open("a", encoding="utf-8") as handle:
+            handle.write(
+                event(
+                    "2026-07-16T10:01:00Z",
+                    "event_msg",
+                    {"type": "user_message", "message": "第二轮"},
+                )
+                + event(
+                    "2026-07-16T10:01:01Z",
+                    "event_msg",
+                    {"type": "agent_message", "phase": "final_answer", "message": "第二轮完成"},
+                )
+            )
+        second = self.run_cli("sync-codex", "--session-file", str(session))
+        self.assertEqual(second["imported_messages"], 2)
+        self.assertEqual(self.run_cli("status")["completed_rounds"], 2)
+        backup_entries = [
+            json.loads(line)
+            for line in (backup_root / "backup-log.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertEqual(len(backup_entries), 2)
+        self.assertEqual(backup_entries[-1]["total_messages"], 5)
+
 
 if __name__ == "__main__":
     unittest.main()

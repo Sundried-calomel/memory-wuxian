@@ -39,6 +39,14 @@ integrity:
   verify_summary_sources: true
   verify_summary_files: true
 
+backup:
+  enabled: true
+  directory: "~/Desktop/Memory無限-记忆归档备份"
+
+codex:
+  sessions_root: "~/.codex/sessions"
+  sync_interval_seconds: 15
+
 safety:
   redact_secrets: true
   atomic_writes: true
