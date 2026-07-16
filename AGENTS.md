@@ -28,6 +28,7 @@ Use Memory無限 to preserve conversation history outside the active context win
 20. After each successful primary-archive mutation, create and log the configured desktop snapshot before reporting the write as fully backed up.
 21. Maintain one complete derived transcript per conversation under `memory/conversations/`; a transcript must never contain records from another conversation ID.
 22. Use the persistent native collector for continuous Codex capture. Use Python for low-frequency maintenance and Agent-facing memory operations, not interval polling.
+23. Hold `memory/.locks/archive.lock` for every complete native event batch and Python maintenance command so readers never observe a partial archive transaction.
 
 ## Authority order
 

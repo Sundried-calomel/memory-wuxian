@@ -6,6 +6,7 @@
 - Moved Codex JSONL parsing, raw append, per-conversation transcripts, cursors, deterministic indexes, Level-1 job creation, and desktop snapshots into the native collector.
 - Kept the Python CLI for low-frequency summary ingestion, retrieval, reconstruction, and maintenance.
 - Added a Python/Rust storage-contract parity test and a native KeepAlive LaunchAgent test.
+- Added a shared archive transaction lock so maintenance commands cannot observe a partially committed native event batch.
 - Preserved the existing archive schema, source-derived message IDs, round semantics, and backup ordering.
 
 ## 0.4.0 - 2026-07-16

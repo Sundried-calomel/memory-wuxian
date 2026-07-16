@@ -1,9 +1,11 @@
+import fcntl
 import json
 import plistlib
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -452,18 +454,32 @@ safety:
             encoding="utf-8",
         )
         python_result = self.run_cli("sync-codex", "--session-file", str(session))
-        native = subprocess.run(
-            [
-                str(native_binary),
-                "--archive-root", str(native_root),
-                "--config", str(self.config),
-                "--sessions-root", str(sessions_root),
-                "--session-file", str(session),
-                "--once",
-            ],
-            text=True,
-            capture_output=True,
-            check=False,
+        native_args = [
+            str(native_binary),
+            "--archive-root", str(native_root),
+            "--config", str(self.config),
+            "--sessions-root", str(sessions_root),
+            "--session-file", str(session),
+            "--once",
+        ]
+        archive_lock = native_root / ".locks" / "archive.lock"
+        with archive_lock.open("a+", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            native_process = subprocess.Popen(
+                native_args,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            time.sleep(0.2)
+            self.assertIsNone(native_process.poll())
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+            native_stdout, native_stderr = native_process.communicate(timeout=10)
+        native = subprocess.CompletedProcess(
+            native_args,
+            native_process.returncode,
+            native_stdout,
+            native_stderr,
         )
         self.assertEqual(native.returncode, 0, native.stderr)
         native_result = json.loads(native.stdout)
@@ -499,6 +515,31 @@ safety:
         repeated = subprocess.run(native.args, text=True, capture_output=True, check=False)
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["imported_messages"], 0)
+
+    def test_python_commands_wait_for_archive_lock(self):
+        archive_lock = self.root / ".locks" / "archive.lock"
+        with archive_lock.open("a+", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    str(CLI),
+                    "--root",
+                    str(self.root),
+                    "--config",
+                    str(self.config),
+                    "status",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            time.sleep(0.2)
+            self.assertIsNone(process.poll())
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+            stdout, stderr = process.communicate(timeout=10)
+        self.assertEqual(process.returncode, 0, stderr)
+        self.assertEqual(json.loads(stdout)["total_messages"], 0)
 
     def test_launch_agent_installer_uses_native_keepalive_collector(self):
         sessions_root = self.base / "sessions"

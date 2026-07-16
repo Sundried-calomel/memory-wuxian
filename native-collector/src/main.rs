@@ -799,6 +799,10 @@ impl Store {
     }
 
     fn sync_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
+        self.lock("archive.lock", || self.sync_batch_unlocked(paths))
+    }
+
+    fn sync_batch_unlocked(&self, paths: Vec<PathBuf>) -> Result<Value> {
         let mut files = Vec::new();
         let mut imported = 0;
         let mut duplicates = 0;

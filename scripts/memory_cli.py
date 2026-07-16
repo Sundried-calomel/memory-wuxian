@@ -1967,103 +1967,112 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def dispatch_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    store: MemoryStore,
+) -> int:
+    if args.command == "init":
+        store.init()
+        result: Any = {"status": "initialized", "root": str(store.root)}
+    elif args.command == "append":
+        result = store.append_message(
+            args.speaker,
+            read_message_text(args),
+            args.timestamp,
+            args.conversation_id,
+            args.message_id,
+            args.reply_to,
+            args.allow_secrets,
+            complete_round=not args.nonfinal_assistant,
+        )
+        if result.get("status") == "appended" or result.get("transcript_repaired"):
+            backup = store.create_backup_snapshot(
+                "append-message",
+                {"message_id": result.get("message_id")},
+            )
+            result["backup"] = str(backup) if backup else None
+    elif args.command == "sync-codex":
+        if not args.session_file and not args.sessions_root:
+            raise ValueError("Provide --session-file or --sessions-root")
+        result = store.sync_codex(
+            [Path(path) for path in args.session_file],
+            Path(args.sessions_root) if args.sessions_root else None,
+            args.since,
+        )
+        if result["imported_messages"] or result["repaired_transcripts"]:
+            backup = store.create_backup_snapshot(
+                "codex-sync",
+                {
+                    "imported_messages": result["imported_messages"],
+                    "repaired_transcripts": result["repaired_transcripts"],
+                    "session_ids": [item["session_id"] for item in result["sessions"]],
+                },
+            )
+            result["backup"] = str(backup) if backup else None
+        else:
+            result["backup"] = None
+    elif args.command == "status":
+        result = store.status()
+    elif args.command == "make-summary-job":
+        path = store.make_summary_job()
+        result = {"status": "created" if path else "not-due", "job": str(path) if path else None}
+        if path:
+            backup = store.create_backup_snapshot("summary-job-created", {"job": str(path)})
+            result["backup"] = str(backup) if backup else None
+    elif args.command == "ingest-summary":
+        path = store.ingest_summary(Path(args.job), Path(args.summary_json))
+        result = {"status": "ingested", "summary": str(path)}
+        backup = store.create_backup_snapshot("summary-ingested", {"summary": str(path)})
+        result["backup"] = str(backup) if backup else None
+    elif args.command == "retrieve":
+        output, _ = store.retrieve(args.query)
+        print(output, end="")
+        return 0
+    elif args.command == "rebuild-state":
+        result = store.rebuild_state(args.apply)
+        if args.apply and result.get("changed"):
+            backup = store.create_backup_snapshot("state-rebuilt")
+            result["desktop_backup"] = str(backup) if backup else None
+    elif args.command == "rebuild-conversations":
+        result = store.rebuild_conversations(args.apply)
+        if args.apply and result.get("changed"):
+            backup = store.create_backup_snapshot("conversation-transcripts-rebuilt")
+            result["desktop_backup"] = str(backup) if backup else None
+    elif args.command == "rebuild-indexes":
+        result = store.rebuild_indexes(args.apply)
+        if args.apply and result.get("changed"):
+            backup = store.create_backup_snapshot("indexes-rebuilt")
+            result["desktop_backup"] = str(backup) if backup else None
+    elif args.command == "heartbeat":
+        if args.check_only and args.repair:
+            raise ValueError("--check-only and --repair cannot be used together")
+        create_jobs = not (args.no_create_jobs or args.check_only)
+        result = store.heartbeat(create_jobs, repair=args.repair)
+        if result.get("created_job") or result.get("repairs"):
+            backup = store.create_backup_snapshot(
+                "heartbeat-maintenance",
+                {
+                    "created_job": result.get("created_job"),
+                    "repair_count": len(result.get("repairs", [])),
+                },
+            )
+            result["backup"] = str(backup) if backup else None
+    else:
+        parser.error(f"Unknown command: {args.command}")
+        return 2
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
         config = resolve_config(Path(args.config))
         store = MemoryStore(resolve_root(args.root, config), config)
-        if args.command == "init":
-            store.init()
-            result: Any = {"status": "initialized", "root": str(store.root)}
-        elif args.command == "append":
-            result = store.append_message(
-                args.speaker,
-                read_message_text(args),
-                args.timestamp,
-                args.conversation_id,
-                args.message_id,
-                args.reply_to,
-                args.allow_secrets,
-                complete_round=not args.nonfinal_assistant,
-            )
-            if result.get("status") == "appended" or result.get("transcript_repaired"):
-                backup = store.create_backup_snapshot(
-                    "append-message",
-                    {"message_id": result.get("message_id")},
-                )
-                result["backup"] = str(backup) if backup else None
-        elif args.command == "sync-codex":
-            if not args.session_file and not args.sessions_root:
-                raise ValueError("Provide --session-file or --sessions-root")
-            result = store.sync_codex(
-                [Path(path) for path in args.session_file],
-                Path(args.sessions_root) if args.sessions_root else None,
-                args.since,
-            )
-            if result["imported_messages"] or result["repaired_transcripts"]:
-                backup = store.create_backup_snapshot(
-                    "codex-sync",
-                    {
-                        "imported_messages": result["imported_messages"],
-                        "repaired_transcripts": result["repaired_transcripts"],
-                        "session_ids": [item["session_id"] for item in result["sessions"]],
-                    },
-                )
-                result["backup"] = str(backup) if backup else None
-            else:
-                result["backup"] = None
-        elif args.command == "status":
-            result = store.status()
-        elif args.command == "make-summary-job":
-            path = store.make_summary_job()
-            result = {"status": "created" if path else "not-due", "job": str(path) if path else None}
-            if path:
-                backup = store.create_backup_snapshot("summary-job-created", {"job": str(path)})
-                result["backup"] = str(backup) if backup else None
-        elif args.command == "ingest-summary":
-            path = store.ingest_summary(Path(args.job), Path(args.summary_json))
-            result = {"status": "ingested", "summary": str(path)}
-            backup = store.create_backup_snapshot("summary-ingested", {"summary": str(path)})
-            result["backup"] = str(backup) if backup else None
-        elif args.command == "retrieve":
-            output, _ = store.retrieve(args.query)
-            print(output, end="")
-            return 0
-        elif args.command == "rebuild-state":
-            result = store.rebuild_state(args.apply)
-            if args.apply and result.get("changed"):
-                backup = store.create_backup_snapshot("state-rebuilt")
-                result["desktop_backup"] = str(backup) if backup else None
-        elif args.command == "rebuild-conversations":
-            result = store.rebuild_conversations(args.apply)
-            if args.apply and result.get("changed"):
-                backup = store.create_backup_snapshot("conversation-transcripts-rebuilt")
-                result["desktop_backup"] = str(backup) if backup else None
-        elif args.command == "rebuild-indexes":
-            result = store.rebuild_indexes(args.apply)
-            if args.apply and result.get("changed"):
-                backup = store.create_backup_snapshot("indexes-rebuilt")
-                result["desktop_backup"] = str(backup) if backup else None
-        elif args.command == "heartbeat":
-            if args.check_only and args.repair:
-                raise ValueError("--check-only and --repair cannot be used together")
-            create_jobs = not (args.no_create_jobs or args.check_only)
-            result = store.heartbeat(create_jobs, repair=args.repair)
-            if result.get("created_job") or result.get("repairs"):
-                backup = store.create_backup_snapshot(
-                    "heartbeat-maintenance",
-                    {
-                        "created_job": result.get("created_job"),
-                        "repair_count": len(result.get("repairs", [])),
-                    },
-                )
-                result["backup"] = str(backup) if backup else None
-        else:
-            parser.error(f"Unknown command: {args.command}")
-            return 2
-        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
-        return 0
+        with exclusive_lock(store.root / ".locks" / "archive.lock"):
+            return dispatch_command(args, parser, store)
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         print(f"memory-wuxian: {exc}", file=sys.stderr)
         return 1

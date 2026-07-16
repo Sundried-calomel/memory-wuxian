@@ -23,6 +23,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 12. Complete the primary archive write before creating its external backup snapshot.
 13. Maintain one complete transcript per conversation; never place records from different conversation IDs in the same transcript.
 14. Use the native event-driven collector for high-frequency Codex capture; keep Python outside the continuous capture loop.
+15. Preserve transaction consistency by holding `memory/.locks/archive.lock` for each native event batch and Python maintenance command.
 
 ## Operating workflow
 
