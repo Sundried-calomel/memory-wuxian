@@ -14,7 +14,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Preview-first state and index recovery
 - Heartbeat validation, maintenance, and repair modes
 - Incremental Codex rollout parsing with stable source IDs and per-session cursors
-- Automatic macOS synchronization through a LaunchAgent
+- Event-driven macOS synchronization through a persistent native LaunchAgent
 - Timestamped desktop snapshots with SHA-256 manifests and an append-only backup log
 - A transparent file layout with no database or external model API dependency
 
@@ -51,20 +51,22 @@ The CLI does not call a language-model API. It creates deterministic summary job
 
 ## Automatic Codex capture on macOS
 
-Installing a Skill does not by itself subscribe to Codex client events. Memory無限 supplies an incremental parser plus a LaunchAgent installer:
+Installing a Skill does not by itself subscribe to Codex client events. Build the Rust collector once, then install its persistent LaunchAgent:
 
 ```bash
+scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py \
   --archive-root "$ARCHIVE" \
-  --python-executable /opt/homebrew/bin/python3 \
   --load
 ```
 
-The LaunchAgent checks native Codex rollout files every 15 seconds. It stores user messages and visible assistant commentary/final answers, while excluding system instructions, internal reasoning, tool calls, and tool output. A per-session cursor and stable source-derived IDs make retries idempotent.
+The LaunchAgent keeps one optimized Rust process alive and receives recursive filesystem change notifications from the operating system. It performs no interval polling and starts work only when Codex rollout files change. It stores user messages and visible assistant commentary/final answers, while excluding system instructions, internal reasoning, tool calls, and tool output. A per-session cursor and stable source-derived IDs make retries idempotent.
+
+The native collector directly owns high-frequency JSONL parsing, raw append, per-conversation transcript updates, deterministic conversation indexes, cursor writes, due Level-1 job creation, and desktop snapshots. The Python CLI remains the low-frequency interface for summary ingestion, retrieval, heartbeat, and preview-first reconstruction.
 
 Every imported conversation is also written to its own file under `memory/conversations/`. A transcript contains only one conversation ID and includes both exact machine-readable records and readable message text. The immutable files under `raw/` remain authoritative; per-conversation transcripts are deterministic views that can be rebuilt without changing raw history.
 
-On macOS, grant Full Disk Access to the same executable passed through `--python-executable` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the resolved executable in the generated plist before claiming automatic capture is active.
+On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the exact executable in the generated plist before claiming automatic capture is active.
 
 With the default configuration, every successful memory mutation creates a new snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes. Each snapshot contains `backup-manifest.json`; the backup root contains `backup-log.jsonl`.
 
@@ -86,13 +88,14 @@ The default thresholds are configurable. The initial implementation deliberately
 - Use `--root` outside the repository for private archives.
 - Mutable files under the bundled `memory/` directory are excluded by `.gitignore`.
 - The CLI can redact obvious secrets when explicitly configured, but users remain responsible for deciding what may be persisted.
-- Automatic capture requires the supplied LaunchAgent or another explicitly configured client hook.
+- Automatic capture requires the supplied native LaunchAgent or another explicitly configured client hook.
 
 ## Development
 
 Run the functional test suite without creating bytecode files:
 
 ```bash
+$HOME/.cargo/bin/cargo test --locked --manifest-path native-collector/Cargo.toml
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 

@@ -15,3 +15,5 @@ memory/pending/*
 memory/archive/*
 memory/.locks/*
 memory/imports/*
+bin/
+native-collector/target/

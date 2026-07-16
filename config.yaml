@@ -45,7 +45,8 @@ backup:
 
 codex:
   sessions_root: "~/.codex/sessions"
-  sync_interval_seconds: 15
+  collector: "native-event-driven"
+  debounce_milliseconds: 400
 
 safety:
   redact_secrets: true

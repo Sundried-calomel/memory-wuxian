@@ -39,7 +39,7 @@ Transcripts are derived files. `rebuild-conversations` compares them with author
 
 ## Codex import cursor
 
-Each imported session has one cursor under `memory/imports/codex/<session-id>.json`. It records the source path, last consumed JSONL line, source size and modification time. Cursor writes occur only after all selected source lines are handled. Stable source-derived message IDs provide a second idempotency boundary if cursor recovery repeats a line.
+Each imported session has one cursor under `memory/imports/codex/<session-id>.json`. The native collector and Python recovery adapter use the same cursor schema. It records the source path, last consumed complete JSONL line, source size and modification time. Cursor writes occur only after all selected source lines are handled. Stable source-derived message IDs provide a second idempotency boundary if cursor recovery repeats a line.
 
 ## Desktop backup manifest
 

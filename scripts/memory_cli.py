@@ -98,6 +98,11 @@ def atomic_write_text(path: Path, text: str) -> None:
             os.unlink(temporary)
 
 
+def read_text_exact(path: Path) -> str:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
 def append_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
@@ -1351,7 +1356,7 @@ class MemoryStore:
         changed_paths = sorted(
             path
             for path, content in expected.items()
-            if not path.exists() or path.read_text(encoding="utf-8") != content
+            if not path.exists() or read_text_exact(path) != content
         )
         extra_paths = sorted(current_paths - set(expected))
         backup = None
@@ -1552,7 +1557,7 @@ class MemoryStore:
         transcript_mismatch = current_transcript_paths != set(expected_transcripts)
         if not transcript_mismatch:
             transcript_mismatch = any(
-                path.read_text(encoding="utf-8") != content
+                read_text_exact(path) != content
                 for path, content in expected_transcripts.items()
             )
         if transcript_mismatch:

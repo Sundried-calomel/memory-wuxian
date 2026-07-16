@@ -47,3 +47,9 @@ Write and index the primary archive first. After a successful mutation, create a
 Status: Accepted.
 
 Maintain one complete Markdown transcript for each conversation ID. Never combine records from different conversations in one transcript. Keep daily raw files as immutable authority and rebuild per-conversation transcripts only as deterministic derived files, with preview, archived replacement, and integrity checks.
+
+## D-009: High-frequency capture uses a native event-driven process
+
+Status: Accepted.
+
+Run one persistent Rust collector that watches native Codex session files through the operating system filesystem notification backend. The collector owns deterministic high-frequency capture and backup operations. Keep the Python CLI for low-frequency Agent-facing maintenance, summary ingestion, retrieval, and reconstruction. Preserve one storage contract across both implementations and test their persisted records for parity.

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 - 2026-07-16
+
+- Replaced the 15-second Python polling process with a persistent Rust filesystem watcher, using native `kqueue` vnode events on macOS.
+- Moved Codex JSONL parsing, raw append, per-conversation transcripts, cursors, deterministic indexes, Level-1 job creation, and desktop snapshots into the native collector.
+- Kept the Python CLI for low-frequency summary ingestion, retrieval, reconstruction, and maintenance.
+- Added a Python/Rust storage-contract parity test and a native KeepAlive LaunchAgent test.
+- Preserved the existing archive schema, source-derived message IDs, round semantics, and backup ordering.
+
 ## 0.4.0 - 2026-07-16
 
 - Added one complete Markdown transcript per conversation ID under `memory/conversations/`.

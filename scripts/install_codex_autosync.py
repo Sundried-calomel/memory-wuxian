@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install or update the macOS LaunchAgent for Memory無限 Codex synchronization."""
+"""Install or update the native macOS LaunchAgent for Memory無限."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import datetime as dt
 import os
 import plistlib
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from typing import Optional, Sequence
@@ -33,7 +32,7 @@ def atomic_write_plist(path: Path, payload: dict) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Create a macOS LaunchAgent that incrementally imports Codex rollout JSONL"
+        description="Create a persistent macOS LaunchAgent for the native Memory無限 collector"
     )
     parser.add_argument("--archive-root", required=True, help="Primary Memory無限 archive root")
     parser.add_argument(
@@ -47,15 +46,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Codex native session directory",
     )
     parser.add_argument(
-        "--python-executable",
-        default=sys.executable,
-        help="Python executable used by LaunchAgent; defaults to the interpreter running this installer",
+        "--collector-executable",
+        help="Compiled collector; defaults to <skill-root>/bin/memory-wuxian-collector",
     )
     parser.add_argument(
         "--since",
         help="Only monitor session files modified from this ISO-8601 time; defaults to installation time",
     )
-    parser.add_argument("--interval", type=int, default=15, help="Synchronization interval in seconds")
+    parser.add_argument(
+        "--debounce-ms",
+        type=int,
+        default=400,
+        help="Quiet period used to combine adjacent filesystem events",
+    )
     parser.add_argument(
         "--output",
         default=f"~/Library/LaunchAgents/{LABEL}.plist",
@@ -71,21 +74,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.interval < 5:
-        raise SystemExit("--interval must be at least 5 seconds")
+    if args.debounce_ms < 100:
+        raise SystemExit("--debounce-ms must be at least 100")
     skill_root = Path(args.skill_root).expanduser().resolve()
     archive_root = Path(args.archive_root).expanduser().resolve()
     sessions_root = Path(args.sessions_root).expanduser().resolve()
-    python_executable = Path(args.python_executable).expanduser().absolute()
+    collector = Path(
+        args.collector_executable or skill_root / "bin" / "memory-wuxian-collector"
+    ).expanduser().absolute()
     output = Path(args.output).expanduser().resolve()
-    cli = skill_root / "scripts" / "memory_cli.py"
     config = skill_root / "config.yaml"
-    if not cli.is_file() or not config.is_file():
+    if not config.is_file():
         raise SystemExit(f"Memory無限 installation is incomplete: {skill_root}")
     if not sessions_root.is_dir():
         raise SystemExit(f"Codex sessions directory does not exist: {sessions_root}")
-    if not python_executable.is_file():
-        raise SystemExit(f"Python executable does not exist: {python_executable}")
+    if not collector.is_file() or not os.access(collector, os.X_OK):
+        raise SystemExit(
+            f"Native collector does not exist or is not executable: {collector}. "
+            "Run scripts/build_native_collector.sh first."
+        )
     since = args.since or dt.datetime.now().astimezone().isoformat(timespec="seconds")
     dt.datetime.fromisoformat(since[:-1] + "+00:00" if since.endswith("Z") else since)
 
@@ -94,22 +101,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     payload = {
         "Label": LABEL,
         "ProgramArguments": [
-            str(python_executable),
-            str(cli),
-            "--root",
+            str(collector),
+            "--archive-root",
             str(archive_root),
             "--config",
             str(config),
-            "sync-codex",
             "--sessions-root",
             str(sessions_root),
             "--since",
             since,
+            "--debounce-ms",
+            str(args.debounce_ms),
         ],
         "RunAtLoad": True,
-        "StartInterval": args.interval,
+        "KeepAlive": True,
+        "ThrottleInterval": 5,
         "ProcessType": "Background",
-        "EnvironmentVariables": {"PYTHONDONTWRITEBYTECODE": "1"},
+        "EnvironmentVariables": {"RUST_BACKTRACE": "1"},
         "StandardOutPath": str(log_dir / "launch-agent.stdout.log"),
         "StandardErrorPath": str(log_dir / "launch-agent.stderr.log"),
     }
@@ -123,7 +131,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             stderr=subprocess.DEVNULL,
         )
         subprocess.run(["/bin/launchctl", "bootstrap", domain, str(output)], check=True)
-        subprocess.run(["/bin/launchctl", "kickstart", "-k", f"{domain}/{LABEL}"], check=True)
     print(output)
     return 0
 

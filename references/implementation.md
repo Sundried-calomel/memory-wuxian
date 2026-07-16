@@ -157,11 +157,13 @@ Hash mismatches, missing historical boundaries, overlapping source ranges, and c
 
 ## 11. Codex client integration
 
-Use `sync-codex` as an input adapter for native rollout JSONL. Persist one cursor per Codex session under `memory/imports/codex/`. Derive stable message IDs from session ID, source line, and speaker. Cursor loss may cause a source line to be considered again, but stable IDs must turn that retry into a no-op or an explicit content-conflict error.
+Use the Rust collector as the continuous input adapter for native rollout JSONL. Keep Python `sync-codex` as a manual compatibility and recovery path. Both implementations persist one cursor per Codex session under `memory/imports/codex/`, derive stable message IDs from session ID, source line, and speaker, and write the same archive schema. Cursor loss may cause a source line to be considered again, but stable IDs must turn that retry into a no-op or an explicit content-conflict error.
 
 Import only `event_msg` records representing `user_message` or visible `agent_message` phases `commentary` and `final_answer`. Do not import session/system instructions, internal reasoning, tool calls, tool output, token counters, or maintenance events. Commentary remains part of the exact visible transcript but does not close the pending dialogue round. `final_answer` closes it.
 
-Codex Desktop does not expose an in-process post-turn hook to a plain Skill. On macOS, the supplied LaunchAgent provides equivalent automatic capture by running the incremental adapter at a short interval. The activation timestamp prevents an installation from silently importing all older sessions; explicitly selected current sessions may be backfilled once before activation.
+Codex Desktop does not expose an in-process post-turn hook to a plain Skill. On macOS, the supplied LaunchAgent keeps one optimized Rust process alive. Its recursive filesystem watcher receives changes through the operating-system notification backend, debounces adjacent writes, and processes only changed rollout files. It does not wake on a fixed polling interval. The activation timestamp prevents an installation from silently importing all older sessions; explicitly selected current sessions may be backfilled once before activation.
+
+The native collector owns high-frequency parsing, raw append, per-conversation transcript append, deterministic conversation-index append, cursor updates, due Level-1 job creation, and post-mutation backup snapshots. Python remains authoritative for summary ingestion, higher-level job maintenance, retrieval, heartbeat checks, and preview-first reconstruction. Contract tests must compare parsed raw records, hashes, round state, and cursor positions across both implementations.
 
 ## 12. External backup snapshots
 

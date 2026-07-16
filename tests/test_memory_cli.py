@@ -1,5 +1,6 @@
 import json
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -10,6 +11,8 @@ from pathlib import Path
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
+NATIVE_MANIFEST = SKILL_ROOT / "native-collector" / "Cargo.toml"
+NATIVE_BINARY = SKILL_ROOT / "bin" / "memory-wuxian-collector"
 
 
 class MemoryCliTest(unittest.TestCase):
@@ -148,7 +151,7 @@ safety:
             "--conversation-id",
             "codex:thread-alpha",
             "--text",
-            "Alpha assistant text",
+            "Alpha assistant text\r\nnative output\r\n",
         )
         self.run_cli(
             "append",
@@ -177,6 +180,7 @@ safety:
         beta_text = beta.read_text(encoding="utf-8")
         self.assertIn("Alpha user text", alpha_text)
         self.assertIn("Alpha assistant text", alpha_text)
+        self.assertIn("native output", alpha_text)
         self.assertNotIn("Beta user text", alpha_text)
         self.assertIn("Beta user text", beta_text)
         self.assertIn("Beta assistant text", beta_text)
@@ -405,11 +409,103 @@ safety:
         self.assertEqual(len(backup_entries), 3)
         self.assertEqual(backup_entries[-1]["total_messages"], 5)
 
-    def test_launch_agent_installer_uses_selected_python(self):
+    def test_native_collector_matches_python_storage_contract(self):
+        cargo = shutil.which("cargo") or str(Path.home() / ".cargo" / "bin" / "cargo")
+        if not NATIVE_BINARY.exists():
+            completed = subprocess.run(
+                [cargo, "build", "--manifest-path", str(NATIVE_MANIFEST)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            native_binary = SKILL_ROOT / "native-collector" / "target" / "debug" / "memory-wuxian-collector"
+        else:
+            native_binary = NATIVE_BINARY
+
+        native_root = self.base / "native-memory"
+        initialized = subprocess.run(
+            [sys.executable, str(CLI), "--root", str(native_root), "--config", str(self.config), "init"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(initialized.returncode, 0, initialized.stderr)
+        sessions_root = self.base / "native-sessions"
+        sessions_root.mkdir()
+        session = sessions_root / "rollout-2026-07-16T10-00-00-native-parity.jsonl"
+
+        def event(timestamp, outer_type, payload):
+            return json.dumps(
+                {"timestamp": timestamp, "type": outer_type, "payload": payload},
+                ensure_ascii=False,
+            ) + "\n"
+
+        session.write_text(
+            event("2026-07-16T10:00:00Z", "session_meta", {"id": "native-parity"})
+            + event("2026-07-16T10:00:01Z", "event_msg", {"type": "user_message", "message": "password=secret-value 请记录"})
+            + event("2026-07-16T10:00:02Z", "event_msg", {"type": "agent_message", "phase": "commentary", "message": "正在记录。"})
+            + event("2026-07-16T10:00:03Z", "event_msg", {"type": "agent_reasoning", "text": "不得保存"})
+            + event("2026-07-16T10:00:04Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "记录完成。"})
+            + event("2026-07-16T10:01:00Z", "event_msg", {"type": "user_message", "message": "第二轮"})
+            + event("2026-07-16T10:01:01Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "第二轮完成。"}),
+            encoding="utf-8",
+        )
+        python_result = self.run_cli("sync-codex", "--session-file", str(session))
+        native = subprocess.run(
+            [
+                str(native_binary),
+                "--archive-root", str(native_root),
+                "--config", str(self.config),
+                "--sessions-root", str(sessions_root),
+                "--session-file", str(session),
+                "--once",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(native.returncode, 0, native.stderr)
+        native_result = json.loads(native.stdout)
+        self.assertEqual(python_result["imported_messages"], 5)
+        self.assertEqual(native_result["imported_messages"], 5)
+
+        def embedded_records(root):
+            records = []
+            for path in root.glob("raw/*/*/*.md"):
+                lines = path.read_text(encoding="utf-8").splitlines()
+                records.extend(
+                    json.loads(lines[index + 2])
+                    for index, line in enumerate(lines[:-2])
+                    if line == "<!-- memory-wuxian-record -->" and lines[index + 1] == "```json"
+                )
+            return sorted(records, key=lambda record: record["sequence"])
+
+        self.assertEqual(embedded_records(self.root), embedded_records(native_root))
+        python_state = json.loads((self.root / "state.json").read_text(encoding="utf-8"))
+        native_state = json.loads((native_root / "state.json").read_text(encoding="utf-8"))
+        python_state.pop("last_successful_memory_update")
+        native_state.pop("last_successful_memory_update")
+        self.assertEqual(python_state, native_state)
+        python_job = json.loads(next((self.root / "pending").glob("job-*.json")).read_text(encoding="utf-8"))
+        native_job = json.loads(next((native_root / "pending").glob("job-*.json")).read_text(encoding="utf-8"))
+        python_job.pop("created_at")
+        native_job.pop("created_at")
+        self.assertEqual(python_job, native_job)
+        self.assertEqual(
+            json.loads((self.root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
+            json.loads((native_root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
+        )
+        repeated = subprocess.run(native.args, text=True, capture_output=True, check=False)
+        self.assertEqual(repeated.returncode, 0, repeated.stderr)
+        self.assertEqual(json.loads(repeated.stdout)["imported_messages"], 0)
+
+    def test_launch_agent_installer_uses_native_keepalive_collector(self):
         sessions_root = self.base / "sessions"
         sessions_root.mkdir()
-        selected_python = self.base / "python3"
-        selected_python.symlink_to(Path(sys.executable).resolve())
+        collector = self.base / "memory-wuxian-collector"
+        collector.write_text("test executable\n", encoding="utf-8")
+        collector.chmod(0o755)
         plist_path = self.base / "com.memorywuxian.codex-sync.plist"
         completed = subprocess.run(
             [
@@ -421,8 +517,8 @@ safety:
                 str(SKILL_ROOT),
                 "--sessions-root",
                 str(sessions_root),
-                "--python-executable",
-                str(selected_python),
+                "--collector-executable",
+                str(collector),
                 "--output",
                 str(plist_path),
             ],
@@ -433,8 +529,11 @@ safety:
         self.assertEqual(completed.returncode, 0, completed.stderr)
         with plist_path.open("rb") as handle:
             payload = plistlib.load(handle)
-        self.assertEqual(payload["ProgramArguments"][0], str(selected_python))
-        self.assertEqual(Path(payload["ProgramArguments"][0]).resolve(), Path(sys.executable).resolve())
+        self.assertEqual(payload["ProgramArguments"][0], str(collector))
+        self.assertTrue(payload["KeepAlive"])
+        self.assertNotIn("StartInterval", payload)
+        self.assertEqual(payload["EnvironmentVariables"], {"RUST_BACKTRACE": "1"})
+        self.assertNotIn("kickstart", INSTALLER.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
