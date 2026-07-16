@@ -14,3 +14,4 @@ memory/retrieval/*
 memory/pending/*
 memory/archive/*
 memory/.locks/*
+memory/imports/*

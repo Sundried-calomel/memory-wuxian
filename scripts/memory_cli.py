@@ -294,6 +294,8 @@ class MemoryStore:
         self.pending_dir = self.root / "pending"
         self.archive_dir = self.root / "archive"
         self.locks_dir = self.root / ".locks"
+        self.imports_dir = self.root / "imports"
+        self.codex_import_dir = self.imports_dir / "codex"
 
     @property
     def level_1_trigger(self) -> int:
@@ -329,6 +331,7 @@ class MemoryStore:
             self.pending_dir,
             self.archive_dir,
             self.locks_dir,
+            self.codex_import_dir,
         ]
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
@@ -403,6 +406,8 @@ class MemoryStore:
         message_id: Optional[str],
         reply_to: Optional[str],
         allow_secrets: bool,
+        complete_round: bool = True,
+        source: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         self.init()
         timestamp = timestamp or now_iso()
@@ -432,6 +437,28 @@ class MemoryStore:
             if redact_enabled and not allow_secrets:
                 stored_text, was_redacted = redact_secrets(stored_text)
 
+            existing = next(
+                (record for record in self.read_all_raw() if record.get("message_id") == message_id),
+                None,
+            )
+            if existing is not None:
+                same_source = (
+                    existing.get("speaker") == speaker
+                    and existing.get("text") == stored_text
+                    and existing.get("conversation_id") == conversation_id
+                    and existing.get("timestamp") == timestamp
+                    and existing.get("source") == source
+                )
+                if not same_source:
+                    raise ValueError(f"Message ID already exists with different content: {message_id}")
+                return {
+                    "status": "duplicate",
+                    "message_id": message_id,
+                    "sequence": existing["sequence"],
+                    "path": existing.get("_path"),
+                    "text_redacted": bool(existing.get("redacted")),
+                }
+
             if reply_to is None and speaker == "assistant" and pending is not None:
                 reply_to = pending.get("latest_user_message_id")
             record = {
@@ -445,7 +472,10 @@ class MemoryStore:
                 "reply_to": reply_to,
                 "text": stored_text,
                 "redacted": was_redacted,
+                "completes_round": bool(speaker == "assistant" and complete_round),
             }
+            if source is not None:
+                record["source"] = source
             record["content_sha256"] = raw_record_sha256(record)
             raw_path = self.raw_path_for_timestamp(timestamp)
             with exclusive_lock(self.locks_dir / f"raw-{raw_path.stem}.lock"):
@@ -464,11 +494,225 @@ class MemoryStore:
                     pending["first_user_message_id"] = message_id
                 pending["latest_user_message_id"] = message_id
                 state["pending_round"] = pending
-            elif speaker == "assistant" and pending is not None:
+            elif speaker == "assistant" and pending is not None and complete_round:
                 state["completed_rounds"] = max(int(state["completed_rounds"]), round_number)
                 state["pending_round"] = None
             self.save_state(state)
-        return {**index_record, "text_redacted": was_redacted}
+        return {**index_record, "status": "appended", "text_redacted": was_redacted}
+
+    def configured_backup_root(self) -> Optional[Path]:
+        if not bool(nested_get(self.config, ["backup", "enabled"], False)):
+            return None
+        configured = str(nested_get(self.config, ["backup", "directory"], "")).strip()
+        if not configured:
+            raise ValueError("backup.enabled requires backup.directory")
+        path = Path(configured).expanduser().resolve()
+        try:
+            path.relative_to(self.root)
+        except ValueError:
+            return path
+        raise ValueError("Backup directory must be outside the memory archive root")
+
+    def create_backup_snapshot(
+        self,
+        reason: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Path]:
+        backup_root = self.configured_backup_root()
+        if backup_root is None:
+            return None
+        backup_root.mkdir(parents=True, exist_ok=True)
+        with exclusive_lock(self.locks_dir / "desktop-backup.lock"):
+            stamp = dt.datetime.now().astimezone().strftime("%Y-%m-%d_%H%M%S_%f")
+            final_path = backup_root / stamp
+            temporary = backup_root / f".{stamp}.tmp-{os.getpid()}"
+            if temporary.exists() or final_path.exists():
+                raise RuntimeError(f"Backup destination already exists: {final_path}")
+            shutil.copytree(
+                self.root,
+                temporary,
+                ignore=shutil.ignore_patterns(".locks", ".DS_Store"),
+            )
+            copied_files = []
+            for path in sorted(temporary.rglob("*")):
+                if path.is_file():
+                    copied_files.append({
+                        "path": str(path.relative_to(temporary)),
+                        "sha256": file_sha256(path),
+                        "bytes": path.stat().st_size,
+                    })
+            manifest = {
+                "format_version": 1,
+                "created_at": now_iso(),
+                "source_root": str(self.root),
+                "reason": reason,
+                "metadata": metadata or {},
+                "state": self.load_state(),
+                "files": copied_files,
+            }
+            atomic_write_json(temporary / "backup-manifest.json", manifest)
+            os.replace(temporary, final_path)
+            append_jsonl(
+                backup_root / "backup-log.jsonl",
+                {
+                    "created_at": manifest["created_at"],
+                    "snapshot": final_path.name,
+                    "reason": reason,
+                    "source_root": str(self.root),
+                    "file_count": len(copied_files),
+                    "total_messages": manifest["state"].get("total_messages"),
+                    "completed_rounds": manifest["state"].get("completed_rounds"),
+                    "metadata": metadata or {},
+                },
+            )
+        return final_path
+
+    def codex_session_id(self, path: Path) -> str:
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                payload = json.loads(line)
+                if payload.get("type") != "session_meta":
+                    continue
+                metadata = payload.get("payload") or {}
+                identifier = metadata.get("id") or metadata.get("session_id")
+                if identifier:
+                    return str(identifier)
+        raise ValueError(f"Codex session metadata is missing an ID: {path}")
+
+    def codex_cursor_path(self, session_id: str) -> Path:
+        safe_id = re.sub(r"[^A-Za-z0-9._-]", "_", session_id)
+        return self.codex_import_dir / f"{safe_id}.json"
+
+    def sync_codex_file(self, source_path: Path) -> Dict[str, Any]:
+        source_path = source_path.expanduser().resolve()
+        if not source_path.is_file():
+            raise FileNotFoundError(f"Codex session does not exist: {source_path}")
+        session_id = self.codex_session_id(source_path)
+        cursor_path = self.codex_cursor_path(session_id)
+        cursor = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
+        last_line = int(cursor.get("last_line", 0))
+        imported = 0
+        duplicates = 0
+        total_lines = 0
+        visible_events = 0
+
+        with source_path.open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, 1):
+                total_lines = line_number
+                if line_number <= last_line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"Invalid Codex JSONL at {source_path}:{line_number}: {exc}") from exc
+                if event.get("type") != "event_msg":
+                    continue
+                payload = event.get("payload") or {}
+                event_type = payload.get("type")
+                phase = payload.get("phase")
+                if event_type == "user_message":
+                    speaker = "user"
+                    text = payload.get("message")
+                    complete_round = False
+                    phase = "user"
+                elif event_type == "agent_message" and phase in {"commentary", "final_answer"}:
+                    speaker = "assistant"
+                    text = payload.get("message")
+                    complete_round = phase == "final_answer"
+                else:
+                    continue
+                if not isinstance(text, str) or not text:
+                    continue
+                visible_events += 1
+                timestamp = str(event.get("timestamp") or now_iso())
+                if timestamp.endswith("Z"):
+                    timestamp = timestamp[:-1] + "+00:00"
+                suffix = "u" if speaker == "user" else "a"
+                message_id = f"codex-{session_id}-{line_number:08d}-{suffix}"
+                result = self.append_message(
+                    speaker=speaker,
+                    text=text,
+                    timestamp=timestamp,
+                    conversation_id=f"codex:{session_id}",
+                    message_id=message_id,
+                    reply_to=None,
+                    allow_secrets=False,
+                    complete_round=complete_round,
+                    source={
+                        "kind": "codex-rollout-jsonl",
+                        "session_id": session_id,
+                        "path": str(source_path),
+                        "line": line_number,
+                        "phase": phase,
+                    },
+                )
+                if result.get("status") == "duplicate":
+                    duplicates += 1
+                else:
+                    imported += 1
+
+        if total_lines < last_line:
+            raise ValueError(
+                f"Codex session was truncated below its saved cursor: {source_path} "
+                f"({total_lines} < {last_line})"
+            )
+        atomic_write_json(
+            cursor_path,
+            {
+                "format_version": 1,
+                "session_id": session_id,
+                "source_path": str(source_path),
+                "last_line": total_lines,
+                "source_size": source_path.stat().st_size,
+                "source_mtime": dt.datetime.fromtimestamp(
+                    source_path.stat().st_mtime,
+                    tz=dt.timezone.utc,
+                ).isoformat(),
+                "updated_at": now_iso(),
+            },
+        )
+        return {
+            "session_id": session_id,
+            "source_path": str(source_path),
+            "last_line": total_lines,
+            "visible_events": visible_events,
+            "imported_messages": imported,
+            "duplicate_messages": duplicates,
+        }
+
+    def sync_codex(
+        self,
+        session_files: Sequence[Path],
+        sessions_root: Optional[Path],
+        since: Optional[str],
+    ) -> Dict[str, Any]:
+        self.init()
+        candidates = {path.expanduser().resolve() for path in session_files}
+        since_timestamp: Optional[float] = None
+        if since:
+            parsed_since = dt.datetime.fromisoformat(since[:-1] + "+00:00" if since.endswith("Z") else since)
+            since_timestamp = parsed_since.timestamp()
+        if sessions_root is not None:
+            root = sessions_root.expanduser().resolve()
+            if not root.exists():
+                raise FileNotFoundError(f"Codex sessions root does not exist: {root}")
+            for path in root.rglob("rollout-*.jsonl"):
+                if since_timestamp is None or path.stat().st_mtime >= since_timestamp:
+                    candidates.add(path.resolve())
+        results = [self.sync_codex_file(path) for path in sorted(candidates)]
+        imported = sum(int(item["imported_messages"]) for item in results)
+        created_job = None
+        if imported:
+            job = self.make_summary_job()
+            created_job = str(job) if job else None
+        return {
+            "status": "synced",
+            "sessions": results,
+            "session_count": len(results),
+            "imported_messages": imported,
+            "duplicate_messages": sum(int(item["duplicate_messages"]) for item in results),
+            "created_summary_job": created_job,
+        }
 
     def read_raw_file(self, path: Path) -> List[Dict[str, Any]]:
         records: List[Dict[str, Any]] = []
@@ -899,13 +1143,21 @@ class MemoryStore:
             number
             for number, records in rounds.items()
             if any(record["speaker"] == "user" for record in records)
-            and any(record["speaker"] == "assistant" for record in records)
+            and any(
+                record["speaker"] == "assistant"
+                and bool(record.get("completes_round", True))
+                for record in records
+            )
         ]
         incomplete = [
             (number, records)
             for number, records in rounds.items()
             if any(record["speaker"] == "user" for record in records)
-            and not any(record["speaker"] == "assistant" for record in records)
+            and not any(
+                record["speaker"] == "assistant"
+                and bool(record.get("completes_round", True))
+                for record in records
+            )
         ]
         pending_round = None
         if incomplete:
@@ -1487,6 +1739,30 @@ def build_parser() -> argparse.ArgumentParser:
     append_parser.add_argument("--message-id")
     append_parser.add_argument("--reply-to")
     append_parser.add_argument("--allow-secrets", action="store_true", help="Disable configured secret redaction for this message")
+    append_parser.add_argument(
+        "--nonfinal-assistant",
+        action="store_true",
+        help="Store a visible assistant update without completing the dialogue round",
+    )
+
+    sync_parser = subparsers.add_parser(
+        "sync-codex",
+        help="Incrementally import visible messages from Codex rollout JSONL files",
+    )
+    sync_parser.add_argument(
+        "--session-file",
+        action="append",
+        default=[],
+        help="Specific Codex rollout JSONL file; may be supplied more than once",
+    )
+    sync_parser.add_argument(
+        "--sessions-root",
+        help="Recursively scan a Codex sessions directory for rollout JSONL files",
+    )
+    sync_parser.add_argument(
+        "--since",
+        help="When scanning --sessions-root, include files modified at or after this ISO-8601 time",
+    )
 
     subparsers.add_parser("status", help="Print archive counters and pending work")
     subparsers.add_parser("make-summary-job", help="Create the next due deterministic summary job")
@@ -1524,28 +1800,74 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.message_id,
                 args.reply_to,
                 args.allow_secrets,
+                complete_round=not args.nonfinal_assistant,
             )
+            if result.get("status") == "appended":
+                backup = store.create_backup_snapshot(
+                    "append-message",
+                    {"message_id": result.get("message_id")},
+                )
+                result["backup"] = str(backup) if backup else None
+        elif args.command == "sync-codex":
+            if not args.session_file and not args.sessions_root:
+                raise ValueError("Provide --session-file or --sessions-root")
+            result = store.sync_codex(
+                [Path(path) for path in args.session_file],
+                Path(args.sessions_root) if args.sessions_root else None,
+                args.since,
+            )
+            if result["imported_messages"]:
+                backup = store.create_backup_snapshot(
+                    "codex-sync",
+                    {
+                        "imported_messages": result["imported_messages"],
+                        "session_ids": [item["session_id"] for item in result["sessions"]],
+                    },
+                )
+                result["backup"] = str(backup) if backup else None
+            else:
+                result["backup"] = None
         elif args.command == "status":
             result = store.status()
         elif args.command == "make-summary-job":
             path = store.make_summary_job()
             result = {"status": "created" if path else "not-due", "job": str(path) if path else None}
+            if path:
+                backup = store.create_backup_snapshot("summary-job-created", {"job": str(path)})
+                result["backup"] = str(backup) if backup else None
         elif args.command == "ingest-summary":
             path = store.ingest_summary(Path(args.job), Path(args.summary_json))
             result = {"status": "ingested", "summary": str(path)}
+            backup = store.create_backup_snapshot("summary-ingested", {"summary": str(path)})
+            result["backup"] = str(backup) if backup else None
         elif args.command == "retrieve":
             output, _ = store.retrieve(args.query)
             print(output, end="")
             return 0
         elif args.command == "rebuild-state":
             result = store.rebuild_state(args.apply)
+            if args.apply and result.get("changed"):
+                backup = store.create_backup_snapshot("state-rebuilt")
+                result["desktop_backup"] = str(backup) if backup else None
         elif args.command == "rebuild-indexes":
             result = store.rebuild_indexes(args.apply)
+            if args.apply and result.get("changed"):
+                backup = store.create_backup_snapshot("indexes-rebuilt")
+                result["desktop_backup"] = str(backup) if backup else None
         elif args.command == "heartbeat":
             if args.check_only and args.repair:
                 raise ValueError("--check-only and --repair cannot be used together")
             create_jobs = not (args.no_create_jobs or args.check_only)
             result = store.heartbeat(create_jobs, repair=args.repair)
+            if result.get("created_job") or result.get("repairs"):
+                backup = store.create_backup_snapshot(
+                    "heartbeat-maintenance",
+                    {
+                        "created_job": result.get("created_job"),
+                        "repair_count": len(result.get("repairs", [])),
+                    },
+                )
+                result["backup"] = str(backup) if backup else None
         else:
             parser.error(f"Unknown command: {args.command}")
             return 2

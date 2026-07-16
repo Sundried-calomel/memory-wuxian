@@ -12,6 +12,9 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Index-first retrieval with raw-text verification
 - Preview-first state and index recovery
 - Heartbeat validation, maintenance, and repair modes
+- Incremental Codex rollout parsing with stable source IDs and per-session cursors
+- Automatic macOS synchronization through a LaunchAgent
+- Timestamped desktop snapshots with SHA-256 manifests and an append-only backup log
 - A transparent file layout with no database or external model API dependency
 
 ## Install
@@ -38,11 +41,26 @@ ARCHIVE="$HOME/Documents/MemoryWuxianArchive"
 python3 scripts/memory_cli.py --root "$ARCHIVE" init
 python3 scripts/memory_cli.py --root "$ARCHIVE" append --speaker user --text "Hello"
 python3 scripts/memory_cli.py --root "$ARCHIVE" append --speaker assistant --text "Hello."
+python3 scripts/memory_cli.py --root "$ARCHIVE" sync-codex --session-file "$HOME/.codex/sessions/.../rollout-....jsonl"
 python3 scripts/memory_cli.py --root "$ARCHIVE" status
 python3 scripts/memory_cli.py --root "$ARCHIVE" heartbeat --check-only
 ```
 
 The CLI does not call a language-model API. It creates deterministic summary jobs; the invoking Agent generates constrained summary JSON and gives it back to `ingest-summary`.
+
+## Automatic Codex capture on macOS
+
+Installing a Skill does not by itself subscribe to Codex client events. Memory無限 supplies an incremental parser plus a LaunchAgent installer:
+
+```bash
+python3 scripts/install_codex_autosync.py \
+  --archive-root "$ARCHIVE" \
+  --load
+```
+
+The LaunchAgent checks native Codex rollout files every 15 seconds. It stores user messages and visible assistant commentary/final answers, while excluding system instructions, internal reasoning, tool calls, and tool output. A per-session cursor and stable source-derived IDs make retries idempotent.
+
+With the default configuration, every successful memory mutation creates a new snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes. Each snapshot contains `backup-manifest.json`; the backup root contains `backup-log.jsonl`.
 
 ## Memory hierarchy
 
@@ -61,7 +79,7 @@ The default thresholds are configurable. The initial implementation deliberately
 - Use `--root` outside the repository for private archives.
 - Mutable files under the bundled `memory/` directory are excluded by `.gitignore`.
 - The CLI can redact obvious secrets when explicitly configured, but users remain responsible for deciding what may be persisted.
-- The Skill does not automatically intercept Codex client events. An Agent or client hook must explicitly call `append` for each message that should be archived.
+- Automatic capture requires the supplied LaunchAgent or another explicitly configured client hook.
 
 ## Development
 

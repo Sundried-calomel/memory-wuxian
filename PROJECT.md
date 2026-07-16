@@ -12,5 +12,7 @@
 10. Rebuild derived state and indexes from persisted records without modifying raw history.
 11. Do not infer long-term preferences, psychological traits, or subjective importance in Version 1.
 12. Keep runtime compression temporary and separate from permanent memory.
+13. Treat Codex rollout files as import sources; store only user-visible dialogue and retain source line references.
+14. Create a recorded external snapshot after each successful archive synchronization or derived-memory update when backup is enabled.
 
 Architectural changes must preserve these invariants or document an explicit replacement decision in `references/decisions.md` before implementation.

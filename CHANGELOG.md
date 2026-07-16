@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 - 2026-07-16
+
+- Added incremental parsing of native Codex rollout JSONL files.
+- Added stable source IDs and persisted per-session cursors for idempotent synchronization.
+- Preserved visible commentary while counting only final answers as completed dialogue rounds.
+- Excluded system instructions, internal reasoning, tool calls, and tool outputs from imported dialogue records.
+- Added timestamped desktop snapshots and an append-only backup log after successful memory writes.
+- Added a macOS LaunchAgent installer for automatic current-and-future Codex session synchronization.
+
 ## 0.2.0 - 2026-07-16
 
 - Added SHA-256 integrity fields for raw records, summary sources, and summary files.

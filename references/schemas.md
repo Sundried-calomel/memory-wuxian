@@ -15,11 +15,29 @@ Each daily Markdown file contains append-only fenced JSON records. Required keys
   "round_number": 1,
   "reply_to": null,
   "text": "Exact stored message text",
+  "completes_round": false,
+  "source": {
+    "kind": "codex-rollout-jsonl",
+    "session_id": "019f...",
+    "path": "/Users/example/.codex/sessions/...jsonl",
+    "line": 42,
+    "phase": "commentary"
+  },
   "content_sha256": "SHA-256 of the canonical record without this field"
 }
 ```
 
 The JSON payload inside the raw Markdown file is authoritative. Machine-readable indexes contain routing metadata and do not replace it.
+
+`source` is required for client-imported records and omitted for manually appended records. Imported `commentary` is preserved with `completes_round: false`; a visible `final_answer` completes the pending user round.
+
+## Codex import cursor
+
+Each imported session has one cursor under `memory/imports/codex/<session-id>.json`. It records the source path, last consumed JSONL line, source size and modification time. Cursor writes occur only after all selected source lines are handled. Stable source-derived message IDs provide a second idempotency boundary if cursor recovery repeats a line.
+
+## Desktop backup manifest
+
+Every enabled external snapshot contains `backup-manifest.json` with the source archive, reason, archive state, and SHA-256/size of every copied file. The backup root contains append-only `backup-log.jsonl` entries. The primary archive remains authoritative.
 
 ## Summary result JSON
 
