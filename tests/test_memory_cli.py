@@ -1,4 +1,5 @@
 import json
+import plistlib
 import subprocess
 import sys
 import tempfile
@@ -8,6 +9,7 @@ from pathlib import Path
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
+INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
 
 
 class MemoryCliTest(unittest.TestCase):
@@ -128,6 +130,79 @@ safety:
         raw_text = next(self.root.glob("raw/*/*/*.md")).read_text(encoding="utf-8")
         self.assertIn("[REDACTED]", raw_text)
         self.assertNotIn("secret-value", raw_text)
+
+    def test_conversations_are_archived_separately_and_rebuild_from_raw(self):
+        self.run_cli(
+            "append",
+            "--speaker",
+            "user",
+            "--conversation-id",
+            "codex:thread-alpha",
+            "--text",
+            "Alpha user text",
+        )
+        self.run_cli(
+            "append",
+            "--speaker",
+            "assistant",
+            "--conversation-id",
+            "codex:thread-alpha",
+            "--text",
+            "Alpha assistant text",
+        )
+        self.run_cli(
+            "append",
+            "--speaker",
+            "user",
+            "--conversation-id",
+            "codex:thread-beta",
+            "--text",
+            "Beta user text",
+        )
+        self.run_cli(
+            "append",
+            "--speaker",
+            "assistant",
+            "--conversation-id",
+            "codex:thread-beta",
+            "--text",
+            "Beta assistant text",
+        )
+
+        alpha = self.root / "conversations" / "codex-thread-alpha.md"
+        beta = self.root / "conversations" / "codex-thread-beta.md"
+        self.assertTrue(alpha.exists())
+        self.assertTrue(beta.exists())
+        alpha_text = alpha.read_text(encoding="utf-8")
+        beta_text = beta.read_text(encoding="utf-8")
+        self.assertIn("Alpha user text", alpha_text)
+        self.assertIn("Alpha assistant text", alpha_text)
+        self.assertNotIn("Beta user text", alpha_text)
+        self.assertIn("Beta user text", beta_text)
+        self.assertIn("Beta assistant text", beta_text)
+        self.assertNotIn("Alpha user text", beta_text)
+
+        raw_hashes_before = {
+            path: path.read_bytes()
+            for path in self.root.glob("raw/*/*/*.md")
+        }
+        preview = self.run_cli("rebuild-conversations")
+        self.assertFalse(preview["changed"])
+        self.assertEqual(preview["changed_files"], [])
+        alpha.write_text("damaged derived transcript\n", encoding="utf-8")
+        checked = self.run_cli("heartbeat", "--check-only")
+        self.assertEqual(checked["status"], "attention")
+        self.assertIn(
+            "conversation transcripts differ from raw records",
+            checked["repairable_issues"],
+        )
+        repaired = self.run_cli("heartbeat", "--repair", "--no-create-jobs")
+        self.assertEqual(repaired["status"], "ok")
+        self.assertIn("Alpha user text", alpha.read_text(encoding="utf-8"))
+        self.assertEqual(
+            raw_hashes_before,
+            {path: path.read_bytes() for path in self.root.glob("raw/*/*/*.md")},
+        )
 
     def test_hashes_are_persisted_and_source_drift_blocks_ingest(self):
         self.append_round(1)
@@ -278,10 +353,34 @@ safety:
         self.assertIn("这一轮已记录。", raw_text)
         self.assertNotIn("内部推理", raw_text)
         self.assertNotIn("工具输出", raw_text)
+        transcript_files = [
+            path for path in (self.root / "conversations").glob("*.md")
+            if path.name != "README.md"
+        ]
+        self.assertEqual(len(transcript_files), 1)
+        transcript = transcript_files[0]
+        transcript_text = transcript.read_text(encoding="utf-8")
+        self.assertIn("请记录这一轮", transcript_text)
+        self.assertIn("正在核对。", transcript_text)
+        self.assertIn("这一轮已记录。", transcript_text)
+        self.assertNotIn("内部推理", transcript_text)
+        self.assertNotIn("工具输出", transcript_text)
 
         repeated = self.run_cli("sync-codex", "--session-file", str(session))
         self.assertEqual(repeated["imported_messages"], 0)
+        self.assertEqual(repeated["repaired_transcripts"], 0)
         self.assertIsNone(repeated["backup"])
+
+        transcript.unlink()
+        cursor_path = self.root / "imports" / "codex" / "thread-001.json"
+        cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
+        cursor["last_line"] = 0
+        cursor_path.write_text(json.dumps(cursor), encoding="utf-8")
+        repaired_transcript = self.run_cli("sync-codex", "--session-file", str(session))
+        self.assertEqual(repaired_transcript["imported_messages"], 0)
+        self.assertEqual(repaired_transcript["repaired_transcripts"], 3)
+        self.assertIsNotNone(repaired_transcript["backup"])
+        self.assertIn("请记录这一轮", transcript.read_text(encoding="utf-8"))
 
         with session.open("a", encoding="utf-8") as handle:
             handle.write(
@@ -303,8 +402,39 @@ safety:
             json.loads(line)
             for line in (backup_root / "backup-log.jsonl").read_text(encoding="utf-8").splitlines()
         ]
-        self.assertEqual(len(backup_entries), 2)
+        self.assertEqual(len(backup_entries), 3)
         self.assertEqual(backup_entries[-1]["total_messages"], 5)
+
+    def test_launch_agent_installer_uses_selected_python(self):
+        sessions_root = self.base / "sessions"
+        sessions_root.mkdir()
+        selected_python = self.base / "python3"
+        selected_python.symlink_to(Path(sys.executable).resolve())
+        plist_path = self.base / "com.memorywuxian.codex-sync.plist"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(INSTALLER),
+                "--archive-root",
+                str(self.root),
+                "--skill-root",
+                str(SKILL_ROOT),
+                "--sessions-root",
+                str(sessions_root),
+                "--python-executable",
+                str(selected_python),
+                "--output",
+                str(plist_path),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        with plist_path.open("rb") as handle:
+            payload = plistlib.load(handle)
+        self.assertEqual(payload["ProgramArguments"][0], str(selected_python))
+        self.assertEqual(Path(payload["ProgramArguments"][0]).resolve(), Path(sys.executable).resolve())
 
 
 if __name__ == "__main__":

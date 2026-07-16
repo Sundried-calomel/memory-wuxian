@@ -21,6 +21,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 10. Rebuild only derived state and indexes; never repair integrity failures by rewriting history.
 11. When Codex integration is enabled, import only user-visible dialogue and preserve native source references.
 12. Complete the primary archive write before creating its external backup snapshot.
+13. Maintain one complete transcript per conversation; never place records from different conversation IDs in the same transcript.
 
 ## Operating workflow
 
@@ -31,7 +32,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 5. Use `retrieve` for earlier topics. Let it search indexes first and raw records second.
 6. Base answers on the recovered raw segment and report the returned verification level.
 7. Run `heartbeat` for validation, pending-job recovery, and count-trigger checks. Do not use heartbeat as the primary trigger.
-8. Preview `rebuild-state` or `rebuild-indexes` before applying a recovery operation.
+8. Preview `rebuild-state`, `rebuild-conversations`, or `rebuild-indexes` before applying a recovery operation.
 9. Use `sync-codex` to import native Codex rollout JSONL incrementally. Repeated synchronization must remain idempotent.
 10. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
 
@@ -48,6 +49,8 @@ python3 scripts/memory_cli.py ingest-summary --job memory/pending/<job>.json --s
 python3 scripts/memory_cli.py retrieve --query "..."
 python3 scripts/memory_cli.py rebuild-state
 python3 scripts/memory_cli.py rebuild-state --apply
+python3 scripts/memory_cli.py rebuild-conversations
+python3 scripts/memory_cli.py rebuild-conversations --apply
 python3 scripts/memory_cli.py rebuild-indexes
 python3 scripts/memory_cli.py rebuild-indexes --apply
 python3 scripts/memory_cli.py heartbeat --check-only

@@ -7,6 +7,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 ## What it provides
 
 - Append-only Markdown conversation records with timestamps and SHA-256 integrity fields
+- One complete, automatically updated Markdown transcript per conversation
 - Count-triggered Level-1 summaries and count-triggered higher-level summaries
 - Persistent timeline, concept, summary, and conversation indexes
 - Index-first retrieval with raw-text verification
@@ -55,10 +56,15 @@ Installing a Skill does not by itself subscribe to Codex client events. Memory�
 ```bash
 python3 scripts/install_codex_autosync.py \
   --archive-root "$ARCHIVE" \
+  --python-executable /opt/homebrew/bin/python3 \
   --load
 ```
 
 The LaunchAgent checks native Codex rollout files every 15 seconds. It stores user messages and visible assistant commentary/final answers, while excluding system instructions, internal reasoning, tool calls, and tool output. A per-session cursor and stable source-derived IDs make retries idempotent.
+
+Every imported conversation is also written to its own file under `memory/conversations/`. A transcript contains only one conversation ID and includes both exact machine-readable records and readable message text. The immutable files under `raw/` remain authoritative; per-conversation transcripts are deterministic views that can be rebuilt without changing raw history.
+
+On macOS, grant Full Disk Access to the same executable passed through `--python-executable` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the resolved executable in the generated plist before claiming automatic capture is active.
 
 With the default configuration, every successful memory mutation creates a new snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes. Each snapshot contains `backup-manifest.json`; the backup root contains `backup-log.jsonl`.
 
@@ -66,6 +72,7 @@ With the default configuration, every successful memory mutation creates a new s
 
 ```text
 Raw conversation records
+  -> Complete per-conversation transcripts
   -> Level-1 summaries after a fixed number of completed dialogue rounds
     -> Higher-level summaries after a fixed number of child summaries
       -> Timeline and concept indexes

@@ -26,6 +26,7 @@ Use Memory無限 to preserve conversation history outside the active context win
 18. When Codex synchronization is configured, import native rollout files incrementally and preserve source session, line, and phase metadata.
 19. Preserve visible assistant commentary, but complete a dialogue round only when the corresponding final answer is persisted.
 20. After each successful primary-archive mutation, create and log the configured desktop snapshot before reporting the write as fully backed up.
+21. Maintain one complete derived transcript per conversation under `memory/conversations/`; a transcript must never contain records from another conversation ID.
 
 ## Authority order
 

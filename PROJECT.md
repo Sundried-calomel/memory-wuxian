@@ -14,5 +14,6 @@
 12. Keep runtime compression temporary and separate from permanent memory.
 13. Treat Codex rollout files as import sources; store only user-visible dialogue and retain source line references.
 14. Create a recorded external snapshot after each successful archive synchronization or derived-memory update when backup is enabled.
+15. Maintain one complete derived transcript for each conversation ID without rewriting or replacing authoritative raw history.
 
 Architectural changes must preserve these invariants or document an explicit replacement decision in `references/decisions.md` before implementation.

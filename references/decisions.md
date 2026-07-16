@@ -41,3 +41,9 @@ Read native Codex rollout JSONL incrementally and persist per-session cursors. I
 Status: Accepted.
 
 Write and index the primary archive first. After a successful mutation, create a timestamped external snapshot with a file-hash manifest and append an entry to the backup log. A backup never becomes the writable source of truth.
+
+## D-008: Conversation transcripts are isolated derived archives
+
+Status: Accepted.
+
+Maintain one complete Markdown transcript for each conversation ID. Never combine records from different conversations in one transcript. Keep daily raw files as immutable authority and rebuild per-conversation transcripts only as deterministic derived files, with preview, archived replacement, and integrity checks.

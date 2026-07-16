@@ -8,6 +8,7 @@ import datetime as dt
 import os
 import plistlib
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional, Sequence
@@ -46,6 +47,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Codex native session directory",
     )
     parser.add_argument(
+        "--python-executable",
+        default=sys.executable,
+        help="Python executable used by LaunchAgent; defaults to the interpreter running this installer",
+    )
+    parser.add_argument(
         "--since",
         help="Only monitor session files modified from this ISO-8601 time; defaults to installation time",
     )
@@ -70,6 +76,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     skill_root = Path(args.skill_root).expanduser().resolve()
     archive_root = Path(args.archive_root).expanduser().resolve()
     sessions_root = Path(args.sessions_root).expanduser().resolve()
+    python_executable = Path(args.python_executable).expanduser().absolute()
     output = Path(args.output).expanduser().resolve()
     cli = skill_root / "scripts" / "memory_cli.py"
     config = skill_root / "config.yaml"
@@ -77,6 +84,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         raise SystemExit(f"Memory無限 installation is incomplete: {skill_root}")
     if not sessions_root.is_dir():
         raise SystemExit(f"Codex sessions directory does not exist: {sessions_root}")
+    if not python_executable.is_file():
+        raise SystemExit(f"Python executable does not exist: {python_executable}")
     since = args.since or dt.datetime.now().astimezone().isoformat(timespec="seconds")
     dt.datetime.fromisoformat(since[:-1] + "+00:00" if since.endswith("Z") else since)
 
@@ -85,7 +94,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     payload = {
         "Label": LABEL,
         "ProgramArguments": [
-            "/usr/bin/python3",
+            str(python_executable),
             str(cli),
             "--root",
             str(archive_root),

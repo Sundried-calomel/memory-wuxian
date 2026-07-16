@@ -31,6 +31,12 @@ The JSON payload inside the raw Markdown file is authoritative. Machine-readable
 
 `source` is required for client-imported records and omitted for manually appended records. Imported `commentary` is preserved with `completes_round: false`; a visible `final_answer` completes the pending user round.
 
+## Per-conversation transcript
+
+Each file under `memory/conversations/` represents exactly one `conversation_id`. It contains the same complete stored JSON records as the authoritative raw archive, ordered by global sequence, followed by a readable rendering of each stored message. A transcript may contain user messages and visible assistant commentary/final answers from its own conversation only.
+
+Transcripts are derived files. `rebuild-conversations` compares them with authoritative raw records, previews differences by default, and archives existing transcript files before an applied rebuild.
+
 ## Codex import cursor
 
 Each imported session has one cursor under `memory/imports/codex/<session-id>.json`. It records the source path, last consumed JSONL line, source size and modification time. Cursor writes occur only after all selected source lines are handled. Stable source-derived message IDs provide a second idempotency boundary if cursor recovery repeats a line.

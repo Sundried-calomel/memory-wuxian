@@ -22,6 +22,9 @@ memory/
 ├── README.md
 ├── state.json
 ├── raw/YYYY/MM/YYYY-MM-DD.md
+├── conversations/
+│   ├── README.md
+│   └── codex-<session-id>.md
 ├── summaries/
 │   ├── level-1/L1-000001.md
 │   ├── level-2/L2-000001.md
@@ -42,7 +45,7 @@ memory/
 └── .locks/
 ```
 
-Raw files contain complete stored messages. Summary files contain every persistent summary level. Indexes provide human-readable and machine-readable navigation. Retrieval records how history was recovered. Pending files preserve unfinished work. State stores reconstructable counters and checkpoints.
+Raw files contain complete stored messages and remain authoritative. `conversations/` contains one complete deterministic transcript per conversation ID so different tasks are never mixed in the same human-readable archive. Summary files contain every persistent summary level. Indexes provide human-readable and machine-readable navigation. Retrieval records how history was recovered. Pending files preserve unfinished work. State stores reconstructable counters and checkpoints.
 
 ## 2. Source authority and immutability
 
@@ -55,6 +58,10 @@ raw source > Level-1 > Level-2 > higher levels > model recollection
 Append raw messages before compression. Flush each append. Never replace original wording with a correction or summary. Add a linked correction record when needed. Do not silently rewrite a summary when a discrepancy appears; log the discrepancy and use the raw record for current reasoning.
 
 Store raw records as daily Markdown files containing parseable one-line JSON payloads. Include timestamp with timezone, unique message ID, speaker, exact stored text, sequence, round number, conversation ID, and reply relationship when available.
+
+After each authoritative raw append, append the same stored record to exactly one file under `conversations/`. Codex transcripts use the native session ID in the filename. Non-Codex conversation IDs use a deterministic SHA-256-derived filename. Each transcript includes the exact JSON record plus readable message text. Treat transcripts as derived archives: rebuild them from raw records when missing or inconsistent, and never use a transcript rebuild to rewrite raw history.
+
+When a source-derived message ID is encountered again, verify that the corresponding transcript record exists before treating the retry as a complete no-op. Restore a missing transcript record from authoritative raw history and create the configured backup snapshot for that repair.
 
 ## 3. Turn counting and summary hierarchy
 
@@ -138,7 +145,7 @@ It does not require embeddings, an external database, autonomous importance scor
 
 New raw records contain a canonical content SHA-256. Each summary job hashes its exact raw range or ordered child-summary set. Summary ingestion recalculates this value and refuses to continue when the source changed. The summary index records the resulting summary-file SHA-256.
 
-Use `rebuild-state` and `rebuild-indexes` without `--apply` to preview reconstruction. Applying either command archives the previous derived files under `memory/archive/` before replacement. Reconstruction never edits raw messages or summary files.
+Use `rebuild-state`, `rebuild-conversations`, and `rebuild-indexes` without `--apply` to preview reconstruction. Applying a command archives the previous derived files under `memory/archive/` before replacement. Reconstruction never edits raw messages or summary files.
 
 Heartbeat modes are distinct:
 

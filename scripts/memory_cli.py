@@ -288,6 +288,7 @@ class MemoryStore:
         self.config = config
         self.state_path = self.root / "state.json"
         self.raw_dir = self.root / "raw"
+        self.conversation_dir = self.root / "conversations"
         self.summaries_dir = self.root / "summaries"
         self.index_dir = self.root / "indexes"
         self.retrieval_dir = self.root / "retrieval"
@@ -325,6 +326,7 @@ class MemoryStore:
     def init(self) -> Dict[str, Any]:
         directories = [
             self.raw_dir,
+            self.conversation_dir,
             self.summaries_dir,
             self.index_dir,
             self.retrieval_dir,
@@ -346,6 +348,12 @@ class MemoryStore:
                 "`rebuild-state` or `rebuild-indexes` before applying recovery. Reconstruction "
                 "may replace derived files after archiving them, but it never edits raw messages "
                 "or summary files.\n"
+            ),
+            self.conversation_dir / "README.md": (
+                "# Per-Conversation Archives\n\n"
+                "Each Markdown file contains the complete visible transcript for exactly one "
+                "conversation. These files are deterministic views of the immutable records "
+                "under `raw/`.\n"
             ),
             self.index_dir / "timeline.md": "# Timeline Index\n",
             self.index_dir / "concepts.md": "# Concept Index\n",
@@ -396,6 +404,63 @@ class MemoryStore:
         )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(header, encoding="utf-8")
+
+    def conversation_transcript_path(self, conversation_id: str) -> Path:
+        codex_match = re.fullmatch(r"codex:([A-Za-z0-9-]+)", conversation_id)
+        if codex_match:
+            filename = f"codex-{codex_match.group(1)}.md"
+        else:
+            digest = hashlib.sha256(conversation_id.encode("utf-8")).hexdigest()[:16]
+            filename = f"conversation-{digest}.md"
+        return self.conversation_dir / filename
+
+    def conversation_transcript_header(self, conversation_id: str) -> str:
+        return (
+            "---\n"
+            "record_type: conversation_transcript\n"
+            f"conversation_id: {json.dumps(conversation_id, ensure_ascii=False)}\n"
+            "format_version: 1\n"
+            "---\n\n"
+            f"# Conversation {conversation_id}\n\n"
+            "This file contains user messages and user-visible assistant text only. "
+            "The fenced JSON record preserves the exact stored text and source metadata.\n\n"
+        )
+
+    def conversation_transcript_block(self, record: Dict[str, Any]) -> str:
+        stored_record = {key: value for key, value in record.items() if key != "_path"}
+        source = stored_record.get("source") or {}
+        phase = source.get("phase")
+        phase_label = f" / {phase}" if phase else ""
+        return (
+            f"{RAW_MARKER}\n"
+            "```json\n"
+            f"{json.dumps(stored_record, ensure_ascii=False, separators=(',', ':'))}\n"
+            "```\n\n"
+            f"## {stored_record['speaker']}{phase_label}\n\n"
+            f"- Timestamp: `{stored_record['timestamp']}`\n"
+            f"- Message ID: `{stored_record['message_id']}`\n\n"
+            f"{stored_record['text']}\n\n"
+        )
+
+    def append_conversation_transcript(self, record: Dict[str, Any]) -> Path:
+        conversation_id = str(record["conversation_id"])
+        path = self.conversation_transcript_path(conversation_id)
+        lock_name = f"conversation-{hashlib.sha256(conversation_id.encode('utf-8')).hexdigest()[:16]}.lock"
+        with exclusive_lock(self.locks_dir / lock_name):
+            if not path.exists():
+                atomic_write_text(path, self.conversation_transcript_header(conversation_id))
+            append_text(path, self.conversation_transcript_block(record))
+        return path
+
+    def render_conversation_transcript(
+        self,
+        conversation_id: str,
+        records: Iterable[Dict[str, Any]],
+    ) -> str:
+        ordered = sorted(records, key=lambda item: int(item["sequence"]))
+        return self.conversation_transcript_header(conversation_id) + "".join(
+            self.conversation_transcript_block(record) for record in ordered
+        )
 
     def append_message(
         self,
@@ -451,11 +516,21 @@ class MemoryStore:
                 )
                 if not same_source:
                     raise ValueError(f"Message ID already exists with different content: {message_id}")
+                transcript_path = self.conversation_transcript_path(conversation_id)
+                transcript_ids = {
+                    record.get("message_id")
+                    for record in self.read_raw_file(transcript_path)
+                }
+                transcript_repaired = message_id not in transcript_ids
+                if transcript_repaired:
+                    self.append_conversation_transcript(existing)
                 return {
                     "status": "duplicate",
                     "message_id": message_id,
                     "sequence": existing["sequence"],
                     "path": existing.get("_path"),
+                    "conversation_path": self.relative(transcript_path),
+                    "transcript_repaired": transcript_repaired,
                     "text_redacted": bool(existing.get("redacted")),
                 }
 
@@ -483,8 +558,11 @@ class MemoryStore:
                 block = f"{RAW_MARKER}\n```json\n{json.dumps(record, ensure_ascii=False, separators=(',', ':'))}\n```\n\n"
                 append_text(raw_path, block)
 
+            transcript_path = self.append_conversation_transcript(record)
+
             index_record = {key: value for key, value in record.items() if key != "text"}
             index_record["path"] = self.relative(raw_path)
+            index_record["conversation_path"] = self.relative(transcript_path)
             append_jsonl(self.index_dir / "conversations.jsonl", index_record)
 
             state["total_messages"] = sequence
@@ -593,6 +671,7 @@ class MemoryStore:
         last_line = int(cursor.get("last_line", 0))
         imported = 0
         duplicates = 0
+        repaired_transcripts = 0
         total_lines = 0
         visible_events = 0
 
@@ -648,6 +727,8 @@ class MemoryStore:
                 )
                 if result.get("status") == "duplicate":
                     duplicates += 1
+                    if result.get("transcript_repaired"):
+                        repaired_transcripts += 1
                 else:
                     imported += 1
 
@@ -678,6 +759,7 @@ class MemoryStore:
             "visible_events": visible_events,
             "imported_messages": imported,
             "duplicate_messages": duplicates,
+            "repaired_transcripts": repaired_transcripts,
         }
 
     def sync_codex(
@@ -701,6 +783,7 @@ class MemoryStore:
                     candidates.add(path.resolve())
         results = [self.sync_codex_file(path) for path in sorted(candidates)]
         imported = sum(int(item["imported_messages"]) for item in results)
+        repaired_transcripts = sum(int(item["repaired_transcripts"]) for item in results)
         created_job = None
         if imported:
             job = self.make_summary_job()
@@ -711,6 +794,7 @@ class MemoryStore:
             "session_count": len(results),
             "imported_messages": imported,
             "duplicate_messages": sum(int(item["duplicate_messages"]) for item in results),
+            "repaired_transcripts": repaired_transcripts,
             "created_summary_job": created_job,
         }
 
@@ -1230,6 +1314,68 @@ class MemoryStore:
             "recovered_state": recovered,
         }
 
+    def expected_conversation_transcripts(
+        self,
+        raw_records: Optional[Iterable[Dict[str, Any]]] = None,
+    ) -> Dict[Path, str]:
+        grouped: Dict[str, List[Dict[str, Any]]] = {}
+        records = list(raw_records) if raw_records is not None else self.read_all_raw()
+        for record in records:
+            grouped.setdefault(str(record["conversation_id"]), []).append(record)
+        return {
+            self.conversation_transcript_path(conversation_id): self.render_conversation_transcript(
+                conversation_id,
+                conversation_records,
+            )
+            for conversation_id, conversation_records in grouped.items()
+        }
+
+    def rebuild_conversations(self, apply: bool) -> Dict[str, Any]:
+        self.init()
+        raw_records = self.read_all_raw()
+        integrity_issues = []
+        for record in raw_records:
+            stored_digest = record.get("content_sha256")
+            if stored_digest and stored_digest != raw_record_sha256(record):
+                integrity_issues.append(f"raw content SHA-256 mismatch: {record['message_id']}")
+        if apply and integrity_issues:
+            raise RuntimeError(
+                "Refusing to rebuild conversation transcripts over integrity failures: "
+                + "; ".join(integrity_issues)
+            )
+
+        expected = self.expected_conversation_transcripts(raw_records)
+        current_paths = {
+            path for path in self.conversation_dir.glob("*.md") if path.name != "README.md"
+        }
+        changed_paths = sorted(
+            path
+            for path, content in expected.items()
+            if not path.exists() or path.read_text(encoding="utf-8") != content
+        )
+        extra_paths = sorted(current_paths - set(expected))
+        backup = None
+        if apply and (changed_paths or extra_paths):
+            backup = self.backup_derived_files(
+                "conversation-rebuild",
+                sorted(current_paths),
+            )
+            for path, content in expected.items():
+                atomic_write_text(path, content)
+            for path in extra_paths:
+                path.unlink()
+        return {
+            "mode": "apply" if apply else "preview",
+            "changed": bool(apply and (changed_paths or extra_paths)),
+            "backup": str(backup) if backup else None,
+            "conversation_count": len(expected),
+            "raw_messages": len(raw_records),
+            "changed_files": [self.relative(path) for path in changed_paths],
+            "extra_files": [self.relative(path) for path in extra_paths],
+            "integrity_issues": integrity_issues,
+            "can_apply": not integrity_issues,
+        }
+
     def rebuild_indexes(self, apply: bool) -> Dict[str, Any]:
         self.init()
         raw_records = self.read_all_raw()
@@ -1273,6 +1419,9 @@ class MemoryStore:
             }
             index_record["content_sha256"] = record.get("content_sha256") or raw_record_sha256(record)
             index_record["path"] = record["_path"]
+            index_record["conversation_path"] = self.relative(
+                self.conversation_transcript_path(str(record["conversation_id"]))
+            )
             conversations.append(index_record)
 
         registry = []
@@ -1395,6 +1544,19 @@ class MemoryStore:
         warnings = []
         missing_sources = []
         raw_records = self.read_all_raw()
+
+        expected_transcripts = self.expected_conversation_transcripts(raw_records)
+        current_transcript_paths = {
+            path for path in self.conversation_dir.glob("*.md") if path.name != "README.md"
+        }
+        transcript_mismatch = current_transcript_paths != set(expected_transcripts)
+        if not transcript_mismatch:
+            transcript_mismatch = any(
+                path.read_text(encoding="utf-8") != content
+                for path, content in expected_transcripts.items()
+            )
+        if transcript_mismatch:
+            repairable_issues.append("conversation transcripts differ from raw records")
 
         sequences = [int(record["sequence"]) for record in raw_records]
         if len(sequences) != len(set(sequences)):
@@ -1652,6 +1814,9 @@ class MemoryStore:
         return {
             **state,
             "root": str(self.root),
+            "conversation_archives": len(
+                [path for path in self.conversation_dir.glob("*.md") if path.name != "README.md"]
+            ),
             "pending_summary_jobs": len(self.pending_jobs()),
             "summary_counts": {
                 str(level): sum(1 for summary in summaries if int(summary["level"]) == level)
@@ -1666,10 +1831,16 @@ class MemoryStore:
         before = self.audit()
         repairs = []
         if repair and not before["integrity_issues"]:
+            needs_conversation_rebuild = any(
+                "conversation transcript" in issue
+                for issue in before["repairable_issues"]
+            )
             needs_index_rebuild = any(
                 "index" in issue or "registry" in issue
                 for issue in before["repairable_issues"]
             )
+            if needs_conversation_rebuild:
+                repairs.append({"conversations": self.rebuild_conversations(apply=True)})
             if needs_index_rebuild:
                 repairs.append({"indexes": self.rebuild_indexes(apply=True)})
             if before["state_differences"] or needs_index_rebuild:
@@ -1773,6 +1944,15 @@ def build_parser() -> argparse.ArgumentParser:
     retrieve_parser.add_argument("--query", required=True)
     rebuild_state_parser = subparsers.add_parser("rebuild-state", help="Preview or apply state reconstruction from persisted files")
     rebuild_state_parser.add_argument("--apply", action="store_true", help="Back up and replace state.json")
+    rebuild_conversations_parser = subparsers.add_parser(
+        "rebuild-conversations",
+        help="Preview or rebuild one complete transcript per conversation",
+    )
+    rebuild_conversations_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Back up and replace derived per-conversation transcripts",
+    )
     rebuild_indexes_parser = subparsers.add_parser("rebuild-indexes", help="Preview or apply derived-index reconstruction")
     rebuild_indexes_parser.add_argument("--apply", action="store_true", help="Back up and replace derived indexes")
     heartbeat_parser = subparsers.add_parser("heartbeat", help="Validate archive state and recover due work")
@@ -1802,7 +1982,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.allow_secrets,
                 complete_round=not args.nonfinal_assistant,
             )
-            if result.get("status") == "appended":
+            if result.get("status") == "appended" or result.get("transcript_repaired"):
                 backup = store.create_backup_snapshot(
                     "append-message",
                     {"message_id": result.get("message_id")},
@@ -1816,11 +1996,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 Path(args.sessions_root) if args.sessions_root else None,
                 args.since,
             )
-            if result["imported_messages"]:
+            if result["imported_messages"] or result["repaired_transcripts"]:
                 backup = store.create_backup_snapshot(
                     "codex-sync",
                     {
                         "imported_messages": result["imported_messages"],
+                        "repaired_transcripts": result["repaired_transcripts"],
                         "session_ids": [item["session_id"] for item in result["sessions"]],
                     },
                 )
@@ -1848,6 +2029,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = store.rebuild_state(args.apply)
             if args.apply and result.get("changed"):
                 backup = store.create_backup_snapshot("state-rebuilt")
+                result["desktop_backup"] = str(backup) if backup else None
+        elif args.command == "rebuild-conversations":
+            result = store.rebuild_conversations(args.apply)
+            if args.apply and result.get("changed"):
+                backup = store.create_backup_snapshot("conversation-transcripts-rebuilt")
                 result["desktop_backup"] = str(backup) if backup else None
         elif args.command == "rebuild-indexes":
             result = store.rebuild_indexes(args.apply)

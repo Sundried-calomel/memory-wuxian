@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0 - 2026-07-16
+
+- Added one complete Markdown transcript per conversation ID under `memory/conversations/`.
+- Added automatic transcript updates during append and Codex synchronization.
+- Made idempotent retries restore missing transcript records and create a recovery snapshot.
+- Added preview-first `rebuild-conversations` recovery with archived replacement and desktop backup.
+- Added heartbeat detection and repair for missing, altered, extra, or cross-conversation transcript content.
+- Preserved existing raw records and summary hashes as immutable authority during historical transcript backfill.
+
+## 0.3.2 - 2026-07-16
+
+- Preserve the configured stable Python entry path in the LaunchAgent instead of resolving it to a versioned Homebrew Cellar path.
+- Added a symlink-path regression test so Homebrew Python upgrades do not require plist rewrites.
+
+## 0.3.1 - 2026-07-16
+
+- Added explicit LaunchAgent Python executable selection.
+- Removed the hard-coded `/usr/bin/python3` runtime, which may resolve to an ungranted Xcode interpreter on macOS.
+- Added a plist-generation regression test for the selected interpreter path.
+
 ## 0.3.0 - 2026-07-16
 
 - Added incremental parsing of native Codex rollout JSONL files.
