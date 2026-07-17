@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1 - 2026-07-17
+
+- Replace whole-query substring retrieval with deterministic normalized multi-term ranking across concepts, summaries, routing indexes, and authoritative raw text.
+- Exclude every conversation's currently incomplete round from historical matching so the active request cannot satisfy its own lookup.
+- Restore neighboring context only from the matched conversation instead of using globally interleaved message positions.
+- Return `verified` only when ranked raw records actually matched; index routes alone no longer promote arbitrary source ranges to verified context.
+- Add a regression case for the mixed Chinese/English `L +/-51 bp`, `90% identity`, and reciprocal-capture discussion.
+
 ## 0.7.0 - 2026-07-17
 
 - Add script-detected summary boundaries triggered by 5 completed rounds or 20,000 visible characters, whichever occurs first.

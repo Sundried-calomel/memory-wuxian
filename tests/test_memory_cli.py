@@ -110,6 +110,57 @@ safety:
         self.assertEqual(status["last_summarized_round"], 2)
         self.assertEqual(status["pending_summary_jobs"], 0)
 
+    def test_retrieve_matches_natural_language_terms_and_excludes_pending_echo(self):
+        self.run_cli(
+            "append",
+            "--speaker", "user",
+            "--conversation-id", "codex:target-thread",
+            "--text", "请定义 reference 合并口径",
+        )
+        self.run_cli(
+            "append",
+            "--speaker", "user",
+            "--conversation-id", "codex:other-thread",
+            "--text", "OTHER THREAD PRIVATE CONTEXT",
+        )
+        self.run_cli(
+            "append",
+            "--speaker", "assistant",
+            "--conversation-id", "codex:other-thread",
+            "--text", "OTHER THREAD FINAL",
+        )
+        historical = self.run_cli(
+            "append",
+            "--speaker", "assistant",
+            "--conversation-id", "codex:target-thread",
+            "--text", (
+                "代表性序列必须满足完整 ORF、长度 L +/-51 bp、Magic-BLAST "
+                "identity/query coverage/reference coverage >=90%，并执行 reciprocal capture。"
+            ),
+        )
+        self.run_cli(
+            "append",
+            "--speaker", "user",
+            "--conversation-id", "codex:target-thread",
+            "--text", (
+                "CURRENT QUERY ECHO：回看代表性序列的合并原则，Magic Blast 长度上下 "
+                "51 base pair、90% identity 和 reciprocal capture。"
+            ),
+        )
+
+        retrieval = self.run_cli(
+            "retrieve",
+            "--query",
+            "代表性序列 Magic Blast 长度上下51 base pair 90% identity reciprocal capture",
+            expect_json=False,
+        )
+
+        self.assertIn("Confidence: `verified`", retrieval)
+        self.assertIn(historical["message_id"], retrieval)
+        self.assertIn("长度 L +/-51 bp", retrieval)
+        self.assertNotIn("CURRENT QUERY ECHO", retrieval)
+        self.assertNotIn("OTHER THREAD PRIVATE CONTEXT", retrieval)
+
     def test_default_level_one_threshold_is_five_rounds(self):
         default_root = self.base / "default-memory"
         default_config = self.base / "default-config.yaml"

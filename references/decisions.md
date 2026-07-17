@@ -97,3 +97,9 @@ Build Level-1 routing records after 5 completed rounds or 20,000 visible charact
 Status: Accepted.
 
 Let scripts count rounds and visible characters. If a character threshold is crossed while an answer is still being written, wait for that answer's `final_answer` before freezing the source range. Then invoke one ephemeral Codex CLI process to generate the constrained semantic summary, ingest it after source-hash verification, and exit. Never keep an AI conversation active merely to watch for trigger conditions.
+
+## D-017: Historical retrieval is multi-term and conversation-local
+
+Status: Accepted.
+
+Normalize mixed natural-language queries and rank explicit terms deterministically across generated routes and raw records. Do not require the full query to occur verbatim. Exclude currently incomplete rounds to prevent self-matching, restore neighboring context only within the matched conversation, and report `verified` only after a raw-text match.
