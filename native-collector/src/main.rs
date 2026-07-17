@@ -109,7 +109,7 @@ impl Default for SafetyConfig {
 }
 
 fn default_l1_trigger() -> u64 {
-    20
+    10
 }
 fn default_true() -> bool {
     true

@@ -10,7 +10,7 @@ Use Memory無限 to preserve conversation history outside the active context win
 2. Preserve timestamp, timezone, speaker, message ID, conversation ID, turn order, and exact stored text.
 3. Keep raw records append-only. Store corrections as new linked records.
 4. Count one user message and its corresponding assistant response as one completed dialogue round.
-5. Generate a Level-1 summary after the configured number of completed rounds, normally 20.
+5. Generate a Level-1 summary after the configured number of completed rounds, normally 10.
 6. Generate a parent summary after the configured number of ungrouped child summaries, normally 10.
 7. Persist every summary and index as a file. Keep all child summaries after grouping.
 8. Include precise source ranges in every summary.

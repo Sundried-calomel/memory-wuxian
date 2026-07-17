@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2 - 2026-07-17
+
+- Reduce the default Level-1 assignment threshold from 20 completed rounds to 10.
+- Preserve existing pending-job source ranges when the threshold changes; the new value applies only to future jobs.
+
 ## 0.6.1 - 2026-07-17
 
 - Retain only the newest derived-file recovery backup under `memory/archive/` by default.

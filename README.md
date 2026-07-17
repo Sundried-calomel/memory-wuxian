@@ -89,6 +89,8 @@ Raw conversation records
 
 The default thresholds are configurable. The initial implementation deliberately avoids subjective importance scoring and automatic inference of long-term user preferences.
 
+The default Level-1 boundary is 10 completed dialogue rounds per conversation. Existing pending jobs keep their original immutable source ranges when this setting changes; the new threshold applies to newly assigned jobs.
+
 ## Privacy and integration boundary
 
 - Use `--root` outside the repository for private archives.

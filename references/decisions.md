@@ -6,6 +6,8 @@ Status: Accepted.
 
 Generate a Level-1 summary job after a configurable number of completed user-assistant dialogue rounds. Keep incomplete rounds persisted and outside the completed count.
 
+The default is 10 completed rounds. Previously assigned jobs remain unchanged when the configuration changes.
+
 ## D-002: Fixed-count summary hierarchy
 
 Status: Accepted.

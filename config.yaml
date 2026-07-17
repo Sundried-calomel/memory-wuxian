@@ -9,7 +9,7 @@ raw:
   flush_after_each_message: true
 
 summaries:
-  level_1_trigger_rounds: 20
+  level_1_trigger_rounds: 10
   higher_level_trigger_count: 10
   maximum_summary_depth: 8
   persist_all_levels: true

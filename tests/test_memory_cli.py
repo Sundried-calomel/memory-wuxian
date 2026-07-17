@@ -107,6 +107,44 @@ safety:
         self.assertEqual(status["last_summarized_round"], 2)
         self.assertEqual(status["pending_summary_jobs"], 0)
 
+    def test_default_level_one_threshold_is_ten_rounds(self):
+        default_root = self.base / "default-memory"
+        default_config = self.base / "default-config.yaml"
+        default_config.write_text(
+            'memory:\n  root_directory: "./default-memory"\n',
+            encoding="utf-8",
+        )
+
+        def run_default(*arguments):
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(CLI),
+                    "--root",
+                    str(default_root),
+                    "--config",
+                    str(default_config),
+                    *arguments,
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            return json.loads(completed.stdout)
+
+        run_default("init")
+        for number in range(1, 10):
+            run_default("append", "--speaker", "user", "--text", f"user {number}")
+            run_default("append", "--speaker", "assistant", "--text", f"assistant {number}")
+        self.assertEqual(run_default("make-summary-job")["status"], "not-due")
+        run_default("append", "--speaker", "user", "--text", "user 10")
+        run_default("append", "--speaker", "assistant", "--text", "assistant 10")
+        created = run_default("make-summary-job")
+        self.assertEqual(created["status"], "created")
+        job = json.loads(Path(created["job"]).read_text(encoding="utf-8"))
+        self.assertEqual(job["source_round_end"] - job["source_round_start"] + 1, 10)
+
     def test_higher_level_job_and_heartbeat_idempotency(self):
         for number in range(1, 3):
             self.append_round(number)

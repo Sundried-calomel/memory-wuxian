@@ -305,7 +305,7 @@ class MemoryStore:
 
     @property
     def level_1_trigger(self) -> int:
-        return int(nested_get(self.config, ["summaries", "level_1_trigger_rounds"], 20))
+        return int(nested_get(self.config, ["summaries", "level_1_trigger_rounds"], 10))
 
     @property
     def higher_trigger(self) -> int:

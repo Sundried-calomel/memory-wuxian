@@ -78,6 +78,8 @@ Keep incomplete user messages. Mark their round complete only after the correspo
 
 Create Level-1 jobs after one conversation accumulates `level_1_trigger_rounds` completed, unassigned rounds. Never combine records from different conversation IDs in one job. Lock the exact source message IDs, create a persistent job, and leave new raw writes available. Ingest the summary only after its schema and source references validate.
 
+The default `level_1_trigger_rounds` is 10. Changing it affects only future assignments; existing pending jobs retain their original source ranges and hashes.
+
 Create Level-N jobs after one conversation accumulates `higher_level_trigger_count` ungrouped Level-(N-1) summaries. A parent and all children must share one conversation ID. Routine parent generation reads only assigned child summaries and their metadata. Consult raw history only to resolve a contradiction. Preserve child summaries and persist parent-child relationships.
 
 ## 4. State and indexes
