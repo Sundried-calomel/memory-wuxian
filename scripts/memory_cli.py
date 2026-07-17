@@ -9,11 +9,13 @@ import datetime as dt
 import fcntl
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
 import sys
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -21,6 +23,13 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = SKILL_ROOT / "config.yaml"
 RAW_MARKER = "<!-- memory-wuxian-record -->"
+SEARCH_STOP_TERMS = {
+    "一个", "一样", "已经", "之前", "什么", "他们", "但是", "你们", "你应该",
+    "你的", "这个", "这些", "这样", "还是", "然后", "现在", "的话", "知道",
+    "我们", "我的", "意思", "怎么", "就是", "可以", "如果", "进行", "里面",
+    "对应", "时候", "一下", "因为", "所以", "the", "and", "for", "that", "this",
+    "with", "from", "into", "about",
+}
 
 
 def now_iso() -> str:
@@ -1145,6 +1154,96 @@ class MemoryStore:
     def deterministic_excerpt(text: str, limit: int = 240) -> str:
         compact = " ".join(text.split())
         return compact if len(compact) <= limit else compact[:limit]
+
+    @staticmethod
+    def normalize_search_text(text: str) -> str:
+        return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+
+    @classmethod
+    def search_terms(cls, query: str, limit: int = 128) -> List[str]:
+        normalized = cls.normalize_search_text(query)
+        ascii_terms = {
+            token
+            for token in re.findall(r"[a-z0-9]+", normalized)
+            if len(token) >= 2 and token not in SEARCH_STOP_TERMS
+        }
+        cjk_terms = set()
+        for run in re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff]+", normalized):
+            if 2 <= len(run) <= 8 and run not in SEARCH_STOP_TERMS:
+                cjk_terms.add(run)
+            for width in (4, 3, 2):
+                for start in range(0, len(run) - width + 1):
+                    term = run[start:start + width]
+                    if term not in SEARCH_STOP_TERMS:
+                        cjk_terms.add(term)
+        ordered_ascii = sorted(ascii_terms, key=lambda term: (-len(term), term))
+        ordered_cjk = sorted(cjk_terms, key=lambda term: (-len(term), term))
+        return (ordered_ascii + ordered_cjk)[:limit]
+
+    @classmethod
+    def ranked_search(
+        cls,
+        records: Sequence[Dict[str, Any]],
+        query_normalized: str,
+        terms: Sequence[str],
+        text_getter,
+    ) -> List[Dict[str, Any]]:
+        if not records:
+            return []
+        normalized_texts = [cls.normalize_search_text(text_getter(record)) for record in records]
+        document_frequencies = {
+            term: sum(1 for text in normalized_texts if term in text)
+            for term in terms
+        }
+        record_count = len(records)
+        ranked = []
+        for record, text in zip(records, normalized_texts):
+            matched = [term for term in terms if term in text]
+            exact_match = query_normalized in text
+            if not matched and not exact_match:
+                continue
+            score = sum(
+                (1.0 + min(len(term), 8) / 4.0)
+                * (1.0 + math.log((record_count + 1) / (document_frequencies[term] + 1)))
+                for term in matched
+            )
+            if exact_match:
+                score += 1000.0
+            ranked.append({
+                "record": record,
+                "score": score,
+                "matched_terms": matched,
+                "exact_match": exact_match,
+            })
+        return sorted(
+            ranked,
+            key=lambda item: (
+                -float(item["score"]),
+                -len(item["matched_terms"]),
+                int(item["record"].get(
+                    "sequence",
+                    item["record"].get("source_start_sequence", 0),
+                )),
+            ),
+        )
+
+    @staticmethod
+    def strongest_matches(
+        ranked: Sequence[Dict[str, Any]],
+        term_count: int,
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        if not ranked:
+            return []
+        minimum_terms = 1 if term_count <= 2 else 2
+        top_score = float(ranked[0]["score"])
+        threshold = top_score * 0.55
+        selected = [
+            item for item in ranked
+            if (item["exact_match"] or len(item["matched_terms"]) >= minimum_terms)
+            and float(item["score"]) >= threshold
+        ]
+        return selected[:limit]
 
     @staticmethod
     def unique_values(values: Iterable[str], limit: int) -> List[str]:
@@ -2515,62 +2614,126 @@ class MemoryStore:
 
     def retrieve(self, query: str) -> Tuple[str, Dict[str, Any]]:
         self.init()
-        query_folded = query.casefold().strip()
-        if not query_folded:
+        query_normalized = self.normalize_search_text(query)
+        if not query_normalized:
             raise ValueError("Query must not be empty")
-        concept_hits = [
-            record for record in read_jsonl(self.index_dir / "concepts.jsonl")
-            if query_folded in record.get("normalized", "") or record.get("normalized", "") in query_folded
-        ]
+        terms = self.search_terms(query)
+        maximum_candidates = int(nested_get(
+            self.config,
+            ["retrieval", "maximum_initial_candidates"],
+            10,
+        ))
+
+        concepts = read_jsonl(self.index_dir / "concepts.jsonl")
+        concept_ranked = self.ranked_search(
+            concepts,
+            query_normalized,
+            terms,
+            lambda record: "\n".join([
+                str(record.get("concept", "")),
+                str(record.get("normalized", "")),
+            ]),
+        )
+        concept_matches = self.strongest_matches(
+            concept_ranked,
+            len(terms),
+            maximum_candidates,
+        )
+        concept_hits = [item["record"] for item in concept_matches]
+
         summaries = self.summary_records()
-        summary_hits = []
         hit_ids = {record["summary_id"] for record in concept_hits}
-        for summary in summaries:
-            searchable = "\n".join(
+        summary_ranked = self.ranked_search(
+            summaries,
+            query_normalized,
+            terms,
+            lambda summary: "\n".join(
                 item
                 for key in ("topics", "established_conclusions", "open_questions", "concepts")
                 for item in summary.get(key, [])
-            ).casefold()
-            if summary["summary_id"] in hit_ids or query_folded in searchable:
+            ),
+        )
+        summary_matches = self.strongest_matches(
+            summary_ranked,
+            len(terms),
+            maximum_candidates,
+        )
+        summary_hits = [item["record"] for item in summary_matches]
+        for summary in summaries:
+            if summary["summary_id"] in hit_ids and summary not in summary_hits:
                 summary_hits.append(summary)
 
-        deterministic_hits = []
+        deterministic_records = []
         for path in sorted(self.deterministic_index_dir.glob("level-*.jsonl")):
-            for record in read_jsonl(path):
-                searchable = "\n".join(
-                    [record.get("index_id", "")]
-                    + record.get("user_anchors", [])
-                    + record.get("assistant_anchors", [])
-                ).casefold()
-                if query_folded in searchable:
-                    deterministic_hits.append(record)
+            deterministic_records.extend(read_jsonl(path))
+        deterministic_ranked = self.ranked_search(
+            deterministic_records,
+            query_normalized,
+            terms,
+            lambda record: "\n".join(
+                [record.get("index_id", "")]
+                + record.get("user_anchors", [])
+                + record.get("assistant_anchors", [])
+            ),
+        )
+        deterministic_matches = self.strongest_matches(
+            deterministic_ranked,
+            len(terms),
+            maximum_candidates,
+        )
+        deterministic_hits = [item["record"] for item in deterministic_matches]
 
         all_raw = self.read_all_raw()
-        candidate_sequences = set()
-        for summary in summary_hits:
-            start = summary.get("source_start_sequence")
-            end = summary.get("source_end_sequence")
-            if start is not None and end is not None:
-                candidate_sequences.update(range(int(start), int(end) + 1))
-        for record in deterministic_hits:
-            start = record.get("source_start_sequence")
-            end = record.get("source_end_sequence")
-            if start is not None and end is not None:
-                candidate_sequences.update(range(int(start), int(end) + 1))
-        candidate_raw = [record for record in all_raw if int(record["sequence"]) in candidate_sequences]
-        search_pool = candidate_raw or all_raw
-        matching_indexes = [index for index, record in enumerate(search_pool) if query_folded in record["text"].casefold()]
+        state = self.load_state()
+        pending_rounds = {
+            (str(conversation_id), int(details["number"]))
+            for conversation_id, details in state.get("pending_rounds", {}).items()
+        }
+        historical_raw = [
+            record for record in all_raw
+            if (
+                str(record.get("conversation_id", "")),
+                int(record.get("round_number", 0)),
+            ) not in pending_rounds
+        ]
+        raw_ranked = self.ranked_search(
+            historical_raw,
+            query_normalized,
+            terms,
+            lambda record: str(record.get("text", "")),
+        )
+        raw_matches = self.strongest_matches(
+            raw_ranked,
+            len(terms),
+            maximum_candidates,
+        )
+
         before = int(nested_get(self.config, ["retrieval", "context_messages_before"], 3))
         after = int(nested_get(self.config, ["retrieval", "context_messages_after"], 3))
+        records_by_conversation: Dict[str, List[Dict[str, Any]]] = {}
+        for record in historical_raw:
+            records_by_conversation.setdefault(
+                str(record["conversation_id"]),
+                [],
+            ).append(record)
+        positions_by_message = {
+            record["message_id"]: index
+            for records in records_by_conversation.values()
+            for index, record in enumerate(records)
+        }
         selected: List[Dict[str, Any]] = []
-        if matching_indexes:
-            selected_indexes = set()
-            for index in matching_indexes:
-                selected_indexes.update(range(max(0, index - before), min(len(search_pool), index + after + 1)))
-            selected = [search_pool[index] for index in sorted(selected_indexes)]
-        elif candidate_raw:
-            limit = int(nested_get(self.config, ["retrieval", "maximum_initial_candidates"], 10))
-            selected = candidate_raw[:limit]
+        selected_ids = set()
+        for match in raw_matches:
+            record = match["record"]
+            conversation_records = records_by_conversation[str(record["conversation_id"])]
+            position = positions_by_message[record["message_id"]]
+            for context_record in conversation_records[
+                max(0, position - before):min(len(conversation_records), position + after + 1)
+            ]:
+                if context_record["message_id"] not in selected_ids:
+                    selected_ids.add(context_record["message_id"])
+                    selected.append(context_record)
+        selected.sort(key=lambda record: int(record["sequence"]))
 
         if selected:
             confidence = "verified"
@@ -2588,6 +2751,7 @@ class MemoryStore:
             f"- Confidence: `{confidence}`",
             f"- Matched summaries: {', '.join(summary['summary_id'] for summary in summary_hits) or 'None'}",
             f"- Matched deterministic indexes: {', '.join(record['index_id'] for record in deterministic_hits) or 'None'}",
+            f"- Matched raw messages: {', '.join(item['record']['message_id'] for item in raw_matches) or 'None'}",
             "",
         ]
         if selected:
@@ -2613,8 +2777,19 @@ class MemoryStore:
             "timestamp": now_iso(),
             "query": query,
             "matched_concepts": [record["concept"] for record in concept_hits],
+            "matched_terms": sorted({
+                term for item in raw_matches for term in item["matched_terms"]
+            }),
             "summaries": [summary["summary_id"] for summary in summary_hits],
             "deterministic_indexes": [record["index_id"] for record in deterministic_hits],
+            "raw_matches": [
+                {
+                    "message_id": item["record"]["message_id"],
+                    "score": round(float(item["score"]), 6),
+                    "matched_terms": item["matched_terms"],
+                }
+                for item in raw_matches
+            ],
             "raw_files": list(dict.fromkeys(record["_path"] for record in selected)),
             "message_range": f"{selected[0]['message_id']}..{selected[-1]['message_id']}" if selected else None,
             "verification": confidence,
