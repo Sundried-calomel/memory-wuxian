@@ -154,7 +154,7 @@ It does not require embeddings, an external database, autonomous importance scor
 
 New raw records contain a canonical content SHA-256. Each summary job hashes its exact raw range or ordered child-summary set. Summary ingestion recalculates this value and refuses to continue when the source changed. The summary index records the resulting summary-file SHA-256.
 
-Use `rebuild-state`, `rebuild-conversations`, and `rebuild-indexes` without `--apply` to preview reconstruction. Applying a command archives the previous derived files under `memory/archive/` before replacement. Reconstruction never edits raw messages or summary files.
+Use `rebuild-state`, `rebuild-conversations`, and `rebuild-indexes` without `--apply` to preview reconstruction. Applying a command archives the previous derived files under `memory/archive/` before replacement, then removes older workspace recovery directories beyond `backup.workspace_retention_count`. The default retention is one. Reconstruction never edits raw messages or summary files.
 
 Heartbeat modes are distinct:
 

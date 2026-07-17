@@ -275,6 +275,9 @@ safety:
         self.assertEqual(repaired["status"], "ok")
         self.assertTrue(repaired["repairs"])
         self.assertIn("恢复测试", self.run_cli("retrieve", "--query", "恢复测试", expect_json=False))
+        workspace_backups = [path for path in (self.root / "archive").iterdir() if path.is_dir()]
+        self.assertEqual(len(workspace_backups), 1)
+        self.assertTrue(workspace_backups[0].name.startswith("index-rebuild-"))
 
     def test_summary_hash_drift_is_not_auto_repaired(self):
         self.append_round(1)

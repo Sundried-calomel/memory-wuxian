@@ -43,6 +43,7 @@ backup:
   enabled: true
   directory: "~/Desktop/Memory無限-记忆归档备份"
   retention_count: 1
+  workspace_retention_count: 1
 
 codex:
   sessions_root: "~/.codex/sessions"

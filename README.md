@@ -17,6 +17,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Incremental Codex rollout parsing with stable source IDs and per-session cursors
 - Event-driven macOS synchronization through a persistent native LaunchAgent
 - One latest verified desktop snapshot with a SHA-256 manifest and an append-only backup log
+- One latest workspace recovery backup for derived-file reconstruction
 - A transparent file layout with no database or external model API dependency
 
 ## Install
@@ -71,6 +72,8 @@ Every imported conversation is also written to its own file under `memory/conver
 On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the exact executable in the generated plist before claiming automatic capture is active.
 
 With the default configuration, every successful memory mutation creates a new complete snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes, verifies its manifest, and removes older snapshot directories. The backup root therefore contains one latest recovery copy plus the append-only `backup-log.jsonl` operation history.
+
+Applied reconstruction commands may first preserve the previous derived files under `memory/archive/`. These internal recovery copies use `backup.workspace_retention_count` and also retain only the newest one by default. Development edits use one replaceable code backup; they do not create additional copies of the live conversation archive.
 
 ## Memory hierarchy
 

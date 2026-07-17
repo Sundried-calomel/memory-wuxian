@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 - 2026-07-17
+
+- Retain only the newest derived-file recovery backup under `memory/archive/` by default.
+- Separate workspace recovery retention from desktop snapshot retention through `backup.workspace_retention_count`.
+- Require one replaceable development code backup instead of accumulating timestamped project copies.
+
 ## 0.6.0 - 2026-07-17
 
 - Retain only the newest complete external recovery snapshot by default, while keeping the append-only backup operation log.

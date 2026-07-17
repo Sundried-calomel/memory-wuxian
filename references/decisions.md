@@ -77,3 +77,9 @@ Assign Level-1 sources and higher-level child summaries within one conversation 
 Status: Accepted.
 
 Use native session metadata to reject complete Codex subagent sessions before importing any message. Archive only top-level user-visible conversation sessions.
+
+## D-014: One current workspace recovery backup
+
+Status: Accepted.
+
+Before replacing deterministic derived files, preserve their previous versions under `memory/archive/`, then remove older recovery directories beyond `backup.workspace_retention_count`. Retain one latest workspace recovery backup by default. Do not copy the live conversation archive into development output folders.

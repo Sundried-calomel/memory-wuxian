@@ -27,6 +27,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 16. Keep summary source ranges, parent-child groups, and derived indexes scoped to one conversation ID.
 17. Exclude native Codex subagent sessions; archive only top-level user-visible conversations.
 18. Keep only the configured number of newest complete external snapshots; the default is one.
+19. Keep only the configured number of newest workspace recovery backups under `memory/archive/`; the default is one.
 
 ## Operating workflow
 
@@ -41,6 +42,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 9. Use the native collector for automatic Codex import. Use `sync-codex` only as a manual compatibility and recovery adapter. Both paths must remain idempotent and storage-compatible.
 10. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
 11. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
+12. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
 
 ## Commands
 

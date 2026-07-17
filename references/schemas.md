@@ -58,6 +58,10 @@ Each deterministic directory under `memory/indexes/by-conversation/` belongs to 
 
 Every enabled external snapshot contains `backup-manifest.json` with the source archive, reason, archive state, and SHA-256/size of every copied file. The backup root contains append-only `backup-log.jsonl` entries. Snapshot directories beyond `backup.retention_count` are removed only after the new snapshot is complete; the default retention is one. The primary archive remains authoritative.
 
+## Workspace recovery backup
+
+Applied derived-file reconstruction stores the replaced state, transcript, or index files in a timestamped directory under `memory/archive/`. Directories matching these reconstruction backup names are pruned after a new backup is created. `backup.workspace_retention_count` defaults to one. Pending summary jobs and ingested-job records are not workspace backup snapshots and are not pruned by this rule.
+
 ## Summary result JSON
 
 The Agent returns this contract to `ingest-summary`:

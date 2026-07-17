@@ -778,6 +778,13 @@ class MemoryStore:
             raise ValueError("backup.retention_count must be at least 1")
         return count
 
+    @property
+    def workspace_backup_retention_count(self) -> int:
+        count = int(nested_get(self.config, ["backup", "workspace_retention_count"], 1))
+        if count < 1:
+            raise ValueError("backup.workspace_retention_count must be at least 1")
+        return count
+
     def prune_backup_snapshots(self, backup_root: Path, keep: Iterable[Path]) -> List[str]:
         keep_paths = {path.resolve() for path in keep}
         snapshot_pattern = re.compile(
@@ -1626,7 +1633,30 @@ class MemoryStore:
             else:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, destination)
+        self.prune_workspace_backups(keep=[backup_dir])
         return backup_dir
+
+    def prune_workspace_backups(self, keep: Iterable[Path]) -> List[str]:
+        keep_paths = {path.resolve() for path in keep if path.exists()}
+        backup_pattern = re.compile(
+            r"^(?:state|conversation|index)-rebuild-\d{8}_\d{6}_\d{6}$"
+        )
+        backups = sorted(
+            (
+                path
+                for path in self.archive_dir.iterdir()
+                if path.is_dir() and backup_pattern.fullmatch(path.name)
+            ),
+            key=lambda path: (path.stat().st_mtime_ns, path.name),
+        )
+        retained = set(backups[-self.workspace_backup_retention_count :]) | keep_paths
+        removed = []
+        for path in backups:
+            if path.resolve() in retained:
+                continue
+            shutil.rmtree(path)
+            removed.append(path.name)
+        return removed
 
     def build_recovered_state(self) -> Dict[str, Any]:
         raw_records = self.read_all_raw()
