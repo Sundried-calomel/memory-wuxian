@@ -13,6 +13,7 @@ from pathlib import Path
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
+SEMANTIC_WORKER = SKILL_ROOT / "scripts" / "semantic_worker.py"
 NATIVE_MANIFEST = SKILL_ROOT / "native-collector" / "Cargo.toml"
 NATIVE_BINARY = SKILL_ROOT / "bin" / "memory-wuxian-collector"
 
@@ -28,6 +29,8 @@ class MemoryCliTest(unittest.TestCase):
   root_directory: "./memory"
 summaries:
   level_1_trigger_rounds: 2
+  level_1_trigger_characters: 20000
+  automatic_semantic_jobs: true
   higher_level_trigger_count: 2
   maximum_summary_depth: 4
 retrieval:
@@ -107,7 +110,7 @@ safety:
         self.assertEqual(status["last_summarized_round"], 2)
         self.assertEqual(status["pending_summary_jobs"], 0)
 
-    def test_default_level_one_threshold_is_ten_rounds(self):
+    def test_default_level_one_threshold_is_five_rounds(self):
         default_root = self.base / "default-memory"
         default_config = self.base / "default-config.yaml"
         default_config.write_text(
@@ -134,16 +137,99 @@ safety:
             return json.loads(completed.stdout)
 
         run_default("init")
-        for number in range(1, 10):
+        for number in range(1, 5):
             run_default("append", "--speaker", "user", "--text", f"user {number}")
             run_default("append", "--speaker", "assistant", "--text", f"assistant {number}")
         self.assertEqual(run_default("make-summary-job")["status"], "not-due")
-        run_default("append", "--speaker", "user", "--text", "user 10")
-        run_default("append", "--speaker", "assistant", "--text", "assistant 10")
+        run_default("append", "--speaker", "user", "--text", "user 5")
+        run_default("append", "--speaker", "assistant", "--text", "assistant 5")
         created = run_default("make-summary-job")
         self.assertEqual(created["status"], "created")
         job = json.loads(Path(created["job"]).read_text(encoding="utf-8"))
-        self.assertEqual(job["source_round_end"] - job["source_round_start"] + 1, 10)
+        self.assertEqual(job["source_round_end"] - job["source_round_start"] + 1, 5)
+
+    def test_deterministic_index_uses_round_or_character_trigger_without_ai(self):
+        hybrid_root = self.base / "hybrid-memory"
+        hybrid_config = self.base / "hybrid-config.yaml"
+        hybrid_config.write_text(
+            """memory:
+  root_directory: "./hybrid-memory"
+summaries:
+  level_1_trigger_rounds: 5
+  level_1_trigger_characters: 20
+  automatic_semantic_jobs: false
+""",
+            encoding="utf-8",
+        )
+
+        def run_hybrid(*arguments):
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(CLI),
+                    "--root",
+                    str(hybrid_root),
+                    "--config",
+                    str(hybrid_config),
+                    *arguments,
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            return json.loads(completed.stdout)
+
+        run_hybrid("init")
+        run_hybrid("append", "--speaker", "user", "--text", "一个超过字符阈值的长问题内容")
+        run_hybrid(
+            "append",
+            "--speaker",
+            "assistant",
+            "--nonfinal-assistant",
+            "--text",
+            "回答仍在生成，字符已经达到阈值",
+        )
+        self.assertEqual(run_hybrid("make-summary-job")["status"], "not-due")
+        self.assertFalse((hybrid_root / "indexes/deterministic/level-1.jsonl").read_text().strip())
+        run_hybrid("append", "--speaker", "assistant", "--text", "对应的完整回答内容现在结束")
+        indexes = [
+            json.loads(line)
+            for line in (hybrid_root / "indexes/deterministic/level-1.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        self.assertEqual(len(indexes), 1)
+        self.assertEqual(indexes[0]["round_count"], 1)
+        self.assertGreaterEqual(indexes[0]["visible_characters"], 20)
+        self.assertEqual(run_hybrid("status")["pending_summary_jobs"], 0)
+        self.assertFalse(run_hybrid("status")["automatic_semantic_jobs"])
+        created = run_hybrid("make-summary-job")
+        self.assertEqual(created["status"], "created")
+        job = json.loads(Path(created["job"]).read_text(encoding="utf-8"))
+        self.assertEqual(job["source_round_start"], job["source_round_end"])
+        self.assertGreaterEqual(
+            sum(len(record["text"]) for record in job["source_records"]),
+            20,
+        )
+        dry_run = subprocess.run(
+            [
+                sys.executable,
+                str(SEMANTIC_WORKER),
+                "--root",
+                str(hybrid_root),
+                "--config",
+                str(hybrid_config),
+                "--job",
+                created["job"],
+                "--dry-run",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
+        self.assertEqual(json.loads(dry_run.stdout)["status"], "dry-run")
 
     def test_higher_level_job_and_heartbeat_idempotency(self):
         for number in range(1, 3):
@@ -162,10 +248,77 @@ safety:
         self.assertEqual(pending_before, 1)
         self.assertEqual(pending_after, 1)
         self.assertEqual(repeated["created_job"], heartbeat["created_job"])
-
         job = json.loads(Path(heartbeat["created_job"]).read_text(encoding="utf-8"))
         self.assertEqual(job["summary_level"], 2)
         self.assertEqual(job["source_summaries"], ["L1-000001", "L1-000002"])
+
+    def test_semantic_backlog_triggers_only_when_a_new_round_completes(self):
+        backlog_root = self.base / "backlog-memory"
+        backlog_config = self.base / "backlog-config.yaml"
+        backlog_config.write_text(
+            "summaries:\n"
+            "  level_1_trigger_rounds: 5\n"
+            "  level_1_trigger_characters: 20000\n"
+            "  automatic_semantic_jobs: false\n",
+            encoding="utf-8",
+        )
+
+        def run_backlog(*arguments):
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(CLI),
+                    "--root",
+                    str(backlog_root),
+                    "--config",
+                    str(backlog_config),
+                    *arguments,
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            return json.loads(completed.stdout)
+
+        run_backlog("init")
+        for number in range(5):
+            run_backlog("append", "--speaker", "user", "--text", f"backlog user {number}")
+            run_backlog("append", "--speaker", "assistant", "--text", f"backlog final {number}")
+        backlog_config.write_text(
+            backlog_config.read_text(encoding="utf-8").replace(
+                "automatic_semantic_jobs: false",
+                "automatic_semantic_jobs: true",
+            ),
+            encoding="utf-8",
+        )
+        rollout = self.base / "rollout-backlog-trigger.jsonl"
+
+        def event(event_type, message, phase=None):
+            payload = {"type": event_type, "message": message}
+            if phase:
+                payload["phase"] = phase
+            return json.dumps(
+                {
+                    "timestamp": "2026-07-17T08:00:00Z",
+                    "type": "event_msg",
+                    "payload": payload,
+                }
+            ) + "\n"
+
+        rollout.write_text(
+            json.dumps({"type": "session_meta", "payload": {"id": "backlog-trigger"}}) + "\n"
+            + event("user_message", "new user")
+            + event("agent_message", "still answering", "commentary"),
+            encoding="utf-8",
+        )
+        commentary_sync = run_backlog("sync-codex", "--session-file", str(rollout))
+        self.assertIsNone(commentary_sync["created_summary_job"])
+        self.assertEqual(run_backlog("status")["pending_summary_jobs"], 0)
+        with rollout.open("a", encoding="utf-8") as handle:
+            handle.write(event("agent_message", "answer complete", "final_answer"))
+        final_sync = run_backlog("sync-codex", "--session-file", str(rollout))
+        self.assertIsNotNone(final_sync["created_summary_job"])
 
     def test_secret_redaction_is_explicit(self):
         result = self.run_cli("append", "--speaker", "user", "--text", "password=secret-value")
@@ -173,6 +326,16 @@ safety:
         raw_text = next(self.root.glob("raw/*/*/*.md")).read_text(encoding="utf-8")
         self.assertIn("[REDACTED]", raw_text)
         self.assertNotIn("secret-value", raw_text)
+
+    def test_sequence_allocation_uses_raw_high_watermark_after_state_rollback(self):
+        first = self.run_cli("append", "--speaker", "user", "--text", "first")
+        state_path = self.root / "state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["total_messages"] = 0
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        second = self.run_cli("append", "--speaker", "assistant", "--text", "second")
+        self.assertEqual(first["sequence"], 1)
+        self.assertEqual(second["sequence"], 2)
 
     def test_conversations_are_archived_separately_and_rebuild_from_raw(self):
         self.run_cli(
@@ -585,6 +748,7 @@ safety:
         intermediate = self.run_cli("status")
         self.assertEqual(intermediate["completed_rounds"], 0)
         self.assertEqual(intermediate["completed_rounds_out_of_order"], [2])
+        self.assertEqual(intermediate["unsummarized_completed_rounds"], 1)
         self.assertEqual(
             set(intermediate["pending_rounds"]),
             {"codex:thread-a"},
@@ -601,6 +765,7 @@ safety:
         completed = self.run_cli("status")
         self.assertEqual(completed["completed_rounds"], 2)
         self.assertEqual(completed["completed_rounds_out_of_order"], [])
+        self.assertEqual(completed["unsummarized_completed_rounds"], 2)
         self.assertEqual(completed["pending_rounds"], {})
         self.assertEqual(self.run_cli("heartbeat", "--check-only")["status"], "ok")
 
@@ -620,17 +785,14 @@ safety:
 
     def test_native_collector_matches_python_storage_contract(self):
         cargo = shutil.which("cargo") or str(Path.home() / ".cargo" / "bin" / "cargo")
-        if not NATIVE_BINARY.exists():
-            completed = subprocess.run(
-                [cargo, "build", "--manifest-path", str(NATIVE_MANIFEST)],
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            native_binary = SKILL_ROOT / "native-collector" / "target" / "debug" / "memory-wuxian-collector"
-        else:
-            native_binary = NATIVE_BINARY
+        completed = subprocess.run(
+            [cargo, "build", "--manifest-path", str(NATIVE_MANIFEST)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        native_binary = SKILL_ROOT / "native-collector" / "target" / "debug" / "memory-wuxian-collector"
 
         native_root = self.base / "native-memory"
         initialized = subprocess.run(
@@ -660,6 +822,20 @@ safety:
             + event("2026-07-16T10:01:01Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "第二轮完成。"}),
             encoding="utf-8",
         )
+        worker_marker = self.base / "native-semantic-worker-marker.json"
+        fake_worker = self.base / "fake-semantic-worker.py"
+        fake_worker.write_text(
+            "import json, pathlib, sys\n"
+            f"pathlib.Path({str(worker_marker)!r}).write_text(json.dumps(sys.argv))\n",
+            encoding="utf-8",
+        )
+        with self.config.open("a", encoding="utf-8") as handle:
+            handle.write(
+                "ai_summary:\n"
+                "  enabled: true\n"
+                f"  python_path: {json.dumps(sys.executable)}\n"
+                f"  worker_path: {json.dumps(str(fake_worker))}\n"
+            )
         python_result = self.run_cli("sync-codex", "--session-file", str(session))
         native_args = [
             str(native_binary),
@@ -692,6 +868,9 @@ safety:
         native_result = json.loads(native.stdout)
         self.assertEqual(python_result["imported_messages"], 5)
         self.assertEqual(native_result["imported_messages"], 5)
+        self.assertTrue(worker_marker.exists())
+        worker_arguments = json.loads(worker_marker.read_text(encoding="utf-8"))
+        self.assertIn("--job", worker_arguments)
 
         def embedded_records(root):
             records = []
@@ -705,6 +884,19 @@ safety:
             return sorted(records, key=lambda record: record["sequence"])
 
         self.assertEqual(embedded_records(self.root), embedded_records(native_root))
+        python_deterministic = [
+            json.loads(line)
+            for line in (self.root / "indexes/deterministic/level-1.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        native_deterministic = [
+            json.loads(line)
+            for line in (native_root / "indexes/deterministic/level-1.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        self.assertEqual(python_deterministic, native_deterministic)
         python_state = json.loads((self.root / "state.json").read_text(encoding="utf-8"))
         native_state = json.loads((native_root / "state.json").read_text(encoding="utf-8"))
         python_state.pop("last_successful_memory_update")

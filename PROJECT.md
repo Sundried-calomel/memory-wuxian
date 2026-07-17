@@ -4,7 +4,7 @@
 2. Persist raw records before runtime compression.
 3. Keep raw records append-only; represent corrections as linked additions.
 4. Use summaries as retrieval indexes and preserve every summary level.
-5. Trigger Level-1 summaries by completed dialogue-round count.
+5. Build deterministic Level-1 indexes when either the completed-round or visible-character threshold is reached.
 6. Trigger parent summaries by ungrouped child-summary count.
 7. Persist raw records, summaries, indexes, jobs, and retrieval logs as files.
 8. Verify historical claims against raw records whenever available.
@@ -17,5 +17,6 @@
 15. Maintain one complete derived transcript for each conversation ID without rewriting or replacing authoritative raw history.
 16. Keep high-frequency capture in the native event-driven collector and verify its storage output against the Python maintenance implementation.
 17. Serialize complete collector batches and maintenance commands through the shared archive transaction lock.
+18. Keep continuous capture and trigger detection script-only. Invoke AI only as an ephemeral worker for a due semantic summary, after the current dialogue round has completed.
 
 Architectural changes must preserve these invariants or document an explicit replacement decision in `references/decisions.md` before implementation.

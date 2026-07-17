@@ -74,11 +74,13 @@ When a source-derived message ID is encountered again, verify that the correspon
 
 Define one dialogue round as one user message plus its corresponding assistant response. System instructions, internal reasoning, tool output, and maintenance operations do not count unless explicitly represented as dialogue messages.
 
-Keep incomplete user messages. Mark their round complete only after the corresponding assistant response is persisted.
+Keep incomplete user messages. Mark their round complete only after the corresponding assistant `final_answer` is persisted. A character threshold crossed by user text or assistant commentary makes the pending round due, but does not close or summarize it early.
 
-Create Level-1 jobs after one conversation accumulates `level_1_trigger_rounds` completed, unassigned rounds. Never combine records from different conversation IDs in one job. Lock the exact source message IDs, create a persistent job, and leave new raw writes available. Ingest the summary only after its schema and source references validate.
+Build deterministic Level-1 indexes after one conversation accumulates `level_1_trigger_rounds` completed rounds or `level_1_trigger_characters` visible characters, whichever occurs first. Defaults are 5 rounds and 20,000 characters. Store exact source IDs, ranges, hashes, counts, and normalized source excerpts. Group every `higher_level_trigger_count` child indexes into the next deterministic level without a model call.
 
-The default `level_1_trigger_rounds` is 10. Changing it affects only future assignments; existing pending jobs retain their original source ranges and hashes.
+Automatic semantic-job creation is enabled in the installed configuration. After a due job is frozen at a completed-round boundary, invoke one ephemeral Codex CLI process for constrained summary JSON, ingest it after source-hash verification, and exit. Existing pending jobs retain their original source ranges and hashes.
+
+Evaluate automatic job creation only when the current synchronization batch increases the number of completed rounds. User messages, commentary, maintenance writes, process restarts, and cursor catch-up without a new `final_answer` must not drain historical summary backlog or start AI work.
 
 Create Level-N jobs after one conversation accumulates `higher_level_trigger_count` ungrouped Level-(N-1) summaries. A parent and all children must share one conversation ID. Routine parent generation reads only assigned child summaries and their metadata. Consult raw history only to resolve a contradiction. Preserve child summaries and persist parent-child relationships.
 
@@ -92,6 +94,7 @@ Maintain both Markdown and JSONL indexes:
 - Concepts: exact phrases, optional canonical labels, first and later appearances, summary references, and raw ranges.
 - Conversations: raw routing metadata without replacing raw payloads.
 - Summaries: level, path, source range, child relationships, and concepts.
+- Deterministic hierarchy: hybrid chunk boundaries, source hashes, exact excerpts, and parent-child index IDs.
 
 Maintain the same navigational categories separately for each conversation under `indexes/by-conversation/`. Global indexes route across conversations; conversation indexes never contain another conversation ID.
 
@@ -174,9 +177,9 @@ Import only top-level Codex sessions and only their `event_msg` records represen
 
 Pending-round state is keyed by conversation ID. User messages in different conversations receive different global round numbers even when both are awaiting answers. If a later round finishes first, record it in `completed_rounds_out_of_order`; advance `completed_rounds` only when all preceding round numbers are complete. This preserves fixed-round summary ranges while preventing cross-conversation `reply_to` links.
 
-Codex Desktop does not expose an in-process post-turn hook to a plain Skill. On macOS, the supplied LaunchAgent keeps one optimized Rust process alive. Its recursive filesystem watcher receives changes through the operating-system notification backend, debounces adjacent writes, and processes only changed rollout files. It does not wake on a fixed polling interval. The activation timestamp prevents an installation from silently importing all older sessions; explicitly selected current sessions may be backfilled once before activation.
+Codex Desktop does not expose an in-process post-turn hook to a plain Skill. On macOS, the supplied LaunchAgent keeps one optimized Rust process alive. It combines kqueue events with a five-second metadata fallback, debounces adjacent writes, and processes only rollout files whose size or modification time changed. The fallback does not reread unchanged rollout contents and does not invoke a model. The activation timestamp prevents an installation from silently importing all older sessions; explicitly selected current sessions may be backfilled once before activation.
 
-The native collector owns high-frequency parsing, raw append, per-conversation transcript append, deterministic conversation-index append, cursor updates, due Level-1 job creation, and post-mutation backup snapshots. Python remains authoritative for summary ingestion, higher-level job maintenance, retrieval, heartbeat checks, and preview-first reconstruction. Both implementations hold `memory/.locks/archive.lock` for a complete event batch or maintenance command so readers cannot observe a partial archive transaction. Contract tests must compare parsed raw records, hashes, round state, cursor positions, and shared-lock behavior across both implementations.
+The native collector owns high-frequency parsing, raw append, per-conversation transcript append, deterministic conversation-index append, cursor updates, due Level-1 job creation, and post-mutation backup snapshots. Trigger detection uses only completed rounds: commentary may increase the pending character count, but the range is not assigned until `final_answer` closes that round. For a newly created job, the collector runs one synchronous ephemeral semantic worker after releasing the archive lock; the worker invokes Codex CLI only for summary JSON, verifies the source hash during ingestion, writes the summary and backup, and exits. Python remains authoritative for summary ingestion, higher-level job maintenance, retrieval, heartbeat checks, and preview-first reconstruction. Both implementations hold `memory/.locks/archive.lock` for a complete event batch or maintenance command so readers cannot observe a partial archive transaction. Contract tests must compare parsed raw records, hashes, round state, cursor positions, and shared-lock behavior across both implementations.
 
 ## 12. External backup snapshots
 

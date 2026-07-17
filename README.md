@@ -11,6 +11,8 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Conversation-scoped pending rounds and reply relationships during concurrent tasks
 - Conversation-scoped Level-1 summaries and conversation-scoped higher-level summaries
 - Separate message, timeline, concept, and summary indexes for every conversation, plus global routing indexes
+- Script-detected summary boundaries after 5 completed rounds or 20,000 visible characters
+- Ephemeral AI summary generation only when a completed round makes a summary due
 - Index-first retrieval with raw-text verification
 - Preview-first state and index recovery
 - Heartbeat validation, maintenance, and repair modes
@@ -18,7 +20,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Event-driven macOS synchronization through a persistent native LaunchAgent
 - One latest verified desktop snapshot with a SHA-256 manifest and an append-only backup log
 - One latest workspace recovery backup for derived-file reconstruction
-- A transparent file layout with no database or external model API dependency
+- A transparent file layout with no database dependency
 
 ## Install
 
@@ -50,7 +52,7 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" backup
 python3 scripts/memory_cli.py --root "$ARCHIVE" heartbeat --check-only
 ```
 
-The CLI does not call a language-model API. It creates deterministic summary jobs; the invoking Agent generates constrained summary JSON and gives it back to `ingest-summary`.
+Continuous capture does not call a model. Scripts create a source-locked summary job only after a complete dialogue round reaches a configured threshold. The one-shot semantic worker then invokes the authenticated Codex CLI in ephemeral mode, ingests the constrained JSON summary, and exits.
 
 ## Automatic Codex capture on macOS
 
@@ -63,9 +65,9 @@ python3 scripts/install_codex_autosync.py \
   --load
 ```
 
-The LaunchAgent keeps one optimized Rust process alive and receives recursive filesystem change notifications from the operating system. It performs no interval polling and starts work only when Codex rollout files change. It stores user messages and visible assistant commentary/final answers from top-level Codex sessions. It excludes subagent sessions, system instructions, internal reasoning, tool calls, and tool output. A per-session cursor and stable source-derived IDs make retries idempotent.
+The LaunchAgent keeps one optimized Rust process alive and receives filesystem change notifications from the operating system, with a five-second size/mtime fallback for missed deep-directory events. It stores user messages and visible assistant commentary/final answers from top-level Codex sessions. It excludes subagent sessions, system instructions, internal reasoning, tool calls, and tool output. A per-session cursor and stable source-derived IDs make retries idempotent.
 
-The native collector directly owns high-frequency JSONL parsing, raw append, per-conversation transcript updates, deterministic conversation indexes, cursor writes, due Level-1 job creation, and desktop snapshots. The Python CLI remains the low-frequency interface for summary ingestion, retrieval, heartbeat, and preview-first reconstruction.
+The native collector directly owns high-frequency JSONL parsing, raw append, per-conversation transcript updates, deterministic routing indexes, cursor writes, due Level-1 job creation, and desktop snapshots. When a job becomes due, it runs one Python wrapper that invokes one ephemeral Codex CLI summary process and exits after ingestion. The Python CLI remains the low-frequency interface for summary ingestion, retrieval, heartbeat, and preview-first reconstruction.
 
 Every imported conversation is also written to its own file under `memory/conversations/`. A transcript contains only one conversation ID and includes both exact machine-readable records and readable message text. Its isolated indexes are stored under `memory/indexes/by-conversation/<conversation>/`. The immutable files under `raw/` remain authoritative; per-conversation transcripts and indexes are deterministic views that can be rebuilt without changing raw history.
 
@@ -81,7 +83,7 @@ Applied reconstruction commands may first preserve the previous derived files un
 Raw conversation records
   -> Complete per-conversation transcripts
   -> Separate indexes for every conversation
-    -> Conversation-scoped Level-1 summaries after a fixed number of completed dialogue rounds
+    -> Conversation-scoped AI Level-1 summaries after a completed-round or character threshold
       -> Conversation-scoped higher-level summaries after a fixed number of child summaries
         -> Global routing indexes
           -> Retrieved raw-text evidence
@@ -89,7 +91,9 @@ Raw conversation records
 
 The default thresholds are configurable. The initial implementation deliberately avoids subjective importance scoring and automatic inference of long-term user preferences.
 
-The default Level-1 boundary is 10 completed dialogue rounds per conversation. Existing pending jobs keep their original immutable source ranges when this setting changes; the new threshold applies to newly assigned jobs.
+The default Level-1 boundary is 5 completed dialogue rounds or 20,000 visible characters per conversation, whichever occurs first. Crossing 20,000 characters during an answer marks the summary as due, but the source range is not closed until that answer's `final_answer` completes the round. Scripts store exact source ranges, hashes, counts, and normalized routing excerpts; the ephemeral AI worker alone produces topics, conclusions, open questions, and concepts.
+
+Automatic semantic-summary jobs and the one-shot worker are enabled in the installed configuration. No AI process remains active between due summaries. Existing pending jobs keep their immutable source ranges and are not silently rewritten when thresholds change.
 
 ## Privacy and integration boundary
 

@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 #[cfg(not(target_os = "macos"))]
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, SystemTime};
@@ -58,18 +59,52 @@ struct Config {
     backup: BackupConfig,
     #[serde(default)]
     safety: SafetyConfig,
+    #[serde(default)]
+    ai_summary: AiSummaryConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct AiSummaryConfig {
+    #[serde(default)]
+    enabled: bool,
+    #[serde(default = "default_python_path")]
+    python_path: String,
+    #[serde(default = "default_semantic_worker_path")]
+    worker_path: String,
+}
+
+impl Default for AiSummaryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            python_path: default_python_path(),
+            worker_path: default_semantic_worker_path(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
 struct SummaryConfig {
     #[serde(default = "default_l1_trigger")]
     level_1_trigger_rounds: u64,
+    #[serde(default = "default_l1_character_trigger")]
+    level_1_trigger_characters: u64,
+    #[serde(default)]
+    automatic_semantic_jobs: bool,
+    #[serde(default = "default_higher_level_trigger")]
+    higher_level_trigger_count: usize,
+    #[serde(default = "default_maximum_summary_depth")]
+    maximum_summary_depth: u64,
 }
 
 impl Default for SummaryConfig {
     fn default() -> Self {
         Self {
             level_1_trigger_rounds: default_l1_trigger(),
+            level_1_trigger_characters: default_l1_character_trigger(),
+            automatic_semantic_jobs: false,
+            higher_level_trigger_count: default_higher_level_trigger(),
+            maximum_summary_depth: default_maximum_summary_depth(),
         }
     }
 }
@@ -109,7 +144,26 @@ impl Default for SafetyConfig {
 }
 
 fn default_l1_trigger() -> u64 {
+    5
+}
+fn default_l1_character_trigger() -> u64 {
+    20_000
+}
+
+fn default_higher_level_trigger() -> usize {
     10
+}
+
+fn default_maximum_summary_depth() -> u64 {
+    8
+}
+
+fn default_python_path() -> String {
+    "/opt/homebrew/bin/python3".to_owned()
+}
+
+fn default_semantic_worker_path() -> String {
+    "scripts/semantic_worker.py".to_owned()
 }
 fn default_true() -> bool {
     true
@@ -138,6 +192,7 @@ struct AppendResult {
 
 struct Store {
     root: PathBuf,
+    config_path: PathBuf,
     config: Config,
     message_cache: RefCell<Option<HashMap<String, Value>>>,
 }
@@ -153,6 +208,7 @@ impl Store {
         })?;
         let store = Self {
             root,
+            config_path: config_path.canonicalize()?,
             config,
             message_cache: RefCell::new(None),
         };
@@ -504,7 +560,16 @@ impl Store {
                 });
             }
 
-            let sequence = u64_field(&state, "total_messages")? + 1;
+            let max_raw_sequence = self
+                .message_cache
+                .borrow()
+                .as_ref()
+                .into_iter()
+                .flat_map(|cache| cache.values())
+                .filter_map(|record| record.get("sequence").and_then(Value::as_u64))
+                .max()
+                .unwrap_or(0);
+            let sequence = u64_field(&state, "total_messages")?.max(max_raw_sequence) + 1;
             let completed_rounds = u64_field(&state, "completed_rounds")?;
             let mut pending_rounds = state
                 .get("pending_rounds")
@@ -880,6 +945,348 @@ impl Store {
         Ok(result)
     }
 
+    fn deterministic_level_one_record(
+        &self,
+        conversation_id: &str,
+        selected_rounds: &[Vec<Value>],
+    ) -> Result<Value> {
+        let mut records: Vec<Value> = selected_rounds.iter().flatten().cloned().collect();
+        records.sort_by_key(|record| record.get("sequence").and_then(Value::as_u64).unwrap_or(0));
+        let start_round = records
+            .first()
+            .and_then(|v| v.get("round_number"))
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("deterministic index start round is missing"))?;
+        let end_round = records
+            .last()
+            .and_then(|v| v.get("round_number"))
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("deterministic index end round is missing"))?;
+        let signature = format!("conversation:{conversation_id}:rounds:{start_round}-{end_round}");
+        let mut timestamps: Vec<(DateTime<FixedOffset>, String)> = records
+            .iter()
+            .map(|record| {
+                let value = string_field(record, "timestamp")?.to_owned();
+                Ok((DateTime::parse_from_rfc3339(&value)?, value))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        timestamps.sort_by_key(|entry| entry.0);
+        let mut user_anchors = Vec::new();
+        let mut assistant_anchors = Vec::new();
+        for record in &records {
+            let text = record.get("text").and_then(Value::as_str).unwrap_or("");
+            match record.get("speaker").and_then(Value::as_str) {
+                Some("user") => push_unique_excerpt(&mut user_anchors, text, 5),
+                Some("assistant")
+                    if record
+                        .get("completes_round")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true) =>
+                {
+                    push_unique_excerpt(&mut assistant_anchors, text, 5)
+                }
+                _ => {}
+            }
+        }
+        let source_message_ids: Vec<Value> = records
+            .iter()
+            .map(|record| record["message_id"].clone())
+            .collect();
+        let visible_characters: usize = records
+            .iter()
+            .map(|record| {
+                record
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .chars()
+                    .count()
+            })
+            .sum();
+        Ok(json!({
+            "index_id": format!("D1-{}", &sha256_hex(signature.as_bytes())[..16]),
+            "level": 1,
+            "conversation_id": conversation_id,
+            "source_round_start": start_round,
+            "source_round_end": end_round,
+            "source_start": records.first().unwrap()["message_id"],
+            "source_end": records.last().unwrap()["message_id"],
+            "source_start_sequence": records.first().unwrap()["sequence"],
+            "source_end_sequence": records.last().unwrap()["sequence"],
+            "start_time": timestamps.first().unwrap().1,
+            "end_time": timestamps.last().unwrap().1,
+            "source_message_ids": source_message_ids,
+            "source_sha256": raw_source_sha256(&records)?,
+            "round_count": selected_rounds.len(),
+            "visible_characters": visible_characters,
+            "user_anchors": user_anchors,
+            "assistant_anchors": assistant_anchors,
+        }))
+    }
+
+    fn deterministic_parent_record(&self, level: u64, children: &[Value]) -> Result<Value> {
+        let child_ids: Vec<String> = children
+            .iter()
+            .map(|child| string_field(child, "index_id").map(str::to_owned))
+            .collect::<Result<Vec<_>>>()?;
+        let signature = format!("children:{}", child_ids.join(","));
+        let source_digests = Value::Array(
+            children
+                .iter()
+                .map(|child| {
+                    json!({
+                        "index_id": child["index_id"],
+                        "source_sha256": child["source_sha256"],
+                    })
+                })
+                .collect(),
+        );
+        let mut user_anchors = Vec::new();
+        let mut assistant_anchors = Vec::new();
+        for child in children {
+            for anchor in child
+                .get("user_anchors")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                push_unique_value(&mut user_anchors, anchor.as_str().unwrap_or(""), 10);
+            }
+            for anchor in child
+                .get("assistant_anchors")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                push_unique_value(&mut assistant_anchors, anchor.as_str().unwrap_or(""), 10);
+            }
+        }
+        let first = children.first().unwrap();
+        let last = children.last().unwrap();
+        let round_count: u64 = children
+            .iter()
+            .filter_map(|v| v.get("round_count").and_then(Value::as_u64))
+            .sum();
+        let visible_characters: u64 = children
+            .iter()
+            .filter_map(|v| v.get("visible_characters").and_then(Value::as_u64))
+            .sum();
+        Ok(json!({
+            "index_id": format!("D{level}-{}", &sha256_hex(signature.as_bytes())[..16]),
+            "level": level,
+            "conversation_id": first["conversation_id"],
+            "child_index_ids": child_ids,
+            "source_round_start": first["source_round_start"],
+            "source_round_end": last["source_round_end"],
+            "source_start": first["source_start"],
+            "source_end": last["source_end"],
+            "source_start_sequence": first["source_start_sequence"],
+            "source_end_sequence": last["source_end_sequence"],
+            "start_time": first["start_time"],
+            "end_time": last["end_time"],
+            "source_sha256": canonical_sha256(&source_digests)?,
+            "round_count": round_count,
+            "visible_characters": visible_characters,
+            "user_anchors": user_anchors,
+            "assistant_anchors": assistant_anchors,
+        }))
+    }
+
+    fn refresh_deterministic_indexes(&self) -> Result<Value> {
+        let raw_records = self.read_all_raw()?;
+        let mut grouped: BTreeMap<String, BTreeMap<u64, Vec<Value>>> = BTreeMap::new();
+        for record in raw_records {
+            let round_number = record
+                .get("round_number")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            if round_number == 0 {
+                continue;
+            }
+            let conversation_id = string_field(&record, "conversation_id")?.to_owned();
+            grouped
+                .entry(conversation_id)
+                .or_default()
+                .entry(round_number)
+                .or_default()
+                .push(record);
+        }
+        let mut level_one_by_conversation: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+        for (conversation_id, rounds) in grouped {
+            let mut completed = Vec::new();
+            for (_, mut records) in rounds {
+                records.sort_by_key(|record| {
+                    record.get("sequence").and_then(Value::as_u64).unwrap_or(0)
+                });
+                let has_user = records
+                    .iter()
+                    .any(|record| record.get("speaker").and_then(Value::as_str) == Some("user"));
+                let has_final = records.iter().any(|record| {
+                    record.get("speaker").and_then(Value::as_str) == Some("assistant")
+                        && record
+                            .get("completes_round")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true)
+                });
+                if has_user && has_final {
+                    completed.push(records);
+                }
+            }
+            completed.sort_by_key(|records| {
+                records[0]
+                    .get("sequence")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+            });
+            let mut bucket: Vec<Vec<Value>> = Vec::new();
+            let mut bucket_characters = 0usize;
+            for records in completed {
+                bucket_characters += records
+                    .iter()
+                    .map(|record| {
+                        record
+                            .get("text")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .chars()
+                            .count()
+                    })
+                    .sum::<usize>();
+                bucket.push(records);
+                if bucket.len() >= self.config.summaries.level_1_trigger_rounds as usize
+                    || bucket_characters
+                        >= self.config.summaries.level_1_trigger_characters as usize
+                {
+                    let index = self.deterministic_level_one_record(&conversation_id, &bucket)?;
+                    level_one_by_conversation
+                        .entry(conversation_id.clone())
+                        .or_default()
+                        .push(index);
+                    bucket.clear();
+                    bucket_characters = 0;
+                }
+            }
+        }
+
+        let mut levels: BTreeMap<u64, Vec<Value>> = BTreeMap::new();
+        levels.insert(
+            1,
+            level_one_by_conversation
+                .values()
+                .flatten()
+                .cloned()
+                .collect(),
+        );
+        let mut current = level_one_by_conversation;
+        let higher_level_trigger = self.config.summaries.higher_level_trigger_count.max(1);
+        for level in 2..=self.config.summaries.maximum_summary_depth {
+            let mut next: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+            for (conversation_id, children) in &current {
+                for group in children.chunks(higher_level_trigger) {
+                    if group.len() < higher_level_trigger {
+                        continue;
+                    }
+                    next.entry(conversation_id.clone())
+                        .or_default()
+                        .push(self.deterministic_parent_record(level, group)?);
+                }
+            }
+            if next.is_empty() {
+                break;
+            }
+            levels.insert(level, next.values().flatten().cloned().collect());
+            current = next;
+        }
+
+        let directory = self.root.join("indexes/deterministic");
+        fs::create_dir_all(&directory)?;
+        for entry in fs::read_dir(&directory)? {
+            let path = entry?.path();
+            if path
+                .file_name()
+                .and_then(|v| v.to_str())
+                .is_some_and(|name| name.starts_with("level-") && name.ends_with(".jsonl"))
+            {
+                fs::remove_file(path)?;
+            }
+        }
+        let mut timeline = String::from("# Deterministic Index Timeline\n\n");
+        for (level, records) in &levels {
+            atomic_write_jsonl(&directory.join(format!("level-{level}.jsonl")), records)?;
+            for record in records {
+                timeline.push_str(&format!(
+                    "## {}\n\n- Level: `{level}`\n- Conversation: `{}`\n- Time range: `{}` to `{}`\n- Rounds: `{}` through `{}`\n- Visible characters: `{}`\n- Source: `{}` through `{}`\n\n",
+                    string_field(record, "index_id")?, string_field(record, "conversation_id")?,
+                    string_field(record, "start_time")?, string_field(record, "end_time")?,
+                    record["source_round_start"], record["source_round_end"], record["visible_characters"],
+                    string_field(record, "source_start")?, string_field(record, "source_end")?,
+                ));
+            }
+        }
+        atomic_write(&directory.join("timeline.md"), timeline.as_bytes())?;
+
+        let by_conversation_root = self.root.join("indexes/by-conversation");
+        if by_conversation_root.exists() {
+            for entry in fs::read_dir(&by_conversation_root)? {
+                let path = entry?.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                for child in fs::read_dir(path)? {
+                    let child_path = child?.path();
+                    if child_path
+                        .file_name()
+                        .and_then(|v| v.to_str())
+                        .is_some_and(|name| {
+                            name.starts_with("deterministic-level-") && name.ends_with(".jsonl")
+                        })
+                    {
+                        fs::remove_file(child_path)?;
+                    }
+                }
+            }
+        }
+        let conversation_ids: BTreeSet<String> = levels
+            .values()
+            .flatten()
+            .filter_map(|record| {
+                record
+                    .get("conversation_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+            .collect();
+        for conversation_id in conversation_ids {
+            let conversation_directory = self.ensure_conversation_indexes(&conversation_id)?;
+            for (level, records) in &levels {
+                let selected: Vec<Value> = records
+                    .iter()
+                    .filter(|record| {
+                        record.get("conversation_id").and_then(Value::as_str)
+                            == Some(conversation_id.as_str())
+                    })
+                    .cloned()
+                    .collect();
+                if !selected.is_empty() {
+                    atomic_write_jsonl(
+                        &conversation_directory.join(format!("deterministic-level-{level}.jsonl")),
+                        &selected,
+                    )?;
+                }
+            }
+        }
+
+        let mut counts = Map::new();
+        for (level, records) in &levels {
+            counts.insert(level.to_string(), json!(records.len()));
+        }
+        Ok(json!({
+            "levels": counts,
+            "level_1_round_trigger": self.config.summaries.level_1_trigger_rounds,
+            "level_1_character_trigger": self.config.summaries.level_1_trigger_characters,
+        }))
+    }
+
     fn maybe_create_level_one_job(&self) -> Result<Option<PathBuf>> {
         self.lock("summary-jobs.lock", || self.lock("state.lock", || {
             let mut state = self.load_state()?;
@@ -977,11 +1384,37 @@ impl Store {
                             > last_assigned_round
                     })
                     .collect();
-                if eligible_rounds.len() < self.config.summaries.level_1_trigger_rounds as usize {
+                let mut selected_rounds = Vec::new();
+                let mut selected_characters = 0usize;
+                for records in eligible_rounds {
+                    selected_characters += records
+                        .iter()
+                        .map(|record| {
+                            record
+                                .get("text")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .chars()
+                                .count()
+                        })
+                        .sum::<usize>();
+                    selected_rounds.push(records);
+                    if selected_rounds.len()
+                        >= self.config.summaries.level_1_trigger_rounds as usize
+                        || selected_characters
+                            >= self.config.summaries.level_1_trigger_characters as usize
+                    {
+                        break;
+                    }
+                }
+                if selected_rounds.is_empty()
+                    || (selected_rounds.len()
+                        < self.config.summaries.level_1_trigger_rounds as usize
+                        && selected_characters
+                            < self.config.summaries.level_1_trigger_characters as usize)
+                {
                     continue;
                 }
-                let selected_rounds =
-                    &eligible_rounds[..self.config.summaries.level_1_trigger_rounds as usize];
                 let start_round = selected_rounds
                     .first()
                     .and_then(|records| records[0].get("round_number"))
@@ -1223,10 +1656,54 @@ impl Store {
     }
 
     fn sync_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        self.lock("archive.lock", || self.sync_batch_unlocked(paths))
+        let mut result = self.lock("archive.lock", || self.sync_batch_unlocked(paths))?;
+        if self.config.ai_summary.enabled
+            && let Some(job) = result.get("created_summary_job").and_then(Value::as_str)
+        {
+            result["semantic_worker"] = self.run_one_shot_summary(Path::new(job));
+        }
+        Ok(result)
+    }
+
+    fn run_one_shot_summary(&self, job_path: &Path) -> Value {
+        let worker_path = PathBuf::from(&self.config.ai_summary.worker_path);
+        let worker_path = if worker_path.is_absolute() {
+            worker_path
+        } else {
+            self.config_path
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join(worker_path)
+        };
+        match Command::new(&self.config.ai_summary.python_path)
+            .arg(worker_path)
+            .arg("--root")
+            .arg(&self.root)
+            .arg("--config")
+            .arg(&self.config_path)
+            .arg("--job")
+            .arg(job_path)
+            .output()
+        {
+            Ok(output) if output.status.success() => json!({
+                "status": "completed",
+                "output": String::from_utf8_lossy(&output.stdout).trim(),
+            }),
+            Ok(output) => json!({
+                "status": "failed",
+                "exit_code": output.status.code(),
+                "error": String::from_utf8_lossy(&output.stderr).trim(),
+            }),
+            Err(error) => json!({
+                "status": "failed",
+                "error": error.to_string(),
+            }),
+        }
     }
 
     fn sync_batch_unlocked(&self, paths: Vec<PathBuf>) -> Result<Value> {
+        let state_before = self.load_state()?;
+        let completed_before = completed_round_total(&state_before);
         let mut files = Vec::new();
         let mut imported = 0;
         let mut duplicates = 0;
@@ -1247,7 +1724,16 @@ impl Store {
                 "excluded_reason": result.excluded_reason,
             }));
         }
-        let created_job = if imported > 0 {
+        let deterministic_indexes = if imported > 0 {
+            Some(self.refresh_deterministic_indexes()?)
+        } else {
+            None
+        };
+        let completed_after = completed_round_total(&self.load_state()?);
+        let created_job = if imported > 0
+            && completed_after > completed_before
+            && self.config.summaries.automatic_semantic_jobs
+        {
             self.maybe_create_level_one_job()?
         } else {
             None
@@ -1257,6 +1743,7 @@ impl Store {
             "session_count": files.len(), "imported_messages": imported,
             "duplicate_messages": duplicates, "repaired_transcripts": repaired,
             "created_summary_job": created_job.as_ref().map(|path| path.to_string_lossy()),
+            "deterministic_indexes": deterministic_indexes,
         });
         let backup = if mutation {
             self.create_backup("codex-native-sync", metadata.clone())?
@@ -1268,6 +1755,7 @@ impl Store {
             "imported_messages": imported, "duplicate_messages": duplicates,
             "repaired_transcripts": repaired,
             "created_summary_job": created_job.map(|path| path.to_string_lossy().into_owned()),
+            "deterministic_indexes": deterministic_indexes,
             "backup": backup.map(|path| path.to_string_lossy().into_owned()),
         }))
     }
@@ -1300,12 +1788,44 @@ fn u64_field(value: &Value, key: &str) -> Result<u64> {
         .ok_or_else(|| anyhow!("missing integer field {key}"))
 }
 
+fn completed_round_total(state: &Value) -> u64 {
+    state
+        .get("completed_rounds")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        + state
+            .get("completed_rounds_out_of_order")
+            .and_then(Value::as_array)
+            .map(|values| values.len() as u64)
+            .unwrap_or(0)
+}
+
 fn compact_json(value: &Value) -> Result<String> {
     Ok(serde_json::to_string(value)?)
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn deterministic_excerpt(text: &str, limit: usize) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(limit)
+        .collect()
+}
+
+fn push_unique_value(values: &mut Vec<String>, value: &str, limit: usize) {
+    if !value.is_empty() && values.len() < limit && !values.iter().any(|item| item == value) {
+        values.push(value.to_owned());
+    }
+}
+
+fn push_unique_excerpt(values: &mut Vec<String>, text: &str, limit: usize) {
+    let excerpt = deterministic_excerpt(text, 240);
+    push_unique_value(values, &excerpt, limit);
 }
 
 fn canonical_sha256(value: &Value) -> Result<String> {
@@ -1375,6 +1895,15 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 fn atomic_write_json(path: &Path, value: &Value) -> Result<()> {
     let mut bytes = serde_json::to_vec_pretty(value)?;
     bytes.push(b'\n');
+    atomic_write(path, &bytes)
+}
+
+fn atomic_write_jsonl(path: &Path, values: &[Value]) -> Result<()> {
+    let mut bytes = Vec::new();
+    for value in values {
+        bytes.extend(serde_json::to_vec(value)?);
+        bytes.push(b'\n');
+    }
     atomic_write(path, &bytes)
 }
 
@@ -1476,7 +2005,7 @@ fn emit(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn sync_and_emit(store: &Store, paths: Vec<PathBuf>) {
+fn sync_and_emit(store: &Store, paths: Vec<PathBuf>) -> bool {
     match store.sync_batch(paths) {
         Ok(result) => {
             let changed = result
@@ -1492,8 +2021,12 @@ fn sync_and_emit(store: &Store, paths: Vec<PathBuf>) {
             if changed && let Err(error) = emit(&result) {
                 eprintln!("output error: {error:#}");
             }
+            true
         }
-        Err(error) => eprintln!("sync error: {error:#}"),
+        Err(error) => {
+            eprintln!("sync error: {error:#}");
+            false
+        }
     }
 }
 
@@ -1578,9 +2111,13 @@ impl KqueueWatcher {
         })
     }
 
-    fn wait(&self) -> Result<()> {
+    fn wait(&self, timeout: Duration) -> Result<bool> {
         loop {
             let mut event: libc::kevent = unsafe { std::mem::zeroed() };
+            let timeout = libc::timespec {
+                tv_sec: timeout.as_secs() as libc::time_t,
+                tv_nsec: timeout.subsec_nanos() as libc::c_long,
+            };
             let result = unsafe {
                 libc::kevent(
                     self.queue.as_raw_fd(),
@@ -1588,11 +2125,14 @@ impl KqueueWatcher {
                     0,
                     &mut event,
                     1,
-                    std::ptr::null(),
+                    &timeout,
                 )
             };
             if result > 0 {
-                return Ok(());
+                return Ok(true);
+            }
+            if result == 0 {
+                return Ok(false);
             }
             let error = std::io::Error::last_os_error();
             if error.kind() != std::io::ErrorKind::Interrupted {
@@ -1603,6 +2143,17 @@ impl KqueueWatcher {
 }
 
 #[cfg(target_os = "macos")]
+fn rollout_stamps(paths: &[PathBuf]) -> Result<HashMap<PathBuf, (u64, SystemTime)>> {
+    paths
+        .iter()
+        .map(|path| {
+            let metadata = fs::metadata(path)?;
+            Ok((path.clone(), (metadata.len(), metadata.modified()?)))
+        })
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
 fn run_event_loop(
     store: &Store,
     sessions_root: &Path,
@@ -1610,15 +2161,31 @@ fn run_event_loop(
     debounce_ms: u64,
 ) -> Result<()> {
     let mut watcher = KqueueWatcher::new(sessions_root, since)?;
+    let initial_paths = recent_rollouts(sessions_root, since)?;
+    let mut known_stamps = rollout_stamps(&initial_paths)?;
     eprintln!(
-        "memory-wuxian-collector ready (kqueue): {}",
+        "memory-wuxian-collector ready (kqueue with 5s metadata fallback): {}",
         sessions_root.display()
     );
     loop {
-        watcher.wait()?;
-        std::thread::sleep(Duration::from_millis(debounce_ms));
-        sync_and_emit(store, recent_rollouts(sessions_root, since)?);
-        watcher = KqueueWatcher::new(sessions_root, since)?;
+        let received_event = watcher.wait(Duration::from_secs(5))?;
+        if received_event {
+            std::thread::sleep(Duration::from_millis(debounce_ms));
+        }
+        let current_paths = recent_rollouts(sessions_root, since)?;
+        let current_stamps = rollout_stamps(&current_paths)?;
+        let changed_paths: Vec<PathBuf> = current_paths
+            .iter()
+            .filter(|path| known_stamps.get(*path) != current_stamps.get(*path))
+            .cloned()
+            .collect();
+        let sync_succeeded = changed_paths.is_empty() || sync_and_emit(store, changed_paths);
+        if received_event || known_stamps.len() != current_stamps.len() {
+            watcher = KqueueWatcher::new(sessions_root, since)?;
+        }
+        if sync_succeeded {
+            known_stamps = current_stamps;
+        }
     }
 }
 
@@ -1657,7 +2224,7 @@ fn run_event_loop(
             }
         }
         if !candidates.is_empty() {
-            sync_and_emit(store, candidates.into_iter().collect());
+            let _ = sync_and_emit(store, candidates.into_iter().collect());
         }
     }
 }

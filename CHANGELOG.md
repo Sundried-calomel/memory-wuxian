@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0 - 2026-07-17
+
+- Add script-detected summary boundaries triggered by 5 completed rounds or 20,000 visible characters, whichever occurs first.
+- Group every 10 deterministic child indexes into the next level without model calls.
+- Store exact source ranges, SHA-256, counts, and normalized user/assistant excerpts in global and per-conversation indexes.
+- Search deterministic excerpts before returning to raw-text verification.
+- Run semantic summarization through an ephemeral Codex CLI worker only after a due round is complete; no AI conversation remains active between summaries.
+- Add a five-second macOS metadata fallback so missed deep-directory events are recovered without reading unchanged rollout contents or invoking a model.
+
 ## 0.6.2 - 2026-07-17
 
 - Reduce the default Level-1 assignment threshold from 20 completed rounds to 10.

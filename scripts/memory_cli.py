@@ -296,6 +296,7 @@ class MemoryStore:
         self.conversation_dir = self.root / "conversations"
         self.summaries_dir = self.root / "summaries"
         self.index_dir = self.root / "indexes"
+        self.deterministic_index_dir = self.index_dir / "deterministic"
         self.retrieval_dir = self.root / "retrieval"
         self.pending_dir = self.root / "pending"
         self.archive_dir = self.root / "archive"
@@ -305,7 +306,23 @@ class MemoryStore:
 
     @property
     def level_1_trigger(self) -> int:
-        return int(nested_get(self.config, ["summaries", "level_1_trigger_rounds"], 10))
+        return int(nested_get(self.config, ["summaries", "level_1_trigger_rounds"], 5))
+
+    @property
+    def level_1_character_trigger(self) -> int:
+        return int(
+            nested_get(self.config, ["summaries", "level_1_trigger_characters"], 20_000)
+        )
+
+    @property
+    def automatic_semantic_jobs(self) -> bool:
+        return bool(
+            nested_get(self.config, ["summaries", "automatic_semantic_jobs"], False)
+        )
+
+    @property
+    def ai_summary_enabled(self) -> bool:
+        return bool(nested_get(self.config, ["ai_summary", "enabled"], False))
 
     @property
     def higher_trigger(self) -> int:
@@ -338,6 +355,7 @@ class MemoryStore:
             self.conversation_dir,
             self.summaries_dir,
             self.index_dir,
+            self.deterministic_index_dir,
             self.index_dir / "by-conversation",
             self.retrieval_dir,
             self.pending_dir,
@@ -370,6 +388,8 @@ class MemoryStore:
             self.index_dir / "conversations.jsonl": "",
             self.index_dir / "summaries.jsonl": "",
             self.index_dir / "concepts.jsonl": "",
+            self.deterministic_index_dir / "level-1.jsonl": "",
+            self.deterministic_index_dir / "timeline.md": "# Deterministic Index Timeline\n",
             self.summaries_dir / "registry.jsonl": "",
             self.retrieval_dir / "retrieval-log.jsonl": "",
             self.pending_dir / "failed-jobs.jsonl": "",
@@ -638,7 +658,10 @@ class MemoryStore:
                 if int(number) > int(state["completed_rounds"])
             })
             state["pending_round"] = None
-            sequence = int(state["total_messages"]) + 1
+            sequence = max(
+                int(state["total_messages"]),
+                max((int(record["sequence"]) for record in raw_records), default=0),
+            ) + 1
             pending_rounds = dict(state["pending_rounds"])
             pending = pending_rounds.get(conversation_id)
             if speaker == "user":
@@ -1026,13 +1049,24 @@ class MemoryStore:
             for path in root.rglob("rollout-*.jsonl"):
                 if since_timestamp is None or path.stat().st_mtime >= since_timestamp:
                     candidates.add(path.resolve())
+        state_before = self.load_state()
+        completed_before = int(state_before.get("completed_rounds", 0)) + len(
+            state_before.get("completed_rounds_out_of_order", [])
+        )
         results = [self.sync_codex_file(path) for path in sorted(candidates)]
         imported = sum(int(item["imported_messages"]) for item in results)
         repaired_transcripts = sum(int(item["repaired_transcripts"]) for item in results)
+        deterministic_indexes = None
         created_job = None
         if imported:
-            job = self.make_summary_job()
-            created_job = str(job) if job else None
+            deterministic_indexes = self.refresh_deterministic_indexes()
+            state_after = self.load_state()
+            completed_after = int(state_after.get("completed_rounds", 0)) + len(
+                state_after.get("completed_rounds_out_of_order", [])
+            )
+            if self.automatic_semantic_jobs and completed_after > completed_before:
+                job = self.make_summary_job()
+                created_job = str(job) if job else None
         return {
             "status": "synced",
             "sessions": results,
@@ -1041,6 +1075,7 @@ class MemoryStore:
             "duplicate_messages": sum(int(item["duplicate_messages"]) for item in results),
             "repaired_transcripts": repaired_transcripts,
             "created_summary_job": created_job,
+            "deterministic_indexes": deterministic_indexes,
         }
 
     def read_raw_file(self, path: Path) -> List[Dict[str, Any]]:
@@ -1106,6 +1141,200 @@ class MemoryStore:
             conversation_rounds.sort(key=lambda items: int(items[0]["sequence"]))
         return completed
 
+    @staticmethod
+    def deterministic_excerpt(text: str, limit: int = 240) -> str:
+        compact = " ".join(text.split())
+        return compact if len(compact) <= limit else compact[:limit]
+
+    @staticmethod
+    def unique_values(values: Iterable[str], limit: int) -> List[str]:
+        selected: List[str] = []
+        seen = set()
+        for value in values:
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            selected.append(value)
+            if len(selected) >= limit:
+                break
+        return selected
+
+    def deterministic_level_one_record(
+        self,
+        conversation_id: str,
+        selected_rounds: List[List[Dict[str, Any]]],
+    ) -> Dict[str, Any]:
+        records = sorted(
+            (record for round_records in selected_rounds for record in round_records),
+            key=lambda record: int(record["sequence"]),
+        )
+        start_round = int(selected_rounds[0][0]["round_number"])
+        end_round = int(selected_rounds[-1][0]["round_number"])
+        signature = f"conversation:{conversation_id}:rounds:{start_round}-{end_round}"
+        timestamps = [dt.datetime.fromisoformat(str(record["timestamp"])) for record in records]
+        user_anchors = self.unique_values(
+            (
+                self.deterministic_excerpt(str(record.get("text", "")))
+                for record in records
+                if record.get("speaker") == "user"
+            ),
+            5,
+        )
+        assistant_anchors = self.unique_values(
+            (
+                self.deterministic_excerpt(str(record.get("text", "")))
+                for record in records
+                if record.get("speaker") == "assistant"
+                and bool(record.get("completes_round", True))
+            ),
+            5,
+        )
+        return {
+            "index_id": "D1-" + hashlib.sha256(signature.encode("utf-8")).hexdigest()[:16],
+            "level": 1,
+            "conversation_id": conversation_id,
+            "source_round_start": start_round,
+            "source_round_end": end_round,
+            "source_start": records[0]["message_id"],
+            "source_end": records[-1]["message_id"],
+            "source_start_sequence": records[0]["sequence"],
+            "source_end_sequence": records[-1]["sequence"],
+            "start_time": min(timestamps).isoformat(),
+            "end_time": max(timestamps).isoformat(),
+            "source_message_ids": [record["message_id"] for record in records],
+            "source_sha256": raw_source_sha256(records),
+            "round_count": len(selected_rounds),
+            "visible_characters": sum(len(str(record.get("text", ""))) for record in records),
+            "user_anchors": user_anchors,
+            "assistant_anchors": assistant_anchors,
+        }
+
+    def deterministic_parent_record(
+        self,
+        level: int,
+        children: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        signature = "children:" + ",".join(child["index_id"] for child in children)
+        return {
+            "index_id": f"D{level}-" + hashlib.sha256(signature.encode("utf-8")).hexdigest()[:16],
+            "level": level,
+            "conversation_id": children[0]["conversation_id"],
+            "child_index_ids": [child["index_id"] for child in children],
+            "source_round_start": children[0]["source_round_start"],
+            "source_round_end": children[-1]["source_round_end"],
+            "source_start": children[0]["source_start"],
+            "source_end": children[-1]["source_end"],
+            "source_start_sequence": children[0]["source_start_sequence"],
+            "source_end_sequence": children[-1]["source_end_sequence"],
+            "start_time": children[0]["start_time"],
+            "end_time": children[-1]["end_time"],
+            "source_sha256": canonical_sha256(
+                [
+                    {"index_id": child["index_id"], "source_sha256": child["source_sha256"]}
+                    for child in children
+                ]
+            ),
+            "round_count": sum(int(child["round_count"]) for child in children),
+            "visible_characters": sum(int(child["visible_characters"]) for child in children),
+            "user_anchors": self.unique_values(
+                (anchor for child in children for anchor in child.get("user_anchors", [])),
+                10,
+            ),
+            "assistant_anchors": self.unique_values(
+                (anchor for child in children for anchor in child.get("assistant_anchors", [])),
+                10,
+            ),
+        }
+
+    def build_deterministic_index_levels(self) -> Dict[int, List[Dict[str, Any]]]:
+        completed = self.completed_rounds_by_conversation()
+        levels: Dict[int, List[Dict[str, Any]]] = {1: []}
+        by_conversation: Dict[str, List[Dict[str, Any]]] = {}
+        for conversation_id, conversation_rounds in completed.items():
+            bucket: List[List[Dict[str, Any]]] = []
+            bucket_characters = 0
+            for round_records in conversation_rounds:
+                bucket.append(round_records)
+                bucket_characters += sum(
+                    len(str(record.get("text", ""))) for record in round_records
+                )
+                if (
+                    len(bucket) >= self.level_1_trigger
+                    or bucket_characters >= self.level_1_character_trigger
+                ):
+                    record = self.deterministic_level_one_record(conversation_id, bucket)
+                    levels[1].append(record)
+                    by_conversation.setdefault(conversation_id, []).append(record)
+                    bucket = []
+                    bucket_characters = 0
+
+        for level in range(2, self.maximum_depth + 1):
+            level_records: List[Dict[str, Any]] = []
+            next_by_conversation: Dict[str, List[Dict[str, Any]]] = {}
+            for conversation_id, children in by_conversation.items():
+                for start in range(0, len(children), self.higher_trigger):
+                    group = children[start : start + self.higher_trigger]
+                    if len(group) < self.higher_trigger:
+                        continue
+                    parent = self.deterministic_parent_record(level, group)
+                    level_records.append(parent)
+                    next_by_conversation.setdefault(conversation_id, []).append(parent)
+            if not level_records:
+                break
+            levels[level] = level_records
+            by_conversation = next_by_conversation
+        return levels
+
+    def refresh_deterministic_indexes(self) -> Dict[str, Any]:
+        self.init()
+        levels = self.build_deterministic_index_levels()
+        self.deterministic_index_dir.mkdir(parents=True, exist_ok=True)
+        for path in self.deterministic_index_dir.glob("level-*.jsonl"):
+            path.unlink()
+        for level, records in levels.items():
+            write_jsonl(self.deterministic_index_dir / f"level-{level}.jsonl", records)
+
+        timeline = ["# Deterministic Index Timeline", ""]
+        for level in sorted(levels):
+            for record in levels[level]:
+                timeline.extend([
+                    f"## {record['index_id']}",
+                    "",
+                    f"- Level: `{level}`",
+                    f"- Conversation: `{record['conversation_id']}`",
+                    f"- Time range: `{record['start_time']}` to `{record['end_time']}`",
+                    f"- Rounds: `{record['source_round_start']}` through `{record['source_round_end']}`",
+                    f"- Visible characters: `{record['visible_characters']}`",
+                    f"- Source: `{record['source_start']}` through `{record['source_end']}`",
+                    "",
+                ])
+        atomic_write_text(
+            self.deterministic_index_dir / "timeline.md",
+            "\n".join(timeline).rstrip() + "\n",
+        )
+
+        for directory in (self.index_dir / "by-conversation").glob("*"):
+            if directory.is_dir():
+                for path in directory.glob("deterministic-level-*.jsonl"):
+                    path.unlink()
+        conversation_ids = {
+            record["conversation_id"] for records in levels.values() for record in records
+        }
+        for conversation_id in conversation_ids:
+            directory = self.ensure_conversation_index_files(str(conversation_id))
+            for level, records in levels.items():
+                selected = [
+                    record for record in records
+                    if record["conversation_id"] == conversation_id
+                ]
+                if selected:
+                    write_jsonl(directory / f"deterministic-level-{level}.jsonl", selected)
+        return {
+            "levels": {str(level): len(records) for level, records in levels.items()},
+            "level_1_round_trigger": self.level_1_trigger,
+            "level_1_character_trigger": self.level_1_character_trigger,
+        }
+
     def make_summary_job(self) -> Optional[Path]:
         self.init()
         with exclusive_lock(self.locks_dir / "summary-jobs.lock"):
@@ -1146,9 +1375,23 @@ class MemoryStore:
                     for round_records in completed[conversation_id]
                     if int(round_records[0]["round_number"]) > last_assigned_round
                 ]
-                if len(eligible_rounds) < self.level_1_trigger:
+                selected_rounds: List[List[Dict[str, Any]]] = []
+                selected_characters = 0
+                for round_records in eligible_rounds:
+                    selected_rounds.append(round_records)
+                    selected_characters += sum(
+                        len(str(record.get("text", ""))) for record in round_records
+                    )
+                    if (
+                        len(selected_rounds) >= self.level_1_trigger
+                        or selected_characters >= self.level_1_character_trigger
+                    ):
+                        break
+                if not selected_rounds or (
+                    len(selected_rounds) < self.level_1_trigger
+                    and selected_characters < self.level_1_character_trigger
+                ):
                     continue
-                selected_rounds = eligible_rounds[: self.level_1_trigger]
                 start_round = int(selected_rounds[0][0]["round_number"])
                 end_round = int(selected_rounds[-1][0]["round_number"])
                 records = [
@@ -2291,11 +2534,27 @@ class MemoryStore:
             if summary["summary_id"] in hit_ids or query_folded in searchable:
                 summary_hits.append(summary)
 
+        deterministic_hits = []
+        for path in sorted(self.deterministic_index_dir.glob("level-*.jsonl")):
+            for record in read_jsonl(path):
+                searchable = "\n".join(
+                    [record.get("index_id", "")]
+                    + record.get("user_anchors", [])
+                    + record.get("assistant_anchors", [])
+                ).casefold()
+                if query_folded in searchable:
+                    deterministic_hits.append(record)
+
         all_raw = self.read_all_raw()
         candidate_sequences = set()
         for summary in summary_hits:
             start = summary.get("source_start_sequence")
             end = summary.get("source_end_sequence")
+            if start is not None and end is not None:
+                candidate_sequences.update(range(int(start), int(end) + 1))
+        for record in deterministic_hits:
+            start = record.get("source_start_sequence")
+            end = record.get("source_end_sequence")
             if start is not None and end is not None:
                 candidate_sequences.update(range(int(start), int(end) + 1))
         candidate_raw = [record for record in all_raw if int(record["sequence"]) in candidate_sequences]
@@ -2328,6 +2587,7 @@ class MemoryStore:
             f"- Query: {query}",
             f"- Confidence: `{confidence}`",
             f"- Matched summaries: {', '.join(summary['summary_id'] for summary in summary_hits) or 'None'}",
+            f"- Matched deterministic indexes: {', '.join(record['index_id'] for record in deterministic_hits) or 'None'}",
             "",
         ]
         if selected:
@@ -2354,6 +2614,7 @@ class MemoryStore:
             "query": query,
             "matched_concepts": [record["concept"] for record in concept_hits],
             "summaries": [summary["summary_id"] for summary in summary_hits],
+            "deterministic_indexes": [record["index_id"] for record in deterministic_hits],
             "raw_files": list(dict.fromkeys(record["_path"] for record in selected)),
             "message_range": f"{selected[0]['message_id']}..{selected[-1]['message_id']}" if selected else None,
             "verification": confidence,
@@ -2367,7 +2628,26 @@ class MemoryStore:
         self.init()
         state = self.load_state()
         summaries = self.summary_records()
+        completed_by_conversation = self.completed_rounds_by_conversation(
+            self.read_all_raw()
+        )
+        last_summarized_rounds = {
+            str(key): int(value)
+            for key, value in state.get("last_summarized_rounds", {}).items()
+        }
+        unsummarized_completed_rounds = sum(
+            1
+            for conversation_id, rounds in completed_by_conversation.items()
+            for round_records in rounds
+            if int(round_records[0]["round_number"]) > last_summarized_rounds.get(
+                conversation_id, 0
+            )
+        )
         grouped = [entry for entry in self.summary_registry() if entry.get("event") == "grouped"]
+        deterministic_counts = {
+            path.stem.removeprefix("level-"): len(read_jsonl(path))
+            for path in self.deterministic_index_dir.glob("level-*.jsonl")
+        }
         return {
             **state,
             "root": str(self.root),
@@ -2380,7 +2660,10 @@ class MemoryStore:
                 for level in range(1, self.maximum_depth + 1)
             },
             "grouped_child_summaries": len(grouped),
-            "unsummarized_completed_rounds": int(state["completed_rounds"]) - int(state["last_summarized_round"]),
+            "deterministic_index_counts": deterministic_counts,
+            "automatic_semantic_jobs": self.automatic_semantic_jobs,
+            "ai_summary_enabled": self.ai_summary_enabled,
+            "unsummarized_completed_rounds": unsummarized_completed_rounds,
         }
 
     def heartbeat(self, create_jobs: bool, repair: bool = False) -> Dict[str, Any]:
@@ -2405,7 +2688,7 @@ class MemoryStore:
         after = self.audit() if repairs else before
 
         created_job = None
-        if create_jobs and after["status"] == "ok":
+        if create_jobs and after["status"] == "ok" and self.automatic_semantic_jobs:
             path = self.make_summary_job()
             created_job = str(path) if path else None
         issues = after["integrity_issues"] + after["repairable_issues"]
@@ -2521,6 +2804,10 @@ def build_parser() -> argparse.ArgumentParser:
     heartbeat_parser.add_argument("--no-create-jobs", action="store_true")
     heartbeat_parser.add_argument("--check-only", action="store_true", help="Validate without creating jobs or repairing files")
     heartbeat_parser.add_argument("--repair", action="store_true", help="Back up and rebuild repairable state or index inconsistencies")
+    subparsers.add_parser(
+        "rebuild-deterministic-indexes",
+        help="Rebuild script-only hybrid indexes from authoritative raw records",
+    )
     return parser
 
 
@@ -2544,6 +2831,8 @@ def dispatch_command(
             complete_round=not args.nonfinal_assistant,
         )
         if result.get("status") == "appended" or result.get("transcript_repaired"):
+            if result.get("status") == "appended":
+                result["deterministic_indexes"] = store.refresh_deterministic_indexes()
             backup = store.create_backup_snapshot(
                 "append-message",
                 {"message_id": result.get("message_id")},
@@ -2584,6 +2873,13 @@ def dispatch_command(
         if path:
             backup = store.create_backup_snapshot("summary-job-created", {"job": str(path)})
             result["backup"] = str(backup) if backup else None
+    elif args.command == "rebuild-deterministic-indexes":
+        result = {
+            "status": "rebuilt",
+            **store.refresh_deterministic_indexes(),
+        }
+        backup = store.create_backup_snapshot("deterministic-indexes-rebuilt")
+        result["backup"] = str(backup) if backup else None
     elif args.command == "ingest-summary":
         path = store.ingest_summary(Path(args.job), Path(args.summary_json))
         result = {"status": "ingested", "summary": str(path)}

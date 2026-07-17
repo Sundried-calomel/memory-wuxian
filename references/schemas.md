@@ -92,6 +92,10 @@ A pending job records:
 
 Jobs remain pending until successfully ingested. Re-running job creation for an already assigned source range returns the existing job.
 
+## Deterministic hybrid index
+
+`indexes/deterministic/level-N.jsonl` is generated entirely from authoritative raw records. A Level-1 record includes conversation ID, source message and round boundaries, timestamps, source SHA-256, round count, visible-character count, and normalized user/assistant excerpts. It is emitted after 5 completed rounds or 20,000 visible characters by default. Higher levels contain ordered child index IDs and mechanically aggregated boundaries and counts. Per-conversation copies live under `indexes/by-conversation/<conversation>/deterministic-level-N.jsonl`.
+
 New summary files persist `source_sha256` in frontmatter. Summary indexes and registries also record `summary_sha256`. `ingest-summary` recalculates the source hash and stops when it differs from the pending job.
 
 ## Confidence values

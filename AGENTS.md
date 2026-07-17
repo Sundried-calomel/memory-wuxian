@@ -10,7 +10,7 @@ Use Memory無限 to preserve conversation history outside the active context win
 2. Preserve timestamp, timezone, speaker, message ID, conversation ID, turn order, and exact stored text.
 3. Keep raw records append-only. Store corrections as new linked records.
 4. Count one user message and its corresponding assistant response as one completed dialogue round.
-5. Generate a Level-1 summary after the configured number of completed rounds, normally 10.
+5. Generate deterministic Level-1 indexes after 5 completed rounds or 20,000 visible characters, whichever occurs first.
 6. Generate a parent summary after the configured number of ungrouped child summaries, normally 10.
 7. Persist every summary and index as a file. Keep all child summaries after grouping.
 8. Include precise source ranges in every summary.
@@ -30,6 +30,8 @@ Use Memory無限 to preserve conversation history outside the active context win
 22. Use the persistent native collector for continuous Codex capture. Use Python for low-frequency maintenance and Agent-facing memory operations, not interval polling.
 23. Hold `memory/.locks/archive.lock` for every complete native event batch and Python maintenance command so readers never observe a partial archive transaction.
 24. Keep one replaceable Memory無限 code backup in the workspace when editing the Skill. Do not accumulate timestamped full-project copies or copy the live conversation archive into development outputs.
+25. Keep only the native collector continuously active. After a completed round reaches either summary threshold, run one ephemeral AI worker to generate and ingest that summary, then exit.
+26. Check automatic semantic backlog only when a synchronization batch completes a new dialogue round. Commentary, restart catch-up, and other nonfinal writes must not trigger AI work.
 
 ## Authority order
 

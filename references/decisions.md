@@ -85,3 +85,15 @@ Use native session metadata to reject complete Codex subagent sessions before im
 Status: Accepted.
 
 Before replacing deterministic derived files, preserve their previous versions under `memory/archive/`, then remove older recovery directories beyond `backup.workspace_retention_count`. Retain one latest workspace recovery backup by default. Do not copy the live conversation archive into development output folders.
+
+## D-015: Hybrid deterministic indexes are the source-routing layer
+
+Status: Accepted.
+
+Build Level-1 routing records after 5 completed rounds or 20,000 visible characters, whichever occurs first. Store only deterministic source metadata, hashes, counts, and normalized excerpts. Group every 10 child routing records into the next level. These records make trigger decisions and source recovery auditable; they do not replace semantic summaries.
+
+## D-016: Semantic AI runs only for a closed due range
+
+Status: Accepted.
+
+Let scripts count rounds and visible characters. If a character threshold is crossed while an answer is still being written, wait for that answer's `final_answer` before freezing the source range. Then invoke one ephemeral Codex CLI process to generate the constrained semantic summary, ingest it after source-hash verification, and exit. Never keep an AI conversation active merely to watch for trigger conditions.
