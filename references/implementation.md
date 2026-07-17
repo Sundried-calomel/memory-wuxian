@@ -22,6 +22,9 @@ memory/
 ├── README.md
 ├── state.json
 ├── raw/YYYY/MM/YYYY-MM-DD.md
+├── conversations/
+│   ├── README.md
+│   └── codex-<session-id>.md
 ├── summaries/
 │   ├── level-1/L1-000001.md
 │   ├── level-2/L2-000001.md
@@ -31,7 +34,14 @@ memory/
 │   ├── concepts.md
 │   ├── conversations.jsonl
 │   ├── summaries.jsonl
-│   └── concepts.jsonl
+│   ├── concepts.jsonl
+│   └── by-conversation/<conversation>/
+│       ├── messages.jsonl
+│       ├── timeline.md
+│       ├── summaries.jsonl
+│       ├── summary-timeline.md
+│       ├── concepts.jsonl
+│       └── concepts.md
 ├── retrieval/
 │   ├── last-query.md
 │   └── retrieval-log.jsonl
@@ -42,7 +52,7 @@ memory/
 └── .locks/
 ```
 
-Raw files contain complete stored messages. Summary files contain every persistent summary level. Indexes provide human-readable and machine-readable navigation. Retrieval records how history was recovered. Pending files preserve unfinished work. State stores reconstructable counters and checkpoints.
+Raw files contain complete stored messages and remain authoritative. `conversations/` contains one complete deterministic transcript per conversation ID so different tasks are never mixed in the same human-readable archive. Summary files contain every persistent summary level. Indexes provide human-readable and machine-readable navigation. Retrieval records how history was recovered. Pending files preserve unfinished work. State stores reconstructable counters and checkpoints.
 
 ## 2. Source authority and immutability
 
@@ -56,15 +66,23 @@ Append raw messages before compression. Flush each append. Never replace origina
 
 Store raw records as daily Markdown files containing parseable one-line JSON payloads. Include timestamp with timezone, unique message ID, speaker, exact stored text, sequence, round number, conversation ID, and reply relationship when available.
 
+After each authoritative raw append, append the same stored record to exactly one file under `conversations/`. Codex transcripts use the native session ID in the filename. Non-Codex conversation IDs use a deterministic SHA-256-derived filename. Each transcript includes the exact JSON record plus readable message text. Treat transcripts as derived archives: rebuild them from raw records when missing or inconsistent, and never use a transcript rebuild to rewrite raw history.
+
+When a source-derived message ID is encountered again, verify that the corresponding transcript record exists before treating the retry as a complete no-op. Restore a missing transcript record from authoritative raw history and create the configured backup snapshot for that repair.
+
 ## 3. Turn counting and summary hierarchy
 
 Define one dialogue round as one user message plus its corresponding assistant response. System instructions, internal reasoning, tool output, and maintenance operations do not count unless explicitly represented as dialogue messages.
 
-Keep incomplete user messages. Mark their round complete only after the corresponding assistant response is persisted.
+Keep incomplete user messages. Mark their round complete only after the corresponding assistant `final_answer` is persisted. A character threshold crossed by user text or assistant commentary makes the pending round due, but does not close or summarize it early.
 
-Create Level-1 jobs after `level_1_trigger_rounds` completed, unassigned rounds. Lock the exact source range, create a persistent job, and leave new raw writes available. Ingest the summary only after its schema and source references validate.
+Build deterministic Level-1 indexes after one conversation accumulates `level_1_trigger_rounds` completed rounds or `level_1_trigger_characters` visible characters, whichever occurs first. Defaults are 5 rounds and 20,000 characters. Store exact source IDs, ranges, hashes, counts, and normalized source excerpts. Group every `higher_level_trigger_count` child indexes into the next deterministic level without a model call.
 
-Create Level-N jobs after `higher_level_trigger_count` ungrouped Level-(N-1) summaries. Routine parent generation reads only assigned child summaries and their metadata. Consult raw history only to resolve a contradiction. Preserve child summaries and persist parent-child relationships.
+Automatic semantic-job creation is enabled in the installed configuration. After a due job is frozen at a completed-round boundary, invoke one ephemeral Codex CLI process for constrained summary JSON, ingest it after source-hash verification, and exit. Existing pending jobs retain their original source ranges and hashes.
+
+Evaluate automatic job creation only when the current synchronization batch increases the number of completed rounds. User messages, commentary, maintenance writes, process restarts, and cursor catch-up without a new `final_answer` must not drain historical summary backlog or start AI work.
+
+Create Level-N jobs after one conversation accumulates `higher_level_trigger_count` ungrouped Level-(N-1) summaries. A parent and all children must share one conversation ID. Routine parent generation reads only assigned child summaries and their metadata. Consult raw history only to resolve a contradiction. Preserve child summaries and persist parent-child relationships.
 
 ## 4. State and indexes
 
@@ -76,6 +94,9 @@ Maintain both Markdown and JSONL indexes:
 - Concepts: exact phrases, optional canonical labels, first and later appearances, summary references, and raw ranges.
 - Conversations: raw routing metadata without replacing raw payloads.
 - Summaries: level, path, source range, child relationships, and concepts.
+- Deterministic hierarchy: hybrid chunk boundaries, source hashes, exact excerpts, and parent-child index IDs.
+
+Maintain the same navigational categories separately for each conversation under `indexes/by-conversation/`. Global indexes route across conversations; conversation indexes never contain another conversation ID.
 
 JSONL indexes are append-only. Represent corrections with later records that reference superseded entries.
 
@@ -138,7 +159,7 @@ It does not require embeddings, an external database, autonomous importance scor
 
 New raw records contain a canonical content SHA-256. Each summary job hashes its exact raw range or ordered child-summary set. Summary ingestion recalculates this value and refuses to continue when the source changed. The summary index records the resulting summary-file SHA-256.
 
-Use `rebuild-state` and `rebuild-indexes` without `--apply` to preview reconstruction. Applying either command archives the previous derived files under `memory/archive/` before replacement. Reconstruction never edits raw messages or summary files.
+Use `rebuild-state`, `rebuild-conversations`, and `rebuild-indexes` without `--apply` to preview reconstruction. Applying a command archives the previous derived files under `memory/archive/` before replacement, then removes older workspace recovery directories beyond `backup.workspace_retention_count`. The default retention is one. Reconstruction never edits raw messages or summary files.
 
 Heartbeat modes are distinct:
 
@@ -150,14 +171,18 @@ Hash mismatches, missing historical boundaries, overlapping source ranges, and c
 
 ## 11. Codex client integration
 
-Use `sync-codex` as an input adapter for native rollout JSONL. Persist one cursor per Codex session under `memory/imports/codex/`. Derive stable message IDs from session ID, source line, and speaker. Cursor loss may cause a source line to be considered again, but stable IDs must turn that retry into a no-op or an explicit content-conflict error.
+Use the Rust collector as the continuous input adapter for native rollout JSONL. Keep Python `sync-codex` as a manual compatibility and recovery path. Both implementations persist one cursor per Codex session under `memory/imports/codex/`, derive stable message IDs from session ID, source line, and speaker, and write the same archive schema. Cursor loss may cause a source line to be considered again, but stable IDs must turn that retry into a no-op or an explicit content-conflict error.
 
-Import only `event_msg` records representing `user_message` or visible `agent_message` phases `commentary` and `final_answer`. Do not import session/system instructions, internal reasoning, tool calls, tool output, token counters, or maintenance events. Commentary remains part of the exact visible transcript but does not close the pending dialogue round. `final_answer` closes it.
+Import only top-level Codex sessions and only their `event_msg` records representing `user_message` or visible `agent_message` phases `commentary` and `final_answer`. Reject a complete native session when `session_meta.payload.source` identifies it as a subagent session. Do not import session/system instructions, internal reasoning, tool calls, tool output, token counters, maintenance events, or approval-review context embedded in subagent traffic. Commentary remains part of the exact visible transcript but does not close the pending dialogue round. `final_answer` closes it.
 
-Codex Desktop does not expose an in-process post-turn hook to a plain Skill. On macOS, the supplied LaunchAgent provides equivalent automatic capture by running the incremental adapter at a short interval. The activation timestamp prevents an installation from silently importing all older sessions; explicitly selected current sessions may be backfilled once before activation.
+Pending-round state is keyed by conversation ID. User messages in different conversations receive different global round numbers even when both are awaiting answers. If a later round finishes first, record it in `completed_rounds_out_of_order`; advance `completed_rounds` only when all preceding round numbers are complete. This preserves fixed-round summary ranges while preventing cross-conversation `reply_to` links.
+
+Codex Desktop does not expose an in-process post-turn hook to a plain Skill. On macOS, the supplied LaunchAgent keeps one optimized Rust process alive. It combines kqueue events with a five-second metadata fallback, debounces adjacent writes, and processes only rollout files whose size or modification time changed. The fallback does not reread unchanged rollout contents and does not invoke a model. The activation timestamp prevents an installation from silently importing all older sessions; explicitly selected current sessions may be backfilled once before activation.
+
+The native collector owns high-frequency parsing, raw append, per-conversation transcript append, deterministic conversation-index append, cursor updates, due Level-1 job creation, and post-mutation backup snapshots. Trigger detection uses only completed rounds: commentary may increase the pending character count, but the range is not assigned until `final_answer` closes that round. For a newly created job, the collector runs one synchronous ephemeral semantic worker after releasing the archive lock; the worker invokes Codex CLI only for summary JSON, verifies the source hash during ingestion, writes the summary and backup, and exits. Python remains authoritative for summary ingestion, higher-level job maintenance, retrieval, heartbeat checks, and preview-first reconstruction. Both implementations hold `memory/.locks/archive.lock` for a complete event batch or maintenance command so readers cannot observe a partial archive transaction. Contract tests must compare parsed raw records, hashes, round state, cursor positions, and shared-lock behavior across both implementations.
 
 ## 12. External backup snapshots
 
 When backup is enabled, complete the primary raw/index/state mutation first. Then copy the archive to a new timestamped directory outside the primary root. Exclude transient lock files. Write a manifest containing the archive state and SHA-256/size of copied files, then atomically expose the completed snapshot and append `backup-log.jsonl` in the backup root.
 
-Create one snapshot per successful synchronization batch or other logical mutation. A no-op synchronization creates no snapshot. Desktop backups are recovery copies; the workspace archive remains the writable authority.
+Create one snapshot per successful synchronization batch or other logical mutation. After the new manifest-backed snapshot is complete, prune older snapshot directories beyond `backup.retention_count`; the default retention is one. Keep `backup-log.jsonl` as operation history. A no-op synchronization creates no snapshot. Desktop backups are recovery copies; the workspace archive remains the writable authority.

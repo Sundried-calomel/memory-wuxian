@@ -9,11 +9,21 @@ raw:
   flush_after_each_message: true
 
 summaries:
-  level_1_trigger_rounds: 20
+  level_1_trigger_rounds: 5
+  level_1_trigger_characters: 20000
+  automatic_semantic_jobs: true
   higher_level_trigger_count: 10
   maximum_summary_depth: 8
   persist_all_levels: true
   immutable: true
+
+ai_summary:
+  enabled: true
+  python_path: "/opt/homebrew/bin/python3"
+  worker_path: "scripts/semantic_worker.py"
+  codex_cli_path: "/Applications/ChatGPT.app/Contents/Resources/codex"
+  timeout_seconds: 900
+  model: ""
 
 indexes:
   timeline: true
@@ -42,10 +52,13 @@ integrity:
 backup:
   enabled: true
   directory: "~/Desktop/Memory無限-记忆归档备份"
+  retention_count: 1
+  workspace_retention_count: 1
 
 codex:
   sessions_root: "~/.codex/sessions"
-  sync_interval_seconds: 15
+  collector: "native-event-driven"
+  debounce_milliseconds: 400
 
 safety:
   redact_secrets: true

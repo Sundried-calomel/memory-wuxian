@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "topics",
+    "established_conclusions",
+    "open_questions",
+    "concepts"
+  ],
+  "properties": {
+    "topics": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "established_conclusions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "concepts": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
