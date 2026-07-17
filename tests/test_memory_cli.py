@@ -302,6 +302,9 @@ safety:
   directory: "{backup_root}"
 '''
             )
+        legacy_snapshot = backup_root / "2026-07-16_1841"
+        legacy_snapshot.mkdir(parents=True)
+        legacy_snapshot.joinpath("legacy.txt").write_text("legacy snapshot", encoding="utf-8")
         session = self.base / "rollout-2026-07-16T10-00-00-thread-001.jsonl"
 
         def event(timestamp, outer_type, payload):
@@ -410,6 +413,169 @@ safety:
         ]
         self.assertEqual(len(backup_entries), 3)
         self.assertEqual(backup_entries[-1]["total_messages"], 5)
+        snapshots = [path for path in backup_root.iterdir() if path.is_dir()]
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual(snapshots[0].name, Path(second["backup"]).name)
+
+        manual = self.run_cli("backup", "--reason", "test-manual-backup")
+        self.assertEqual(manual["status"], "created")
+        self.assertEqual(manual["retention_count"], 1)
+        snapshots = [path for path in backup_root.iterdir() if path.is_dir()]
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual(snapshots[0].name, Path(manual["backup"]).name)
+
+    def test_codex_subagent_sessions_are_excluded(self):
+        session = self.base / "rollout-guardian.jsonl"
+
+        def event(timestamp, outer_type, payload):
+            return json.dumps(
+                {"timestamp": timestamp, "type": outer_type, "payload": payload},
+                ensure_ascii=False,
+            ) + "\n"
+
+        session.write_text(
+            event(
+                "2026-07-16T10:00:00Z",
+                "session_meta",
+                {
+                    "id": "guardian-thread",
+                    "source": {"subagent": {"other": "guardian"}},
+                    "parent_thread_id": "user-thread",
+                },
+            )
+            + event(
+                "2026-07-16T10:00:01Z",
+                "event_msg",
+                {
+                    "type": "user_message",
+                    "message": "The following is the Codex agent history whose request action you are assessing.",
+                },
+            )
+            + event(
+                "2026-07-16T10:00:02Z",
+                "event_msg",
+                {"type": "agent_message", "phase": "final_answer", "message": "approved"},
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_cli("sync-codex", "--session-file", str(session))
+        self.assertEqual(result["imported_messages"], 0)
+        self.assertEqual(result["sessions"][0]["excluded_reason"], "subagent-session")
+        self.assertEqual(self.run_cli("status")["total_messages"], 0)
+        cursor = json.loads(
+            (self.root / "imports/codex/guardian-thread.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(cursor["excluded_reason"], "subagent-session")
+
+    def test_level_one_jobs_and_indexes_are_conversation_scoped(self):
+        for conversation_id, label in (("codex:thread-a", "A"), ("codex:thread-b", "B")):
+            for number in range(1, 3):
+                self.run_cli(
+                    "append",
+                    "--speaker", "user",
+                    "--conversation-id", conversation_id,
+                    "--text", f"{label} user {number}",
+                )
+                self.run_cli(
+                    "append",
+                    "--speaker", "assistant",
+                    "--conversation-id", conversation_id,
+                    "--text", f"{label} final {number}",
+                )
+
+        first_path = Path(self.run_cli("make-summary-job")["job"])
+        second_path = Path(self.run_cli("make-summary-job")["job"])
+        first = json.loads(first_path.read_text(encoding="utf-8"))
+        second = json.loads(second_path.read_text(encoding="utf-8"))
+        self.assertNotEqual(first["conversation_id"], second["conversation_id"])
+        self.assertNotEqual(first["target_summary_id"], second["target_summary_id"])
+        for job in (first, second):
+            self.assertTrue(job["source_records"])
+            self.assertEqual(
+                {record["conversation_id"] for record in job["source_records"]},
+                {job["conversation_id"]},
+            )
+            source_rounds = {
+                record["round_number"] for record in job["source_records"]
+                if record["round_number"] > 0
+            }
+            self.assertEqual(min(source_rounds), job["source_round_start"])
+            self.assertEqual(max(source_rounds), job["source_round_end"])
+            self.assertEqual(len(source_rounds), 2)
+            self.assertLessEqual(job["start_time"], job["end_time"])
+
+        rebuilt = self.run_cli("rebuild-indexes", "--apply")
+        self.assertEqual(rebuilt["raw_messages"], 8)
+        for conversation_id in ("codex:thread-a", "codex:thread-b"):
+            index_dir = self.root / "indexes/by-conversation" / conversation_id.replace(":", "-")
+            self.assertTrue(index_dir.joinpath("messages.jsonl").exists())
+            messages = [
+                json.loads(line)
+                for line in index_dir.joinpath("messages.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(len(messages), 4)
+            self.assertEqual({record["conversation_id"] for record in messages}, {conversation_id})
+
+    def test_concurrent_conversations_keep_rounds_and_replies_isolated(self):
+        first_user = self.run_cli(
+            "append",
+            "--speaker", "user",
+            "--conversation-id", "codex:thread-a",
+            "--text", "A user",
+        )
+        second_user = self.run_cli(
+            "append",
+            "--speaker", "user",
+            "--conversation-id", "codex:thread-b",
+            "--text", "B user",
+        )
+        second_final = self.run_cli(
+            "append",
+            "--speaker", "assistant",
+            "--conversation-id", "codex:thread-b",
+            "--text", "B final",
+        )
+
+        self.assertEqual(first_user["round_number"], 1)
+        self.assertEqual(second_user["round_number"], 2)
+        self.assertEqual(second_final["round_number"], 2)
+        self.assertEqual(second_final["reply_to"], second_user["message_id"])
+        intermediate = self.run_cli("status")
+        self.assertEqual(intermediate["completed_rounds"], 0)
+        self.assertEqual(intermediate["completed_rounds_out_of_order"], [2])
+        self.assertEqual(
+            set(intermediate["pending_rounds"]),
+            {"codex:thread-a"},
+        )
+
+        first_final = self.run_cli(
+            "append",
+            "--speaker", "assistant",
+            "--conversation-id", "codex:thread-a",
+            "--text", "A final",
+        )
+        self.assertEqual(first_final["round_number"], 1)
+        self.assertEqual(first_final["reply_to"], first_user["message_id"])
+        completed = self.run_cli("status")
+        self.assertEqual(completed["completed_rounds"], 2)
+        self.assertEqual(completed["completed_rounds_out_of_order"], [])
+        self.assertEqual(completed["pending_rounds"], {})
+        self.assertEqual(self.run_cli("heartbeat", "--check-only")["status"], "ok")
+
+        records = [
+            json.loads(line)
+            for line in (self.root / "indexes" / "conversations.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        owners = {record["message_id"]: record["conversation_id"] for record in records}
+        self.assertFalse([
+            record
+            for record in records
+            if record.get("reply_to")
+            and owners.get(record["reply_to"]) != record["conversation_id"]
+        ])
 
     def test_native_collector_matches_python_storage_contract(self):
         cargo = shutil.which("cargo") or str(Path.home() / ".cargo" / "bin" / "cargo")
@@ -515,6 +681,122 @@ safety:
         repeated = subprocess.run(native.args, text=True, capture_output=True, check=False)
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["imported_messages"], 0)
+
+        guardian = sessions_root / "rollout-guardian.jsonl"
+        guardian.write_text(
+            event(
+                "2026-07-16T10:01:10Z",
+                "session_meta",
+                {
+                    "id": "native-guardian",
+                    "source": {"subagent": {"other": "guardian"}},
+                },
+            )
+            + event(
+                "2026-07-16T10:01:11Z",
+                "event_msg",
+                {"type": "user_message", "message": "hidden approval-review context"},
+            ),
+            encoding="utf-8",
+        )
+        guardian_native = subprocess.run(
+            [
+                str(native_binary),
+                "--archive-root", str(native_root),
+                "--config", str(self.config),
+                "--sessions-root", str(sessions_root),
+                "--session-file", str(guardian),
+                "--once",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(guardian_native.returncode, 0, guardian_native.stderr)
+        guardian_result = json.loads(guardian_native.stdout)
+        guardian_session = next(
+            item for item in guardian_result["sessions"]
+            if item["session_id"] == "native-guardian"
+        )
+        self.assertEqual(guardian_session["excluded_reason"], "subagent-session")
+        self.assertNotIn(
+            "hidden approval-review context",
+            "\n".join(
+                path.read_text(encoding="utf-8")
+                for path in native_root.glob("raw/*/*/*.md")
+            ),
+        )
+
+        concurrent_a = sessions_root / "rollout-concurrent-a.jsonl"
+        concurrent_b = sessions_root / "rollout-concurrent-b.jsonl"
+        concurrent_a.write_text(
+            event("2026-07-16T10:02:00Z", "session_meta", {"id": "concurrent-a"})
+            + event("2026-07-16T10:02:01Z", "event_msg", {"type": "user_message", "message": "A user"}),
+            encoding="utf-8",
+        )
+        concurrent_b.write_text(
+            event("2026-07-16T10:02:00Z", "session_meta", {"id": "concurrent-b"})
+            + event("2026-07-16T10:02:02Z", "event_msg", {"type": "user_message", "message": "B user"})
+            + event("2026-07-16T10:02:03Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "B final"}),
+            encoding="utf-8",
+        )
+        self.run_cli(
+            "sync-codex",
+            "--session-file", str(concurrent_a),
+            "--session-file", str(concurrent_b),
+        )
+        concurrent_native_args = [
+            str(native_binary),
+            "--archive-root", str(native_root),
+            "--config", str(self.config),
+            "--sessions-root", str(sessions_root),
+            "--session-file", str(concurrent_a),
+            "--session-file", str(concurrent_b),
+            "--once",
+        ]
+        concurrent_native = subprocess.run(
+            concurrent_native_args,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(concurrent_native.returncode, 0, concurrent_native.stderr)
+        python_state = json.loads((self.root / "state.json").read_text(encoding="utf-8"))
+        native_state = json.loads((native_root / "state.json").read_text(encoding="utf-8"))
+        python_state.pop("last_successful_memory_update")
+        native_state.pop("last_successful_memory_update")
+        self.assertEqual(python_state, native_state)
+        self.assertEqual(python_state["completed_rounds"], 2)
+        self.assertEqual(python_state["completed_rounds_out_of_order"], [4])
+
+        with concurrent_a.open("a", encoding="utf-8") as handle:
+            handle.write(
+                event("2026-07-16T10:02:04Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "A final"})
+            )
+        self.run_cli("sync-codex", "--session-file", str(concurrent_a))
+        completed_native = subprocess.run(
+            concurrent_native_args,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed_native.returncode, 0, completed_native.stderr)
+        self.assertEqual(embedded_records(self.root), embedded_records(native_root))
+        final_state = json.loads((self.root / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(final_state["completed_rounds"], 4)
+        self.assertEqual(final_state["completed_rounds_out_of_order"], [])
+        self.assertEqual(final_state["pending_rounds"], {})
+
+        owners = {
+            record["message_id"]: record["conversation_id"]
+            for record in embedded_records(native_root)
+        }
+        self.assertFalse([
+            record
+            for record in embedded_records(native_root)
+            if record.get("reply_to")
+            and owners.get(record["reply_to"]) != record["conversation_id"]
+        ])
 
     def test_python_commands_wait_for_archive_lock(self):
         archive_lock = self.root / ".locks" / "archive.lock"

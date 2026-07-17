@@ -53,3 +53,27 @@ Maintain one complete Markdown transcript for each conversation ID. Never combin
 Status: Accepted.
 
 Run one persistent Rust collector that watches native Codex session files through the operating system filesystem notification backend. The collector owns deterministic high-frequency capture and backup operations. Keep the Python CLI for low-frequency Agent-facing maintenance, summary ingestion, retrieval, and reconstruction. Preserve one storage contract across both implementations and test their persisted records for parity.
+
+## D-010: Pending rounds are conversation-scoped
+
+Status: Accepted.
+
+Maintain one pending round per conversation ID and allocate each new dialogue round a globally unique number. A final assistant answer may close only its own conversation's pending round. Preserve summary ranges by advancing the global completed-round high-watermark only across contiguous completed round numbers; retain later completions in an explicit out-of-order set until preceding rounds finish. Store assistant text without a pending user as visible non-round content.
+
+## D-011: One current external recovery snapshot
+
+Status: Accepted.
+
+Create a complete manifest-backed snapshot after each successful primary mutation, then remove older snapshot directories beyond configured retention. Retain one latest snapshot by default and keep the append-only backup log as operation history.
+
+## D-012: Summaries and detailed indexes are conversation-scoped
+
+Status: Accepted.
+
+Assign Level-1 sources and higher-level child summaries within one conversation only. Persist message, timeline, summary, and concept indexes separately for each conversation; retain global indexes only for cross-conversation routing.
+
+## D-013: Native subagent sessions are excluded
+
+Status: Accepted.
+
+Use native session metadata to reject complete Codex subagent sessions before importing any message. Archive only top-level user-visible conversation sessions.

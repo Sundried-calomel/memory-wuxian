@@ -8,14 +8,15 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 
 - Append-only Markdown conversation records with timestamps and SHA-256 integrity fields
 - One complete, automatically updated Markdown transcript per conversation
-- Count-triggered Level-1 summaries and count-triggered higher-level summaries
-- Persistent timeline, concept, summary, and conversation indexes
+- Conversation-scoped pending rounds and reply relationships during concurrent tasks
+- Conversation-scoped Level-1 summaries and conversation-scoped higher-level summaries
+- Separate message, timeline, concept, and summary indexes for every conversation, plus global routing indexes
 - Index-first retrieval with raw-text verification
 - Preview-first state and index recovery
 - Heartbeat validation, maintenance, and repair modes
 - Incremental Codex rollout parsing with stable source IDs and per-session cursors
 - Event-driven macOS synchronization through a persistent native LaunchAgent
-- Timestamped desktop snapshots with SHA-256 manifests and an append-only backup log
+- One latest verified desktop snapshot with a SHA-256 manifest and an append-only backup log
 - A transparent file layout with no database or external model API dependency
 
 ## Install
@@ -44,6 +45,7 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" append --speaker user --text "He
 python3 scripts/memory_cli.py --root "$ARCHIVE" append --speaker assistant --text "Hello."
 python3 scripts/memory_cli.py --root "$ARCHIVE" sync-codex --session-file "$HOME/.codex/sessions/.../rollout-....jsonl"
 python3 scripts/memory_cli.py --root "$ARCHIVE" status
+python3 scripts/memory_cli.py --root "$ARCHIVE" backup
 python3 scripts/memory_cli.py --root "$ARCHIVE" heartbeat --check-only
 ```
 
@@ -60,25 +62,26 @@ python3 scripts/install_codex_autosync.py \
   --load
 ```
 
-The LaunchAgent keeps one optimized Rust process alive and receives recursive filesystem change notifications from the operating system. It performs no interval polling and starts work only when Codex rollout files change. It stores user messages and visible assistant commentary/final answers, while excluding system instructions, internal reasoning, tool calls, and tool output. A per-session cursor and stable source-derived IDs make retries idempotent.
+The LaunchAgent keeps one optimized Rust process alive and receives recursive filesystem change notifications from the operating system. It performs no interval polling and starts work only when Codex rollout files change. It stores user messages and visible assistant commentary/final answers from top-level Codex sessions. It excludes subagent sessions, system instructions, internal reasoning, tool calls, and tool output. A per-session cursor and stable source-derived IDs make retries idempotent.
 
 The native collector directly owns high-frequency JSONL parsing, raw append, per-conversation transcript updates, deterministic conversation indexes, cursor writes, due Level-1 job creation, and desktop snapshots. The Python CLI remains the low-frequency interface for summary ingestion, retrieval, heartbeat, and preview-first reconstruction.
 
-Every imported conversation is also written to its own file under `memory/conversations/`. A transcript contains only one conversation ID and includes both exact machine-readable records and readable message text. The immutable files under `raw/` remain authoritative; per-conversation transcripts are deterministic views that can be rebuilt without changing raw history.
+Every imported conversation is also written to its own file under `memory/conversations/`. A transcript contains only one conversation ID and includes both exact machine-readable records and readable message text. Its isolated indexes are stored under `memory/indexes/by-conversation/<conversation>/`. The immutable files under `raw/` remain authoritative; per-conversation transcripts and indexes are deterministic views that can be rebuilt without changing raw history.
 
 On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the exact executable in the generated plist before claiming automatic capture is active.
 
-With the default configuration, every successful memory mutation creates a new snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes. Each snapshot contains `backup-manifest.json`; the backup root contains `backup-log.jsonl`.
+With the default configuration, every successful memory mutation creates a new complete snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes, verifies its manifest, and removes older snapshot directories. The backup root therefore contains one latest recovery copy plus the append-only `backup-log.jsonl` operation history.
 
 ## Memory hierarchy
 
 ```text
 Raw conversation records
   -> Complete per-conversation transcripts
-  -> Level-1 summaries after a fixed number of completed dialogue rounds
-    -> Higher-level summaries after a fixed number of child summaries
-      -> Timeline and concept indexes
-        -> Retrieved raw-text evidence
+  -> Separate indexes for every conversation
+    -> Conversation-scoped Level-1 summaries after a fixed number of completed dialogue rounds
+      -> Conversation-scoped higher-level summaries after a fixed number of child summaries
+        -> Global routing indexes
+          -> Retrieved raw-text evidence
 ```
 
 The default thresholds are configurable. The initial implementation deliberately avoids subjective importance scoring and automatic inference of long-term user preferences.

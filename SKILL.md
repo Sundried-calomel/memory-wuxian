@@ -24,6 +24,9 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 13. Maintain one complete transcript per conversation; never place records from different conversation IDs in the same transcript.
 14. Use the native event-driven collector for high-frequency Codex capture; keep Python outside the continuous capture loop.
 15. Preserve transaction consistency by holding `memory/.locks/archive.lock` for each native event batch and Python maintenance command.
+16. Keep summary source ranges, parent-child groups, and derived indexes scoped to one conversation ID.
+17. Exclude native Codex subagent sessions; archive only top-level user-visible conversations.
+18. Keep only the configured number of newest complete external snapshots; the default is one.
 
 ## Operating workflow
 
@@ -37,6 +40,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 8. Preview `rebuild-state`, `rebuild-conversations`, or `rebuild-indexes` before applying a recovery operation.
 9. Use the native collector for automatic Codex import. Use `sync-codex` only as a manual compatibility and recovery adapter. Both paths must remain idempotent and storage-compatible.
 10. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
+11. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
 
 ## Commands
 
@@ -46,6 +50,7 @@ python3 scripts/memory_cli.py append --speaker user --text "..."
 python3 scripts/memory_cli.py append --speaker assistant --text "..."
 python3 scripts/memory_cli.py sync-codex --session-file ~/.codex/sessions/YYYY/MM/DD/rollout-....jsonl
 python3 scripts/memory_cli.py status
+python3 scripts/memory_cli.py backup
 python3 scripts/memory_cli.py make-summary-job
 python3 scripts/memory_cli.py ingest-summary --job memory/pending/<job>.json --summary-json <summary>.json
 python3 scripts/memory_cli.py retrieve --query "..."
@@ -74,4 +79,4 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 
 ## Client integration boundary
 
-Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or another configured client hook. The LaunchAgent keeps the Rust collector alive and uses recursive operating-system filesystem notifications instead of interval polling. It imports user messages plus visible assistant commentary/final answers; it excludes system prompts, internal reasoning, tool calls, and tool output. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.
+Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or another configured client hook. The LaunchAgent keeps the Rust collector alive and uses recursive operating-system filesystem notifications instead of interval polling. It imports user messages plus visible assistant commentary/final answers from top-level sessions; it excludes subagent sessions, system prompts, internal reasoning, tool calls, and tool output. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 - 2026-07-17
+
+- Retain only the newest complete external recovery snapshot by default, while keeping the append-only backup operation log.
+- Exclude Codex sessions whose native session metadata identifies them as subagent sessions.
+- Generate Level-1 and higher-level summary assignments within one conversation only.
+- Persist deterministic message, timeline, summary, and concept indexes under a separate directory for every conversation.
+- Rebuild global and per-conversation derived indexes together from authoritative raw records and persisted summaries.
+- Added an explicit `backup` command that creates a verified snapshot and applies configured retention.
+- Recognize both legacy minute-stamped snapshots and current microsecond-stamped snapshots during retention cleanup.
+- Cache source-derived message IDs inside each native collector process so full-history imports do not rescan all raw files for every message.
+- Select the next 20 eligible completed rounds within each conversation even when global round numbers are interleaved.
+
+## 0.5.1 - 2026-07-17
+
+- Isolated pending user rounds and `reply_to` relationships by conversation ID.
+- Added globally unique round allocation with deferred high-watermark advancement for out-of-order conversation completion.
+- Marked new round metadata with `round_scope: conversation`; assistant messages without a pending user remain visible but do not complete or allocate a dialogue round.
+- Added migration-aware state reconstruction and audit detection for any new cross-conversation reply link while preserving legacy raw records unchanged.
+- Added concurrent Python/Rust contract tests covering interleaved conversations and reverse completion order.
+
 ## 0.5.0 - 2026-07-16
 
 - Replaced the 15-second Python polling process with a persistent Rust filesystem watcher, using native `kqueue` vnode events on macOS.

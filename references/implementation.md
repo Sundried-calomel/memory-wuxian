@@ -34,7 +34,14 @@ memory/
 │   ├── concepts.md
 │   ├── conversations.jsonl
 │   ├── summaries.jsonl
-│   └── concepts.jsonl
+│   ├── concepts.jsonl
+│   └── by-conversation/<conversation>/
+│       ├── messages.jsonl
+│       ├── timeline.md
+│       ├── summaries.jsonl
+│       ├── summary-timeline.md
+│       ├── concepts.jsonl
+│       └── concepts.md
 ├── retrieval/
 │   ├── last-query.md
 │   └── retrieval-log.jsonl
@@ -69,9 +76,9 @@ Define one dialogue round as one user message plus its corresponding assistant r
 
 Keep incomplete user messages. Mark their round complete only after the corresponding assistant response is persisted.
 
-Create Level-1 jobs after `level_1_trigger_rounds` completed, unassigned rounds. Lock the exact source range, create a persistent job, and leave new raw writes available. Ingest the summary only after its schema and source references validate.
+Create Level-1 jobs after one conversation accumulates `level_1_trigger_rounds` completed, unassigned rounds. Never combine records from different conversation IDs in one job. Lock the exact source message IDs, create a persistent job, and leave new raw writes available. Ingest the summary only after its schema and source references validate.
 
-Create Level-N jobs after `higher_level_trigger_count` ungrouped Level-(N-1) summaries. Routine parent generation reads only assigned child summaries and their metadata. Consult raw history only to resolve a contradiction. Preserve child summaries and persist parent-child relationships.
+Create Level-N jobs after one conversation accumulates `higher_level_trigger_count` ungrouped Level-(N-1) summaries. A parent and all children must share one conversation ID. Routine parent generation reads only assigned child summaries and their metadata. Consult raw history only to resolve a contradiction. Preserve child summaries and persist parent-child relationships.
 
 ## 4. State and indexes
 
@@ -83,6 +90,8 @@ Maintain both Markdown and JSONL indexes:
 - Concepts: exact phrases, optional canonical labels, first and later appearances, summary references, and raw ranges.
 - Conversations: raw routing metadata without replacing raw payloads.
 - Summaries: level, path, source range, child relationships, and concepts.
+
+Maintain the same navigational categories separately for each conversation under `indexes/by-conversation/`. Global indexes route across conversations; conversation indexes never contain another conversation ID.
 
 JSONL indexes are append-only. Represent corrections with later records that reference superseded entries.
 
@@ -159,7 +168,9 @@ Hash mismatches, missing historical boundaries, overlapping source ranges, and c
 
 Use the Rust collector as the continuous input adapter for native rollout JSONL. Keep Python `sync-codex` as a manual compatibility and recovery path. Both implementations persist one cursor per Codex session under `memory/imports/codex/`, derive stable message IDs from session ID, source line, and speaker, and write the same archive schema. Cursor loss may cause a source line to be considered again, but stable IDs must turn that retry into a no-op or an explicit content-conflict error.
 
-Import only `event_msg` records representing `user_message` or visible `agent_message` phases `commentary` and `final_answer`. Do not import session/system instructions, internal reasoning, tool calls, tool output, token counters, or maintenance events. Commentary remains part of the exact visible transcript but does not close the pending dialogue round. `final_answer` closes it.
+Import only top-level Codex sessions and only their `event_msg` records representing `user_message` or visible `agent_message` phases `commentary` and `final_answer`. Reject a complete native session when `session_meta.payload.source` identifies it as a subagent session. Do not import session/system instructions, internal reasoning, tool calls, tool output, token counters, maintenance events, or approval-review context embedded in subagent traffic. Commentary remains part of the exact visible transcript but does not close the pending dialogue round. `final_answer` closes it.
+
+Pending-round state is keyed by conversation ID. User messages in different conversations receive different global round numbers even when both are awaiting answers. If a later round finishes first, record it in `completed_rounds_out_of_order`; advance `completed_rounds` only when all preceding round numbers are complete. This preserves fixed-round summary ranges while preventing cross-conversation `reply_to` links.
 
 Codex Desktop does not expose an in-process post-turn hook to a plain Skill. On macOS, the supplied LaunchAgent keeps one optimized Rust process alive. Its recursive filesystem watcher receives changes through the operating-system notification backend, debounces adjacent writes, and processes only changed rollout files. It does not wake on a fixed polling interval. The activation timestamp prevents an installation from silently importing all older sessions; explicitly selected current sessions may be backfilled once before activation.
 
@@ -169,4 +180,4 @@ The native collector owns high-frequency parsing, raw append, per-conversation t
 
 When backup is enabled, complete the primary raw/index/state mutation first. Then copy the archive to a new timestamped directory outside the primary root. Exclude transient lock files. Write a manifest containing the archive state and SHA-256/size of copied files, then atomically expose the completed snapshot and append `backup-log.jsonl` in the backup root.
 
-Create one snapshot per successful synchronization batch or other logical mutation. A no-op synchronization creates no snapshot. Desktop backups are recovery copies; the workspace archive remains the writable authority.
+Create one snapshot per successful synchronization batch or other logical mutation. After the new manifest-backed snapshot is complete, prune older snapshot directories beyond `backup.retention_count`; the default retention is one. Keep `backup-log.jsonl` as operation history. A no-op synchronization creates no snapshot. Desktop backups are recovery copies; the workspace archive remains the writable authority.

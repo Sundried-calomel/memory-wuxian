@@ -321,8 +321,12 @@ class MemoryStore:
             "total_messages": 0,
             "completed_rounds": 0,
             "last_summarized_round": 0,
+            "last_summarized_rounds": {},
             "last_raw_message_id": None,
             "pending_round": None,
+            "pending_rounds": {},
+            "next_round_number": 1,
+            "completed_rounds_out_of_order": [],
             "next_job_id": 1,
             "next_summary_ids": {str(level): 1 for level in range(1, self.maximum_depth + 1)},
             "last_successful_memory_update": None,
@@ -334,6 +338,7 @@ class MemoryStore:
             self.conversation_dir,
             self.summaries_dir,
             self.index_dir,
+            self.index_dir / "by-conversation",
             self.retrieval_dir,
             self.pending_dir,
             self.archive_dir,
@@ -419,6 +424,55 @@ class MemoryStore:
             filename = f"conversation-{digest}.md"
         return self.conversation_dir / filename
 
+    def conversation_index_dir(self, conversation_id: str) -> Path:
+        return self.index_dir / "by-conversation" / self.conversation_transcript_path(
+            conversation_id
+        ).stem
+
+    def ensure_conversation_index_files(self, conversation_id: str) -> Path:
+        directory = self.conversation_index_dir(conversation_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        initial_files = {
+            directory / "messages.jsonl": "",
+            directory / "summaries.jsonl": "",
+            directory / "concepts.jsonl": "",
+            directory / "timeline.md": (
+                "# Conversation Timeline\n\n"
+                f"- Conversation ID: `{conversation_id}`\n"
+            ),
+            directory / "summary-timeline.md": (
+                "# Conversation Summary Timeline\n\n"
+                f"- Conversation ID: `{conversation_id}`\n"
+            ),
+            directory / "concepts.md": (
+                "# Conversation Concept Index\n\n"
+                f"- Conversation ID: `{conversation_id}`\n"
+            ),
+        }
+        for path, content in initial_files.items():
+            if not path.exists():
+                atomic_write_text(path, content)
+        return directory
+
+    def append_conversation_message_index(
+        self,
+        index_record: Dict[str, Any],
+    ) -> None:
+        conversation_id = str(index_record["conversation_id"])
+        directory = self.ensure_conversation_index_files(conversation_id)
+        append_jsonl(directory / "messages.jsonl", index_record)
+        source = index_record.get("source") or {}
+        phase = source.get("phase") or index_record.get("speaker")
+        append_text(
+            directory / "timeline.md",
+            (
+                f"\n- `{index_record['timestamp']}` | sequence "
+                f"`{index_record['sequence']}` | `{phase}` | round "
+                f"`{index_record.get('round_number', 0)}` | "
+                f"`{index_record['message_id']}`\n"
+            ),
+        )
+
     def conversation_transcript_header(self, conversation_id: str) -> str:
         return (
             "---\n"
@@ -467,6 +521,89 @@ class MemoryStore:
             self.conversation_transcript_block(record) for record in ordered
         )
 
+    def recover_round_tracking(
+        self,
+        raw_records: Iterable[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        records = sorted(raw_records, key=lambda item: int(item["sequence"]))
+        rounds: Dict[int, List[Dict[str, Any]]] = {}
+        for record in records:
+            number = int(record.get("round_number", 0))
+            if number > 0:
+                rounds.setdefault(number, []).append(record)
+
+        completed_numbers = set()
+        for number, round_records in rounds.items():
+            user_conversations = {
+                str(record["conversation_id"])
+                for record in round_records
+                if record["speaker"] == "user"
+            }
+            final_conversations = {
+                str(record["conversation_id"])
+                for record in round_records
+                if record["speaker"] == "assistant"
+                and bool(record.get("completes_round", True))
+            }
+            conversation_scoped = any(
+                record.get("round_scope") == "conversation"
+                for record in round_records
+            )
+            if (
+                user_conversations & final_conversations
+                if conversation_scoped
+                else user_conversations and final_conversations
+            ):
+                completed_numbers.add(number)
+
+        completed_high_watermark = 0
+        while completed_high_watermark + 1 in completed_numbers:
+            completed_high_watermark += 1
+
+        pending_rounds: Dict[str, Dict[str, Any]] = {}
+        for record in records:
+            number = int(record.get("round_number", 0))
+            if number <= completed_high_watermark:
+                continue
+            conversation_id = str(record["conversation_id"])
+            if record["speaker"] == "user":
+                pending = pending_rounds.get(conversation_id)
+                if pending is None or int(pending["number"]) != number:
+                    pending = {
+                        "number": number,
+                        "first_user_message_id": record["message_id"],
+                        "latest_user_message_id": record["message_id"],
+                    }
+                else:
+                    pending["latest_user_message_id"] = record["message_id"]
+                pending_rounds[conversation_id] = pending
+            elif (
+                record["speaker"] == "assistant"
+                and bool(record.get("completes_round", True))
+                and conversation_id in pending_rounds
+                and int(pending_rounds[conversation_id]["number"]) == number
+            ):
+                pending_rounds.pop(conversation_id, None)
+
+        out_of_order = sorted(
+            number
+            for number in completed_numbers
+            if number > completed_high_watermark
+        )
+        allocated_rounds = [
+            int(pending["number"])
+            for pending in pending_rounds.values()
+        ] + out_of_order
+        return {
+            "completed_rounds": completed_high_watermark,
+            "completed_rounds_out_of_order": out_of_order,
+            "pending_rounds": pending_rounds,
+            "next_round_number": max(
+                [completed_high_watermark, *allocated_rounds],
+                default=0,
+            ) + 1,
+        }
+
     def append_message(
         self,
         speaker: str,
@@ -484,20 +621,39 @@ class MemoryStore:
         dt.datetime.fromisoformat(timestamp)
         with exclusive_lock(self.locks_dir / "state.lock"):
             state = self.load_state()
+            raw_records = self.read_all_raw()
+            recovered_rounds = self.recover_round_tracking(raw_records)
+            if not isinstance(state.get("pending_rounds"), dict):
+                state["pending_rounds"] = recovered_rounds["pending_rounds"]
+            state["next_round_number"] = max(
+                int(state.get("next_round_number", 1)),
+                int(recovered_rounds["next_round_number"]),
+            )
+            state["completed_rounds_out_of_order"] = sorted({
+                int(number)
+                for number in state.get(
+                    "completed_rounds_out_of_order",
+                    recovered_rounds["completed_rounds_out_of_order"],
+                )
+                if int(number) > int(state["completed_rounds"])
+            })
+            state["pending_round"] = None
             sequence = int(state["total_messages"]) + 1
-            pending = state.get("pending_round")
+            pending_rounds = dict(state["pending_rounds"])
+            pending = pending_rounds.get(conversation_id)
             if speaker == "user":
                 if pending is None:
                     pending = {
-                        "number": int(state["completed_rounds"]) + 1,
+                        "number": int(state["next_round_number"]),
                         "first_user_message_id": None,
                         "latest_user_message_id": None,
                     }
+                    state["next_round_number"] = int(state["next_round_number"]) + 1
                 round_number = int(pending["number"])
             elif speaker == "assistant" and pending is not None:
                 round_number = int(pending["number"])
             else:
-                round_number = int(state["completed_rounds"]) + 1
+                round_number = 0
 
             suffix = {"user": "u", "assistant": "a", "system": "s", "tool": "t"}[speaker]
             message_id = message_id or f"msg-{sequence:06d}-{suffix}"
@@ -508,7 +664,7 @@ class MemoryStore:
                 stored_text, was_redacted = redact_secrets(stored_text)
 
             existing = next(
-                (record for record in self.read_all_raw() if record.get("message_id") == message_id),
+                (record for record in raw_records if record.get("message_id") == message_id),
                 None,
             )
             if existing is not None:
@@ -549,10 +705,13 @@ class MemoryStore:
                 "timestamp": timestamp,
                 "speaker": speaker,
                 "round_number": round_number,
+                "round_scope": "conversation",
                 "reply_to": reply_to,
                 "text": stored_text,
                 "redacted": was_redacted,
-                "completes_round": bool(speaker == "assistant" and complete_round),
+                "completes_round": bool(
+                    speaker == "assistant" and complete_round and pending is not None
+                ),
             }
             if source is not None:
                 record["source"] = source
@@ -569,6 +728,7 @@ class MemoryStore:
             index_record["path"] = self.relative(raw_path)
             index_record["conversation_path"] = self.relative(transcript_path)
             append_jsonl(self.index_dir / "conversations.jsonl", index_record)
+            self.append_conversation_message_index(index_record)
 
             state["total_messages"] = sequence
             state["last_raw_message_id"] = message_id
@@ -576,10 +736,25 @@ class MemoryStore:
                 if pending.get("first_user_message_id") is None:
                     pending["first_user_message_id"] = message_id
                 pending["latest_user_message_id"] = message_id
-                state["pending_round"] = pending
+                pending_rounds[conversation_id] = pending
             elif speaker == "assistant" and pending is not None and complete_round:
-                state["completed_rounds"] = max(int(state["completed_rounds"]), round_number)
-                state["pending_round"] = None
+                completed = int(state["completed_rounds"])
+                out_of_order = {
+                    int(number)
+                    for number in state["completed_rounds_out_of_order"]
+                    if int(number) > completed
+                }
+                if round_number == completed + 1:
+                    completed = round_number
+                    while completed + 1 in out_of_order:
+                        out_of_order.remove(completed + 1)
+                        completed += 1
+                elif round_number > completed + 1:
+                    out_of_order.add(round_number)
+                state["completed_rounds"] = completed
+                state["completed_rounds_out_of_order"] = sorted(out_of_order)
+                pending_rounds.pop(conversation_id, None)
+            state["pending_rounds"] = pending_rounds
             self.save_state(state)
         return {**index_record, "status": "appended", "text_redacted": was_redacted}
 
@@ -595,6 +770,32 @@ class MemoryStore:
         except ValueError:
             return path
         raise ValueError("Backup directory must be outside the memory archive root")
+
+    @property
+    def backup_retention_count(self) -> int:
+        count = int(nested_get(self.config, ["backup", "retention_count"], 1))
+        if count < 1:
+            raise ValueError("backup.retention_count must be at least 1")
+        return count
+
+    def prune_backup_snapshots(self, backup_root: Path, keep: Iterable[Path]) -> List[str]:
+        keep_paths = {path.resolve() for path in keep}
+        snapshot_pattern = re.compile(
+            r"^\d{4}-\d{2}-\d{2}_\d{4}(?:\d{2}(?:_\d{6})?)?$"
+        )
+        snapshots = sorted(
+            path
+            for path in backup_root.iterdir()
+            if path.is_dir() and snapshot_pattern.fullmatch(path.name)
+        )
+        retained = set(snapshots[-self.backup_retention_count :]) | keep_paths
+        removed = []
+        for path in snapshots:
+            if path.resolve() in retained:
+                continue
+            shutil.rmtree(path)
+            removed.append(path.name)
+        return removed
 
     def create_backup_snapshot(
         self,
@@ -648,9 +849,10 @@ class MemoryStore:
                     "metadata": metadata or {},
                 },
             )
+            self.prune_backup_snapshots(backup_root, [final_path])
         return final_path
 
-    def codex_session_id(self, path: Path) -> str:
+    def codex_session_metadata(self, path: Path) -> Dict[str, Any]:
         with path.open("r", encoding="utf-8") as handle:
             for line in handle:
                 payload = json.loads(line)
@@ -659,7 +861,13 @@ class MemoryStore:
                 metadata = payload.get("payload") or {}
                 identifier = metadata.get("id") or metadata.get("session_id")
                 if identifier:
-                    return str(identifier)
+                    return {
+                        "session_id": str(identifier),
+                        "source": metadata.get("source"),
+                        "parent_thread_id": metadata.get("parent_thread_id"),
+                        "is_subagent": isinstance(metadata.get("source"), dict)
+                        and "subagent" in metadata.get("source", {}),
+                    }
         raise ValueError(f"Codex session metadata is missing an ID: {path}")
 
     def codex_cursor_path(self, session_id: str) -> Path:
@@ -670,7 +878,8 @@ class MemoryStore:
         source_path = source_path.expanduser().resolve()
         if not source_path.is_file():
             raise FileNotFoundError(f"Codex session does not exist: {source_path}")
-        session_id = self.codex_session_id(source_path)
+        session_metadata = self.codex_session_metadata(source_path)
+        session_id = session_metadata["session_id"]
         cursor_path = self.codex_cursor_path(session_id)
         cursor = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
         last_line = int(cursor.get("last_line", 0))
@@ -679,6 +888,30 @@ class MemoryStore:
         repaired_transcripts = 0
         total_lines = 0
         visible_events = 0
+
+        if session_metadata["is_subagent"]:
+            total_lines = sum(1 for _ in source_path.open("r", encoding="utf-8"))
+            atomic_write_json(
+                cursor_path,
+                {
+                    "format_version": 1,
+                    "session_id": session_id,
+                    "source_path": str(source_path),
+                    "last_line": total_lines,
+                    "excluded_reason": "subagent-session",
+                    "updated_at": now_iso(),
+                },
+            )
+            return {
+                "session_id": session_id,
+                "source_path": str(source_path),
+                "last_line": total_lines,
+                "visible_events": 0,
+                "imported_messages": 0,
+                "duplicate_messages": 0,
+                "repaired_transcripts": 0,
+                "excluded_reason": "subagent-session",
+            }
 
         with source_path.open("r", encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, 1):
@@ -838,22 +1071,96 @@ class MemoryStore:
     def summary_records(self) -> List[Dict[str, Any]]:
         return [entry for entry in read_jsonl(self.index_dir / "summaries.jsonl") if entry.get("event") == "created"]
 
+    def completed_rounds_by_conversation(
+        self,
+        raw_records: Optional[Iterable[Dict[str, Any]]] = None,
+    ) -> Dict[str, List[List[Dict[str, Any]]]]:
+        records = list(raw_records) if raw_records is not None else self.read_all_raw()
+        grouped: Dict[Tuple[str, int], List[Dict[str, Any]]] = {}
+        for record in records:
+            round_number = int(record.get("round_number", 0))
+            if round_number <= 0:
+                continue
+            key = (str(record["conversation_id"]), round_number)
+            grouped.setdefault(key, []).append(record)
+
+        completed: Dict[str, List[List[Dict[str, Any]]]] = {}
+        for (conversation_id, _), round_records in grouped.items():
+            ordered = sorted(round_records, key=lambda item: int(item["sequence"]))
+            has_user = any(record.get("speaker") == "user" for record in ordered)
+            has_final = any(
+                record.get("speaker") == "assistant"
+                and bool(record.get("completes_round", True))
+                for record in ordered
+            )
+            if has_user and has_final:
+                completed.setdefault(conversation_id, []).append(ordered)
+        for conversation_rounds in completed.values():
+            conversation_rounds.sort(key=lambda items: int(items[0]["sequence"]))
+        return completed
+
     def make_summary_job(self) -> Optional[Path]:
         self.init()
         with exclusive_lock(self.locks_dir / "summary-jobs.lock"):
             state = self.load_state()
             existing = self.pending_jobs()
-            start_round = int(state["last_summarized_round"]) + 1
-            end_round = start_round + self.level_1_trigger - 1
-            if int(state["completed_rounds"]) >= end_round:
-                signature = f"rounds:{start_round}-{end_round}"
-                match = next((job for job in existing if job.get("source_signature") == signature), None)
-                if match:
-                    return Path(match["_path"])
-                records = [record for record in self.read_all_raw() if start_round <= int(record["round_number"]) <= end_round]
-                if not records:
-                    raise RuntimeError("Completed-round state has no corresponding raw records")
-                job = self.build_level_1_job(state, records, start_round, end_round, signature)
+            raw_records = self.read_all_raw()
+            completed = self.completed_rounds_by_conversation(raw_records)
+            summarized = {
+                str(key): int(value)
+                for key, value in state.get("last_summarized_rounds", {}).items()
+            }
+            for summary in self.summary_records():
+                if int(summary.get("level", 0)) != 1 or not summary.get("conversation_id"):
+                    continue
+                conversation_id = str(summary["conversation_id"])
+                summarized[conversation_id] = max(
+                    summarized.get(conversation_id, 0),
+                    int(summary.get("source_round_end", 0)),
+                )
+            assigned = dict(summarized)
+            for job in existing:
+                if int(job.get("summary_level", 0)) != 1 or not job.get("conversation_id"):
+                    continue
+                conversation_id = str(job["conversation_id"])
+                assigned[conversation_id] = max(
+                    assigned.get(conversation_id, 0),
+                    int(job.get("source_round_end", 0)),
+                )
+
+            conversation_order = sorted(
+                completed,
+                key=lambda conversation_id: int(completed[conversation_id][0][0]["sequence"]),
+            )
+            for conversation_id in conversation_order:
+                last_assigned_round = assigned.get(conversation_id, 0)
+                eligible_rounds = [
+                    round_records
+                    for round_records in completed[conversation_id]
+                    if int(round_records[0]["round_number"]) > last_assigned_round
+                ]
+                if len(eligible_rounds) < self.level_1_trigger:
+                    continue
+                selected_rounds = eligible_rounds[: self.level_1_trigger]
+                start_round = int(selected_rounds[0][0]["round_number"])
+                end_round = int(selected_rounds[-1][0]["round_number"])
+                records = [
+                    record
+                    for round_records in selected_rounds
+                    for record in round_records
+                ]
+                records.sort(key=lambda record: int(record["sequence"]))
+                signature = (
+                    f"conversation:{conversation_id}:rounds:{start_round}-{end_round}"
+                )
+                job = self.build_level_1_job(
+                    state,
+                    records,
+                    start_round,
+                    end_round,
+                    signature,
+                    conversation_id,
+                )
                 return self.persist_job(state, job)
 
             grouped_children = {
@@ -863,20 +1170,40 @@ class MemoryStore:
             }
             summaries = self.summary_records()
             for level in range(1, self.maximum_depth):
-                candidates = [
-                    entry for entry in summaries
-                    if int(entry["level"]) == level and entry["summary_id"] not in grouped_children
-                ]
-                candidates.sort(key=lambda entry: entry["summary_id"])
-                if len(candidates) < self.higher_trigger:
-                    continue
-                children = candidates[: self.higher_trigger]
-                signature = "children:" + ",".join(entry["summary_id"] for entry in children)
-                match = next((job for job in existing if job.get("source_signature") == signature), None)
-                if match:
-                    return Path(match["_path"])
-                job = self.build_parent_job(state, level + 1, children, signature)
-                return self.persist_job(state, job)
+                conversation_ids = sorted({
+                    str(entry.get("conversation_id"))
+                    for entry in summaries
+                    if int(entry["level"]) == level and entry.get("conversation_id")
+                })
+                for conversation_id in conversation_ids:
+                    candidates = [
+                        entry for entry in summaries
+                        if int(entry["level"]) == level
+                        and entry["summary_id"] not in grouped_children
+                        and entry.get("conversation_id") == conversation_id
+                    ]
+                    candidates.sort(key=lambda entry: entry["summary_id"])
+                    if len(candidates) < self.higher_trigger:
+                        continue
+                    children = candidates[: self.higher_trigger]
+                    signature = (
+                        f"conversation:{conversation_id}:children:"
+                        + ",".join(entry["summary_id"] for entry in children)
+                    )
+                    match = next(
+                        (job for job in existing if job.get("source_signature") == signature),
+                        None,
+                    )
+                    if match:
+                        return Path(match["_path"])
+                    job = self.build_parent_job(
+                        state,
+                        level + 1,
+                        children,
+                        signature,
+                        conversation_id,
+                    )
+                    return self.persist_job(state, job)
             return None
 
     def build_level_1_job(
@@ -886,14 +1213,17 @@ class MemoryStore:
         start_round: int,
         end_round: int,
         signature: str,
+        conversation_id: str,
     ) -> Dict[str, Any]:
         source_files = list(dict.fromkeys(record["_path"] for record in records))
         summary_number = int(state["next_summary_ids"]["1"])
+        timestamps = [dt.datetime.fromisoformat(str(record["timestamp"])) for record in records]
         return {
             "format_version": 1,
             "job_id": f"job-{int(state['next_job_id']):06d}",
             "target_summary_id": f"L1-{summary_number:06d}",
             "summary_level": 1,
+            "conversation_id": conversation_id,
             "created_at": now_iso(),
             "source_signature": signature,
             "source_round_start": start_round,
@@ -902,9 +1232,10 @@ class MemoryStore:
             "source_end": records[-1]["message_id"],
             "source_start_sequence": records[0]["sequence"],
             "source_end_sequence": records[-1]["sequence"],
-            "start_time": records[0]["timestamp"],
-            "end_time": records[-1]["timestamp"],
+            "start_time": min(timestamps).isoformat(),
+            "end_time": max(timestamps).isoformat(),
             "source_files": source_files,
+            "source_message_ids": [record["message_id"] for record in records],
             "source_sha256": raw_source_sha256(records),
             "source_records": [{key: value for key, value in record.items() if key != "_path"} for record in records],
             "required_result_keys": ["topics", "established_conclusions", "open_questions", "concepts"],
@@ -916,6 +1247,7 @@ class MemoryStore:
         target_level: int,
         children: List[Dict[str, Any]],
         signature: str,
+        conversation_id: str,
     ) -> Dict[str, Any]:
         summary_number = int(state["next_summary_ids"][str(target_level)])
         child_payload = []
@@ -935,6 +1267,7 @@ class MemoryStore:
             "job_id": f"job-{int(state['next_job_id']):06d}",
             "target_summary_id": f"L{target_level}-{summary_number:06d}",
             "summary_level": target_level,
+            "conversation_id": conversation_id,
             "created_at": now_iso(),
             "source_signature": signature,
             "source_summaries": [child["summary_id"] for child in children],
@@ -942,8 +1275,8 @@ class MemoryStore:
             "source_end": children[-1].get("source_end"),
             "source_start_sequence": children[0].get("source_start_sequence"),
             "source_end_sequence": children[-1].get("source_end_sequence"),
-            "start_time": children[0]["start_time"],
-            "end_time": children[-1]["end_time"],
+            "start_time": min(child["start_time"] for child in children),
+            "end_time": max(child["end_time"] for child in children),
             "source_files": list(dict.fromkeys(path for child in children for path in child.get("source_files", []))),
             "source_sha256": canonical_sha256(child_digests),
             "source_summary_payload": child_payload,
@@ -954,6 +1287,8 @@ class MemoryStore:
         path = self.pending_dir / f"{job['job_id']}.json"
         atomic_write_json(path, job)
         state["next_job_id"] = int(state["next_job_id"]) + 1
+        level = str(int(job["summary_level"]))
+        state["next_summary_ids"][level] = int(state["next_summary_ids"][level]) + 1
         self.save_state(state)
         self.refresh_unsummarized_registry()
         return path
@@ -979,14 +1314,23 @@ class MemoryStore:
     def current_job_source_sha256(self, job: Dict[str, Any]) -> str:
         level = int(job["summary_level"])
         if level == 1:
+            expected_ids = list(job.get("source_message_ids", []))
+            raw_by_id = {
+                record["message_id"]: record for record in self.read_all_raw()
+            }
+            if expected_ids:
+                missing = [message_id for message_id in expected_ids if message_id not in raw_by_id]
+                if missing:
+                    raise RuntimeError("Summary source range is incomplete")
+                return raw_source_sha256(raw_by_id[message_id] for message_id in expected_ids)
             start = int(job["source_start_sequence"])
             end = int(job["source_end_sequence"])
             records = [
                 record
-                for record in self.read_all_raw()
+                for record in raw_by_id.values()
                 if start <= int(record["sequence"]) <= end
             ]
-            if not records or int(records[0]["sequence"]) != start or int(records[-1]["sequence"]) != end:
+            if not records:
                 raise RuntimeError("Summary source range is incomplete")
             return raw_source_sha256(records)
 
@@ -1032,6 +1376,7 @@ class MemoryStore:
                 "---",
                 f"summary_id: {summary_id}",
                 f"summary_level: {level}",
+                f"conversation_id: {json.dumps(job.get('conversation_id'), ensure_ascii=False)}",
                 f"created_at: {json.dumps(now_iso())}",
                 f"source_start: {json.dumps(job.get('source_start'))}",
                 f"source_end: {json.dumps(job.get('source_end'))}",
@@ -1042,6 +1387,11 @@ class MemoryStore:
             ]
             if level == 1:
                 metadata_lines.append(f"source_rounds: {int(job['source_round_end']) - int(job['source_round_start']) + 1}")
+                metadata_lines.append(f"source_round_start: {int(job['source_round_start'])}")
+                metadata_lines.append(f"source_round_end: {int(job['source_round_end'])}")
+                metadata_lines.append(
+                    f"source_message_ids: {yaml_list(job.get('source_message_ids', []))}"
+                )
             else:
                 metadata_lines.append(f"source_summaries: {yaml_list(job.get('source_summaries', []))}")
             metadata_lines.extend(["format_version: 1", "---", ""])
@@ -1060,6 +1410,7 @@ class MemoryStore:
                 "event": "created",
                 "summary_id": summary_id,
                 "level": level,
+                "conversation_id": job.get("conversation_id"),
                 "created_at": now_iso(),
                 "start_time": job.get("start_time"),
                 "end_time": job.get("end_time"),
@@ -1069,12 +1420,20 @@ class MemoryStore:
                 "source_end_sequence": job.get("source_end_sequence"),
                 "source_files": job.get("source_files", []),
                 "source_summaries": job.get("source_summaries", []),
+                "source_message_ids": job.get("source_message_ids", []),
+                "source_round_start": job.get("source_round_start"),
+                "source_round_end": job.get("source_round_end"),
                 "source_sha256": current_source_sha256,
                 "summary_sha256": summary_sha256,
                 "path": self.relative(output_path),
                 **summary,
             }
             append_jsonl(self.index_dir / "summaries.jsonl", index_record)
+            if index_record.get("conversation_id"):
+                conversation_indexes = self.ensure_conversation_index_files(
+                    str(index_record["conversation_id"])
+                )
+                append_jsonl(conversation_indexes / "summaries.jsonl", index_record)
             append_jsonl(self.summaries_dir / "registry.jsonl", {
                 "event": "created",
                 "summary_id": summary_id,
@@ -1098,7 +1457,13 @@ class MemoryStore:
             state = self.load_state()
             if level == 1:
                 state["last_summarized_round"] = max(int(state["last_summarized_round"]), int(job["source_round_end"]))
-            state["next_summary_ids"][str(level)] = int(state["next_summary_ids"][str(level)]) + 1
+                conversation_id = str(job["conversation_id"])
+                summarized_rounds = dict(state.get("last_summarized_rounds", {}))
+                summarized_rounds[conversation_id] = max(
+                    int(summarized_rounds.get(conversation_id, 0)),
+                    int(job["source_round_end"]),
+                )
+                state["last_summarized_rounds"] = summarized_rounds
             self.save_state(state)
 
             archived_job = self.archive_dir / f"{job['job_id']}-ingested.json"
@@ -1118,6 +1483,11 @@ class MemoryStore:
             f"- Source: `{summary.get('source_start')}` through `{summary.get('source_end')}`\n"
         )
         append_text(self.index_dir / "timeline.md", timeline)
+        if summary.get("conversation_id"):
+            directory = self.ensure_conversation_index_files(
+                str(summary["conversation_id"])
+            )
+            append_text(directory / "summary-timeline.md", timeline)
 
     def update_concept_indexes(self, summary: Dict[str, Any]) -> None:
         for concept in summary["concepts"]:
@@ -1140,6 +1510,22 @@ class MemoryStore:
                 self.index_dir / "concepts.md",
                 f"\n## {concept}\n\n- Summary: `{summary['summary_id']}`\n- First indexed time in this entry: `{summary['start_time']}`\n- Source: `{summary.get('source_start')}` through `{summary.get('source_end')}`\n",
             )
+            if summary.get("conversation_id"):
+                directory = self.ensure_conversation_index_files(
+                    str(summary["conversation_id"])
+                )
+                conversation_record = {
+                    **record,
+                    "conversation_id": summary["conversation_id"],
+                }
+                append_jsonl(directory / "concepts.jsonl", conversation_record)
+                append_text(
+                    directory / "concepts.md",
+                    f"\n## {concept}\n\n- Summary: `{summary['summary_id']}`\n"
+                    f"- First indexed time in this entry: `{summary['start_time']}`\n"
+                    f"- Source: `{summary.get('source_start')}` through "
+                    f"`{summary.get('source_end')}`\n",
+                )
 
     def summary_records_from_files(self) -> List[Dict[str, Any]]:
         raw_records = self.read_all_raw()
@@ -1151,10 +1537,15 @@ class MemoryStore:
             source_end = parsed.get("source_end")
             start_record = raw_by_id.get(source_start)
             end_record = raw_by_id.get(source_end)
+            conversation_id = parsed.get("conversation_id")
+            if not conversation_id and start_record and end_record:
+                if start_record.get("conversation_id") == end_record.get("conversation_id"):
+                    conversation_id = start_record.get("conversation_id")
             records.append({
                 "event": "created",
                 "summary_id": parsed["summary_id"],
                 "level": int(parsed["summary_level"]),
+                "conversation_id": conversation_id,
                 "created_at": parsed.get("created_at"),
                 "start_time": parsed.get("start_time") or (start_record or {}).get("timestamp"),
                 "end_time": parsed.get("end_time") or (end_record or {}).get("timestamp"),
@@ -1164,6 +1555,9 @@ class MemoryStore:
                 "source_end_sequence": (end_record or {}).get("sequence"),
                 "source_files": parsed.get("source_files") or [],
                 "source_summaries": parsed.get("source_summaries") or [],
+                "source_message_ids": parsed.get("source_message_ids") or [],
+                "source_round_start": parsed.get("source_round_start"),
+                "source_round_end": parsed.get("source_round_end"),
                 "source_sha256": parsed.get("source_sha256"),
                 "summary_sha256": file_sha256(path),
                 "path": self.relative(path),
@@ -1181,11 +1575,19 @@ class MemoryStore:
         summaries_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Optional[str]:
         if int(summary["level"]) == 1:
+            source_message_ids = list(summary.get("source_message_ids", []))
+            raw_records = raw_records if raw_records is not None else self.read_all_raw()
+            if source_message_ids:
+                raw_by_id = {record["message_id"]: record for record in raw_records}
+                if any(message_id not in raw_by_id for message_id in source_message_ids):
+                    return None
+                return raw_source_sha256(
+                    raw_by_id[message_id] for message_id in source_message_ids
+                )
             start = summary.get("source_start_sequence")
             end = summary.get("source_end_sequence")
             if start is None or end is None:
                 return None
-            raw_records = raw_records if raw_records is not None else self.read_all_raw()
             selected = [
                 record
                 for record in raw_records
@@ -1219,44 +1621,16 @@ class MemoryStore:
             if not path.exists():
                 continue
             destination = backup_dir / self.relative(path)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, destination)
+            if path.is_dir():
+                shutil.copytree(path, destination)
+            else:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, destination)
         return backup_dir
 
     def build_recovered_state(self) -> Dict[str, Any]:
         raw_records = self.read_all_raw()
-        rounds: Dict[int, List[Dict[str, Any]]] = {}
-        for record in raw_records:
-            rounds.setdefault(int(record["round_number"]), []).append(record)
-        completed_rounds = [
-            number
-            for number, records in rounds.items()
-            if any(record["speaker"] == "user" for record in records)
-            and any(
-                record["speaker"] == "assistant"
-                and bool(record.get("completes_round", True))
-                for record in records
-            )
-        ]
-        incomplete = [
-            (number, records)
-            for number, records in rounds.items()
-            if any(record["speaker"] == "user" for record in records)
-            and not any(
-                record["speaker"] == "assistant"
-                and bool(record.get("completes_round", True))
-                for record in records
-            )
-        ]
-        pending_round = None
-        if incomplete:
-            number, records = sorted(incomplete, key=lambda item: item[0])[-1]
-            user_records = [record for record in records if record["speaker"] == "user"]
-            pending_round = {
-                "number": number,
-                "first_user_message_id": user_records[0]["message_id"],
-                "latest_user_message_id": user_records[-1]["message_id"],
-            }
+        round_tracking = self.recover_round_tracking(raw_records)
 
         summaries = self.summary_records_from_files()
         raw_by_id = {record["message_id"]: record for record in raw_records}
@@ -1265,12 +1639,33 @@ class MemoryStore:
             for summary in summaries
             if int(summary["level"]) == 1 and summary.get("source_end") in raw_by_id
         ]
+        last_summarized_rounds: Dict[str, int] = {}
+        for summary in summaries:
+            if int(summary["level"]) != 1 or not summary.get("conversation_id"):
+                continue
+            conversation_id = str(summary["conversation_id"])
+            source_round_end = summary.get("source_round_end")
+            if source_round_end is None:
+                continue
+            last_summarized_rounds[conversation_id] = max(
+                last_summarized_rounds.get(conversation_id, 0),
+                int(source_round_end),
+            )
         next_summary_ids = {str(level): 1 for level in range(1, self.maximum_depth + 1)}
         for summary in summaries:
             match = re.fullmatch(r"L(\d+)-(\d+)", summary["summary_id"])
             if match:
                 level, number = int(match.group(1)), int(match.group(2))
                 next_summary_ids[str(level)] = max(next_summary_ids.get(str(level), 1), number + 1)
+
+        for job in self.pending_jobs():
+            match = re.fullmatch(r"L(\d+)-(\d+)", str(job.get("target_summary_id", "")))
+            if match:
+                level, number = int(match.group(1)), int(match.group(2))
+                next_summary_ids[str(level)] = max(
+                    next_summary_ids.get(str(level), 1),
+                    number + 1,
+                )
 
         job_numbers = []
         for path in list(self.pending_dir.glob("job-*.json")) + list(self.archive_dir.glob("job-*-ingested.json")):
@@ -1280,10 +1675,16 @@ class MemoryStore:
         return {
             "format_version": 1,
             "total_messages": max((int(record["sequence"]) for record in raw_records), default=0),
-            "completed_rounds": max(completed_rounds, default=0),
+            "completed_rounds": round_tracking["completed_rounds"],
             "last_summarized_round": max(summarized_rounds, default=0),
+            "last_summarized_rounds": last_summarized_rounds,
             "last_raw_message_id": raw_records[-1]["message_id"] if raw_records else None,
-            "pending_round": pending_round,
+            "pending_round": None,
+            "pending_rounds": round_tracking["pending_rounds"],
+            "next_round_number": round_tracking["next_round_number"],
+            "completed_rounds_out_of_order": round_tracking[
+                "completed_rounds_out_of_order"
+            ],
             "next_job_id": max(job_numbers, default=0) + 1,
             "next_summary_ids": next_summary_ids,
             "last_successful_memory_update": None,
@@ -1297,8 +1698,12 @@ class MemoryStore:
             "total_messages",
             "completed_rounds",
             "last_summarized_round",
+            "last_summarized_rounds",
             "last_raw_message_id",
             "pending_round",
+            "pending_rounds",
+            "next_round_number",
+            "completed_rounds_out_of_order",
             "next_job_id",
             "next_summary_ids",
         ]
@@ -1443,6 +1848,7 @@ class MemoryStore:
                 "event": "created",
                 "summary_id": summary["summary_id"],
                 "level": summary["level"],
+                "conversation_id": summary.get("conversation_id"),
                 "path": summary["path"],
                 "source_signature": source_signature,
                 "source_sha256": summary.get("source_sha256"),
@@ -1473,6 +1879,7 @@ class MemoryStore:
                     "event": "appearance",
                     "concept": concept,
                     "normalized": concept.casefold(),
+                    "conversation_id": summary.get("conversation_id"),
                     "summary_id": summary["summary_id"],
                     "summary_level": summary["level"],
                     "start_time": summary.get("start_time"),
@@ -1499,6 +1906,7 @@ class MemoryStore:
             self.index_dir / "timeline.md",
             self.index_dir / "concepts.md",
             self.summaries_dir / "registry.jsonl",
+            self.index_dir / "by-conversation",
         ]
         backup = None
         if apply:
@@ -1509,6 +1917,91 @@ class MemoryStore:
             atomic_write_text(self.index_dir / "timeline.md", "\n".join(timeline_lines).rstrip() + "\n")
             atomic_write_text(self.index_dir / "concepts.md", "\n".join(concept_lines).rstrip() + "\n")
             write_jsonl(self.summaries_dir / "registry.jsonl", registry)
+            by_conversation_root = self.index_dir / "by-conversation"
+            if by_conversation_root.exists():
+                shutil.rmtree(by_conversation_root)
+            by_conversation_root.mkdir(parents=True, exist_ok=True)
+            conversation_ids = sorted({
+                str(record["conversation_id"]) for record in conversations
+            })
+            for conversation_id in conversation_ids:
+                directory = self.ensure_conversation_index_files(conversation_id)
+                message_records = [
+                    record for record in conversations
+                    if record.get("conversation_id") == conversation_id
+                ]
+                summary_records = [
+                    summary for summary in summaries
+                    if summary.get("conversation_id") == conversation_id
+                ]
+                concept_records = [
+                    concept for concept in concepts
+                    if concept.get("conversation_id") == conversation_id
+                ]
+                write_jsonl(directory / "messages.jsonl", message_records)
+                write_jsonl(directory / "summaries.jsonl", summary_records)
+                write_jsonl(directory / "concepts.jsonl", concept_records)
+
+                message_timeline = [
+                    "# Conversation Timeline",
+                    "",
+                    f"- Conversation ID: `{conversation_id}`",
+                    "",
+                ]
+                for record in message_records:
+                    source = record.get("source") or {}
+                    phase = source.get("phase") or record.get("speaker")
+                    message_timeline.append(
+                        f"- `{record['timestamp']}` | sequence `{record['sequence']}` | "
+                        f"`{phase}` | round `{record.get('round_number', 0)}` | "
+                        f"`{record['message_id']}`"
+                    )
+                atomic_write_text(
+                    directory / "timeline.md",
+                    "\n".join(message_timeline).rstrip() + "\n",
+                )
+
+                summary_timeline = [
+                    "# Conversation Summary Timeline",
+                    "",
+                    f"- Conversation ID: `{conversation_id}`",
+                    "",
+                ]
+                conversation_concepts = [
+                    "# Conversation Concept Index",
+                    "",
+                    f"- Conversation ID: `{conversation_id}`",
+                    "",
+                ]
+                for summary in summary_records:
+                    topics = ", ".join(summary["topics"]) or "No topics recorded"
+                    summary_timeline.extend([
+                        f"## {str(summary.get('start_time') or 'unknown').split('T', 1)[0]}",
+                        "",
+                        f"- Summary: `{summary['summary_id']}`",
+                        f"- Level: `{summary['level']}`",
+                        f"- Time range: `{summary.get('start_time')}` to `{summary.get('end_time')}`",
+                        f"- Topics: {topics}",
+                        f"- Source: `{summary.get('source_start')}` through `{summary.get('source_end')}`",
+                        "",
+                    ])
+                    for concept in summary["concepts"]:
+                        conversation_concepts.extend([
+                            f"## {concept}",
+                            "",
+                            f"- Summary: `{summary['summary_id']}`",
+                            f"- First indexed time in this entry: `{summary.get('start_time')}`",
+                            f"- Source: `{summary.get('source_start')}` through `{summary.get('source_end')}`",
+                            "",
+                        ])
+                atomic_write_text(
+                    directory / "summary-timeline.md",
+                    "\n".join(summary_timeline).rstrip() + "\n",
+                )
+                atomic_write_text(
+                    directory / "concepts.md",
+                    "\n".join(conversation_concepts).rstrip() + "\n",
+                )
         return {
             "mode": "apply" if apply else "preview",
             "changed": apply,
@@ -1523,22 +2016,26 @@ class MemoryStore:
 
     @staticmethod
     def overlapping_ranges(records: Iterable[Dict[str, Any]], label: str) -> List[str]:
-        by_level: Dict[int, List[Tuple[int, int, str]]] = {}
+        by_scope: Dict[Tuple[int, str], List[Tuple[int, int, str]]] = {}
         for record in records:
             start = record.get("source_start_sequence")
             end = record.get("source_end_sequence")
             if start is None or end is None:
                 continue
             level = int(record.get("level", record.get("summary_level", 1)))
+            conversation_id = str(record.get("conversation_id") or "legacy-global")
             identifier = record.get("summary_id", record.get("job_id", "unknown"))
-            by_level.setdefault(level, []).append((int(start), int(end), identifier))
+            by_scope.setdefault((level, conversation_id), []).append(
+                (int(start), int(end), identifier)
+            )
         overlaps = []
-        for level, ranges in by_level.items():
+        for (level, conversation_id), ranges in by_scope.items():
             ranges.sort()
             for previous, current in zip(ranges, ranges[1:]):
                 if current[0] <= previous[1]:
                     overlaps.append(
-                        f"{label} level {level} overlap: {previous[2]} and {current[2]}"
+                        f"{label} level {level} overlap for {conversation_id}: "
+                        f"{previous[2]} and {current[2]}"
                     )
         return overlaps
 
@@ -1577,6 +2074,28 @@ class MemoryStore:
                 integrity_issues.append(f"raw content SHA-256 mismatch: {record['message_id']}")
         if legacy_raw:
             warnings.append(f"legacy raw records without content SHA-256={legacy_raw}")
+
+        message_owners = {
+            record["message_id"]: record["conversation_id"]
+            for record in raw_records
+        }
+        legacy_cross_replies = 0
+        for record in raw_records:
+            reply_to = record.get("reply_to")
+            reply_owner = message_owners.get(reply_to)
+            if reply_owner is None or reply_owner == record["conversation_id"]:
+                continue
+            if record.get("round_scope") == "conversation":
+                integrity_issues.append(
+                    "conversation-scoped reply crosses conversations: "
+                    f"{record['message_id']} -> {reply_to}"
+                )
+            else:
+                legacy_cross_replies += 1
+        if legacy_cross_replies:
+            warnings.append(
+                f"legacy cross-conversation reply links={legacy_cross_replies}"
+            )
 
         try:
             conversation_index = read_jsonl(self.index_dir / "conversations.jsonl")
@@ -1684,6 +2203,9 @@ class MemoryStore:
             "last_summarized_round",
             "last_raw_message_id",
             "pending_round",
+            "pending_rounds",
+            "next_round_number",
+            "completed_rounds_out_of_order",
             "next_job_id",
             "next_summary_ids",
         ]
@@ -1941,6 +2463,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("status", help="Print archive counters and pending work")
+    backup_parser = subparsers.add_parser(
+        "backup",
+        help="Create one verified external snapshot and prune older snapshots",
+    )
+    backup_parser.add_argument("--reason", default="manual-backup")
     subparsers.add_parser("make-summary-job", help="Create the next due deterministic summary job")
     ingest_parser = subparsers.add_parser("ingest-summary", help="Validate and persist an Agent-generated summary")
     ingest_parser.add_argument("--job", required=True)
@@ -2014,6 +2541,13 @@ def dispatch_command(
             result["backup"] = None
     elif args.command == "status":
         result = store.status()
+    elif args.command == "backup":
+        backup = store.create_backup_snapshot(args.reason)
+        result = {
+            "status": "created" if backup else "disabled",
+            "backup": str(backup) if backup else None,
+            "retention_count": store.backup_retention_count if backup else None,
+        }
     elif args.command == "make-summary-job":
         path = store.make_summary_job()
         result = {"status": "created" if path else "not-due", "job": str(path) if path else None}

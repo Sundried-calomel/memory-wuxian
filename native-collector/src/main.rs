@@ -1,6 +1,5 @@
-#[cfg(not(target_os = "macos"))]
-use std::collections::BTreeSet;
-use std::collections::HashSet;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -23,7 +22,7 @@ use fs2::FileExt;
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
@@ -75,12 +74,24 @@ impl Default for SummaryConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 struct BackupConfig {
     #[serde(default)]
     enabled: bool,
     #[serde(default)]
     directory: String,
+    #[serde(default = "default_backup_retention")]
+    retention_count: usize,
+}
+
+impl Default for BackupConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            directory: String::new(),
+            retention_count: default_backup_retention(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,6 +114,9 @@ fn default_l1_trigger() -> u64 {
 fn default_true() -> bool {
     true
 }
+fn default_backup_retention() -> usize {
+    1
+}
 
 #[derive(Debug, Default)]
 struct FileSyncResult {
@@ -113,6 +127,7 @@ struct FileSyncResult {
     imported_messages: u64,
     duplicate_messages: u64,
     repaired_transcripts: u64,
+    excluded_reason: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -124,6 +139,7 @@ struct AppendResult {
 struct Store {
     root: PathBuf,
     config: Config,
+    message_cache: RefCell<Option<HashMap<String, Value>>>,
 }
 
 impl Store {
@@ -135,7 +151,11 @@ impl Store {
             fs::create_dir_all(&root)?;
             root.canonicalize()
         })?;
-        let store = Self { root, config };
+        let store = Self {
+            root,
+            config,
+            message_cache: RefCell::new(None),
+        };
         store.init()?;
         Ok(store)
     }
@@ -146,6 +166,7 @@ impl Store {
             "conversations",
             "summaries",
             "indexes",
+            "indexes/by-conversation",
             "retrieval",
             "pending",
             "archive",
@@ -238,6 +259,72 @@ impl Store {
             .join(format!("conversation-{}.md", &digest[..16]))
     }
 
+    fn conversation_index_dir(&self, conversation_id: &str) -> Result<PathBuf> {
+        let transcript = self.conversation_path(conversation_id);
+        let stem = transcript
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| anyhow!("conversation transcript has no valid stem"))?;
+        Ok(self.root.join("indexes/by-conversation").join(stem))
+    }
+
+    fn ensure_conversation_indexes(&self, conversation_id: &str) -> Result<PathBuf> {
+        let directory = self.conversation_index_dir(conversation_id)?;
+        fs::create_dir_all(&directory)?;
+        let files = [
+            ("messages.jsonl", String::new()),
+            ("summaries.jsonl", String::new()),
+            ("concepts.jsonl", String::new()),
+            (
+                "timeline.md",
+                format!("# Conversation Timeline\n\n- Conversation ID: `{conversation_id}`\n"),
+            ),
+            (
+                "summary-timeline.md",
+                format!(
+                    "# Conversation Summary Timeline\n\n- Conversation ID: `{conversation_id}`\n"
+                ),
+            ),
+            (
+                "concepts.md",
+                format!("# Conversation Concept Index\n\n- Conversation ID: `{conversation_id}`\n"),
+            ),
+        ];
+        for (name, content) in files {
+            let path = directory.join(name);
+            if !path.exists() {
+                atomic_write(&path, content.as_bytes())?;
+            }
+        }
+        Ok(directory)
+    }
+
+    fn append_conversation_message_index(&self, index: &Value) -> Result<()> {
+        let conversation_id = string_field(index, "conversation_id")?;
+        let directory = self.ensure_conversation_indexes(conversation_id)?;
+        append_jsonl(&directory.join("messages.jsonl"), index)?;
+        let phase = index
+            .get("source")
+            .and_then(|source| source.get("phase"))
+            .and_then(Value::as_str)
+            .or_else(|| index.get("speaker").and_then(Value::as_str))
+            .unwrap_or("message");
+        append_bytes(
+            &directory.join("timeline.md"),
+            format!(
+                "\n- `{}` | sequence `{}` | `{phase}` | round `{}` | `{}`\n",
+                string_field(index, "timestamp")?,
+                u64_field(index, "sequence")?,
+                index
+                    .get("round_number")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0),
+                string_field(index, "message_id")?,
+            )
+            .as_bytes(),
+        )
+    }
+
     fn conversation_header(&self, conversation_id: &str) -> String {
         format!(
             "---\nrecord_type: conversation_transcript\nconversation_id: {}\nformat_version: 1\n---\n\n# Conversation {}\n\nThis file contains user messages and user-visible assistant text only. The fenced JSON record preserves the exact stored text and source metadata.\n\n",
@@ -279,6 +366,99 @@ impl Store {
         Ok(path)
     }
 
+    fn recover_pending_rounds(
+        &self,
+        records: &[Value],
+        completed_rounds: u64,
+    ) -> Result<Map<String, Value>> {
+        let mut pending = Map::new();
+        for record in records {
+            let number = record
+                .get("round_number")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            if number <= completed_rounds {
+                continue;
+            }
+            let conversation_id = string_field(record, "conversation_id")?;
+            let speaker = string_field(record, "speaker")?;
+            if speaker == "user" {
+                let message_id = string_field(record, "message_id")?;
+                let existing = pending.get(conversation_id);
+                let first = existing
+                    .filter(|value| value.get("number").and_then(Value::as_u64) == Some(number))
+                    .and_then(|value| value.get("first_user_message_id"))
+                    .cloned()
+                    .unwrap_or_else(|| json!(message_id));
+                pending.insert(
+                    conversation_id.to_owned(),
+                    json!({
+                        "number": number,
+                        "first_user_message_id": first,
+                        "latest_user_message_id": message_id,
+                    }),
+                );
+            } else if speaker == "assistant"
+                && record
+                    .get("completes_round")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true)
+                && pending
+                    .get(conversation_id)
+                    .and_then(|value| value.get("number"))
+                    .and_then(Value::as_u64)
+                    == Some(number)
+            {
+                pending.remove(conversation_id);
+            }
+        }
+        Ok(pending)
+    }
+
+    fn normalize_round_state(&self, state: &mut Value, records: &[Value]) -> Result<()> {
+        let completed_rounds = u64_field(state, "completed_rounds")?;
+        if !state.get("pending_rounds").is_some_and(Value::is_object) {
+            state["pending_rounds"] =
+                Value::Object(self.recover_pending_rounds(records, completed_rounds)?);
+        }
+        let max_pending_round = state
+            .get("pending_rounds")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flat_map(|rounds| rounds.values())
+            .filter_map(|round| round.get("number").and_then(Value::as_u64))
+            .max()
+            .unwrap_or(0);
+        let max_out_of_order = state
+            .get("completed_rounds_out_of_order")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_u64)
+            .max()
+            .unwrap_or(0);
+        let configured_next = state
+            .get("next_round_number")
+            .and_then(Value::as_u64)
+            .unwrap_or(1);
+        state["next_round_number"] = json!(
+            configured_next.max(
+                completed_rounds
+                    .max(max_pending_round)
+                    .max(max_out_of_order)
+                    + 1
+            )
+        );
+        if !state
+            .get("completed_rounds_out_of_order")
+            .is_some_and(Value::is_array)
+        {
+            state["completed_rounds_out_of_order"] = json!([]);
+        }
+        state["pending_round"] = Value::Null;
+        Ok(())
+    }
+
     fn append_message(
         &self,
         speaker: &str,
@@ -291,12 +471,18 @@ impl Store {
     ) -> Result<AppendResult> {
         self.lock("state.lock", || {
             let mut state = self.load_state()?;
+            let recovery_records = if state.get("pending_rounds").is_some_and(Value::is_object) {
+                Vec::new()
+            } else {
+                self.read_all_raw()?
+            };
+            self.normalize_round_state(&mut state, &recovery_records)?;
             let stored_text = if self.config.safety.redact_secrets {
                 redact_secrets(text)
             } else {
                 text.to_owned()
             };
-            if let Some(existing) = self.find_raw_record(message_id)? {
+            if let Some(existing) = self.cached_message(message_id)? {
                 let same = string_field(&existing, "speaker")? == speaker
                     && string_field(&existing, "text")? == stored_text
                     && string_field(&existing, "conversation_id")? == conversation_id
@@ -320,20 +506,31 @@ impl Store {
 
             let sequence = u64_field(&state, "total_messages")? + 1;
             let completed_rounds = u64_field(&state, "completed_rounds")?;
-            let pending = state
-                .get("pending_round")
-                .filter(|value| !value.is_null())
-                .cloned();
+            let mut pending_rounds = state
+                .get("pending_rounds")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            let mut pending = pending_rounds.get(conversation_id).cloned();
             let round_number = if speaker == "user" {
+                if pending.is_none() {
+                    let number = u64_field(&state, "next_round_number")?;
+                    pending = Some(json!({
+                        "number": number,
+                        "first_user_message_id": Value::Null,
+                        "latest_user_message_id": Value::Null,
+                    }));
+                    state["next_round_number"] = json!(number + 1);
+                }
                 pending
                     .as_ref()
                     .and_then(|value| value.get("number"))
                     .and_then(Value::as_u64)
-                    .unwrap_or(completed_rounds + 1)
+                    .ok_or_else(|| anyhow!("pending round number is missing"))?
             } else if let Some(value) = pending.as_ref() {
                 u64_field(value, "number")?
             } else {
-                completed_rounds + 1
+                0
             };
             let reply_to = if speaker == "assistant" {
                 pending
@@ -353,10 +550,11 @@ impl Store {
                 "timestamp": timestamp,
                 "speaker": speaker,
                 "round_number": round_number,
+                "round_scope": "conversation",
                 "reply_to": reply_to,
                 "text": stored_text,
                 "redacted": redacted,
-                "completes_round": speaker == "assistant" && complete_round,
+                "completes_round": speaker == "assistant" && complete_round && pending.is_some(),
                 "source": source,
             });
             let digest = raw_record_sha256(&record)?;
@@ -382,6 +580,7 @@ impl Store {
             index["path"] = json!(self.relative(&raw_path)?);
             index["conversation_path"] = json!(self.relative(&transcript_path)?);
             append_jsonl(&self.root.join("indexes/conversations.jsonl"), &index)?;
+            self.append_conversation_message_index(&index)?;
 
             state["total_messages"] = json!(sequence);
             state["last_raw_message_id"] = json!(message_id);
@@ -392,16 +591,39 @@ impl Store {
                     .filter(|value| !value.is_null())
                     .cloned()
                     .unwrap_or_else(|| json!(message_id));
-                state["pending_round"] = json!({
-                    "number": round_number,
-                    "first_user_message_id": first,
-                    "latest_user_message_id": message_id,
-                });
+                pending_rounds.insert(
+                    conversation_id.to_owned(),
+                    json!({
+                        "number": round_number,
+                        "first_user_message_id": first,
+                        "latest_user_message_id": message_id,
+                    }),
+                );
             } else if speaker == "assistant" && pending.is_some() && complete_round {
-                state["completed_rounds"] = json!(completed_rounds.max(round_number));
-                state["pending_round"] = Value::Null;
+                let mut completed = completed_rounds;
+                let mut out_of_order: BTreeSet<u64> = state
+                    .get("completed_rounds_out_of_order")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_u64)
+                    .filter(|number| *number > completed)
+                    .collect();
+                if round_number == completed + 1 {
+                    completed = round_number;
+                    while out_of_order.remove(&(completed + 1)) {
+                        completed += 1;
+                    }
+                } else if round_number > completed + 1 {
+                    out_of_order.insert(round_number);
+                }
+                state["completed_rounds"] = json!(completed);
+                state["completed_rounds_out_of_order"] = json!(out_of_order);
+                pending_rounds.remove(conversation_id);
             }
+            state["pending_rounds"] = Value::Object(pending_rounds);
             self.save_state(&mut state)?;
+            self.cache_message(&record)?;
             Ok(AppendResult {
                 appended: true,
                 transcript_repaired: false,
@@ -453,11 +675,29 @@ impl Store {
         Ok(records)
     }
 
-    fn find_raw_record(&self, message_id: &str) -> Result<Option<Value>> {
+    fn cached_message(&self, message_id: &str) -> Result<Option<Value>> {
+        if self.message_cache.borrow().is_none() {
+            let records = self.read_all_raw()?;
+            let mut cache = HashMap::with_capacity(records.len());
+            for record in records {
+                cache.insert(string_field(&record, "message_id")?.to_owned(), record);
+            }
+            *self.message_cache.borrow_mut() = Some(cache);
+        }
         Ok(self
-            .read_all_raw()?
-            .into_iter()
-            .find(|record| record.get("message_id").and_then(Value::as_str) == Some(message_id)))
+            .message_cache
+            .borrow()
+            .as_ref()
+            .and_then(|cache| cache.get(message_id))
+            .cloned())
+    }
+
+    fn cache_message(&self, record: &Value) -> Result<()> {
+        let message_id = string_field(record, "message_id")?.to_owned();
+        if let Some(cache) = self.message_cache.borrow_mut().as_mut() {
+            cache.insert(message_id, record.clone());
+        }
+        Ok(())
     }
 
     fn cursor_path(&self, session_id: &str) -> PathBuf {
@@ -490,7 +730,7 @@ impl Store {
         } else {
             complete_text.lines().collect()
         };
-        let session_id = lines
+        let (session_id, is_subagent) = lines
             .iter()
             .find_map(|line| {
                 let event: Value = serde_json::from_str(line).ok()?;
@@ -498,11 +738,16 @@ impl Store {
                     return None;
                 }
                 let payload = event.get("payload")?;
-                payload
+                let session_id = payload
                     .get("id")
                     .or_else(|| payload.get("session_id"))
                     .and_then(Value::as_str)
-                    .map(str::to_owned)
+                    .map(str::to_owned)?;
+                let is_subagent = payload
+                    .get("source")
+                    .and_then(Value::as_object)
+                    .is_some_and(|source| source.contains_key("subagent"));
+                Some((session_id, is_subagent))
             })
             .ok_or_else(|| {
                 anyhow!(
@@ -530,6 +775,23 @@ impl Store {
             last_line: total_lines,
             ..Default::default()
         };
+        if is_subagent {
+            let metadata = fs::metadata(&source_path)?;
+            atomic_write_json(
+                &cursor_path,
+                &json!({
+                    "format_version": 1,
+                    "session_id": session_id,
+                    "source_path": source_path.to_string_lossy(),
+                    "last_line": total_lines,
+                    "source_size": metadata.len(),
+                    "excluded_reason": "subagent-session",
+                    "updated_at": now_iso(),
+                }),
+            )?;
+            result.excluded_reason = Some("subagent-session".to_owned());
+            return Ok(result);
+        }
         for (zero_index, line) in lines.iter().enumerate().skip(last_line as usize) {
             let line_number = zero_index as u64 + 1;
             let event: Value = serde_json::from_str(line).with_context(|| {
@@ -621,21 +883,133 @@ impl Store {
     fn maybe_create_level_one_job(&self) -> Result<Option<PathBuf>> {
         self.lock("summary-jobs.lock", || self.lock("state.lock", || {
             let mut state = self.load_state()?;
-            let start_round = u64_field(&state, "last_summarized_round")? + 1;
-            let end_round = start_round + self.config.summaries.level_1_trigger_rounds - 1;
-            if u64_field(&state, "completed_rounds")? < end_round { return Ok(None); }
-            let signature = format!("rounds:{start_round}-{end_round}");
+            let raw_records = self.read_all_raw()?;
+            let mut grouped: BTreeMap<String, BTreeMap<u64, Vec<Value>>> = BTreeMap::new();
+            for record in raw_records {
+                let round_number = record
+                    .get("round_number")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                if round_number == 0 {
+                    continue;
+                }
+                let conversation_id = string_field(&record, "conversation_id")?.to_owned();
+                grouped
+                    .entry(conversation_id)
+                    .or_default()
+                    .entry(round_number)
+                    .or_default()
+                    .push(record);
+            }
+            let mut completed_by_conversation = Vec::new();
+            for (conversation_id, rounds) in grouped {
+                let mut completed = Vec::new();
+                for (_, mut records) in rounds {
+                    records.sort_by_key(|record| {
+                        record.get("sequence").and_then(Value::as_u64).unwrap_or(0)
+                    });
+                    let has_user = records.iter().any(|record| {
+                        record.get("speaker").and_then(Value::as_str) == Some("user")
+                    });
+                    let has_final = records.iter().any(|record| {
+                        record.get("speaker").and_then(Value::as_str) == Some("assistant")
+                            && record
+                                .get("completes_round")
+                                .and_then(Value::as_bool)
+                                .unwrap_or(true)
+                    });
+                    if has_user && has_final {
+                        completed.push(records);
+                    }
+                }
+                completed.sort_by_key(|records| {
+                    records[0]
+                        .get("sequence")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0)
+                });
+                if let Some(first) = completed.first() {
+                    let first_sequence = first[0]
+                        .get("sequence")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0);
+                    completed_by_conversation.push((first_sequence, conversation_id, completed));
+                }
+            }
+            completed_by_conversation.sort_by_key(|entry| entry.0);
+
+            let mut assigned: BTreeMap<String, u64> = state
+                .get("last_summarized_rounds")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flat_map(|rounds| rounds.iter())
+                .filter_map(|(conversation_id, value)| {
+                    value
+                        .as_u64()
+                        .map(|round| (conversation_id.to_owned(), round))
+                })
+                .collect();
             for entry in fs::read_dir(self.root.join("pending"))? {
                 let path = entry?.path();
                 if path.file_name().and_then(|v| v.to_str()).is_some_and(|name| name.starts_with("job-") && name.ends_with(".json")) {
                     let job = read_json(&path)?;
-                    if job.get("source_signature").and_then(Value::as_str) == Some(&signature) { return Ok(Some(path)); }
+                    if job.get("summary_level").and_then(Value::as_u64) == Some(1)
+                        && let (Some(conversation_id), Some(end_round)) = (
+                            job.get("conversation_id").and_then(Value::as_str),
+                            job.get("source_round_end").and_then(Value::as_u64),
+                        )
+                    {
+                        let current = assigned.entry(conversation_id.to_owned()).or_default();
+                        *current = (*current).max(end_round);
+                    }
                 }
             }
-            let records: Vec<Value> = self.read_all_raw()?.into_iter()
-                .filter(|record| record.get("round_number").and_then(Value::as_u64).is_some_and(|round| start_round <= round && round <= end_round))
-                .collect();
-            if records.is_empty() { bail!("completed-round state has no corresponding raw records"); }
+            let mut selected = None;
+            for (_, conversation_id, completed_rounds) in completed_by_conversation {
+                let last_assigned_round = assigned.get(&conversation_id).copied().unwrap_or(0);
+                let eligible_rounds: Vec<&Vec<Value>> = completed_rounds
+                    .iter()
+                    .filter(|records| {
+                        records[0]
+                            .get("round_number")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0)
+                            > last_assigned_round
+                    })
+                    .collect();
+                if eligible_rounds.len() < self.config.summaries.level_1_trigger_rounds as usize {
+                    continue;
+                }
+                let selected_rounds =
+                    &eligible_rounds[..self.config.summaries.level_1_trigger_rounds as usize];
+                let start_round = selected_rounds
+                    .first()
+                    .and_then(|records| records[0].get("round_number"))
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("selected Level-1 start round is missing"))?;
+                let end_round = selected_rounds
+                    .last()
+                    .and_then(|records| records[0].get("round_number"))
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("selected Level-1 end round is missing"))?;
+                let mut records: Vec<Value> = selected_rounds
+                    .iter()
+                    .copied()
+                    .flatten()
+                    .cloned()
+                    .collect();
+                records.sort_by_key(|record| {
+                    record.get("sequence").and_then(Value::as_u64).unwrap_or(0)
+                });
+                selected = Some((conversation_id, start_round, end_round, records));
+                break;
+            }
+            let Some((conversation_id, start_round, end_round, records)) = selected else {
+                return Ok(None);
+            };
+            let signature = format!(
+                "conversation:{conversation_id}:rounds:{start_round}-{end_round}"
+            );
             let job_number = u64_field(&state, "next_job_id")?;
             let summary_number = state.get("next_summary_ids").and_then(|v| v.get("1")).and_then(Value::as_u64)
                 .ok_or_else(|| anyhow!("state.next_summary_ids.1 is missing"))?;
@@ -653,11 +1027,24 @@ impl Store {
             let source_records: Vec<Value> = records.iter().map(|value| {
                 let mut cloned = value.clone(); cloned.as_object_mut().unwrap().remove("_path"); cloned
             }).collect();
+            let source_message_ids: Vec<Value> = records
+                .iter()
+                .map(|record| record["message_id"].clone())
+                .collect();
+            let mut timestamped: Vec<(DateTime<FixedOffset>, String)> = records
+                .iter()
+                .map(|record| {
+                    let value = string_field(record, "timestamp")?.to_owned();
+                    Ok((DateTime::parse_from_rfc3339(&value)?, value))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            timestamped.sort_by_key(|entry| entry.0);
             let job = json!({
                 "format_version": 1,
                 "job_id": format!("job-{job_number:06}"),
                 "target_summary_id": format!("L1-{summary_number:06}"),
                 "summary_level": 1,
+                "conversation_id": conversation_id,
                 "created_at": now_iso(),
                 "source_signature": signature,
                 "source_round_start": start_round,
@@ -666,9 +1053,10 @@ impl Store {
                 "source_end": records.last().unwrap()["message_id"],
                 "source_start_sequence": records.first().unwrap()["sequence"],
                 "source_end_sequence": records.last().unwrap()["sequence"],
-                "start_time": records.first().unwrap()["timestamp"],
-                "end_time": records.last().unwrap()["timestamp"],
+                "start_time": timestamped.first().unwrap().1,
+                "end_time": timestamped.last().unwrap().1,
                 "source_files": source_files,
+                "source_message_ids": source_message_ids,
                 "source_sha256": raw_source_sha256(&records)?,
                 "source_records": source_records,
                 "required_result_keys": ["topics", "established_conclusions", "open_questions", "concepts"],
@@ -676,6 +1064,7 @@ impl Store {
             let path = self.root.join("pending").join(format!("job-{job_number:06}.json"));
             atomic_write_json(&path, &job)?;
             state["next_job_id"] = json!(job_number + 1);
+            state["next_summary_ids"]["1"] = json!(summary_number + 1);
             self.save_state(&mut state)?;
             self.refresh_unsummarized()?;
             Ok(Some(path))
@@ -710,6 +1099,40 @@ impl Store {
             &self.root.join("pending/unsummarized.json"),
             &json!({"format_version": 1, "pending_jobs": jobs}),
         )
+    }
+
+    fn prune_backup_snapshots(&self, backup_root: &Path) -> Result<Vec<String>> {
+        if self.config.backup.retention_count == 0 {
+            bail!("backup.retention_count must be at least 1");
+        }
+        let pattern = Regex::new(r"^\d{4}-\d{2}-\d{2}_\d{4}(?:\d{2}(?:_\d{6})?)?$")?;
+        let mut snapshots = Vec::new();
+        for entry in fs::read_dir(backup_root)? {
+            let path = entry?.path();
+            if path.is_dir()
+                && path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|name| pattern.is_match(name))
+            {
+                snapshots.push(path);
+            }
+        }
+        snapshots.sort();
+        let remove_count = snapshots
+            .len()
+            .saturating_sub(self.config.backup.retention_count);
+        let mut removed = Vec::new();
+        for path in snapshots.into_iter().take(remove_count) {
+            fs::remove_dir_all(&path)?;
+            removed.push(
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        }
+        Ok(removed)
     }
 
     fn create_backup(&self, reason: &str, metadata: Value) -> Result<Option<PathBuf>> {
@@ -794,6 +1217,7 @@ impl Store {
                     "metadata": metadata,
                 }),
             )?;
+            self.prune_backup_snapshots(&backup_root)?;
             Ok(Some(final_path))
         })
     }
@@ -820,6 +1244,7 @@ impl Store {
                 "imported_messages": result.imported_messages,
                 "duplicate_messages": result.duplicate_messages,
                 "repaired_transcripts": result.repaired_transcripts,
+                "excluded_reason": result.excluded_reason,
             }));
         }
         let created_job = if imported > 0 {
