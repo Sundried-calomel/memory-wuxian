@@ -5,7 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import shutil
+import sqlite3
+import subprocess
 import threading
+import time
 import webbrowser
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -31,6 +36,135 @@ def parse_time(value: str | None) -> datetime | None:
 
 
 TELEMETRY_CACHE: dict[str, tuple[int, dict[str, int] | None]] = {}
+CJK_PATTERN = re.compile(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]")
+THREAD_ID_PATTERN = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
+THREAD_ID_SEARCH_PATTERN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.IGNORECASE)
+RUNTIME_TITLE_CACHE: tuple[float, dict[str, str]] = (0.0, {})
+
+
+def estimate_context_tokens(text: str) -> int:
+    cjk_count = len(CJK_PATTERN.findall(text))
+    return cjk_count + (max(0, len(text) - cjk_count) + 3) // 4
+
+
+def codex_runtime_titles() -> dict[str, str]:
+    global RUNTIME_TITLE_CACHE
+    if time.monotonic() - RUNTIME_TITLE_CACHE[0] < 30:
+        return RUNTIME_TITLE_CACHE[1]
+    codex = Path.home() / ".codex/.sandbox-bin/codex.exe"
+    executable = str(codex) if codex.exists() else shutil.which("codex")
+    if not executable:
+        return {}
+    process = None
+    killer = None
+    titles: dict[str, str] = {}
+    try:
+        process = subprocess.Popen(
+            [executable, "app-server", "--stdio"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+        )
+        killer = threading.Timer(3, process.terminate)
+        killer.start()
+        assert process.stdin and process.stdout
+        requests = [
+            {"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "memory-wuxian-dashboard", "version": "1.0"}}},
+            {"method": "initialized", "params": {}},
+            {"id": 2, "method": "thread/list", "params": {"limit": 100, "archived": False}},
+        ]
+        for request in requests:
+            process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
+        process.stdin.flush()
+        for line in process.stdout:
+            response = json.loads(line)
+            if response.get("id") != 2:
+                continue
+            for thread in (response.get("result") or {}).get("data", []):
+                if thread.get("id") and thread.get("name"):
+                    titles[str(thread["id"])] = str(thread["name"]).strip()
+            break
+    except (OSError, json.JSONDecodeError, subprocess.SubprocessError):
+        titles = {}
+    finally:
+        if killer:
+            killer.cancel()
+        if process and process.poll() is None:
+            process.terminate()
+        if process:
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=1)
+            if process.stdin:
+                process.stdin.close()
+            if process.stdout:
+                process.stdout.close()
+    RUNTIME_TITLE_CACHE = (time.monotonic(), titles)
+    return titles
+
+
+def codex_thread_titles() -> dict[str, str]:
+    runtime_titles = codex_runtime_titles()
+    global_state = Path.home() / ".codex/.codex-global-state.json"
+    sidebar_candidates: dict[str, list[str]] = defaultdict(list)
+    try:
+        state = json.loads(global_state.read_text(encoding="utf-8"))
+
+        def visit(value: Any) -> None:
+            if isinstance(value, dict):
+                object_id = str(value.get("id", ""))
+                object_title = value.get("title")
+                if THREAD_ID_PATTERN.fullmatch(object_id) and isinstance(object_title, str):
+                    sidebar_candidates[object_id].append(object_title.strip())
+                for key, child in value.items():
+                    key_text = str(key)
+                    embedded_id = THREAD_ID_SEARCH_PATTERN.search(key_text)
+                    candidate_id = key_text if THREAD_ID_PATTERN.fullmatch(key_text) else (
+                        embedded_id.group(0) if embedded_id and "title" in key_text.casefold() else None
+                    )
+                    if candidate_id and isinstance(child, str):
+                        candidate = child.strip()
+                        if (
+                            candidate
+                            and "\\" not in candidate
+                            and "/" not in candidate
+                            and not candidate.startswith(("client-", "local-", "remote-"))
+                            and len(candidate) <= 120
+                        ):
+                            sidebar_candidates[candidate_id].append(candidate)
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        visit(state)
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    database = Path.home() / ".codex/state_5.sqlite"
+    database_titles: dict[str, str] = {}
+    try:
+        connection = sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True, timeout=1)
+        try:
+            database_titles = {
+                str(thread_id): str(title).strip()
+                for thread_id, title in connection.execute("SELECT id, title FROM threads")
+                if str(title).strip()
+            }
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        pass
+    fallback_titles = {
+        thread_id: min(candidates, key=len)
+        for thread_id in set(database_titles) | set(sidebar_candidates)
+        if (candidates := sidebar_candidates.get(thread_id) or [database_titles[thread_id]])
+    }
+    return {**fallback_titles, **runtime_titles}
 
 
 def session_telemetry(path: Path) -> dict[str, int] | None:
@@ -80,6 +214,7 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         daily_characters[day] += len(str(record.get("text", "")))
 
     summary_counts: dict[str, Counter[int]] = defaultdict(Counter)
+    titles = codex_thread_titles()
     for summary in summaries:
         summary_counts[str(summary.get("conversation_id"))][int(summary["level"])] += 1
 
@@ -91,7 +226,8 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         telemetry = session_telemetry(Path(source_path)) if source_path else None
         conversations.append({
             "conversation_id": conversation_id,
-            "label": first_user.replace("\n", " ")[:72],
+            "title": titles.get(conversation_id.removeprefix("codex:"), first_user.replace("\n", " ")[:72]),
+            "title_source": "codex-thread" if conversation_id.removeprefix("codex:") in titles else "first-user-message",
             "message_count": len(items),
             "character_count": sum(len(str(item.get("text", ""))) for item in items),
             "completed_rounds": len({item.get("round_number") for item in items if item.get("completes_round")}),
@@ -106,7 +242,8 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
     timestamps = [item for item in timestamps if item]
     first = min(timestamps) if timestamps else None
     now = datetime.now(timezone.utc)
-    archived_characters = sum(len(str(item.get("text", ""))) for item in records)
+    archived_text = "".join(str(item.get("text", "")) for item in records)
+    archived_characters = len(archived_text)
     return {
         "generated_at": now.isoformat(),
         "archive_root": str(store.root),
@@ -115,18 +252,19 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
             "conversations": len(conversations),
             "messages": len(records),
             "characters": archived_characters,
-            "estimated_tokens": (archived_characters + 3) // 4,
+            "estimated_tokens": estimate_context_tokens(archived_text),
             "summary_counts": status.get("summary_counts", {}),
             "pending_summary_jobs": status.get("pending_summary_jobs", 0),
             "archived_days": max(1, (now - first.astimezone(timezone.utc)).days + 1) if first else 0,
             "first_archived_at": first.isoformat() if first else None,
         },
         "daily": [
-            {"date": day, "messages": daily_messages[day], "characters": daily_characters[day], "estimated_tokens": (daily_characters[day] + 3) // 4}
+            {"date": day, "messages": daily_messages[day], "characters": daily_characters[day]}
             for day in sorted(daily_messages)
         ],
         "conversations": conversations,
-        "estimation_note": "Estimated tokens use ceil(visible Unicode characters / 4); model tokenizer counts may differ.",
+        "character_note": "Visible user and assistant source text stored in the append-only raw archive; summaries are excluded.",
+        "estimation_note": "Context-size estimate: CJK characters count as about one token and other characters as about four per token. This is not API billing or summary-generation usage.",
     }
 
 

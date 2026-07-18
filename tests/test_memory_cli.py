@@ -14,7 +14,7 @@ from pathlib import Path
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 from platform_lock import exclusive_lock
-from memory_dashboard import dashboard_data
+from memory_dashboard import dashboard_data, estimate_context_tokens
 
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
@@ -99,9 +99,10 @@ safety:
         self.assertGreater(result["totals"]["characters"], 0)
         self.assertEqual(
             result["totals"]["estimated_tokens"],
-            (result["totals"]["characters"] + 3) // 4,
+            estimate_context_tokens("第 1 轮讨论分层记忆第 1 轮确认原文必须保留"),
         )
         self.assertEqual(len(result["conversations"]), 1)
+        self.assertIn("title", result["conversations"][0])
         self.assertIsNone(result["conversations"][0]["telemetry"])
 
     def ingest_due_summary(self, concept):
