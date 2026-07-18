@@ -75,7 +75,13 @@ On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archi
 
 ## Automatic Codex capture on Windows
 
-Build the same Rust collector as a Windows executable, then install its user-level scheduled task:
+Run the environment bootstrap first. It reports the detected Python version and paths for Python, Codex CLI, the bundled collector, and Codex sessions. With `-InstallMissing`, it installs Python only when no compatible `>=3.9` runtime or Codex-bundled Python exists.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
+```
+
+The release includes `bin/memory-wuxian-collector.exe`, so Rust and Visual C++ Build Tools are development-only dependencies. Rebuild the collector only when changing native source, then install its user-level startup integration:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1

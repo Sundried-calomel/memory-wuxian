@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1
+
+- Add a Windows environment bootstrap that reports the exact Python version and discovers Codex-bundled Python and CLI paths before activation.
+- Install official Python only when no compatible 3.9+ runtime is available and the user explicitly enables missing-runtime installation.
+- Ship the Windows collector binary with the Skill so Rust and MSVC remain development-only dependencies.
+
 ## 0.8.0
 
 - Add a Windows-native collector build with Task Scheduler and hidden per-user Run-key fallback while preserving the macOS LaunchAgent.

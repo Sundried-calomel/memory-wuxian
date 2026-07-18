@@ -18,6 +18,7 @@ from platform_lock import exclusive_lock
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
 WINDOWS_INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync_windows.py"
+WINDOWS_BOOTSTRAP = SKILL_ROOT / "scripts" / "bootstrap_windows.ps1"
 SEMANTIC_WORKER = SKILL_ROOT / "scripts" / "semantic_worker.py"
 NATIVE_MANIFEST = SKILL_ROOT / "native-collector" / "Cargo.toml"
 NATIVE_BINARY = SKILL_ROOT / "bin" / (
@@ -853,6 +854,7 @@ summaries:
         completed = subprocess.run(
             [cargo, "build", "--manifest-path", str(NATIVE_MANIFEST)],
             text=True,
+            encoding="utf-8",
             capture_output=True,
             check=False,
         )
@@ -1195,6 +1197,33 @@ summaries:
         self.assertIn("MEMORY_WUXIAN_CODEX", command)
         self.assertIn("--sessions-root", command)
         self.assertIn("scheduled-task.log", command)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows bootstrap test")
+    def test_windows_bootstrap_reports_runtime_versions(self):
+        sessions = self.base / "sessions"
+        sessions.mkdir()
+        collector = self.base / "memory-wuxian-collector.exe"
+        collector.write_bytes(b"collector")
+        codex = self.base / "codex.exe"
+        codex.write_bytes(b"codex")
+        completed = subprocess.run(
+            [
+                "powershell.exe", "-ExecutionPolicy", "Bypass", "-File", str(WINDOWS_BOOTSTRAP),
+                "-PythonPath", sys.executable,
+                "-CodexCliPath", str(codex),
+                "-CollectorPath", str(collector),
+                "-SessionsRoot", str(sessions),
+            ],
+            text=True,
+            encoding="utf-8-sig",
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads(completed.stdout)
+        self.assertTrue(result["ready"])
+        version = tuple(map(int, result["checks"]["python"]["version"].split(".")))
+        self.assertGreaterEqual(version, (3, 9))
 
 
 if __name__ == "__main__":

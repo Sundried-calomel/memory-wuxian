@@ -15,5 +15,6 @@ memory/pending/*
 memory/archive/*
 memory/.locks/*
 memory/imports/*
-bin/
+bin/*
+!bin/memory-wuxian-collector.exe
 native-collector/target/
