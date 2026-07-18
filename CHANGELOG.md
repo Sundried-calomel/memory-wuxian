@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0 - 2026-07-19
+
+- Add bounded runtime context refresh that detects completed-round intervals, context utilization stages, and Codex compaction events.
+- Build a temporary context capsule from the highest useful semantic-summary levels plus recent dialogue, capped by a configurable context fraction and an absolute 10,000-token ceiling.
+- Add `context-refresh-status`, `context-capsule`, and `ack-context-refresh` commands with per-conversation acknowledgement state.
+- Ship reusable `AGENTS.md` rules so each installation checks for due refreshes without archiving generated capsules as source dialogue.
+- Run the native collector on an explicit 16 MiB stack, fixing Windows stack overflow during full-history imports.
+- Validate a fresh Windows import of 15 rollout files, 1,197 visible messages, and 14 deterministic Level-1 indexes.
+- Promote the cross-platform append-only archive, hierarchical summaries, verified retrieval, automatic capture, environment bootstrap, integrity checks, and external recovery snapshots to the stable 1.0 contract.
+
 ## 0.8.1
 
 - Add a Windows environment bootstrap that reports the exact Python version and discovers Codex-bundled Python and CLI paths before activation.

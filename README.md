@@ -13,6 +13,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Separate message, timeline, concept, and summary indexes for every conversation, plus global routing indexes
 - Script-detected summary boundaries after 5 completed rounds or 20,000 visible characters
 - Ephemeral AI summary generation only when a completed round makes a summary due
+- Bounded runtime context refresh after configured round, utilization, or compaction thresholds
 - Index-first retrieval with raw-text verification
 - Preview-first state and index recovery
 - Heartbeat validation, maintenance, and repair modes
@@ -54,6 +55,12 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" heartbeat --check-only
 
 Continuous capture does not call a model. Scripts create a source-locked summary job only after a complete dialogue round reaches a configured threshold. The one-shot semantic worker then invokes the authenticated Codex CLI in ephemeral mode, ingests the constrained JSON summary, and exits.
 
+## Runtime context refresh
+
+Memory無限 can periodically restore compressed history into a continuing Codex task without opening a replacement task. `context-refresh-status` detects configured completed-round intervals, context utilization stages, and context compaction. When refresh is due, `context-capsule` selects the highest useful semantic-summary levels, suppresses covered child summaries, adds a small recent-dialogue tail, and emits temporary derived context. `ack-context-refresh` records that the capsule was read so it is not repeatedly injected.
+
+The capsule budget is derived from the model context window. The default is one percent, with a 3,000-token soft cap and an absolute 10,000-token ceiling. A capsule is navigation context rather than historical authority: claims still return to append-only raw records for verification, and the generated capsule must never be archived as a new source message. Reusable rules for workspace `AGENTS.md` files are shipped under `agents/` and `templates/`.
+
 ## Automatic Codex capture on macOS
 
 Installing a Skill does not by itself subscribe to Codex client events. Build the Rust collector once, then install its persistent LaunchAgent:
@@ -93,6 +100,8 @@ python scripts/install_codex_autosync_windows.py `
 ```
 
 The task starts at user logon and is also started immediately by `--load`. If local policy denies Task Scheduler registration, the installer falls back to the current user's `Run` registry key with an encoded hidden restart-on-exit command; no persistent helper script is required. Archive data remains in the selected workspace root. It uses the Windows native filesystem watcher plus the same five-second size/mtime fallback, archive lock, session cursors, summary triggers, semantic worker, and verified desktop snapshots as macOS. Remove either backend with `python scripts/install_codex_autosync_windows.py --archive-root "$PWD\memory" --uninstall`.
+
+The collector uses an explicit 16 MiB worker stack so a fresh full-history import can safely parse and index large Codex rollout sets on Windows, where the default console main-thread stack is comparatively small.
 
 With the default configuration, every successful memory mutation creates a new complete snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes, verifies its manifest, and removes older snapshot directories. The backup root therefore contains one latest recovery copy plus the append-only `backup-log.jsonl` operation history.
 

@@ -2279,7 +2279,7 @@ fn run_event_loop(
     }
 }
 
-fn main() -> Result<()> {
+fn run() -> Result<()> {
     let args = Args::parse();
     let sessions_root = expand_tilde(&args.sessions_root)?
         .canonicalize()
@@ -2320,4 +2320,23 @@ fn main() -> Result<()> {
     }
 
     run_event_loop(&store, &sessions_root, since, args.debounce_ms)
+}
+
+fn main() -> Result<()> {
+    // Windows starts console programs with a relatively small main-thread stack.
+    // A full historical import can traverse deeply nested JSON and archive state,
+    // so run the collector on an explicitly sized stack on every platform.
+    std::thread::Builder::new()
+        .name("memory-wuxian-collector".to_string())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(run)?
+        .join()
+        .map_err(|panic| {
+            let message = panic
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("unknown panic");
+            anyhow::anyhow!("collector thread panicked: {message}")
+        })?
 }
