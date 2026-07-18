@@ -1245,6 +1245,46 @@ summaries:
         self.assertEqual(installed.count("<!-- memory-wuxian:rules:start -->"), 1)
         self.assertIn("## Memory无限长期记忆约定", installed)
 
+    def test_context_refresh_capsule_is_bounded_and_acknowledged(self):
+        session_id = "019f-context-refresh"
+        session = self.base / "sessions" / "rollout-context.jsonl"
+        session.parent.mkdir()
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {"id": session_id, "source": "codex"},
+            },
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {"total_tokens": 70000},
+                        "model_context_window": 100000,
+                    },
+                },
+            },
+        ]
+        session.write_text(
+            "\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n",
+            encoding="utf-8",
+        )
+        self.config.write_text(
+            self.config.read_text(encoding="utf-8")
+            + f'\ncodex:\n  sessions_root: "{session.parent.as_posix()}"\n'
+            + "context_refresh:\n  enabled: true\n  round_interval: 10\n"
+            + "  utilization_low_percent: 65\n  utilization_high_percent: 80\n"
+            + "  context_fraction_percent: 1\n  soft_max_tokens: 3000\n"
+            + "  absolute_max_tokens: 10000\n",
+            encoding="utf-8",
+        )
+        status = self.run_cli("context-refresh-status")
+        self.assertTrue(status["due"])
+        self.assertEqual(status["capsule_token_budget"], 1000)
+        acknowledged = self.run_cli("ack-context-refresh")
+        self.assertEqual(acknowledged["status"], "acknowledged")
+        self.assertFalse(self.run_cli("context-refresh-status")["due"])
+
 
 if __name__ == "__main__":
     unittest.main()

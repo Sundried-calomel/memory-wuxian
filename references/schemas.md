@@ -104,3 +104,9 @@ New summary files persist `source_sha256` in frontmatter. Summary indexes and re
 - `summary-supported`: a Level-1 summary was found without raw verification.
 - `index-only`: only a higher-level index was found.
 - `unverified`: no persisted supporting source was found.
+
+## Context refresh state
+
+`retrieval/context-refresh-state.json` is derived runtime state keyed by conversation ID. Each acknowledgement records timestamp, completed-round count, utilization stage, detected compaction count, last used tokens, and effective model context window. Deleting this file causes a safe initial refresh; it never removes raw history or summaries.
+
+`context-refresh-status` reports the selected top-level session, due reasons, latest token usage, utilization, compaction count, and capsule budget. `context-capsule` emits derived Markdown plus machine-readable metadata. It prefers higher-level summaries over their covered children and is not a raw-message record.

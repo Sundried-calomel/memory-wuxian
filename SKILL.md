@@ -45,6 +45,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 11. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
 12. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
 13. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
+14. At the start of each user turn, run `context-refresh-status`. When due, load `context-capsule` into the current reasoning context and run `ack-context-refresh` only after the capsule was read. Do not quote the capsule to the user unless requested, and never archive it as a source message.
 
 ## Commands
 
@@ -54,6 +55,9 @@ python3 scripts/memory_cli.py append --speaker user --text "..."
 python3 scripts/memory_cli.py append --speaker assistant --text "..."
 python3 scripts/memory_cli.py sync-codex --session-file ~/.codex/sessions/YYYY/MM/DD/rollout-....jsonl
 python3 scripts/memory_cli.py status
+python3 scripts/memory_cli.py context-refresh-status
+python3 scripts/memory_cli.py context-capsule
+python3 scripts/memory_cli.py ack-context-refresh
 python3 scripts/memory_cli.py backup
 python3 scripts/memory_cli.py make-summary-job
 python3 scripts/semantic_worker.py --root memory --config config.yaml --job memory/pending/<job>.json
