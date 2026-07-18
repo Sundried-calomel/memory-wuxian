@@ -14,6 +14,7 @@ from pathlib import Path
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 from platform_lock import exclusive_lock
+from memory_dashboard import dashboard_data
 
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
@@ -86,6 +87,22 @@ safety:
     def append_round(self, number):
         self.run_cli("append", "--speaker", "user", "--text", f"第 {number} 轮讨论分层记忆")
         self.run_cli("append", "--speaker", "assistant", "--text", f"第 {number} 轮确认原文必须保留")
+
+    def test_dashboard_reports_verifiable_archive_totals(self):
+        self.append_round(1)
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+        result = dashboard_data(store)
+        self.assertEqual(result["totals"]["messages"], 2)
+        self.assertEqual(result["totals"]["conversations"], 1)
+        self.assertGreater(result["totals"]["characters"], 0)
+        self.assertEqual(
+            result["totals"]["estimated_tokens"],
+            (result["totals"]["characters"] + 3) // 4,
+        )
+        self.assertEqual(len(result["conversations"]), 1)
+        self.assertIsNone(result["conversations"][0]["telemetry"])
 
     def ingest_due_summary(self, concept):
         job_result = self.run_cli("make-summary-job")
