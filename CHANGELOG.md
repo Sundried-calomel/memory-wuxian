@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Separate visible-archive token estimates from Codex model-request telemetry, and stop labeling the latter as precise context utilization.
+
 - Show Codex task titles from the read-only local thread database, falling back to the first user message only when title metadata is unavailable.
 - Animate and temporarily disable the manual refresh control while a refresh is in progress.
 - Clarify that character totals cover archived visible source dialogue rather than summaries, and replace the ambiguous token count with a CJK-aware context-size estimate that is explicitly not billing or summary-generation usage.

@@ -193,8 +193,15 @@ def session_telemetry(path: Path) -> dict[str, int] | None:
         used = int(usage.get("total_tokens") or 0)
         window = int(info.get("model_context_window") or 0)
         if window:
-            latest = {"used_tokens": used, "context_window": window}
-            latest["utilization_percent"] = round(min(100.0, used * 100 / window), 2)
+            latest = {
+                "request_tokens": used,
+                "input_tokens": int(usage.get("input_tokens") or 0),
+                "cached_input_tokens": int(usage.get("cached_input_tokens") or 0),
+                "output_tokens": int(usage.get("output_tokens") or 0),
+                "reasoning_output_tokens": int(usage.get("reasoning_output_tokens") or 0),
+                "context_window": window,
+            }
+            latest["window_ratio_percent"] = round(used * 100 / window, 2)
             break
     TELEMETRY_CACHE[str(path)] = (stamp, latest)
     return latest
@@ -224,12 +231,14 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         first_user = next((str(item.get("text", "")).strip() for item in items if item.get("speaker") == "user"), conversation_id)
         source_path = next((item.get("source", {}).get("path") for item in reversed(items) if item.get("source", {}).get("path")), None)
         telemetry = session_telemetry(Path(source_path)) if source_path else None
+        conversation_text = "".join(str(item.get("text", "")) for item in items)
         conversations.append({
             "conversation_id": conversation_id,
             "title": titles.get(conversation_id.removeprefix("codex:"), first_user.replace("\n", " ")[:72]),
             "title_source": "codex-thread" if conversation_id.removeprefix("codex:") in titles else "first-user-message",
             "message_count": len(items),
             "character_count": sum(len(str(item.get("text", ""))) for item in items),
+            "estimated_archive_tokens": estimate_context_tokens(conversation_text),
             "completed_rounds": len({item.get("round_number") for item in items if item.get("completes_round")}),
             "summary_counts": {str(level): count for level, count in sorted(summary_counts[conversation_id].items())},
             "first_timestamp": items[0].get("timestamp"),
@@ -264,7 +273,7 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         ],
         "conversations": conversations,
         "character_note": "Visible user and assistant source text stored in the append-only raw archive; summaries are excluded.",
-        "estimation_note": "Context-size estimate: CJK characters count as about one token and other characters as about four per token. This is not API billing or summary-generation usage.",
+        "estimation_note": "The archive estimate covers visible stored dialogue only. Codex request telemetry has a different scope and can include instructions, tools, reasoning, and outputs; its ratio to the advertised model window is not a precise remaining-context gauge.",
     }
 
 
