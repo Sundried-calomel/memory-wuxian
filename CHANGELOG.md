@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Replace the visible language select with a compact `文/A` icon button and a three-language dropdown menu.
 - Add a persistent Chinese, English, and Japanese language menu covering all native dashboard labels, states, tooltips, charts, and footer text.
 - Reduce dashboard text density by removing the scope paragraph, keeping archive totals in the footer, splitting per-task archive/tool counts, and showing request/window telemetry as a percentage.
 - Prevent the Windows title-refresh subprocess from opening a console window or stealing focus; slow passive dashboard refreshes to 30 seconds.
