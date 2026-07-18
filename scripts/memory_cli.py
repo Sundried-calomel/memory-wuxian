@@ -987,12 +987,12 @@ class MemoryStore:
                     if not command and command_match:
                         command = command_match.group(2)
                     command = command.replace('\\"', '"').replace("\\\\", "\\")
-                    parts = [f"Tool: {tool_name}"]
-                    if nested_tools:
-                        parts.append("Invokes: " + ", ".join(nested_tools))
                     if command:
-                        parts.append("Command: " + command[:1000])
-                    text = "; ".join(parts)
+                        text = "Ran " + command[:1000]
+                    else:
+                        text = f"Called tool: {tool_name}"
+                        if nested_tools:
+                            text += " (invokes " + ", ".join(nested_tools) + ")"
                 elif outer_type == "event_msg" and event_type == "user_message":
                     speaker = "user"
                     text = payload.get("message")

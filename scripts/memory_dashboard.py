@@ -49,7 +49,7 @@ def estimate_context_tokens(text: str) -> int:
 
 def codex_runtime_titles() -> dict[str, str]:
     global RUNTIME_TITLE_CACHE
-    if time.monotonic() - RUNTIME_TITLE_CACHE[0] < 30:
+    if time.monotonic() - RUNTIME_TITLE_CACHE[0] < 60:
         return RUNTIME_TITLE_CACHE[1]
     codex = Path.home() / ".codex/.sandbox-bin/codex.exe"
     executable = str(codex) if codex.exists() else shutil.which("codex")
@@ -66,6 +66,7 @@ def codex_runtime_titles() -> dict[str, str]:
             stderr=subprocess.DEVNULL,
             text=True,
             encoding="utf-8",
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         killer = threading.Timer(3, process.terminate)
         killer.start()
