@@ -103,3 +103,9 @@ Let scripts count rounds and visible characters. If a character threshold is cro
 Status: Accepted.
 
 Normalize mixed natural-language queries and rank explicit terms deterministically across generated routes and raw records. Do not require the full query to occur verbatim. Exclude currently incomplete rounds to prevent self-matching, restore neighboring context only within the matched conversation, and report `verified` only after a raw-text match.
+
+## D-018: Runtime memory refresh is bounded and hierarchical
+
+Status: Accepted.
+
+Keep persistent memory separate from the client-managed active context. At each Agent turn, inspect the active top-level rollout's latest token telemetry and completed-round count. Refresh after 10 completed rounds, at 65% and 80% effective context utilization, or after a detected compaction drop. Inject a derived capsule through tool context rather than archiving it as a source message. Prefer the highest available summary level, add only uncovered lower summaries and recent task state, and cap the capsule at 1% of the effective model context with a 3,000-token soft limit and 10,000-token absolute limit.

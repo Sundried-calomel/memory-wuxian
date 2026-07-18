@@ -22,7 +22,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 11. When Codex integration is enabled, import only user-visible dialogue and preserve native source references.
 12. Complete the primary archive write before creating its external backup snapshot.
 13. Maintain one complete transcript per conversation; never place records from different conversation IDs in the same transcript.
-14. Use the native event-driven collector for high-frequency Codex capture; keep Python outside the continuous capture loop.
+14. Use the native event-driven collector for high-frequency Codex capture on macOS and Windows; keep Python outside the continuous capture loop.
 15. Preserve transaction consistency by holding `memory/.locks/archive.lock` for each native event batch and Python maintenance command.
 16. Keep summary source ranges, parent-child groups, and derived indexes scoped to one conversation ID.
 17. Exclude native Codex subagent sessions; archive only top-level user-visible conversations.
@@ -32,18 +32,20 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 
 ## Operating workflow
 
-1. Run `python3 scripts/memory_cli.py init` for a new memory root.
-2. Append each user and assistant message with `append`; one user message plus its assistant response forms a completed round.
-3. Let the native collector mark a summary due after 5 completed rounds or 20,000 visible characters. A character threshold reached during an answer is acted on only after that answer's `final_answer` closes the round.
-4. Let the one-shot semantic worker generate and ingest the AI summary, then exit. Use `make-summary-job` and [summary prompt](prompts/summarize.md) for manual recovery.
-5. Use `retrieve` for earlier topics. Let it search indexes first and raw records second.
-6. Base answers on the recovered raw segment and report the returned verification level.
-7. Run `heartbeat` for validation, pending-job recovery, and count-trigger checks. Do not use heartbeat as the primary trigger.
-8. Preview `rebuild-state`, `rebuild-conversations`, or `rebuild-indexes` before applying a recovery operation.
-9. Use the native collector for automatic Codex import. Use `sync-codex` only as a manual compatibility and recovery adapter. Both paths must remain idempotent and storage-compatible.
-10. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
-11. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
-12. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
+1. On Windows, run `powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1` before the first archive operation. Pass `-AgentsPath <workspace AGENTS.md>` to install or deterministically update the canonical workspace rules. If it reports `missing-runtime`, rerun with `-InstallMissing` after user approval. Reuse Codex-bundled Python and CLI when available; do not install Rust or MSVC unless rebuilding the collector.
+2. Run `python3 scripts/memory_cli.py init` for a new memory root.
+3. Append each user and assistant message with `append`; one user message plus its assistant response forms a completed round.
+4. Let the native collector mark a summary due after 5 completed rounds or 20,000 visible characters. A character threshold reached during an answer is acted on only after that answer's `final_answer` closes the round.
+5. Let the one-shot semantic worker generate and ingest the AI summary, then exit. Use `make-summary-job` and [summary prompt](prompts/summarize.md) for manual recovery.
+6. Use `retrieve` for earlier topics. Let it search indexes first and raw records second.
+7. Base answers on the recovered raw segment and report the returned verification level.
+8. Run `heartbeat` for validation and recovery. Keep count-based events as primary triggers.
+9. Preview `rebuild-state`, `rebuild-conversations`, or `rebuild-indexes` before applying a recovery operation.
+10. Use the native collector for automatic Codex import. Use `sync-codex` only as a manual compatibility and recovery adapter. Both paths must remain idempotent and storage-compatible.
+11. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
+12. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
+13. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
+14. At the start of each user turn, run `context-refresh-status`. When due, load `context-capsule` into the current reasoning context and run `ack-context-refresh` only after the capsule was read. Do not quote the capsule to the user unless requested, and never archive it as a source message.
 
 ## Commands
 
@@ -53,6 +55,9 @@ python3 scripts/memory_cli.py append --speaker user --text "..."
 python3 scripts/memory_cli.py append --speaker assistant --text "..."
 python3 scripts/memory_cli.py sync-codex --session-file ~/.codex/sessions/YYYY/MM/DD/rollout-....jsonl
 python3 scripts/memory_cli.py status
+python3 scripts/memory_cli.py context-refresh-status
+python3 scripts/memory_cli.py context-capsule
+python3 scripts/memory_cli.py ack-context-refresh
 python3 scripts/memory_cli.py backup
 python3 scripts/memory_cli.py make-summary-job
 python3 scripts/semantic_worker.py --root memory --config config.yaml --job memory/pending/<job>.json
@@ -70,6 +75,10 @@ python3 scripts/memory_cli.py heartbeat
 python3 scripts/memory_cli.py heartbeat --repair
 scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
+powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
+python scripts/install_agent_rules.py --agents-file /path/to/workspace/AGENTS.md
+python scripts/install_codex_autosync_windows.py --archive-root C:\path\to\memory --load
 ```
 
 Pass `--root <memory-directory>` before the subcommand to use a memory archive outside this skill folder.
@@ -84,4 +93,4 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 
 ## Client integration boundary
 
-Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or another configured client hook. The LaunchAgent keeps only the Rust collector alive, using kqueue plus a lightweight metadata fallback. It imports user messages plus visible assistant commentary/final answers from top-level sessions; it excludes subagent sessions, system prompts, internal reasoning, tool calls, and tool output. When a complete-round boundary makes a summary due, the collector runs one ephemeral Codex CLI summary worker and waits for it to exit. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.
+Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or Windows scheduled task. Both keep only the Rust collector alive, use native filesystem events plus a five-second metadata fallback, and share the same archive contract. They import user messages plus visible assistant commentary/final answers from top-level sessions; they exclude subagent sessions, system prompts, internal reasoning, tool calls, and tool output. When a complete-round boundary makes a summary due, the collector runs one ephemeral Codex CLI summary worker and waits for it to exit. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.

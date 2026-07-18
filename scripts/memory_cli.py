@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import datetime as dt
-import fcntl
 import hashlib
 import json
 import math
@@ -18,6 +16,8 @@ import tempfile
 import unicodedata
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+from platform_lock import exclusive_lock
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -82,7 +82,7 @@ def atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
             handle.write("\n")
             handle.flush()
@@ -97,7 +97,7 @@ def atomic_write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
@@ -114,7 +114,7 @@ def read_text_exact(path: Path) -> str:
 
 def append_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(text)
         handle.flush()
         os.fsync(handle.fileno())
@@ -146,15 +146,8 @@ def read_jsonl(path: Path) -> List[Dict[str, Any]]:
     return records
 
 
-@contextlib.contextmanager
-def exclusive_lock(path: Path):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a+", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+def read_json(path: Path) -> Dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def yaml_list(values: Iterable[str], indent: int = 2) -> str:
@@ -312,6 +305,7 @@ class MemoryStore:
         self.locks_dir = self.root / ".locks"
         self.imports_dir = self.root / "imports"
         self.codex_import_dir = self.imports_dir / "codex"
+        self.context_refresh_state_path = self.retrieval_dir / "context-refresh-state.json"
 
     @property
     def level_1_trigger(self) -> int:
@@ -340,6 +334,13 @@ class MemoryStore:
     @property
     def maximum_depth(self) -> int:
         return int(nested_get(self.config, ["summaries", "maximum_summary_depth"], 8))
+
+    @property
+    def context_refresh_enabled(self) -> bool:
+        return bool(nested_get(self.config, ["context_refresh", "enabled"], True))
+
+    def context_refresh_setting(self, key: str, default: int) -> int:
+        return int(nested_get(self.config, ["context_refresh", key], default))
 
     def initial_state(self) -> Dict[str, Any]:
         return {
@@ -2841,6 +2842,187 @@ class MemoryStore:
             "unsummarized_completed_rounds": unsummarized_completed_rounds,
         }
 
+    def context_refresh_telemetry(
+        self, session_file: Optional[Path] = None
+    ) -> Dict[str, Any]:
+        sessions_root = Path(str(nested_get(
+            self.config, ["codex", "sessions_root"], "~/.codex/sessions"
+        ))).expanduser()
+        candidates = [session_file.expanduser()] if session_file else list(
+            sessions_root.rglob("rollout-*.jsonl") if sessions_root.exists() else []
+        )
+        candidates = [path for path in candidates if path.exists()]
+        if not candidates:
+            raise ValueError("No Codex rollout session is available for context refresh")
+        candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+        selected: Optional[Path] = None
+        session_id: Optional[str] = None
+        token_events: List[Tuple[int, int]] = []
+        for candidate in candidates:
+            current_session = None
+            is_subagent = False
+            current_tokens: List[Tuple[int, int]] = []
+            for line in candidate.read_text(encoding="utf-8").splitlines():
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("type") == "session_meta":
+                    payload = event.get("payload", {})
+                    current_session = payload.get("id") or payload.get("session_id")
+                    is_subagent = isinstance(payload.get("source"), dict) and (
+                        "subagent" in payload["source"]
+                    )
+                payload = event.get("payload", {})
+                if event.get("type") != "event_msg" or payload.get("type") != "token_count":
+                    continue
+                info = payload.get("info") or {}
+                usage = info.get("last_token_usage") or {}
+                used = int(usage.get("total_tokens") or 0)
+                window = int(info.get("model_context_window") or 0)
+                if used > 0 and window > 0:
+                    current_tokens.append((used, window))
+            if current_session and not is_subagent:
+                selected = candidate
+                session_id = str(current_session)
+                token_events = current_tokens
+                break
+        if not selected or not session_id:
+            raise ValueError("No top-level Codex rollout session is available")
+
+        low = self.context_refresh_setting("utilization_low_percent", 65)
+        high = self.context_refresh_setting("utilization_high_percent", 80)
+        drop = self.context_refresh_setting("compaction_drop_percent", 20)
+        compactions = 0
+        previous = None
+        for used, window in token_events:
+            percent = used * 100.0 / window
+            if previous is not None and previous >= low and previous - percent >= drop:
+                compactions += 1
+            previous = percent
+        used_tokens, context_window = token_events[-1] if token_events else (0, 0)
+        utilization = used_tokens * 100.0 / context_window if context_window else 0.0
+        stage = 2 if utilization >= high else (1 if utilization >= low else 0)
+        conversation_id = f"codex:{session_id}"
+        completed = len(self.completed_rounds_by_conversation().get(conversation_id, []))
+        state = read_json(self.context_refresh_state_path) if self.context_refresh_state_path.exists() else {}
+        acknowledged = (state.get("conversations") or {}).get(conversation_id, {})
+        interval = self.context_refresh_setting("round_interval", 10)
+        reasons = []
+        if not acknowledged and self.summary_records():
+            reasons.append("initial")
+        if completed - int(acknowledged.get("completed_rounds", 0)) >= interval:
+            reasons.append("round-interval")
+        if stage > int(acknowledged.get("utilization_stage", 0)):
+            reasons.append("context-utilization")
+        if compactions > int(acknowledged.get("compaction_count", 0)):
+            reasons.append("context-compaction")
+        fraction = self.context_refresh_setting("context_fraction_percent", 1)
+        fraction_budget = context_window * fraction // 100 if context_window else 3000
+        token_budget = min(
+            self.context_refresh_setting("soft_max_tokens", 3000),
+            self.context_refresh_setting("absolute_max_tokens", 10000),
+            max(512, fraction_budget),
+        )
+        return {
+            "enabled": self.context_refresh_enabled,
+            "due": self.context_refresh_enabled and bool(reasons),
+            "reasons": reasons,
+            "conversation_id": conversation_id,
+            "session_id": session_id,
+            "session_file": str(selected),
+            "completed_rounds": completed,
+            "used_tokens": used_tokens,
+            "model_context_window": context_window,
+            "utilization_percent": round(utilization, 3),
+            "utilization_stage": stage,
+            "compaction_count": compactions,
+            "capsule_token_budget": token_budget,
+            "capsule_absolute_max_tokens": self.context_refresh_setting("absolute_max_tokens", 10000),
+            "acknowledged": acknowledged,
+        }
+
+    def context_capsule(self, session_file: Optional[Path] = None) -> Tuple[str, Dict[str, Any]]:
+        telemetry = self.context_refresh_telemetry(session_file)
+        conversation_id = telemetry["conversation_id"]
+        summaries = [
+            item for item in self.summary_records_from_files()
+            if item.get("conversation_id") == conversation_id
+        ]
+        by_id = {item["summary_id"]: item for item in summaries}
+        covered = set()
+        def mark_children(summary_id: str) -> None:
+            for child_id in by_id.get(summary_id, {}).get("source_summaries", []):
+                if child_id not in covered:
+                    covered.add(child_id)
+                    mark_children(child_id)
+        for summary in summaries:
+            if int(summary["level"]) > 1:
+                mark_children(summary["summary_id"])
+        selected = [item for item in summaries if item["summary_id"] not in covered]
+        selected.sort(key=lambda item: (
+            int(item.get("source_start_sequence") or 0), -int(item["level"])
+        ))
+        lines = [
+            "# Memory无限运行时记忆胶囊",
+            "",
+            f"- Conversation: `{conversation_id}`",
+            f"- Generated: `{now_iso()}`",
+            f"- Verification: `summary-supported`; historical claims still require raw verification.",
+            "- This is derived runtime context, not a new source message.",
+            "",
+        ]
+        for summary in selected:
+            lines.extend([
+                f"## {summary['summary_id']} (Level {summary['level']})",
+                "",
+                "### Topics", markdown_bullets(summary.get("topics", [])), "",
+                "### Established Conclusions",
+                markdown_bullets(summary.get("established_conclusions", [])), "",
+                "### Open Questions", markdown_bullets(summary.get("open_questions", [])), "",
+                "### Concepts", markdown_bullets(summary.get("concepts", [])), "",
+                f"- Source: `{summary.get('source_start')}` through `{summary.get('source_end')}`",
+                "",
+            ])
+        recent_count = self.context_refresh_setting("recent_rounds", 3)
+        recent = self.completed_rounds_by_conversation().get(conversation_id, [])[-recent_count:]
+        if recent:
+            lines.extend(["## Recent Task State", ""])
+            for round_records in recent:
+                number = round_records[0]["round_number"]
+                user = next((r for r in round_records if r.get("speaker") == "user"), None)
+                final = next((r for r in reversed(round_records) if r.get("speaker") == "assistant" and r.get("completes_round")), None)
+                lines.append(f"- Round {number} user: {self.deterministic_excerpt((user or {}).get('text', ''), 320)}")
+                lines.append(f"- Round {number} assistant: {self.deterministic_excerpt((final or {}).get('text', ''), 320)}")
+            lines.append("")
+        max_characters = int(telemetry["capsule_token_budget"]) * 3
+        capsule = "\n".join(lines).rstrip() + "\n"
+        if len(capsule) > max_characters:
+            capsule = capsule[:max_characters].rstrip() + "\n\n[Capsule truncated at configured budget.]\n"
+        metadata = {
+            **telemetry,
+            "summary_ids": [item["summary_id"] for item in selected],
+            "character_count": len(capsule),
+            "estimated_token_upper_budget": telemetry["capsule_token_budget"],
+        }
+        return capsule, metadata
+
+    def acknowledge_context_refresh(self, session_file: Optional[Path] = None) -> Dict[str, Any]:
+        telemetry = self.context_refresh_telemetry(session_file)
+        state = read_json(self.context_refresh_state_path) if self.context_refresh_state_path.exists() else {
+            "format_version": 1, "conversations": {}
+        }
+        state.setdefault("conversations", {})[telemetry["conversation_id"]] = {
+            "acknowledged_at": now_iso(),
+            "completed_rounds": telemetry["completed_rounds"],
+            "utilization_stage": telemetry["utilization_stage"],
+            "compaction_count": telemetry["compaction_count"],
+            "used_tokens": telemetry["used_tokens"],
+            "model_context_window": telemetry["model_context_window"],
+        }
+        atomic_write_json(self.context_refresh_state_path, state)
+        return {"status": "acknowledged", **state["conversations"][telemetry["conversation_id"]]}
+
     def heartbeat(self, create_jobs: bool, repair: bool = False) -> Dict[str, Any]:
         self.init()
         before = self.audit()
@@ -2951,6 +3133,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("status", help="Print archive counters and pending work")
+    for name, help_text in (
+        ("context-refresh-status", "Check whether the active conversation needs a memory capsule"),
+        ("context-capsule", "Render a bounded hierarchical memory capsule for the active conversation"),
+        ("ack-context-refresh", "Acknowledge that the active conversation loaded its memory capsule"),
+    ):
+        refresh_parser = subparsers.add_parser(name, help=help_text)
+        refresh_parser.add_argument("--session-file")
     backup_parser = subparsers.add_parser(
         "backup",
         help="Create one verified external snapshot and prune older snapshots",
@@ -3035,6 +3224,21 @@ def dispatch_command(
             result["backup"] = None
     elif args.command == "status":
         result = store.status()
+    elif args.command == "context-refresh-status":
+        result = store.context_refresh_telemetry(
+            Path(args.session_file) if args.session_file else None
+        )
+    elif args.command == "context-capsule":
+        capsule, metadata = store.context_capsule(
+            Path(args.session_file) if args.session_file else None
+        )
+        print(capsule, end="")
+        print("\n<!-- memory-wuxian-capsule-metadata " + json.dumps(metadata, ensure_ascii=False, sort_keys=True) + " -->")
+        return 0
+    elif args.command == "ack-context-refresh":
+        result = store.acknowledge_context_refresh(
+            Path(args.session_file) if args.session_file else None
+        )
     elif args.command == "backup":
         backup = store.create_backup_snapshot(args.reason)
         result = {

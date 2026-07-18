@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.0 - 2026-07-19
+
+- Add bounded runtime context refresh that detects completed-round intervals, context utilization stages, and Codex compaction events.
+- Build a temporary context capsule from the highest useful semantic-summary levels plus recent dialogue, capped by a configurable context fraction and an absolute 10,000-token ceiling.
+- Add `context-refresh-status`, `context-capsule`, and `ack-context-refresh` commands with per-conversation acknowledgement state.
+- Ship reusable `AGENTS.md` rules so each installation checks for due refreshes without archiving generated capsules as source dialogue.
+- Run the native collector on an explicit 16 MiB stack, fixing Windows stack overflow during full-history imports.
+- Validate a fresh Windows import of 15 rollout files, 1,197 visible messages, and 14 deterministic Level-1 indexes.
+- Promote the cross-platform append-only archive, hierarchical summaries, verified retrieval, automatic capture, environment bootstrap, integrity checks, and external recovery snapshots to the stable 1.0 contract.
+
+## 0.8.1
+
+- Add a Windows environment bootstrap that reports the exact Python version and discovers Codex-bundled Python and CLI paths before activation.
+- Install official Python only when no compatible 3.9+ runtime is available and the user explicitly enables missing-runtime installation.
+- Ship the Windows collector binary with the Skill so Rust and MSVC remain development-only dependencies.
+
+## 0.8.0
+
+- Add a Windows-native collector build with Task Scheduler and hidden per-user Run-key fallback while preserving the macOS LaunchAgent.
+- Replace Python's Unix-only `fcntl` dependency with equivalent advisory locks on Unix and Windows.
+- Keep LF archive serialization and normalized source paths identical across Python, macOS Rust, and Windows Rust implementations.
+- Add the five-second metadata fallback to the Windows native watcher and pass explicit Python/Codex executable paths to one-shot semantic jobs.
+- Add Windows installer and cross-process lock coverage to the storage-contract test suite.
+
 ## 0.7.1 - 2026-07-17
 
 - Replace whole-query substring retrieval with deterministic normalized multi-term ranking across concepts, summaries, routing indexes, and authoritative raw text.

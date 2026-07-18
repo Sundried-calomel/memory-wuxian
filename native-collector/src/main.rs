@@ -29,6 +29,20 @@ use walkdir::WalkDir;
 
 const RAW_MARKER: &str = "<!-- memory-wuxian-record -->";
 
+fn portable_path(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    #[cfg(windows)]
+    {
+        if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+            return format!(r"\\{rest}");
+        }
+        if let Some(rest) = value.strip_prefix(r"\\?\") {
+            return rest.to_owned();
+        }
+    }
+    value.into_owned()
+}
+
 #[derive(Parser, Debug)]
 #[command(
     version,
@@ -69,6 +83,8 @@ struct AiSummaryConfig {
     enabled: bool,
     #[serde(default = "default_python_path")]
     python_path: String,
+    #[serde(default)]
+    python_path_windows: Option<String>,
     #[serde(default = "default_semantic_worker_path")]
     worker_path: String,
 }
@@ -78,6 +94,7 @@ impl Default for AiSummaryConfig {
         Self {
             enabled: false,
             python_path: default_python_path(),
+            python_path_windows: None,
             worker_path: default_semantic_worker_path(),
         }
     }
@@ -159,7 +176,11 @@ fn default_maximum_summary_depth() -> u64 {
 }
 
 fn default_python_path() -> String {
-    "/opt/homebrew/bin/python3".to_owned()
+    if cfg!(windows) {
+        "python.exe".to_owned()
+    } else {
+        "/opt/homebrew/bin/python3".to_owned()
+    }
 }
 
 fn default_semantic_worker_path() -> String {
@@ -847,7 +868,7 @@ impl Store {
                 &json!({
                     "format_version": 1,
                     "session_id": session_id,
-                    "source_path": source_path.to_string_lossy(),
+                    "source_path": portable_path(&source_path),
                     "last_line": total_lines,
                     "source_size": metadata.len(),
                     "excluded_reason": "subagent-session",
@@ -912,7 +933,7 @@ impl Store {
                 json!({
                     "kind": "codex-rollout-jsonl",
                     "session_id": session_id,
-                    "path": source_path.to_string_lossy(),
+                    "path": portable_path(&source_path),
                     "line": line_number,
                     "phase": phase,
                 }),
@@ -934,7 +955,7 @@ impl Store {
                 &json!({
                     "format_version": 1,
                     "session_id": session_id,
-                    "source_path": source_path.to_string_lossy(),
+                    "source_path": portable_path(&source_path),
                     "last_line": total_lines,
                     "source_size": metadata.len(),
                     "source_mtime": modified.to_rfc3339(),
@@ -1675,7 +1696,19 @@ impl Store {
                 .unwrap_or(Path::new("."))
                 .join(worker_path)
         };
-        match Command::new(&self.config.ai_summary.python_path)
+        let python_path = std::env::var("MEMORY_WUXIAN_PYTHON").unwrap_or_else(|_| {
+            if cfg!(windows) {
+                self.config
+                    .ai_summary
+                    .python_path_windows
+                    .as_ref()
+                    .unwrap_or(&self.config.ai_summary.python_path)
+                    .clone()
+            } else {
+                self.config.ai_summary.python_path.clone()
+            }
+        });
+        match Command::new(python_path)
             .arg(worker_path)
             .arg("--root")
             .arg(&self.root)
@@ -1715,7 +1748,7 @@ impl Store {
             repaired += result.repaired_transcripts;
             files.push(json!({
                 "session_id": result.session_id,
-                "source_path": result.source_path.to_string_lossy(),
+                "source_path": portable_path(&result.source_path),
                 "last_line": result.last_line,
                 "visible_events": result.visible_events,
                 "imported_messages": result.imported_messages,
@@ -2142,7 +2175,6 @@ impl KqueueWatcher {
     }
 }
 
-#[cfg(target_os = "macos")]
 fn rollout_stamps(paths: &[PathBuf]) -> Result<HashMap<PathBuf, (u64, SystemTime)>> {
     paths
         .iter()
@@ -2201,35 +2233,53 @@ fn run_event_loop(
         let _ = sender.send(event);
     })?;
     watcher.watch(sessions_root, RecursiveMode::Recursive)?;
-    eprintln!("memory-wuxian-collector ready: {}", sessions_root.display());
+    let initial_paths = recent_rollouts(sessions_root, since)?;
+    let mut known_stamps = rollout_stamps(&initial_paths)?;
+    eprintln!(
+        "memory-wuxian-collector ready (native watcher with 5s metadata fallback): {}",
+        sessions_root.display()
+    );
     loop {
-        let first = match receiver.recv() {
-            Ok(value) => value,
-            Err(_) => bail!("filesystem watcher stopped"),
+        let first = match receiver.recv_timeout(Duration::from_secs(5)) {
+            Ok(value) => Some(value),
+            Err(RecvTimeoutError::Timeout) => None,
+            Err(RecvTimeoutError::Disconnected) => bail!("filesystem watcher stopped"),
         };
         let mut candidates = BTreeSet::new();
-        match first {
-            Ok(event) => candidates.extend(event_rollouts(event, sessions_root, since)?),
-            Err(error) => {
-                eprintln!("watch error: {error}");
-                continue;
+        if let Some(first) = first {
+            match first {
+                Ok(event) => candidates.extend(event_rollouts(event, sessions_root, since)?),
+                Err(error) => eprintln!("watch error: {error}"),
+            }
+            loop {
+                match receiver.recv_timeout(Duration::from_millis(debounce_ms)) {
+                    Ok(Ok(event)) => {
+                        candidates.extend(event_rollouts(event, sessions_root, since)?)
+                    }
+                    Ok(Err(error)) => eprintln!("watch error: {error}"),
+                    Err(RecvTimeoutError::Timeout) => break,
+                    Err(RecvTimeoutError::Disconnected) => bail!("filesystem watcher stopped"),
+                }
             }
         }
-        loop {
-            match receiver.recv_timeout(Duration::from_millis(debounce_ms)) {
-                Ok(Ok(event)) => candidates.extend(event_rollouts(event, sessions_root, since)?),
-                Ok(Err(error)) => eprintln!("watch error: {error}"),
-                Err(RecvTimeoutError::Timeout) => break,
-                Err(RecvTimeoutError::Disconnected) => bail!("filesystem watcher stopped"),
-            }
-        }
-        if !candidates.is_empty() {
-            let _ = sync_and_emit(store, candidates.into_iter().collect());
+
+        let current_paths = recent_rollouts(sessions_root, since)?;
+        let current_stamps = rollout_stamps(&current_paths)?;
+        candidates.extend(
+            current_paths
+                .iter()
+                .filter(|path| known_stamps.get(*path) != current_stamps.get(*path))
+                .cloned(),
+        );
+        let sync_succeeded =
+            candidates.is_empty() || sync_and_emit(store, candidates.into_iter().collect());
+        if sync_succeeded {
+            known_stamps = current_stamps;
         }
     }
 }
 
-fn main() -> Result<()> {
+fn run() -> Result<()> {
     let args = Args::parse();
     let sessions_root = expand_tilde(&args.sessions_root)?
         .canonicalize()
@@ -2270,4 +2320,23 @@ fn main() -> Result<()> {
     }
 
     run_event_loop(&store, &sessions_root, since, args.debounce_ms)
+}
+
+fn main() -> Result<()> {
+    // Windows starts console programs with a relatively small main-thread stack.
+    // A full historical import can traverse deeply nested JSON and archive state,
+    // so run the collector on an explicitly sized stack on every platform.
+    std::thread::Builder::new()
+        .name("memory-wuxian-collector".to_string())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(run)?
+        .join()
+        .map_err(|panic| {
+            let message = panic
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("unknown panic");
+            anyhow::anyhow!("collector thread panicked: {message}")
+        })?
 }

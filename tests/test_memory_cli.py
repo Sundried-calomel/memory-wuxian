@@ -1,5 +1,6 @@
-import fcntl
+import base64
 import json
+import os
 import plistlib
 import shutil
 import subprocess
@@ -11,11 +12,19 @@ from pathlib import Path
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SKILL_ROOT / "scripts"))
+from platform_lock import exclusive_lock
+
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
+WINDOWS_INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync_windows.py"
+WINDOWS_BOOTSTRAP = SKILL_ROOT / "scripts" / "bootstrap_windows.ps1"
+AGENT_RULES_INSTALLER = SKILL_ROOT / "scripts" / "install_agent_rules.py"
 SEMANTIC_WORKER = SKILL_ROOT / "scripts" / "semantic_worker.py"
 NATIVE_MANIFEST = SKILL_ROOT / "native-collector" / "Cargo.toml"
-NATIVE_BINARY = SKILL_ROOT / "bin" / "memory-wuxian-collector"
+NATIVE_BINARY = SKILL_ROOT / "bin" / (
+    "memory-wuxian-collector.exe" if sys.platform == "win32" else "memory-wuxian-collector"
+)
 
 
 class MemoryCliTest(unittest.TestCase):
@@ -65,7 +74,14 @@ safety:
             str(self.config),
             *arguments,
         ]
-        return subprocess.run(command, text=True, capture_output=True, check=False)
+        return subprocess.run(
+            command,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
 
     def append_round(self, number):
         self.run_cli("append", "--speaker", "user", "--text", f"第 {number} 轮讨论分层记忆")
@@ -839,11 +855,14 @@ summaries:
         completed = subprocess.run(
             [cargo, "build", "--manifest-path", str(NATIVE_MANIFEST)],
             text=True,
+            encoding="utf-8",
             capture_output=True,
             check=False,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        native_binary = SKILL_ROOT / "native-collector" / "target" / "debug" / "memory-wuxian-collector"
+        native_binary = SKILL_ROOT / "native-collector" / "target" / "debug" / (
+            "memory-wuxian-collector.exe" if sys.platform == "win32" else "memory-wuxian-collector"
+        )
 
         native_root = self.base / "native-memory"
         initialized = subprocess.run(
@@ -897,18 +916,17 @@ summaries:
             "--once",
         ]
         archive_lock = native_root / ".locks" / "archive.lock"
-        with archive_lock.open("a+", encoding="utf-8") as lock_handle:
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        with exclusive_lock(archive_lock):
             native_process = subprocess.Popen(
                 native_args,
                 text=True,
+                encoding="utf-8",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
             time.sleep(0.2)
             self.assertIsNone(native_process.poll())
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
-            native_stdout, native_stderr = native_process.communicate(timeout=10)
+        native_stdout, native_stderr = native_process.communicate(timeout=10)
         native = subprocess.CompletedProcess(
             native_args,
             native_process.returncode,
@@ -962,7 +980,13 @@ summaries:
             json.loads((self.root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
             json.loads((native_root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
         )
-        repeated = subprocess.run(native.args, text=True, capture_output=True, check=False)
+        repeated = subprocess.run(
+            native.args,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+        )
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["imported_messages"], 0)
 
@@ -1084,8 +1108,7 @@ summaries:
 
     def test_python_commands_wait_for_archive_lock(self):
         archive_lock = self.root / ".locks" / "archive.lock"
-        with archive_lock.open("a+", encoding="utf-8") as lock_handle:
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        with exclusive_lock(archive_lock):
             process = subprocess.Popen(
                 [
                     sys.executable,
@@ -1102,8 +1125,7 @@ summaries:
             )
             time.sleep(0.2)
             self.assertIsNone(process.poll())
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
-            stdout, stderr = process.communicate(timeout=10)
+        stdout, stderr = process.communicate(timeout=10)
         self.assertEqual(process.returncode, 0, stderr)
         self.assertEqual(json.loads(stdout)["total_messages"], 0)
 
@@ -1141,6 +1163,127 @@ summaries:
         self.assertNotIn("StartInterval", payload)
         self.assertEqual(payload["EnvironmentVariables"], {"RUST_BACKTRACE": "1"})
         self.assertNotIn("kickstart", INSTALLER.read_text(encoding="utf-8"))
+
+    def test_windows_installer_writes_persistent_collector_wrapper(self):
+        sessions_root = self.base / "sessions"
+        sessions_root.mkdir()
+        collector = self.base / "memory-wuxian-collector.exe"
+        collector.write_bytes(b"test executable\n")
+        codex = self.base / "codex.exe"
+        codex.write_bytes(b"test executable\n")
+        wrapper = self.base / "run-collector.cmd"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(WINDOWS_INSTALLER),
+                "--archive-root", str(self.root),
+                "--skill-root", str(SKILL_ROOT),
+                "--sessions-root", str(sessions_root),
+                "--collector-executable", str(collector),
+                "--python-executable", sys.executable,
+                "--codex-cli", str(codex),
+                "--output", str(wrapper),
+            ],
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        text = wrapper.read_text(encoding="utf-8")
+        self.assertIn("-EncodedCommand", text)
+        encoded = text.strip().split()[-1]
+        command = base64.b64decode(encoded).decode("utf-16le")
+        self.assertIn("MEMORY_WUXIAN_PYTHON", command)
+        self.assertIn("MEMORY_WUXIAN_CODEX", command)
+        self.assertIn("--sessions-root", command)
+        self.assertIn("scheduled-task.log", command)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows bootstrap test")
+    def test_windows_bootstrap_reports_runtime_versions(self):
+        sessions = self.base / "sessions"
+        sessions.mkdir()
+        collector = self.base / "memory-wuxian-collector.exe"
+        collector.write_bytes(b"collector")
+        codex = self.base / "codex.exe"
+        codex.write_bytes(b"codex")
+        completed = subprocess.run(
+            [
+                "powershell.exe", "-ExecutionPolicy", "Bypass", "-File", str(WINDOWS_BOOTSTRAP),
+                "-PythonPath", sys.executable,
+                "-CodexCliPath", str(codex),
+                "-CollectorPath", str(collector),
+                "-SessionsRoot", str(sessions),
+            ],
+            text=True,
+            encoding="utf-8-sig",
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads(completed.stdout)
+        self.assertTrue(result["ready"])
+        version = tuple(map(int, result["checks"]["python"]["version"].split(".")))
+        self.assertGreaterEqual(version, (3, 9))
+
+    def test_agent_rules_installer_is_idempotent(self):
+        agents_file = self.base / "workspace" / "AGENTS.md"
+        agents_file.parent.mkdir()
+        agents_file.write_text("# Workspace rules\n", encoding="utf-8")
+        command = [
+            sys.executable,
+            str(AGENT_RULES_INSTALLER),
+            "--agents-file",
+            str(agents_file),
+        ]
+        first = subprocess.run(command, text=True, encoding="utf-8", capture_output=True)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        installed = agents_file.read_text(encoding="utf-8")
+        second = subprocess.run(command, text=True, encoding="utf-8", capture_output=True)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(agents_file.read_text(encoding="utf-8"), installed)
+        self.assertEqual(installed.count("<!-- memory-wuxian:rules:start -->"), 1)
+        self.assertIn("## Memory无限长期记忆约定", installed)
+
+    def test_context_refresh_capsule_is_bounded_and_acknowledged(self):
+        session_id = "019f-context-refresh"
+        session = self.base / "sessions" / "rollout-context.jsonl"
+        session.parent.mkdir()
+        events = [
+            {
+                "type": "session_meta",
+                "payload": {"id": session_id, "source": "codex"},
+            },
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {"total_tokens": 70000},
+                        "model_context_window": 100000,
+                    },
+                },
+            },
+        ]
+        session.write_text(
+            "\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n",
+            encoding="utf-8",
+        )
+        self.config.write_text(
+            self.config.read_text(encoding="utf-8")
+            + f'\ncodex:\n  sessions_root: "{session.parent.as_posix()}"\n'
+            + "context_refresh:\n  enabled: true\n  round_interval: 10\n"
+            + "  utilization_low_percent: 65\n  utilization_high_percent: 80\n"
+            + "  context_fraction_percent: 1\n  soft_max_tokens: 3000\n"
+            + "  absolute_max_tokens: 10000\n",
+            encoding="utf-8",
+        )
+        status = self.run_cli("context-refresh-status")
+        self.assertTrue(status["due"])
+        self.assertEqual(status["capsule_token_budget"], 1000)
+        acknowledged = self.run_cli("ack-context-refresh")
+        self.assertEqual(acknowledged["status"], "acknowledged")
+        self.assertFalse(self.run_cli("context-refresh-status")["due"])
 
 
 if __name__ == "__main__":

@@ -18,5 +18,7 @@
 16. Keep high-frequency capture in the native event-driven collector and verify its storage output against the Python maintenance implementation.
 17. Serialize complete collector batches and maintenance commands through the shared archive transaction lock.
 18. Keep continuous capture and trigger detection script-only. Invoke AI only as an ephemeral worker for a due semantic summary, after the current dialogue round has completed.
+19. Keep runtime context capsules derived, bounded, acknowledgement-driven, and separate from authoritative archive records.
+20. Cap every runtime context capsule at 10,000 estimated tokens even when the active model exposes a larger context window.
 
 Architectural changes must preserve these invariants or document an explicit replacement decision in `references/decisions.md` before implementation.

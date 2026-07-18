@@ -13,11 +13,12 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Separate message, timeline, concept, and summary indexes for every conversation, plus global routing indexes
 - Script-detected summary boundaries after 5 completed rounds or 20,000 visible characters
 - Ephemeral AI summary generation only when a completed round makes a summary due
+- Bounded runtime context refresh after configured round, utilization, or compaction thresholds
 - Index-first retrieval with raw-text verification
 - Preview-first state and index recovery
 - Heartbeat validation, maintenance, and repair modes
 - Incremental Codex rollout parsing with stable source IDs and per-session cursors
-- Event-driven macOS synchronization through a persistent native LaunchAgent
+- Event-driven synchronization through a native macOS LaunchAgent or Windows scheduled task
 - One latest verified desktop snapshot with a SHA-256 manifest and an append-only backup log
 - One latest workspace recovery backup for derived-file reconstruction
 - A transparent file layout with no database dependency
@@ -54,6 +55,12 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" heartbeat --check-only
 
 Continuous capture does not call a model. Scripts create a source-locked summary job only after a complete dialogue round reaches a configured threshold. The one-shot semantic worker then invokes the authenticated Codex CLI in ephemeral mode, ingests the constrained JSON summary, and exits.
 
+## Runtime context refresh
+
+Memory無限 can periodically restore compressed history into a continuing Codex task without opening a replacement task. `context-refresh-status` detects configured completed-round intervals, context utilization stages, and context compaction. When refresh is due, `context-capsule` selects the highest useful semantic-summary levels, suppresses covered child summaries, adds a small recent-dialogue tail, and emits temporary derived context. `ack-context-refresh` records that the capsule was read so it is not repeatedly injected.
+
+The capsule budget is derived from the model context window. The default is one percent, with a 3,000-token soft cap and an absolute 10,000-token ceiling. A capsule is navigation context rather than historical authority: claims still return to append-only raw records for verification, and the generated capsule must never be archived as a new source message. Reusable rules for workspace `AGENTS.md` files are shipped under `agents/` and `templates/`.
+
 ## Automatic Codex capture on macOS
 
 Installing a Skill does not by itself subscribe to Codex client events. Build the Rust collector once, then install its persistent LaunchAgent:
@@ -72,6 +79,29 @@ The native collector directly owns high-frequency JSONL parsing, raw append, per
 Every imported conversation is also written to its own file under `memory/conversations/`. A transcript contains only one conversation ID and includes both exact machine-readable records and readable message text. Its isolated indexes are stored under `memory/indexes/by-conversation/<conversation>/`. The immutable files under `raw/` remain authoritative; per-conversation transcripts and indexes are deterministic views that can be rebuilt without changing raw history.
 
 On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the exact executable in the generated plist before claiming automatic capture is active.
+
+## Automatic Codex capture on Windows
+
+Run the environment bootstrap first. It reports the detected Python version and paths for Python, Codex CLI, the bundled collector, and Codex sessions. With `-InstallMissing`, it installs Python only when no compatible `>=3.9` runtime or Codex-bundled Python exists.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
+```
+
+The release includes `bin/memory-wuxian-collector.exe`, so Rust and Visual C++ Build Tools are development-only dependencies. Rebuild the collector only when changing native source, then install its user-level startup integration:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1
+python scripts/install_codex_autosync_windows.py `
+  --archive-root "$PWD\memory" `
+  --python-executable "C:\path\to\python.exe" `
+  --codex-cli "C:\path\to\codex.exe" `
+  --load
+```
+
+The task starts at user logon and is also started immediately by `--load`. If local policy denies Task Scheduler registration, the installer falls back to the current user's `Run` registry key with an encoded hidden restart-on-exit command; no persistent helper script is required. Archive data remains in the selected workspace root. It uses the Windows native filesystem watcher plus the same five-second size/mtime fallback, archive lock, session cursors, summary triggers, semantic worker, and verified desktop snapshots as macOS. Remove either backend with `python scripts/install_codex_autosync_windows.py --archive-root "$PWD\memory" --uninstall`.
+
+The collector uses an explicit 16 MiB worker stack so a fresh full-history import can safely parse and index large Codex rollout sets on Windows, where the default console main-thread stack is comparatively small.
 
 With the default configuration, every successful memory mutation creates a new complete snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes, verifies its manifest, and removes older snapshot directories. The backup root therefore contains one latest recovery copy plus the append-only `backup-log.jsonl` operation history.
 
@@ -100,7 +130,7 @@ Automatic semantic-summary jobs and the one-shot worker are enabled in the insta
 - Use `--root` outside the repository for private archives.
 - Mutable files under the bundled `memory/` directory are excluded by `.gitignore`.
 - The CLI can redact obvious secrets when explicitly configured, but users remain responsible for deciding what may be persisted.
-- Automatic capture requires the supplied native LaunchAgent or another explicitly configured client hook.
+- Automatic capture requires the supplied native LaunchAgent, Windows scheduled task, or another explicitly configured client hook.
 
 ## Development
 

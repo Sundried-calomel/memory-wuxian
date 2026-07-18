@@ -20,8 +20,10 @@ summaries:
 ai_summary:
   enabled: true
   python_path: "/opt/homebrew/bin/python3"
+  python_path_windows: "python.exe"
   worker_path: "scripts/semantic_worker.py"
   codex_cli_path: "/Applications/ChatGPT.app/Contents/Resources/codex"
+  codex_cli_path_windows: "~/.codex/.sandbox-bin/codex.exe"
   timeout_seconds: 900
   model: ""
 
@@ -59,6 +61,17 @@ codex:
   sessions_root: "~/.codex/sessions"
   collector: "native-event-driven"
   debounce_milliseconds: 400
+
+context_refresh:
+  enabled: true
+  round_interval: 10
+  utilization_low_percent: 65
+  utilization_high_percent: 80
+  compaction_drop_percent: 20
+  context_fraction_percent: 1
+  soft_max_tokens: 3000
+  absolute_max_tokens: 10000
+  recent_rounds: 3
 
 safety:
   redact_secrets: true

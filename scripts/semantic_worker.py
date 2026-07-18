@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -20,7 +21,9 @@ from memory_cli import (
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CODEX = Path("/Applications/ChatGPT.app/Contents/Resources/codex")
+DEFAULT_CODEX = Path(
+    "codex.exe" if os.name == "nt" else "/Applications/ChatGPT.app/Contents/Resources/codex"
+)
 
 
 def parse_result(path: Path) -> dict:
@@ -52,8 +55,12 @@ def run_job(root: Path, config_path: Path, job_path: Path, dry_run: bool) -> dic
     if job_path.parent != store.pending_dir.resolve() or not job_path.exists():
         raise ValueError("Job must be an existing pending Memory無限 job")
     job = json.loads(job_path.read_text(encoding="utf-8"))
+    codex_key = "codex_cli_path_windows" if os.name == "nt" else "codex_cli_path"
     codex_path = Path(
-        str(nested_get(config, ["ai_summary", "codex_cli_path"], DEFAULT_CODEX))
+        os.environ.get(
+            "MEMORY_WUXIAN_CODEX",
+            str(nested_get(config, ["ai_summary", codex_key], DEFAULT_CODEX)),
+        )
     ).expanduser()
     timeout_seconds = int(nested_get(config, ["ai_summary", "timeout_seconds"], 900))
     model = str(nested_get(config, ["ai_summary", "model"], "")).strip()
@@ -86,10 +93,11 @@ def run_job(root: Path, config_path: Path, job_path: Path, dry_run: bool) -> dic
             command,
             input=build_prompt(job),
             text=True,
+            encoding="utf-8",
             capture_output=True,
             timeout=timeout_seconds,
             check=False,
-            cwd="/private/tmp",
+            cwd=tempfile.gettempdir(),
         )
         if completed.returncode != 0:
             raise RuntimeError(
