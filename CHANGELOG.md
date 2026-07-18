@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Show Codex task titles from the read-only local thread database, falling back to the first user message only when title metadata is unavailable.
+- Animate and temporarily disable the manual refresh control while a refresh is in progress.
+- Clarify that character totals cover archived visible source dialogue rather than summaries, and replace the ambiguous token count with a CJK-aware context-size estimate that is explicitly not billing or summary-generation usage.
 - Add a native Windows dashboard window backed by Microsoft Edge WebView2, preserving the complete existing local UI without browser chrome.
 - Detect the optional open-source `pywebview` dependency during Windows bootstrap and install it only when `-InstallMissing` is explicitly selected.
 - Add a read-only local status dashboard with per-conversation context utilization, message and round totals, summary levels, daily archive volume, pending work, archived days, visible characters, and estimated tokens.

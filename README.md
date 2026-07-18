@@ -72,7 +72,7 @@ python scripts/memory_dashboard.py `
   --window
 ```
 
-Run `scripts/bootstrap_windows.ps1 -InstallMissing` once if the environment check reports that the open-source `pywebview` package is missing. The window refreshes every five seconds and shows per-conversation context utilization, messages, completed rounds, summary levels, daily archive volume, pending summaries, total visible characters, and an explicitly labeled token estimate. It binds only to localhost, performs no writes, and sends no archive data to an external service. Without `--window`, the cross-platform browser mode remains available; use `--no-browser` to start only the local server, or `--port` to choose another local port.
+Run `scripts/bootstrap_windows.ps1 -InstallMissing` once if the environment check reports that the open-source `pywebview` package is missing. The window refreshes every five seconds and shows the Codex task title for each conversation, context utilization, messages, completed rounds, summary levels, daily archive volume, pending summaries, archived visible source characters, and an explicitly labeled context-token estimate. Character totals include stored user and visible assistant dialogue but exclude generated summaries. Estimated tokens use a CJK-aware size heuristic; they are neither billing usage nor the tokens consumed by summary generation. The app binds only to localhost, performs no writes, and sends no archive data to an external service. Without `--window`, the cross-platform browser mode remains available; use `--no-browser` to start only the local server, or `--port` to choose another local port.
 
 ## Automatic Codex capture on macOS
 
