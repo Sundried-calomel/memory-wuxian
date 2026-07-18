@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a native Windows dashboard window backed by Microsoft Edge WebView2, preserving the complete existing local UI without browser chrome.
+- Detect the optional open-source `pywebview` dependency during Windows bootstrap and install it only when `-InstallMissing` is explicitly selected.
 - Add a read-only local status dashboard with per-conversation context utilization, message and round totals, summary levels, daily archive volume, pending work, archived days, visible characters, and estimated tokens.
 - Read current context utilization from each rollout's latest `last_token_usage` event and cache file-tail telemetry for sub-second refreshes on large archives.
 - Keep all dashboard data local on `127.0.0.1`, refresh every five seconds, and expose the same statistics as JSON at `/api/status`.

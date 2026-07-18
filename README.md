@@ -63,15 +63,16 @@ The capsule budget is derived from the model context window. The default is one 
 
 ## Local status dashboard
 
-Start the read-only dashboard with the same archive root and configuration used by the collector:
+On Windows, start the read-only dashboard as a native application window. It uses the installed Microsoft Edge WebView2 runtime and preserves the complete dashboard UI without browser chrome:
 
 ```powershell
 python scripts/memory_dashboard.py `
   --root "C:\path\to\memory-wuxian-archive" `
-  --config "C:\path\to\memory-wuxian\config.yaml"
+  --config "C:\path\to\memory-wuxian\config.yaml" `
+  --window
 ```
 
-It opens `http://127.0.0.1:8765/` and refreshes every five seconds. The dashboard shows per-conversation context utilization, messages, completed rounds, summary levels, daily archive volume, pending summaries, total visible characters, and an explicitly labeled token estimate. It binds only to localhost, performs no writes, and sends no archive data to an external service. Use `--no-browser` to start the server without opening a window, or `--port` to choose another local port.
+Run `scripts/bootstrap_windows.ps1 -InstallMissing` once if the environment check reports that the open-source `pywebview` package is missing. The window refreshes every five seconds and shows per-conversation context utilization, messages, completed rounds, summary levels, daily archive volume, pending summaries, total visible characters, and an explicitly labeled token estimate. It binds only to localhost, performs no writes, and sends no archive data to an external service. Without `--window`, the cross-platform browser mode remains available; use `--no-browser` to start only the local server, or `--port` to choose another local port.
 
 ## Automatic Codex capture on macOS
 

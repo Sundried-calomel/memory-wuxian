@@ -156,6 +156,31 @@ def make_handler(store: MemoryStore):
     return Handler
 
 
+def run_window(server: ThreadingHTTPServer, url: str) -> None:
+    try:
+        import webview
+    except ImportError as exc:
+        raise RuntimeError(
+            "Native dashboard windows require pywebview. Run bootstrap_windows.ps1 -InstallMissing."
+        ) from exc
+    thread = threading.Thread(target=server.serve_forever, name="memory-wuxian-dashboard", daemon=True)
+    thread.start()
+    try:
+        webview.create_window(
+            "Memory无限状态台",
+            url,
+            width=1180,
+            height=760,
+            min_size=(760, 520),
+            background_color="#f6f8f5",
+        )
+        webview.start(gui="edgechromium", private_mode=True)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", required=True)
@@ -163,10 +188,15 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--window", action="store_true", help="Open a native WebView2 application window")
     args = parser.parse_args()
     store = MemoryStore(Path(args.root).expanduser().resolve(), load_simple_yaml(Path(args.config).expanduser().resolve()))
     server = ThreadingHTTPServer((args.host, args.port), make_handler(store))
     url = f"http://{args.host}:{server.server_port}/"
+    if args.window:
+        print(json.dumps({"status": "opening-window", "url": url}, ensure_ascii=False), flush=True)
+        run_window(server, url)
+        return 0
     if not args.no_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
     print(json.dumps({"status": "serving", "url": url}, ensure_ascii=False), flush=True)

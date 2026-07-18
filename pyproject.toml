@@ -4,5 +4,8 @@ version = "1.0.0"
 description = "File-backed hierarchical and verifiable conversation memory"
 requires-python = ">=3.9"
 
+[project.optional-dependencies]
+dashboard-window = ["pywebview>=6.2,<7"]
+
 [tool.unittest]
 test-directory = "tests"
