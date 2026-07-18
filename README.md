@@ -63,7 +63,7 @@ The capsule budget is derived from the model context window. The default is one 
 
 ## Local status dashboard
 
-On Windows, start the read-only dashboard as a native application window. It uses the installed Microsoft Edge WebView2 runtime and preserves the complete dashboard UI without browser chrome:
+On Windows, start the read-only dashboard as a native application window. It uses the installed Microsoft Edge WebView2 runtime, the bundled Memory Wuxian archive/infinity application icon, and preserves the complete dashboard UI without browser chrome:
 
 ```powershell
 python scripts/memory_dashboard.py `

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a dedicated Memory Wuxian application icon combining an infinity loop with an archive drawer, including PNG and multi-size Windows ICO assets.
+- Apply the bundled icon to the native dashboard window so Windows no longer shows the default Python icon.
 - Replace the visible language select with a compact `文/A` icon button and a three-language dropdown menu.
 - Add a persistent Chinese, English, and Japanese language menu covering all native dashboard labels, states, tooltips, charts, and footer text.
 - Reduce dashboard text density by removing the scope paragraph, keeping archive totals in the footer, splitting per-task archive/tool counts, and showing request/window telemetry as a percentage.

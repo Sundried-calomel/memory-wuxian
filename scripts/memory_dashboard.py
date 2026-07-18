@@ -24,6 +24,7 @@ from memory_cli import MemoryStore, load_simple_yaml
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 INDEX_HTML = SKILL_ROOT / "dashboard/index.html"
+DASHBOARD_ICON = SKILL_ROOT / "assets/memory-wuxian.ico"
 
 
 def parse_time(value: str | None) -> datetime | None:
@@ -324,7 +325,11 @@ def run_window(server: ThreadingHTTPServer, url: str) -> None:
             min_size=(760, 520),
             background_color="#f6f8f5",
         )
-        webview.start(gui="edgechromium", private_mode=True)
+        webview.start(
+            gui="edgechromium",
+            private_mode=True,
+            icon=str(DASHBOARD_ICON) if DASHBOARD_ICON.exists() else None,
+        )
     finally:
         server.shutdown()
         server.server_close()
