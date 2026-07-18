@@ -71,14 +71,22 @@ fn summarize_tool_activity(payload: &Value) -> Option<String> {
         .collect();
     let command = serde_json::from_str::<Value>(&raw_input)
         .ok()
-        .and_then(|value| value.get("command").and_then(Value::as_str).map(str::to_owned))
+        .and_then(|value| {
+            value
+                .get("command")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
         .or_else(|| {
             let command_re = Regex::new(r#"command\s*:\s*\"((?:\\.|[^\"])*)\""#).ok()?;
             let encoded = command_re.captures(&raw_input)?.get(1)?.as_str();
             serde_json::from_str::<String>(&format!(r#""{encoded}""#)).ok()
         });
     if let Some(command) = command.filter(|value| !value.is_empty()) {
-        return Some(format!("Ran {}", command.chars().take(1000).collect::<String>()));
+        return Some(format!(
+            "Ran {}",
+            command.chars().take(1000).collect::<String>()
+        ));
     }
     let mut text = format!("Called tool: {tool_name}");
     if !nested.is_empty() {
@@ -88,6 +96,62 @@ fn summarize_tool_activity(payload: &Value) -> Option<String> {
         ));
     }
     Some(text)
+}
+
+fn summarize_file_change(payload: &Value) -> Option<String> {
+    if payload.get("type").and_then(Value::as_str) != Some("patch_apply_end")
+        || payload.get("success").and_then(Value::as_bool) != Some(true)
+    {
+        return None;
+    }
+    let changes = payload.get("changes")?.as_object()?;
+    if changes.is_empty() {
+        return None;
+    }
+
+    let mut rendered = Vec::new();
+    let mut total_additions = 0usize;
+    let mut total_deletions = 0usize;
+    let mut paths = changes.keys().collect::<Vec<_>>();
+    paths.sort();
+    for path in paths {
+        let change = changes.get(path).and_then(Value::as_object);
+        let diff = change
+            .and_then(|value| value.get("unified_diff"))
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let additions = diff
+            .lines()
+            .filter(|line| line.starts_with('+') && !line.starts_with("+++"))
+            .count();
+        let deletions = diff
+            .lines()
+            .filter(|line| line.starts_with('-') && !line.starts_with("---"))
+            .count();
+        total_additions += additions;
+        total_deletions += deletions;
+        let change_type = change
+            .and_then(|value| value.get("type"))
+            .and_then(Value::as_str)
+            .unwrap_or("update");
+        let mut detail = format!("File: {path} [{change_type}] (+{additions} -{deletions})");
+        if let Some(move_path) = change
+            .and_then(|value| value.get("move_path"))
+            .and_then(Value::as_str)
+        {
+            detail.push_str(&format!(" -> {move_path}"));
+        }
+        if !diff.is_empty() {
+            detail.push_str(&format!("\n```diff\n{}\n```", diff.trim_end()));
+        }
+        rendered.push(detail);
+    }
+    let noun = if rendered.len() == 1 { "file" } else { "files" };
+    Some(format!(
+        "Edited {} {noun}: +{total_additions} -{total_deletions}\n\n{}",
+        rendered.len(),
+        rendered.join("\n\n")
+    ))
 }
 
 #[derive(Parser, Debug)]
@@ -895,6 +959,11 @@ impl Store {
             json!({})
         };
         let last_line = cursor.get("last_line").and_then(Value::as_u64).unwrap_or(0);
+        let backfill_file_changes = cursor
+            .get("file_change_format_version")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            < 1;
         let total_lines = lines.len() as u64;
         if total_lines < last_line {
             bail!(
@@ -917,6 +986,7 @@ impl Store {
                     "session_id": session_id,
                     "source_path": portable_path(&source_path),
                     "last_line": total_lines,
+                    "file_change_format_version": 1,
                     "source_size": metadata.len(),
                     "excluded_reason": "subagent-session",
                     "updated_at": now_iso(),
@@ -925,7 +995,12 @@ impl Store {
             result.excluded_reason = Some("subagent-session".to_owned());
             return Ok(result);
         }
-        for (zero_index, line) in lines.iter().enumerate().skip(last_line as usize) {
+        let start_line = if backfill_file_changes {
+            0
+        } else {
+            last_line as usize
+        };
+        for (zero_index, line) in lines.iter().enumerate().skip(start_line) {
             let line_number = zero_index as u64 + 1;
             let event: Value = serde_json::from_str(line).with_context(|| {
                 format!(
@@ -945,22 +1020,52 @@ impl Store {
             } else {
                 None
             };
-            let (speaker, phase, complete_round, message) = match (outer_type, event_type, incoming_phase) {
-                (_, _, _) if tool_activity.is_some() => ("tool", "tool_activity", false, tool_activity.unwrap()),
-                (Some("event_msg"), Some("user_message"), _) => (
-                    "user", "user", false,
-                    payload.get("message").and_then(Value::as_str).unwrap_or("").to_owned(),
-                ),
-                (Some("event_msg"), Some("agent_message"), Some("commentary")) => (
-                    "assistant", "commentary", false,
-                    payload.get("message").and_then(Value::as_str).unwrap_or("").to_owned(),
-                ),
-                (Some("event_msg"), Some("agent_message"), Some("final_answer")) => {
-                    let text = payload.get("message").and_then(Value::as_str).unwrap_or("").to_owned();
-                    ("assistant", "final_answer", true, text)
-                }
-                _ => continue,
+            let file_change = if outer_type == Some("event_msg") {
+                summarize_file_change(payload)
+            } else {
+                None
             };
+            if line_number <= last_line && file_change.is_none() {
+                continue;
+            }
+            let (speaker, phase, complete_round, message) =
+                match (outer_type, event_type, incoming_phase) {
+                    (_, _, _) if file_change.is_some() => {
+                        ("tool", "file_change", false, file_change.unwrap())
+                    }
+                    (_, _, _) if tool_activity.is_some() => {
+                        ("tool", "tool_activity", false, tool_activity.unwrap())
+                    }
+                    (Some("event_msg"), Some("user_message"), _) => (
+                        "user",
+                        "user",
+                        false,
+                        payload
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_owned(),
+                    ),
+                    (Some("event_msg"), Some("agent_message"), Some("commentary")) => (
+                        "assistant",
+                        "commentary",
+                        false,
+                        payload
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_owned(),
+                    ),
+                    (Some("event_msg"), Some("agent_message"), Some("final_answer")) => {
+                        let text = payload
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_owned();
+                        ("assistant", "final_answer", true, text)
+                    }
+                    _ => continue,
+                };
             if message.is_empty() {
                 continue;
             }
@@ -975,7 +1080,11 @@ impl Store {
                 timestamp.push_str("+00:00");
             }
             DateTime::parse_from_rfc3339(&timestamp)?;
-            let suffix = match speaker { "user" => "u", "assistant" => "a", _ => "t" };
+            let suffix = match speaker {
+                "user" => "u",
+                "assistant" => "a",
+                _ => "t",
+            };
             let message_id = format!("codex-{session_id}-{line_number:08}-{suffix}");
             let append = self.append_message(
                 speaker,
@@ -1001,7 +1110,7 @@ impl Store {
                 result.repaired_transcripts += 1;
             }
         }
-        if total_lines != last_line {
+        if total_lines != last_line || backfill_file_changes {
             let metadata = fs::metadata(&source_path)?;
             let modified: DateTime<Utc> = metadata.modified().unwrap_or(SystemTime::now()).into();
             atomic_write_json(
@@ -1011,6 +1120,7 @@ impl Store {
                     "session_id": session_id,
                     "source_path": portable_path(&source_path),
                     "last_line": total_lines,
+                    "file_change_format_version": 1,
                     "source_size": metadata.len(),
                     "source_mtime": modified.to_rfc3339(),
                     "updated_at": now_iso(),
