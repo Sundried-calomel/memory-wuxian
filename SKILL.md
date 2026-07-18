@@ -37,7 +37,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 3. Append each user and assistant message with `append`; one user message plus its assistant response forms a completed round.
 4. Let the native collector mark a summary due after 5 completed rounds or 20,000 visible characters. A character threshold reached during an answer is acted on only after that answer's `final_answer` closes the round.
 5. Let the one-shot semantic worker generate and ingest the AI summary, then exit. Use `make-summary-job` and [summary prompt](prompts/summarize.md) for manual recovery.
-6. Use `retrieve` for earlier topics. Let it search indexes first and raw records second.
+6. Use `retrieve` for earlier topics. Let it search indexes first and raw records second. Retrieval is read-only and does not require the archive write lock; query logging is skipped automatically when the caller lacks write permission.
 7. Base answers on the recovered raw segment and report the returned verification level.
 8. Run `heartbeat` for validation and recovery. Keep count-based events as primary triggers.
 9. Preview `rebuild-state`, `rebuild-conversations`, or `rebuild-indexes` before applying a recovery operation.

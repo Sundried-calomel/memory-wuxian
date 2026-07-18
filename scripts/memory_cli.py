@@ -2640,7 +2640,8 @@ class MemoryStore:
         }
 
     def retrieve(self, query: str) -> Tuple[str, Dict[str, Any]]:
-        self.init()
+        if not self.root.exists() or not self.state_path.exists():
+            raise FileNotFoundError(f"Memory archive is not initialized: {self.root}")
         query_normalized = self.normalize_search_text(query)
         if not query_normalized:
             raise ValueError("Query must not be empty")
@@ -2821,9 +2822,13 @@ class MemoryStore:
             "message_range": f"{selected[0]['message_id']}..{selected[-1]['message_id']}" if selected else None,
             "verification": confidence,
         }
-        (self.retrieval_dir / "last-query.md").write_text(output, encoding="utf-8")
-        if bool(nested_get(self.config, ["retrieval", "log_queries"], True)):
-            append_jsonl(self.retrieval_dir / "retrieval-log.jsonl", metadata)
+        try:
+            (self.retrieval_dir / "last-query.md").write_text(output, encoding="utf-8")
+            if bool(nested_get(self.config, ["retrieval", "log_queries"], True)):
+                append_jsonl(self.retrieval_dir / "retrieval-log.jsonl", metadata)
+            metadata["query_log"] = "recorded"
+        except PermissionError:
+            metadata["query_log"] = "skipped-read-only"
         return output, metadata
 
     def status(self) -> Dict[str, Any]:
@@ -3349,6 +3354,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         config = resolve_config(Path(args.config))
         store = MemoryStore(resolve_root(args.root, config), config)
+        if args.command == "retrieve":
+            return dispatch_command(args, parser, store)
         with exclusive_lock(store.root / ".locks" / "archive.lock"):
             return dispatch_command(args, parser, store)
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
