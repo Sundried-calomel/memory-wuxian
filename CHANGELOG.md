@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Prevent the Windows title-refresh subprocess from opening a console window or stealing focus; slow passive dashboard refreshes to 30 seconds.
+- Render archived activity as `Ran <command>` or `Called tool: <name>` to match the visible Codex task timeline more closely.
 - Archive lightweight tool activity visible in Codex task timelines, including tool names and command text, while continuing to exclude tool outputs and hidden reasoning.
 - Separate visible-archive token estimates from Codex model-request telemetry, and stop labeling the latter as precise context utilization.
 

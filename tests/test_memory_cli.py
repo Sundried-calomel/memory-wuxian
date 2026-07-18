@@ -660,8 +660,7 @@ summaries:
         self.assertIn("这一轮已记录。", raw_text)
         self.assertNotIn("内部推理", raw_text)
         self.assertNotIn("工具输出", raw_text)
-        self.assertIn("Tool: shell_command", raw_text)
-        self.assertIn("Command: rg -n TODO src", raw_text)
+        self.assertIn("Ran rg -n TODO src", raw_text)
         transcript_files = [
             path for path in (self.root / "conversations").glob("*.md")
             if path.name != "README.md"

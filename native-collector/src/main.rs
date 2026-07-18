@@ -75,19 +75,19 @@ fn summarize_tool_activity(payload: &Value) -> Option<String> {
         .or_else(|| {
             let command_re = Regex::new(r#"command\s*:\s*\"((?:\\.|[^\"])*)\""#).ok()?;
             let encoded = command_re.captures(&raw_input)?.get(1)?.as_str();
-            serde_json::from_str::<String>(&format!(r#"\"{encoded}\""#)).ok()
+            serde_json::from_str::<String>(&format!(r#""{encoded}""#)).ok()
         });
-    let mut parts = vec![format!("Tool: {tool_name}")];
+    if let Some(command) = command.filter(|value| !value.is_empty()) {
+        return Some(format!("Ran {}", command.chars().take(1000).collect::<String>()));
+    }
+    let mut text = format!("Called tool: {tool_name}");
     if !nested.is_empty() {
-        parts.push(format!(
-            "Invokes: {}",
+        text.push_str(&format!(
+            " (invokes {})",
             nested.into_iter().collect::<Vec<_>>().join(", ")
         ));
     }
-    if let Some(command) = command.filter(|value| !value.is_empty()) {
-        parts.push(format!("Command: {}", command.chars().take(1000).collect::<String>()));
-    }
-    Some(parts.join("; "))
+    Some(text)
 }
 
 #[derive(Parser, Debug)]
