@@ -32,6 +32,7 @@ Use Memory無限 to preserve conversation history outside the active context win
 24. Keep one replaceable Memory無限 code backup in the workspace when editing the Skill. Do not accumulate timestamped full-project copies or copy the live conversation archive into development outputs.
 25. Keep only the native collector continuously active. After a completed round reaches either summary threshold, run one ephemeral AI worker to generate and ingest that summary, then exit.
 26. Check automatic semantic backlog only when a synchronization batch completes a new dialogue round. Commentary, restart catch-up, and other nonfinal writes must not trigger AI work.
+27. Preserve lightweight tool activity already visible in the Codex task timeline: tool name, nested tool names, and command text when available. Keep it in the corresponding conversation and round, but exclude tool outputs and hidden reasoning.
 
 ## Authority order
 

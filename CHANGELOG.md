@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Archive lightweight tool activity visible in Codex task timelines, including tool names and command text, while continuing to exclude tool outputs and hidden reasoning.
 - Separate visible-archive token estimates from Codex model-request telemetry, and stop labeling the latter as precise context utilization.
 
 - Show Codex task titles from the read-only local thread database, falling back to the first user message only when title metadata is unavailable.

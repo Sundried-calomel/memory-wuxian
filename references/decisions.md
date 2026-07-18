@@ -36,7 +36,7 @@ Reconstruct derived state and indexes from persisted raw and summary files. Prev
 
 Status: Accepted.
 
-Read native Codex rollout JSONL incrementally and persist per-session cursors. Import user messages and visible assistant commentary/final answers. Exclude system instructions, internal reasoning, tool calls, and tool outputs. Use source-derived message IDs so retries cannot duplicate history. Count only a final assistant answer as completing a dialogue round.
+Read native Codex rollout JSONL incrementally and persist per-session cursors. Import user messages, visible assistant commentary/final answers, and lightweight tool activity displayed in the task timeline. Tool activity stores tool and nested-tool names plus command text when available, but never tool output or hidden reasoning. Use source-derived message IDs so retries cannot duplicate history. Count only a final assistant answer as completing a dialogue round.
 
 ## D-007: Desktop backup follows the primary archive
 
