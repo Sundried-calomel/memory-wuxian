@@ -3097,9 +3097,22 @@ def resolve_config(path: Path) -> Dict[str, Any]:
     return load_simple_yaml(path)
 
 
+def active_root_pointer() -> Path:
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
+    return codex_home / "memory-wuxian-active-root.txt"
+
+
 def resolve_root(root_argument: Optional[str], config: Dict[str, Any]) -> Path:
     if root_argument:
         return Path(root_argument).expanduser()
+    environment_root = os.environ.get("MEMORY_WUXIAN_ROOT")
+    if environment_root:
+        return Path(environment_root).expanduser()
+    pointer = active_root_pointer()
+    if pointer.exists():
+        pointed_root = pointer.read_text(encoding="utf-8").strip()
+        if pointed_root:
+            return Path(pointed_root).expanduser()
     configured = Path(str(nested_get(config, ["memory", "root_directory"], "./memory")))
     return configured if configured.is_absolute() else SKILL_ROOT / configured
 

@@ -9,12 +9,14 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 from platform_lock import exclusive_lock
 from memory_dashboard import dashboard_data, estimate_context_tokens
+from memory_cli import resolve_root
 
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
@@ -108,6 +110,22 @@ safety:
             result["totals"]["estimated_tokens"],
         )
         self.assertIsNone(result["conversations"][0]["telemetry"])
+
+    def test_default_root_uses_active_archive_pointer(self):
+        codex_home = self.base / "codex-home"
+        codex_home.mkdir()
+        (codex_home / "memory-wuxian-active-root.txt").write_text(
+            f"{self.root}\n", encoding="utf-8"
+        )
+        with patch.dict(os.environ, {"CODEX_HOME": str(codex_home)}, clear=False):
+            self.assertEqual(
+                resolve_root(None, {"memory": {"root_directory": "./memory"}}),
+                self.root,
+            )
+            self.assertEqual(
+                resolve_root(str(self.base / "explicit"), {}),
+                self.base / "explicit",
+            )
 
     def ingest_due_summary(self, concept):
         job_result = self.run_cli("make-summary-job")
@@ -1201,6 +1219,7 @@ summaries:
         codex = self.base / "codex.exe"
         codex.write_bytes(b"test executable\n")
         wrapper = self.base / "run-collector.cmd"
+        codex_home = self.base / "codex-home"
         completed = subprocess.run(
             [
                 sys.executable,
@@ -1217,6 +1236,7 @@ summaries:
             encoding="utf-8",
             capture_output=True,
             check=False,
+            env={**os.environ, "CODEX_HOME": str(codex_home)},
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         text = wrapper.read_text(encoding="utf-8")
@@ -1227,6 +1247,10 @@ summaries:
         self.assertIn("MEMORY_WUXIAN_CODEX", command)
         self.assertIn("--sessions-root", command)
         self.assertIn("scheduled-task.log", command)
+        self.assertEqual(
+            (codex_home / "memory-wuxian-active-root.txt").read_text(encoding="utf-8").strip(),
+            str(self.root.resolve()),
+        )
 
     @unittest.skipUnless(sys.platform == "win32", "Windows bootstrap test")
     def test_windows_bootstrap_reports_runtime_versions(self):

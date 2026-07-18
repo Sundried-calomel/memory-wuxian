@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Record the active Windows archive root during collector installation and resolve it automatically for CLI retrieval and maintenance commands.
+- Preserve explicit `--root` and `MEMORY_WUXIAN_ROOT` overrides while preventing silent queries against the Skill template archive.
 - Add a dedicated Memory Wuxian application icon combining an infinity loop with an archive drawer, including PNG and multi-size Windows ICO assets.
 - Apply the bundled icon to the native dashboard window so Windows no longer shows the default Python icon.
 - Replace the visible language select with a compact `文/A` icon button and a three-language dropdown menu.

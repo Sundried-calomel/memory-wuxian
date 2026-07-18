@@ -114,6 +114,8 @@ python scripts/install_codex_autosync_windows.py `
 
 The task starts at user logon and is also started immediately by `--load`. If local policy denies Task Scheduler registration, the installer falls back to the current user's `Run` registry key with an encoded hidden restart-on-exit command; no persistent helper script is required. Archive data remains in the selected workspace root. It uses the Windows native filesystem watcher plus the same five-second size/mtime fallback, archive lock, session cursors, summary triggers, semantic worker, and verified desktop snapshots as macOS. Remove either backend with `python scripts/install_codex_autosync_windows.py --archive-root "$PWD\memory" --uninstall`.
 
+The installer also records the selected archive in `~/.codex/memory-wuxian-active-root.txt`. CLI retrieval and maintenance commands use that active archive when `--root` is omitted, preventing an installed Skill's empty template archive from being mistaken for the live archive. `--root` and `MEMORY_WUXIAN_ROOT` remain explicit overrides.
+
 The collector uses an explicit 16 MiB worker stack so a fresh full-history import can safely parse and index large Codex rollout sets on Windows, where the default console main-thread stack is comparatively small.
 
 With the default configuration, every successful memory mutation creates a new complete snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes, verifies its manifest, and removes older snapshot directories. The backup root therefore contains one latest recovery copy plus the append-only `backup-log.jsonl` operation history.
