@@ -1,5 +1,6 @@
-import fcntl
+import base64
 import json
+import os
 import plistlib
 import shutil
 import subprocess
@@ -11,11 +12,17 @@ from pathlib import Path
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SKILL_ROOT / "scripts"))
+from platform_lock import exclusive_lock
+
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
+WINDOWS_INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync_windows.py"
 SEMANTIC_WORKER = SKILL_ROOT / "scripts" / "semantic_worker.py"
 NATIVE_MANIFEST = SKILL_ROOT / "native-collector" / "Cargo.toml"
-NATIVE_BINARY = SKILL_ROOT / "bin" / "memory-wuxian-collector"
+NATIVE_BINARY = SKILL_ROOT / "bin" / (
+    "memory-wuxian-collector.exe" if sys.platform == "win32" else "memory-wuxian-collector"
+)
 
 
 class MemoryCliTest(unittest.TestCase):
@@ -65,7 +72,14 @@ safety:
             str(self.config),
             *arguments,
         ]
-        return subprocess.run(command, text=True, capture_output=True, check=False)
+        return subprocess.run(
+            command,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
 
     def append_round(self, number):
         self.run_cli("append", "--speaker", "user", "--text", f"第 {number} 轮讨论分层记忆")
@@ -843,7 +857,9 @@ summaries:
             check=False,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        native_binary = SKILL_ROOT / "native-collector" / "target" / "debug" / "memory-wuxian-collector"
+        native_binary = SKILL_ROOT / "native-collector" / "target" / "debug" / (
+            "memory-wuxian-collector.exe" if sys.platform == "win32" else "memory-wuxian-collector"
+        )
 
         native_root = self.base / "native-memory"
         initialized = subprocess.run(
@@ -897,18 +913,17 @@ summaries:
             "--once",
         ]
         archive_lock = native_root / ".locks" / "archive.lock"
-        with archive_lock.open("a+", encoding="utf-8") as lock_handle:
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        with exclusive_lock(archive_lock):
             native_process = subprocess.Popen(
                 native_args,
                 text=True,
+                encoding="utf-8",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
             time.sleep(0.2)
             self.assertIsNone(native_process.poll())
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
-            native_stdout, native_stderr = native_process.communicate(timeout=10)
+        native_stdout, native_stderr = native_process.communicate(timeout=10)
         native = subprocess.CompletedProcess(
             native_args,
             native_process.returncode,
@@ -962,7 +977,13 @@ summaries:
             json.loads((self.root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
             json.loads((native_root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
         )
-        repeated = subprocess.run(native.args, text=True, capture_output=True, check=False)
+        repeated = subprocess.run(
+            native.args,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+        )
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["imported_messages"], 0)
 
@@ -1084,8 +1105,7 @@ summaries:
 
     def test_python_commands_wait_for_archive_lock(self):
         archive_lock = self.root / ".locks" / "archive.lock"
-        with archive_lock.open("a+", encoding="utf-8") as lock_handle:
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        with exclusive_lock(archive_lock):
             process = subprocess.Popen(
                 [
                     sys.executable,
@@ -1102,8 +1122,7 @@ summaries:
             )
             time.sleep(0.2)
             self.assertIsNone(process.poll())
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
-            stdout, stderr = process.communicate(timeout=10)
+        stdout, stderr = process.communicate(timeout=10)
         self.assertEqual(process.returncode, 0, stderr)
         self.assertEqual(json.loads(stdout)["total_messages"], 0)
 
@@ -1141,6 +1160,41 @@ summaries:
         self.assertNotIn("StartInterval", payload)
         self.assertEqual(payload["EnvironmentVariables"], {"RUST_BACKTRACE": "1"})
         self.assertNotIn("kickstart", INSTALLER.read_text(encoding="utf-8"))
+
+    def test_windows_installer_writes_persistent_collector_wrapper(self):
+        sessions_root = self.base / "sessions"
+        sessions_root.mkdir()
+        collector = self.base / "memory-wuxian-collector.exe"
+        collector.write_bytes(b"test executable\n")
+        codex = self.base / "codex.exe"
+        codex.write_bytes(b"test executable\n")
+        wrapper = self.base / "run-collector.cmd"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(WINDOWS_INSTALLER),
+                "--archive-root", str(self.root),
+                "--skill-root", str(SKILL_ROOT),
+                "--sessions-root", str(sessions_root),
+                "--collector-executable", str(collector),
+                "--python-executable", sys.executable,
+                "--codex-cli", str(codex),
+                "--output", str(wrapper),
+            ],
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        text = wrapper.read_text(encoding="utf-8")
+        self.assertIn("-EncodedCommand", text)
+        encoded = text.strip().split()[-1]
+        command = base64.b64decode(encoded).decode("utf-16le")
+        self.assertIn("MEMORY_WUXIAN_PYTHON", command)
+        self.assertIn("MEMORY_WUXIAN_CODEX", command)
+        self.assertIn("--sessions-root", command)
+        self.assertIn("scheduled-task.log", command)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Preview-first state and index recovery
 - Heartbeat validation, maintenance, and repair modes
 - Incremental Codex rollout parsing with stable source IDs and per-session cursors
-- Event-driven macOS synchronization through a persistent native LaunchAgent
+- Event-driven synchronization through a native macOS LaunchAgent or Windows scheduled task
 - One latest verified desktop snapshot with a SHA-256 manifest and an append-only backup log
 - One latest workspace recovery backup for derived-file reconstruction
 - A transparent file layout with no database dependency
@@ -73,6 +73,21 @@ Every imported conversation is also written to its own file under `memory/conver
 
 On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the exact executable in the generated plist before claiming automatic capture is active.
 
+## Automatic Codex capture on Windows
+
+Build the same Rust collector as a Windows executable, then install its user-level scheduled task:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1
+python scripts/install_codex_autosync_windows.py `
+  --archive-root "$PWD\memory" `
+  --python-executable "C:\path\to\python.exe" `
+  --codex-cli "C:\path\to\codex.exe" `
+  --load
+```
+
+The task starts at user logon and is also started immediately by `--load`. If local policy denies Task Scheduler registration, the installer falls back to the current user's `Run` registry key with an encoded hidden restart-on-exit command; no persistent helper script is required. Archive data remains in the selected workspace root. It uses the Windows native filesystem watcher plus the same five-second size/mtime fallback, archive lock, session cursors, summary triggers, semantic worker, and verified desktop snapshots as macOS. Remove either backend with `python scripts/install_codex_autosync_windows.py --archive-root "$PWD\memory" --uninstall`.
+
 With the default configuration, every successful memory mutation creates a new complete snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes, verifies its manifest, and removes older snapshot directories. The backup root therefore contains one latest recovery copy plus the append-only `backup-log.jsonl` operation history.
 
 Applied reconstruction commands may first preserve the previous derived files under `memory/archive/`. These internal recovery copies use `backup.workspace_retention_count` and also retain only the newest one by default. Development edits use one replaceable code backup; they do not create additional copies of the live conversation archive.
@@ -100,7 +115,7 @@ Automatic semantic-summary jobs and the one-shot worker are enabled in the insta
 - Use `--root` outside the repository for private archives.
 - Mutable files under the bundled `memory/` directory are excluded by `.gitignore`.
 - The CLI can redact obvious secrets when explicitly configured, but users remain responsible for deciding what may be persisted.
-- Automatic capture requires the supplied native LaunchAgent or another explicitly configured client hook.
+- Automatic capture requires the supplied native LaunchAgent, Windows scheduled task, or another explicitly configured client hook.
 
 ## Development
 

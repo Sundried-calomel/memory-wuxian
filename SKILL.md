@@ -22,7 +22,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 11. When Codex integration is enabled, import only user-visible dialogue and preserve native source references.
 12. Complete the primary archive write before creating its external backup snapshot.
 13. Maintain one complete transcript per conversation; never place records from different conversation IDs in the same transcript.
-14. Use the native event-driven collector for high-frequency Codex capture; keep Python outside the continuous capture loop.
+14. Use the native event-driven collector for high-frequency Codex capture on macOS and Windows; keep Python outside the continuous capture loop.
 15. Preserve transaction consistency by holding `memory/.locks/archive.lock` for each native event batch and Python maintenance command.
 16. Keep summary source ranges, parent-child groups, and derived indexes scoped to one conversation ID.
 17. Exclude native Codex subagent sessions; archive only top-level user-visible conversations.
@@ -70,6 +70,8 @@ python3 scripts/memory_cli.py heartbeat
 python3 scripts/memory_cli.py heartbeat --repair
 scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
+powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1
+python scripts/install_codex_autosync_windows.py --archive-root C:\path\to\memory --load
 ```
 
 Pass `--root <memory-directory>` before the subcommand to use a memory archive outside this skill folder.
@@ -84,4 +86,4 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 
 ## Client integration boundary
 
-Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or another configured client hook. The LaunchAgent keeps only the Rust collector alive, using kqueue plus a lightweight metadata fallback. It imports user messages plus visible assistant commentary/final answers from top-level sessions; it excludes subagent sessions, system prompts, internal reasoning, tool calls, and tool output. When a complete-round boundary makes a summary due, the collector runs one ephemeral Codex CLI summary worker and waits for it to exit. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.
+Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or Windows scheduled task. Both keep only the Rust collector alive, use native filesystem events plus a five-second metadata fallback, and share the same archive contract. They import user messages plus visible assistant commentary/final answers from top-level sessions; they exclude subagent sessions, system prompts, internal reasoning, tool calls, and tool output. When a complete-round boundary makes a summary due, the collector runs one ephemeral Codex CLI summary worker and waits for it to exit. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.

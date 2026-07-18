@@ -27,7 +27,7 @@ Use Memory無限 to preserve conversation history outside the active context win
 19. Preserve visible assistant commentary, but complete a dialogue round only when the corresponding final answer is persisted.
 20. After each successful primary-archive mutation, create and log the configured desktop snapshot before reporting the write as fully backed up.
 21. Maintain one complete derived transcript per conversation under `memory/conversations/`; a transcript must never contain records from another conversation ID.
-22. Use the persistent native collector for continuous Codex capture. Use Python for low-frequency maintenance and Agent-facing memory operations, not interval polling.
+22. Use the persistent native collector for continuous Codex capture through LaunchAgent on macOS or Task Scheduler on Windows. Use Python for low-frequency maintenance and Agent-facing memory operations, not interval polling.
 23. Hold `memory/.locks/archive.lock` for every complete native event batch and Python maintenance command so readers never observe a partial archive transaction.
 24. Keep one replaceable Memory無限 code backup in the workspace when editing the Skill. Do not accumulate timestamped full-project copies or copy the live conversation archive into development outputs.
 25. Keep only the native collector continuously active. After a completed round reaches either summary threshold, run one ephemeral AI worker to generate and ingest that summary, then exit.
