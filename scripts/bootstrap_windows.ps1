@@ -70,6 +70,15 @@ if (-not $CollectorPath) {
 
 if (-not $SessionsRoot) { $SessionsRoot = Join-Path $env:USERPROFILE ".codex\sessions" }
 $pythonVersion = if ($python) { & $python -c "import platform; print(platform.python_version())" } else { $null }
+$dashboardWindowReady = $false
+if ($python) {
+    $dashboardWindowReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('webview') else '0')") -eq "1"
+    if (-not $dashboardWindowReady -and $InstallMissing) {
+        & $python -m pip install "pywebview>=6.2,<7"
+        if ($LASTEXITCODE -ne 0) { throw "pywebview installation failed: $LASTEXITCODE" }
+        $dashboardWindowReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('webview') else '0')") -eq "1"
+    }
+}
 $checks = [ordered]@{
     platform = "windows"
     python = [ordered]@{
@@ -89,6 +98,11 @@ $checks = [ordered]@{
     sessions = [ordered]@{
         ready = Test-Path -LiteralPath $SessionsRoot
         path = $SessionsRoot
+    }
+    dashboard_window = [ordered]@{
+        ready = $dashboardWindowReady
+        runtime = "Microsoft Edge WebView2"
+        python_package = "pywebview"
     }
 }
 $ready = $checks.python.ready -and $checks.codex_cli.ready -and $checks.collector.ready -and $checks.sessions.ready
