@@ -103,6 +103,10 @@ safety:
         )
         self.assertEqual(len(result["conversations"]), 1)
         self.assertIn("title", result["conversations"][0])
+        self.assertEqual(
+            result["conversations"][0]["estimated_archive_tokens"],
+            result["totals"]["estimated_tokens"],
+        )
         self.assertIsNone(result["conversations"][0]["telemetry"])
 
     def ingest_due_summary(self, concept):
