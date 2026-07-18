@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.0.1 - 2026-07-19
+
+- Archive successful structured file changes with per-file operation types, move targets, exact unified diffs, hunk line ranges, and addition/deletion totals.
+- Backfill historical patch events once on upgrade without duplicating existing conversation messages.
+- Keep general tool output and hidden reasoning excluded while making applied edits independently verifiable.
 - Record the active Windows archive root during collector installation and resolve it automatically for CLI retrieval and maintenance commands.
 - Preserve explicit `--root` and `MEMORY_WUXIAN_ROOT` overrides while preventing silent queries against the Skill template archive.
 - Make retrieval genuinely read-only: it no longer takes the archive write lock and tolerates unavailable query-log permissions.

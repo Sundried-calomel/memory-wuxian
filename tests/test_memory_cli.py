@@ -934,6 +934,26 @@ summaries:
             + event("2026-07-16T10:00:02Z", "event_msg", {"type": "agent_message", "phase": "commentary", "message": "正在记录。"})
             + event("2026-07-16T10:00:03Z", "event_msg", {"type": "agent_reasoning", "text": "不得保存"})
             + event("2026-07-16T10:00:03.500Z", "response_item", {"type": "function_call", "name": "shell_command", "arguments": json.dumps({"command": "rg memory"})})
+            + event(
+                "2026-07-16T10:00:03.750Z",
+                "event_msg",
+                {
+                    "type": "patch_apply_end",
+                    "success": True,
+                    "changes": {
+                        "scripts/example.py": {
+                            "type": "update",
+                            "move_path": None,
+                            "unified_diff": "@@ -1,2 +1,3 @@\n-old = 1\n+new = 2\n keep = True\n+added = True\n",
+                        },
+                        "docs/new.md": {
+                            "type": "create",
+                            "move_path": None,
+                            "unified_diff": "@@ -0,0 +1 @@\n+Documented change\n",
+                        },
+                    },
+                },
+            )
             + event("2026-07-16T10:00:04Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "记录完成。"})
             + event("2026-07-16T10:01:00Z", "event_msg", {"type": "user_message", "message": "第二轮"})
             + event("2026-07-16T10:01:01Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "第二轮完成。"}),
@@ -982,8 +1002,8 @@ summaries:
         )
         self.assertEqual(native.returncode, 0, native.stderr)
         native_result = json.loads(native.stdout)
-        self.assertEqual(python_result["imported_messages"], 6)
-        self.assertEqual(native_result["imported_messages"], 6)
+        self.assertEqual(python_result["imported_messages"], 7)
+        self.assertEqual(native_result["imported_messages"], 7)
         self.assertTrue(worker_marker.exists())
         worker_arguments = json.loads(worker_marker.read_text(encoding="utf-8"))
         self.assertIn("--job", worker_arguments)
@@ -999,7 +1019,17 @@ summaries:
                 )
             return sorted(records, key=lambda record: record["sequence"])
 
-        self.assertEqual(embedded_records(self.root), embedded_records(native_root))
+        python_records = embedded_records(self.root)
+        self.assertEqual(python_records, embedded_records(native_root))
+        file_change = next(
+            record for record in python_records
+            if record.get("source", {}).get("phase") == "file_change"
+        )
+        self.assertIn("Edited 2 files: +3 -1", file_change["text"])
+        self.assertIn("File: scripts/example.py [update] (+2 -1)", file_change["text"])
+        self.assertIn("@@ -1,2 +1,3 @@", file_change["text"])
+        self.assertIn("-old = 1", file_change["text"])
+        self.assertIn("+new = 2", file_change["text"])
         python_deterministic = [
             json.loads(line)
             for line in (self.root / "indexes/deterministic/level-1.jsonl")
@@ -1152,6 +1182,49 @@ summaries:
             if record.get("reply_to")
             and owners.get(record["reply_to"]) != record["conversation_id"]
         ])
+
+    def test_sync_backfills_historical_file_changes_once(self):
+        session = self.base / "rollout-historical-patch.jsonl"
+        events = [
+            {"timestamp": "2026-07-16T10:00:00Z", "type": "session_meta", "payload": {"id": "historical-patch"}},
+            {"timestamp": "2026-07-16T10:00:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "old user"}},
+            {
+                "timestamp": "2026-07-16T10:00:02Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "patch_apply_end",
+                    "success": True,
+                    "changes": {
+                        "src/app.py": {
+                            "type": "update",
+                            "move_path": None,
+                            "unified_diff": "@@ -1 +1 @@\n-before\n+after\n",
+                        }
+                    },
+                },
+            },
+            {"timestamp": "2026-07-16T10:00:03Z", "type": "event_msg", "payload": {"type": "agent_message", "phase": "final_answer", "message": "old answer"}},
+        ]
+        session.write_text(
+            "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in events),
+            encoding="utf-8",
+        )
+        cursor = self.root / "imports/codex/historical-patch.json"
+        cursor.write_text(
+            json.dumps({"format_version": 1, "session_id": "historical-patch", "last_line": len(events)}),
+            encoding="utf-8",
+        )
+
+        first = self.run_cli("sync-codex", "--session-file", str(session))
+        second = self.run_cli("sync-codex", "--session-file", str(session))
+        self.assertEqual(first["imported_messages"], 1)
+        self.assertEqual(second["imported_messages"], 0)
+        self.assertEqual(json.loads(cursor.read_text(encoding="utf-8"))["file_change_format_version"], 1)
+        transcript = (self.root / "conversations/codex-historical-patch.md").read_text(encoding="utf-8")
+        self.assertIn("Edited 1 file: +1 -1", transcript)
+        self.assertIn("@@ -1 +1 @@", transcript)
+        self.assertNotIn("old user", transcript)
+        self.assertNotIn("old answer", transcript)
 
     def test_python_commands_wait_for_archive_lock(self):
         archive_lock = self.root / ".locks" / "archive.lock"

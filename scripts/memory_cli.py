@@ -914,6 +914,45 @@ class MemoryStore:
         safe_id = re.sub(r"[^A-Za-z0-9._-]", "_", session_id)
         return self.codex_import_dir / f"{safe_id}.json"
 
+    @staticmethod
+    def summarize_file_change(payload: Dict[str, Any]) -> Optional[str]:
+        if payload.get("type") != "patch_apply_end" or payload.get("success") is not True:
+            return None
+        changes = payload.get("changes")
+        if not isinstance(changes, dict) or not changes:
+            return None
+
+        rendered = []
+        total_additions = 0
+        total_deletions = 0
+        for path in sorted(changes):
+            change = changes[path] if isinstance(changes[path], dict) else {}
+            diff = str(change.get("unified_diff") or "")
+            additions = sum(
+                1 for line in diff.splitlines()
+                if line.startswith("+") and not line.startswith("+++")
+            )
+            deletions = sum(
+                1 for line in diff.splitlines()
+                if line.startswith("-") and not line.startswith("---")
+            )
+            total_additions += additions
+            total_deletions += deletions
+            change_type = str(change.get("type") or "update")
+            move_path = change.get("move_path")
+            detail = f"File: {path} [{change_type}] (+{additions} -{deletions})"
+            if move_path:
+                detail += f" -> {move_path}"
+            if diff:
+                detail += f"\n```diff\n{diff.rstrip()}\n```"
+            rendered.append(detail)
+
+        noun = "file" if len(rendered) == 1 else "files"
+        return (
+            f"Edited {len(rendered)} {noun}: +{total_additions} -{total_deletions}\n\n"
+            + "\n\n".join(rendered)
+        )
+
     def sync_codex_file(self, source_path: Path) -> Dict[str, Any]:
         source_path = source_path.expanduser().resolve()
         if not source_path.is_file():
@@ -923,6 +962,7 @@ class MemoryStore:
         cursor_path = self.codex_cursor_path(session_id)
         cursor = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
         last_line = int(cursor.get("last_line", 0))
+        backfill_file_changes = int(cursor.get("file_change_format_version", 0)) < 1
         imported = 0
         duplicates = 0
         repaired_transcripts = 0
@@ -938,6 +978,7 @@ class MemoryStore:
                     "session_id": session_id,
                     "source_path": str(source_path),
                     "last_line": total_lines,
+                    "file_change_format_version": 1,
                     "excluded_reason": "subagent-session",
                     "updated_at": now_iso(),
                 },
@@ -956,7 +997,7 @@ class MemoryStore:
         with source_path.open("r", encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, 1):
                 total_lines = line_number
-                if line_number <= last_line:
+                if line_number <= last_line and not backfill_file_changes:
                     continue
                 try:
                     event = json.loads(line)
@@ -966,7 +1007,15 @@ class MemoryStore:
                 outer_type = event.get("type")
                 event_type = payload.get("type")
                 phase = payload.get("phase")
-                if outer_type == "response_item" and event_type in {
+                file_change = self.summarize_file_change(payload) if outer_type == "event_msg" else None
+                if line_number <= last_line and not file_change:
+                    continue
+                if file_change:
+                    speaker = "tool"
+                    text = file_change
+                    complete_round = False
+                    phase = "file_change"
+                elif outer_type == "response_item" and event_type in {
                     "custom_tool_call", "function_call", "local_shell_call", "web_search_call"
                 }:
                     speaker = "tool"
@@ -1048,6 +1097,7 @@ class MemoryStore:
                 "session_id": session_id,
                 "source_path": str(source_path),
                 "last_line": total_lines,
+                "file_change_format_version": 1,
                 "source_size": source_path.stat().st_size,
                 "source_mtime": dt.datetime.fromtimestamp(
                     source_path.stat().st_mtime,

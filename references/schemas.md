@@ -40,13 +40,13 @@ The legacy scalar `pending_round` remains `null` for compatibility. Historical r
 
 ## Per-conversation transcript
 
-Each file under `memory/conversations/` represents exactly one `conversation_id`. It contains the same complete stored JSON records as the authoritative raw archive, ordered by global sequence, followed by a readable rendering of each stored message. A transcript may contain user messages, visible assistant commentary/final answers, and lightweight visible tool-activity records from its own conversation only. Tool records use `speaker: "tool"`, `source.phase: "tool_activity"`, and never contain tool output.
+Each file under `memory/conversations/` represents exactly one `conversation_id`. It contains the same complete stored JSON records as the authoritative raw archive, ordered by global sequence, followed by a readable rendering of each stored message. A transcript may contain user messages, visible assistant commentary/final answers, lightweight visible tool activity, and successful structured file changes from its own conversation only. Ordinary tool records use `speaker: "tool"` and `source.phase: "tool_activity"`. File-change records use `speaker: "tool"` and `source.phase: "file_change"`; their text contains a file/addition/deletion summary followed by each file's change type, optional move target, and exact unified diff. General tool output remains excluded.
 
 Transcripts are derived files. `rebuild-conversations` compares them with authoritative raw records, previews differences by default, and archives existing transcript files before an applied rebuild.
 
 ## Codex import cursor
 
-Each imported session has one cursor under `memory/imports/codex/<session-id>.json`. The native collector and Python recovery adapter use the same cursor schema. It records the source path, last consumed complete JSONL line, source size and modification time. Cursor writes occur only after all selected source lines are handled. Stable source-derived message IDs provide a second idempotency boundary if cursor recovery repeats a line.
+Each imported session has one cursor under `memory/imports/codex/<session-id>.json`. The native collector and Python recovery adapter use the same cursor schema. It records the source path, last consumed complete JSONL line, source size and modification time. `file_change_format_version: 1` confirms that historical successful patch events were backfilled. Cursor writes occur only after all selected source lines are handled. Stable source-derived message IDs provide a second idempotency boundary if cursor recovery repeats a line.
 
 An excluded native subagent session receives a terminal cursor with `excluded_reason: subagent-session`. No raw record, transcript, summary job, or conversation index is created for that session.
 
