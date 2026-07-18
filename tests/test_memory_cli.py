@@ -19,6 +19,7 @@ CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
 WINDOWS_INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync_windows.py"
 WINDOWS_BOOTSTRAP = SKILL_ROOT / "scripts" / "bootstrap_windows.ps1"
+AGENT_RULES_INSTALLER = SKILL_ROOT / "scripts" / "install_agent_rules.py"
 SEMANTIC_WORKER = SKILL_ROOT / "scripts" / "semantic_worker.py"
 NATIVE_MANIFEST = SKILL_ROOT / "native-collector" / "Cargo.toml"
 NATIVE_BINARY = SKILL_ROOT / "bin" / (
@@ -1224,6 +1225,25 @@ summaries:
         self.assertTrue(result["ready"])
         version = tuple(map(int, result["checks"]["python"]["version"].split(".")))
         self.assertGreaterEqual(version, (3, 9))
+
+    def test_agent_rules_installer_is_idempotent(self):
+        agents_file = self.base / "workspace" / "AGENTS.md"
+        agents_file.parent.mkdir()
+        agents_file.write_text("# Workspace rules\n", encoding="utf-8")
+        command = [
+            sys.executable,
+            str(AGENT_RULES_INSTALLER),
+            "--agents-file",
+            str(agents_file),
+        ]
+        first = subprocess.run(command, text=True, encoding="utf-8", capture_output=True)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        installed = agents_file.read_text(encoding="utf-8")
+        second = subprocess.run(command, text=True, encoding="utf-8", capture_output=True)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(agents_file.read_text(encoding="utf-8"), installed)
+        self.assertEqual(installed.count("<!-- memory-wuxian:rules:start -->"), 1)
+        self.assertIn("## Memory无限长期记忆约定", installed)
 
 
 if __name__ == "__main__":

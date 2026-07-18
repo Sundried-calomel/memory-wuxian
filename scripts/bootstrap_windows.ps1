@@ -3,7 +3,8 @@ param(
     [string]$PythonPath = "",
     [string]$CodexCliPath = "",
     [string]$CollectorPath = "",
-    [string]$SessionsRoot = ""
+    [string]$SessionsRoot = "",
+    [string]$AgentsPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -91,11 +92,17 @@ $checks = [ordered]@{
     }
 }
 $ready = $checks.python.ready -and $checks.codex_cli.ready -and $checks.collector.ready -and $checks.sessions.ready
+if ($AgentsPath) {
+    if (-not $python) { throw "Python is required to install Memory无限 AGENTS.md rules." }
+    & $python (Join-Path $PSScriptRoot "install_agent_rules.py") --agents-file $AgentsPath
+    if ($LASTEXITCODE -ne 0) { throw "AGENTS.md rules installation failed: $LASTEXITCODE" }
+}
 $result = [ordered]@{
     status = if ($ready) { "ready" } else { "missing-runtime" }
     ready = $ready
     checks = $checks
     build_tools_required = $false
+    agents_rules = if ($AgentsPath) { (Resolve-Path -LiteralPath $AgentsPath).Path } else { $null }
 }
 $result | ConvertTo-Json -Depth 5
 if (-not $ready) { exit 2 }
