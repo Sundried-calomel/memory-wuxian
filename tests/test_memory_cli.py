@@ -1176,6 +1176,32 @@ summaries:
         self.assertEqual(process.returncode, 0, stderr)
         self.assertEqual(json.loads(stdout)["total_messages"], 0)
 
+    def test_retrieve_does_not_require_the_archive_write_lock(self):
+        self.append_round(1)
+        archive_lock = self.root / ".locks" / "archive.lock"
+        with exclusive_lock(archive_lock):
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(CLI),
+                    "--root",
+                    str(self.root),
+                    "--config",
+                    str(self.config),
+                    "retrieve",
+                    "--query",
+                    "分层长期记忆",
+                ],
+                text=True,
+                encoding="utf-8",
+                capture_output=True,
+                check=False,
+                timeout=5,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Memory無限 Retrieval", completed.stdout)
+
     def test_launch_agent_installer_uses_native_keepalive_collector(self):
         sessions_root = self.base / "sessions"
         sessions_root.mkdir()
