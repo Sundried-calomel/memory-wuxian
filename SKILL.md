@@ -33,7 +33,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 ## Operating workflow
 
 1. On Windows, run `powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1` before the first archive operation. Pass `-AgentsPath <workspace AGENTS.md>` to install or deterministically update the canonical workspace rules. If it reports `missing-runtime`, rerun with `-InstallMissing` after user approval. Reuse Codex-bundled Python and CLI when available; do not install Rust or MSVC unless rebuilding the collector.
-2. Run `python3 scripts/memory_cli.py init` for a new memory root.
+2. Run `python3 scripts/memory_cli.py init` for a new memory root. The Windows collector installer records its `--archive-root` as the active archive, so later CLI calls can omit `--root`. An explicit `--root` or `MEMORY_WUXIAN_ROOT` still overrides that pointer.
 3. Append each user and assistant message with `append`; one user message plus its assistant response forms a completed round.
 4. Let the native collector mark a summary due after 5 completed rounds or 20,000 visible characters. A character threshold reached during an answer is acted on only after that answer's `final_answer` closes the round.
 5. Let the one-shot semantic worker generate and ingest the AI summary, then exit. Use `make-summary-job` and [summary prompt](prompts/summarize.md) for manual recovery.

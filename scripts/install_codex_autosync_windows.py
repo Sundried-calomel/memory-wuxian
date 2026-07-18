@@ -19,6 +19,11 @@ RUN_KEY = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = "MemoryWuxianCodexSync"
 
 
+def active_root_pointer() -> Path:
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
+    return codex_home / "memory-wuxian-active-root.txt"
+
+
 def default_codex_cli() -> str:
     discovered = shutil.which("codex")
     if discovered:
@@ -117,6 +122,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             raise SystemExit(f"{label} does not exist: {path}")
 
     archive_root.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(active_root_pointer(), f"{archive_root}\n")
     runtime_dir = archive_root / "imports" / "codex"
     output = Path(args.output).expanduser().resolve() if args.output else runtime_dir / "run-collector.cmd"
     since = args.since or dt.datetime.now().astimezone().isoformat(timespec="seconds")
