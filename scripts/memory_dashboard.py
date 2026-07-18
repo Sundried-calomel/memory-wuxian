@@ -237,6 +237,7 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
             "title": titles.get(conversation_id.removeprefix("codex:"), first_user.replace("\n", " ")[:72]),
             "title_source": "codex-thread" if conversation_id.removeprefix("codex:") in titles else "first-user-message",
             "message_count": len(items),
+            "tool_activity_count": sum(item.get("speaker") == "tool" for item in items),
             "character_count": sum(len(str(item.get("text", ""))) for item in items),
             "estimated_archive_tokens": estimate_context_tokens(conversation_text),
             "completed_rounds": len({item.get("round_number") for item in items if item.get("completes_round")}),
@@ -260,6 +261,7 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         "totals": {
             "conversations": len(conversations),
             "messages": len(records),
+            "tool_activities": sum(item.get("speaker") == "tool" for item in records),
             "characters": archived_characters,
             "estimated_tokens": estimate_context_tokens(archived_text),
             "summary_counts": status.get("summary_counts", {}),

@@ -43,6 +43,53 @@ fn portable_path(path: &Path) -> String {
     value.into_owned()
 }
 
+fn summarize_tool_activity(payload: &Value) -> Option<String> {
+    let event_type = payload.get("type")?.as_str()?;
+    if !matches!(
+        event_type,
+        "custom_tool_call" | "function_call" | "local_shell_call" | "web_search_call"
+    ) {
+        return None;
+    }
+    let tool_name = payload
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or(event_type);
+    let input_value = payload
+        .get("input")
+        .or_else(|| payload.get("arguments"))
+        .or_else(|| payload.get("command"));
+    let raw_input = match input_value {
+        Some(Value::String(value)) => value.clone(),
+        Some(value) => serde_json::to_string(value).unwrap_or_default(),
+        None => String::new(),
+    };
+    let nested_re = Regex::new(r"tools\.([A-Za-z0-9_]+)").expect("valid tool regex");
+    let nested: BTreeSet<&str> = nested_re
+        .captures_iter(&raw_input)
+        .filter_map(|capture| capture.get(1).map(|value| value.as_str()))
+        .collect();
+    let command = serde_json::from_str::<Value>(&raw_input)
+        .ok()
+        .and_then(|value| value.get("command").and_then(Value::as_str).map(str::to_owned))
+        .or_else(|| {
+            let command_re = Regex::new(r#"command\s*:\s*\"((?:\\.|[^\"])*)\""#).ok()?;
+            let encoded = command_re.captures(&raw_input)?.get(1)?.as_str();
+            serde_json::from_str::<String>(&format!(r#"\"{encoded}\""#)).ok()
+        });
+    let mut parts = vec![format!("Tool: {tool_name}")];
+    if !nested.is_empty() {
+        parts.push(format!(
+            "Invokes: {}",
+            nested.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if let Some(command) = command.filter(|value| !value.is_empty()) {
+        parts.push(format!("Command: {}", command.chars().take(1000).collect::<String>()));
+    }
+    Some(parts.join("; "))
+}
+
 #[derive(Parser, Debug)]
 #[command(
     version,
@@ -404,7 +451,7 @@ impl Store {
 
     fn conversation_header(&self, conversation_id: &str) -> String {
         format!(
-            "---\nrecord_type: conversation_transcript\nconversation_id: {}\nformat_version: 1\n---\n\n# Conversation {}\n\nThis file contains user messages and user-visible assistant text only. The fenced JSON record preserves the exact stored text and source metadata.\n\n",
+            "---\nrecord_type: conversation_transcript\nconversation_id: {}\nformat_version: 1\n---\n\n# Conversation {}\n\nThis file contains user messages, user-visible assistant text, and lightweight visible tool activity. The fenced JSON record preserves the exact stored text and source metadata.\n\n",
             serde_json::to_string(conversation_id).unwrap(),
             conversation_id
         )
@@ -886,30 +933,37 @@ impl Store {
                     source_path.display()
                 )
             })?;
-            if event.get("type").and_then(Value::as_str) != Some("event_msg") {
-                continue;
-            }
+            let outer_type = event.get("type").and_then(Value::as_str);
             let payload = match event.get("payload") {
                 Some(value) => value,
                 None => continue,
             };
             let event_type = payload.get("type").and_then(Value::as_str);
             let incoming_phase = payload.get("phase").and_then(Value::as_str);
-            let (speaker, phase, complete_round) = match (event_type, incoming_phase) {
-                (Some("user_message"), _) => ("user", "user", false),
-                (Some("agent_message"), Some("commentary")) => ("assistant", "commentary", false),
-                (Some("agent_message"), Some("final_answer")) => {
-                    ("assistant", "final_answer", true)
+            let tool_activity = if outer_type == Some("response_item") {
+                summarize_tool_activity(payload)
+            } else {
+                None
+            };
+            let (speaker, phase, complete_round, message) = match (outer_type, event_type, incoming_phase) {
+                (_, _, _) if tool_activity.is_some() => ("tool", "tool_activity", false, tool_activity.unwrap()),
+                (Some("event_msg"), Some("user_message"), _) => (
+                    "user", "user", false,
+                    payload.get("message").and_then(Value::as_str).unwrap_or("").to_owned(),
+                ),
+                (Some("event_msg"), Some("agent_message"), Some("commentary")) => (
+                    "assistant", "commentary", false,
+                    payload.get("message").and_then(Value::as_str).unwrap_or("").to_owned(),
+                ),
+                (Some("event_msg"), Some("agent_message"), Some("final_answer")) => {
+                    let text = payload.get("message").and_then(Value::as_str).unwrap_or("").to_owned();
+                    ("assistant", "final_answer", true, text)
                 }
                 _ => continue,
             };
-            let Some(message) = payload
-                .get("message")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-            else {
+            if message.is_empty() {
                 continue;
-            };
+            }
             result.visible_events += 1;
             let mut timestamp = event
                 .get("timestamp")
@@ -921,11 +975,11 @@ impl Store {
                 timestamp.push_str("+00:00");
             }
             DateTime::parse_from_rfc3339(&timestamp)?;
-            let suffix = if speaker == "user" { "u" } else { "a" };
+            let suffix = match speaker { "user" => "u", "assistant" => "a", _ => "t" };
             let message_id = format!("codex-{session_id}-{line_number:08}-{suffix}");
             let append = self.append_message(
                 speaker,
-                message,
+                &message,
                 &timestamp,
                 &format!("codex:{session_id}"),
                 &message_id,

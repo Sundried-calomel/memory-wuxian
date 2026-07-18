@@ -40,7 +40,7 @@ The legacy scalar `pending_round` remains `null` for compatibility. Historical r
 
 ## Per-conversation transcript
 
-Each file under `memory/conversations/` represents exactly one `conversation_id`. It contains the same complete stored JSON records as the authoritative raw archive, ordered by global sequence, followed by a readable rendering of each stored message. A transcript may contain user messages and visible assistant commentary/final answers from its own conversation only.
+Each file under `memory/conversations/` represents exactly one `conversation_id`. It contains the same complete stored JSON records as the authoritative raw archive, ordered by global sequence, followed by a readable rendering of each stored message. A transcript may contain user messages, visible assistant commentary/final answers, and lightweight visible tool-activity records from its own conversation only. Tool records use `speaker: "tool"`, `source.phase: "tool_activity"`, and never contain tool output.
 
 Transcripts are derived files. `rebuild-conversations` compares them with authoritative raw records, previews differences by default, and archives existing transcript files before an applied rebuild.
 

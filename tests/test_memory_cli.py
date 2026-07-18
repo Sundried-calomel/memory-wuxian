@@ -630,6 +630,11 @@ summaries:
             + event(
                 "2026-07-16T10:00:04Z",
                 "response_item",
+                {"type": "function_call", "name": "shell_command", "arguments": json.dumps({"command": "rg -n TODO src"})},
+            )
+            + event(
+                "2026-07-16T10:00:04.500Z",
+                "response_item",
                 {"type": "function_call_output", "output": "不得归档的工具输出"},
             )
             + event(
@@ -641,11 +646,11 @@ summaries:
         )
 
         first = self.run_cli("sync-codex", "--session-file", str(session))
-        self.assertEqual(first["imported_messages"], 3)
+        self.assertEqual(first["imported_messages"], 4)
         self.assertIsNotNone(first["backup"])
         self.assertTrue(Path(first["backup"]).joinpath("backup-manifest.json").exists())
         status = self.run_cli("status")
-        self.assertEqual(status["total_messages"], 3)
+        self.assertEqual(status["total_messages"], 4)
         self.assertEqual(status["completed_rounds"], 1)
         self.assertEqual(self.run_cli("heartbeat", "--check-only")["status"], "ok")
 
@@ -655,6 +660,8 @@ summaries:
         self.assertIn("这一轮已记录。", raw_text)
         self.assertNotIn("内部推理", raw_text)
         self.assertNotIn("工具输出", raw_text)
+        self.assertIn("Tool: shell_command", raw_text)
+        self.assertIn("Command: rg -n TODO src", raw_text)
         transcript_files = [
             path for path in (self.root / "conversations").glob("*.md")
             if path.name != "README.md"
@@ -680,7 +687,7 @@ summaries:
         cursor_path.write_text(json.dumps(cursor), encoding="utf-8")
         repaired_transcript = self.run_cli("sync-codex", "--session-file", str(session))
         self.assertEqual(repaired_transcript["imported_messages"], 0)
-        self.assertEqual(repaired_transcript["repaired_transcripts"], 3)
+        self.assertEqual(repaired_transcript["repaired_transcripts"], 4)
         self.assertIsNotNone(repaired_transcript["backup"])
         self.assertIn("请记录这一轮", transcript.read_text(encoding="utf-8"))
 
@@ -705,7 +712,7 @@ summaries:
             for line in (backup_root / "backup-log.jsonl").read_text(encoding="utf-8").splitlines()
         ]
         self.assertEqual(len(backup_entries), 3)
-        self.assertEqual(backup_entries[-1]["total_messages"], 5)
+        self.assertEqual(backup_entries[-1]["total_messages"], 6)
         snapshots = [path for path in backup_root.iterdir() if path.is_dir()]
         self.assertEqual(len(snapshots), 1)
         self.assertEqual(snapshots[0].name, Path(second["backup"]).name)
@@ -909,6 +916,7 @@ summaries:
             + event("2026-07-16T10:00:01Z", "event_msg", {"type": "user_message", "message": "password=secret-value 请记录"})
             + event("2026-07-16T10:00:02Z", "event_msg", {"type": "agent_message", "phase": "commentary", "message": "正在记录。"})
             + event("2026-07-16T10:00:03Z", "event_msg", {"type": "agent_reasoning", "text": "不得保存"})
+            + event("2026-07-16T10:00:03.500Z", "response_item", {"type": "function_call", "name": "shell_command", "arguments": json.dumps({"command": "rg memory"})})
             + event("2026-07-16T10:00:04Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "记录完成。"})
             + event("2026-07-16T10:01:00Z", "event_msg", {"type": "user_message", "message": "第二轮"})
             + event("2026-07-16T10:01:01Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "第二轮完成。"}),
@@ -957,8 +965,8 @@ summaries:
         )
         self.assertEqual(native.returncode, 0, native.stderr)
         native_result = json.loads(native.stdout)
-        self.assertEqual(python_result["imported_messages"], 5)
-        self.assertEqual(native_result["imported_messages"], 5)
+        self.assertEqual(python_result["imported_messages"], 6)
+        self.assertEqual(native_result["imported_messages"], 6)
         self.assertTrue(worker_marker.exists())
         worker_arguments = json.loads(worker_marker.read_text(encoding="utf-8"))
         self.assertIn("--job", worker_arguments)

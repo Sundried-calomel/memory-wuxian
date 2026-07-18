@@ -511,7 +511,7 @@ class MemoryStore:
             "format_version: 1\n"
             "---\n\n"
             f"# Conversation {conversation_id}\n\n"
-            "This file contains user messages and user-visible assistant text only. "
+            "This file contains user messages, user-visible assistant text, and lightweight visible tool activity. "
             "The fenced JSON record preserves the exact stored text and source metadata.\n\n"
         )
 
@@ -683,7 +683,7 @@ class MemoryStore:
                     }
                     state["next_round_number"] = int(state["next_round_number"]) + 1
                 round_number = int(pending["number"])
-            elif speaker == "assistant" and pending is not None:
+            elif speaker in {"assistant", "tool"} and pending is not None:
                 round_number = int(pending["number"])
             else:
                 round_number = 0
@@ -962,17 +962,43 @@ class MemoryStore:
                     event = json.loads(line)
                 except json.JSONDecodeError as exc:
                     raise ValueError(f"Invalid Codex JSONL at {source_path}:{line_number}: {exc}") from exc
-                if event.get("type") != "event_msg":
-                    continue
                 payload = event.get("payload") or {}
+                outer_type = event.get("type")
                 event_type = payload.get("type")
                 phase = payload.get("phase")
-                if event_type == "user_message":
+                if outer_type == "response_item" and event_type in {
+                    "custom_tool_call", "function_call", "local_shell_call", "web_search_call"
+                }:
+                    speaker = "tool"
+                    complete_round = False
+                    phase = "tool_activity"
+                    tool_name = str(payload.get("name") or event_type)
+                    raw_input = payload.get("input", payload.get("arguments", payload.get("command", "")))
+                    if isinstance(raw_input, (dict, list)):
+                        raw_input = json.dumps(raw_input, ensure_ascii=False, separators=(",", ":"))
+                    raw_input = str(raw_input or "")
+                    nested_tools = sorted(set(re.findall(r"tools\.([A-Za-z0-9_]+)", raw_input)))
+                    try:
+                        parsed_input = json.loads(raw_input)
+                    except json.JSONDecodeError:
+                        parsed_input = None
+                    command = str(parsed_input.get("command") or "") if isinstance(parsed_input, dict) else ""
+                    command_match = re.search(r'command\s*:\s*(["\'])(.*?)(?<!\\)\1', raw_input, re.DOTALL)
+                    if not command and command_match:
+                        command = command_match.group(2)
+                    command = command.replace('\\"', '"').replace("\\\\", "\\")
+                    parts = [f"Tool: {tool_name}"]
+                    if nested_tools:
+                        parts.append("Invokes: " + ", ".join(nested_tools))
+                    if command:
+                        parts.append("Command: " + command[:1000])
+                    text = "; ".join(parts)
+                elif outer_type == "event_msg" and event_type == "user_message":
                     speaker = "user"
                     text = payload.get("message")
                     complete_round = False
                     phase = "user"
-                elif event_type == "agent_message" and phase in {"commentary", "final_answer"}:
+                elif outer_type == "event_msg" and event_type == "agent_message" and phase in {"commentary", "final_answer"}:
                     speaker = "assistant"
                     text = payload.get("message")
                     complete_round = phase == "final_answer"
@@ -984,7 +1010,7 @@ class MemoryStore:
                 timestamp = str(event.get("timestamp") or now_iso())
                 if timestamp.endswith("Z"):
                     timestamp = timestamp[:-1] + "+00:00"
-                suffix = "u" if speaker == "user" else "a"
+                suffix = {"user": "u", "assistant": "a", "tool": "t"}[speaker]
                 message_id = f"codex-{session_id}-{line_number:08d}-{suffix}"
                 result = self.append_message(
                     speaker=speaker,

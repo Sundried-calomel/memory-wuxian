@@ -85,7 +85,7 @@ python3 scripts/install_codex_autosync.py \
   --load
 ```
 
-The LaunchAgent keeps one optimized Rust process alive and receives filesystem change notifications from the operating system, with a five-second size/mtime fallback for missed deep-directory events. It stores user messages and visible assistant commentary/final answers from top-level Codex sessions. It excludes subagent sessions, system instructions, internal reasoning, tool calls, and tool output. A per-session cursor and stable source-derived IDs make retries idempotent.
+The LaunchAgent keeps one optimized Rust process alive and receives filesystem change notifications from the operating system, with a five-second size/mtime fallback for missed deep-directory events. It stores user messages, visible assistant commentary/final answers, and the lightweight tool activity already visible in top-level Codex task timelines. Tool activity retains the tool name, nested tool names, and command text when available; tool outputs, system instructions, hidden reasoning, and subagent sessions remain excluded. A per-session cursor and stable source-derived IDs make retries idempotent.
 
 The native collector directly owns high-frequency JSONL parsing, raw append, per-conversation transcript updates, deterministic routing indexes, cursor writes, due Level-1 job creation, and desktop snapshots. When a job becomes due, it runs one Python wrapper that invokes one ephemeral Codex CLI summary process and exits after ingestion. The Python CLI remains the low-frequency interface for summary ingestion, retrieval, heartbeat, and preview-first reconstruction.
 
