@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add a persistent Chinese, English, and Japanese language menu covering all native dashboard labels, states, tooltips, charts, and footer text.
 - Reduce dashboard text density by removing the scope paragraph, keeping archive totals in the footer, splitting per-task archive/tool counts, and showing request/window telemetry as a percentage.
 - Prevent the Windows title-refresh subprocess from opening a console window or stealing focus; slow passive dashboard refreshes to 30 seconds.
 - Render archived activity as `Ran <command>` or `Called tool: <name>` to match the visible Codex task timeline more closely.
