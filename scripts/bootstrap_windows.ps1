@@ -72,13 +72,11 @@ if (-not $SessionsRoot) { $SessionsRoot = Join-Path $env:USERPROFILE ".codex\ses
 $pythonVersion = if ($python) { & $python -c "import platform; print(platform.python_version())" } else { $null }
 $dashboardWindowReady = $false
 if ($python) {
-    & $python -c "import webview" 2>$null
-    $dashboardWindowReady = $LASTEXITCODE -eq 0
+    $dashboardWindowReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('webview') else '0')") -eq "1"
     if (-not $dashboardWindowReady -and $InstallMissing) {
         & $python -m pip install "pywebview>=6.2,<7"
         if ($LASTEXITCODE -ne 0) { throw "pywebview installation failed: $LASTEXITCODE" }
-        & $python -c "import webview"
-        $dashboardWindowReady = $LASTEXITCODE -eq 0
+        $dashboardWindowReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('webview') else '0')") -eq "1"
     }
 }
 $checks = [ordered]@{
