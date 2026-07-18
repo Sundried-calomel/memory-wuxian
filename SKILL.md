@@ -58,6 +58,7 @@ python3 scripts/memory_cli.py status
 python3 scripts/memory_cli.py context-refresh-status
 python3 scripts/memory_cli.py context-capsule
 python3 scripts/memory_cli.py ack-context-refresh
+python3 scripts/memory_dashboard.py --root /path/to/archive --config /path/to/config.yaml
 python3 scripts/memory_cli.py backup
 python3 scripts/memory_cli.py make-summary-job
 python3 scripts/semantic_worker.py --root memory --config config.yaml --job memory/pending/<job>.json

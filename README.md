@@ -61,6 +61,18 @@ Memory無限 can periodically restore compressed history into a continuing Codex
 
 The capsule budget is derived from the model context window. The default is one percent, with a 3,000-token soft cap and an absolute 10,000-token ceiling. A capsule is navigation context rather than historical authority: claims still return to append-only raw records for verification, and the generated capsule must never be archived as a new source message. Reusable rules for workspace `AGENTS.md` files are shipped under `agents/` and `templates/`.
 
+## Local status dashboard
+
+Start the read-only dashboard with the same archive root and configuration used by the collector:
+
+```powershell
+python scripts/memory_dashboard.py `
+  --root "C:\path\to\memory-wuxian-archive" `
+  --config "C:\path\to\memory-wuxian\config.yaml"
+```
+
+It opens `http://127.0.0.1:8765/` and refreshes every five seconds. The dashboard shows per-conversation context utilization, messages, completed rounds, summary levels, daily archive volume, pending summaries, total visible characters, and an explicitly labeled token estimate. It binds only to localhost, performs no writes, and sends no archive data to an external service. Use `--no-browser` to start the server without opening a window, or `--port` to choose another local port.
+
 ## Automatic Codex capture on macOS
 
 Installing a Skill does not by itself subscribe to Codex client events. Build the Rust collector once, then install its persistent LaunchAgent:
