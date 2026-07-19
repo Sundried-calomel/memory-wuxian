@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.0.2 - 2026-07-19
+
+- Adapt macOS and Windows metadata safety checks from 5 seconds while active to 30 seconds after 2 idle minutes and 5 minutes after 15 idle minutes.
+- Wake immediately on native filesystem events and return to active mode as soon as Codex writes a session file.
+
 ## 1.0.1 - 2026-07-19
 
 - Archive successful structured file changes with per-file operation types, move targets, exact unified diffs, hunk line ranges, and addition/deletion totals.
