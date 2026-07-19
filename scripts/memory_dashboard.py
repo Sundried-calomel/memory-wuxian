@@ -41,11 +41,35 @@ CJK_PATTERN = re.compile(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]")
 THREAD_ID_PATTERN = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
 THREAD_ID_SEARCH_PATTERN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.IGNORECASE)
 RUNTIME_TITLE_CACHE: tuple[float, dict[str, str]] = (0.0, {})
+SESSION_SOURCE_CACHE: dict[str, tuple[int, str | None]] = {}
 
 
 def estimate_context_tokens(text: str) -> int:
     cjk_count = len(CJK_PATTERN.findall(text))
     return cjk_count + (max(0, len(text) - cjk_count) + 3) // 4
+
+
+def codex_session_source(path: Path) -> str | None:
+    try:
+        mtime = path.stat().st_mtime_ns
+    except OSError:
+        return None
+    cached = SESSION_SOURCE_CACHE.get(str(path))
+    if cached and cached[0] == mtime:
+        return cached[1]
+    source = None
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                event = json.loads(line)
+                if event.get("type") == "session_meta":
+                    value = (event.get("payload") or {}).get("source")
+                    source = value if isinstance(value, str) else None
+                    break
+    except (OSError, json.JSONDecodeError):
+        source = None
+    SESSION_SOURCE_CACHE[str(path)] = (mtime, source)
+    return source
 
 
 def codex_runtime_titles() -> dict[str, str]:
@@ -242,7 +266,16 @@ def collector_telemetry(root: Path) -> dict[str, Any] | None:
 
 
 def dashboard_data(store: MemoryStore) -> dict[str, Any]:
-    records = store.read_all_raw()
+    all_records = store.read_all_raw()
+    hidden_conversations: set[str] = set()
+    for record in all_records:
+        source_path = record.get("source", {}).get("path")
+        if source_path and codex_session_source(Path(source_path)) == "exec":
+            hidden_conversations.add(str(record["conversation_id"]))
+    records = [
+        record for record in all_records
+        if str(record["conversation_id"]) not in hidden_conversations
+    ]
     summaries = store.summary_records()
     status = store.status()
     by_conversation: dict[str, list[dict[str, Any]]] = defaultdict(list)

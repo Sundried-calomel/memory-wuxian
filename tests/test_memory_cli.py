@@ -982,6 +982,43 @@ summaries:
         )
         self.assertEqual(cursor["excluded_reason"], "subagent-session")
 
+    def test_codex_exec_sessions_are_excluded(self):
+        session = self.base / "rollout-exec.jsonl"
+
+        def event(timestamp, outer_type, payload):
+            return json.dumps(
+                {"timestamp": timestamp, "type": outer_type, "payload": payload},
+                ensure_ascii=False,
+            ) + "\n"
+
+        session.write_text(
+            event(
+                "2026-07-16T10:00:00Z",
+                "session_meta",
+                {"id": "exec-thread", "source": "exec", "thread_source": "user"},
+            )
+            + event(
+                "2026-07-16T10:00:01Z",
+                "event_msg",
+                {"type": "user_message", "message": "Reply with exactly OK."},
+            )
+            + event(
+                "2026-07-16T10:00:02Z",
+                "event_msg",
+                {"type": "agent_message", "phase": "final_answer", "message": "OK"},
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_cli("sync-codex", "--session-file", str(session))
+        self.assertEqual(result["imported_messages"], 0)
+        self.assertEqual(result["sessions"][0]["excluded_reason"], "exec-session")
+        self.assertEqual(self.run_cli("status")["total_messages"], 0)
+        cursor = json.loads(
+            (self.root / "imports/codex/exec-thread.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(cursor["excluded_reason"], "exec-session")
+
     def test_level_one_jobs_and_indexes_are_conversation_scoped(self):
         for conversation_id, label in (("codex:thread-a", "A"), ("codex:thread-b", "B")):
             for number in range(1, 3):

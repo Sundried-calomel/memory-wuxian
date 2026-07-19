@@ -927,7 +927,7 @@ impl Store {
         } else {
             complete_text.lines().collect()
         };
-        let (session_id, is_subagent) = lines
+        let (session_id, excluded_reason) = lines
             .iter()
             .find_map(|line| {
                 let event: Value = serde_json::from_str(line).ok()?;
@@ -944,7 +944,15 @@ impl Store {
                     .get("source")
                     .and_then(Value::as_object)
                     .is_some_and(|source| source.contains_key("subagent"));
-                Some((session_id, is_subagent))
+                let is_exec = payload.get("source").and_then(Value::as_str) == Some("exec");
+                let excluded_reason = if is_subagent {
+                    Some("subagent-session")
+                } else if is_exec {
+                    Some("exec-session")
+                } else {
+                    None
+                };
+                Some((session_id, excluded_reason))
             })
             .ok_or_else(|| {
                 anyhow!(
@@ -977,7 +985,7 @@ impl Store {
             last_line: total_lines,
             ..Default::default()
         };
-        if is_subagent {
+        if let Some(excluded_reason) = excluded_reason {
             let metadata = fs::metadata(&source_path)?;
             atomic_write_json(
                 &cursor_path,
@@ -988,11 +996,11 @@ impl Store {
                     "last_line": total_lines,
                     "file_change_format_version": 1,
                     "source_size": metadata.len(),
-                    "excluded_reason": "subagent-session",
+                    "excluded_reason": excluded_reason,
                     "updated_at": now_iso(),
                 }),
             )?;
-            result.excluded_reason = Some("subagent-session".to_owned());
+            result.excluded_reason = Some(excluded_reason.to_owned());
             return Ok(result);
         }
         let start_line = if backfill_file_changes {
