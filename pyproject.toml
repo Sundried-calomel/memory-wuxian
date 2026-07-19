@@ -1,11 +1,11 @@
 [project]
 name = "memory-wuxian"
-version = "1.0.2"
+version = "1.0.3"
 description = "File-backed hierarchical and verifiable conversation memory"
 requires-python = ">=3.9"
 
 [project.optional-dependencies]
-dashboard-window = ["pywebview>=6.2,<7"]
+dashboard-window = ["pywebview>=6.2,<7", "psutil>=7,<8"]
 
 [tool.unittest]
 test-directory = "tests"

@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -2365,6 +2365,69 @@ fn adaptive_fallback(idle_for: Duration) -> Duration {
     }
 }
 
+struct CollectorTelemetry {
+    last_mode: &'static str,
+    last_file_event: Option<String>,
+    last_archive_update: Option<String>,
+    wakeups: VecDeque<(std::time::Instant, String)>,
+}
+
+impl CollectorTelemetry {
+    fn new() -> Self {
+        Self {
+            last_mode: "active",
+            last_file_event: None,
+            last_archive_update: None,
+            wakeups: VecDeque::new(),
+        }
+    }
+
+    fn mode(interval: Duration) -> &'static str {
+        if interval == DEEP_IDLE_FALLBACK {
+            "deep-idle"
+        } else if interval == IDLE_FALLBACK {
+            "idle"
+        } else {
+            "active"
+        }
+    }
+
+    fn record_event(&mut self) {
+        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+        self.last_file_event = Some(now.clone());
+        self.wakeups.push_back((std::time::Instant::now(), now));
+    }
+
+    fn record_archive(&mut self) {
+        self.last_archive_update = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
+    }
+
+    fn write(&mut self, store: &Store, interval: Duration) -> Result<()> {
+        while self
+            .wakeups
+            .front()
+            .is_some_and(|(instant, _)| instant.elapsed() > Duration::from_secs(3600))
+        {
+            self.wakeups.pop_front();
+        }
+        self.last_mode = Self::mode(interval);
+        atomic_write_json(
+            &store.root.join("imports/codex/collector-telemetry.json"),
+            &json!({
+                "format_version": 1,
+                "pid": std::process::id(),
+                "mode": self.last_mode,
+                "fallback_interval_seconds": interval.as_secs(),
+                "last_file_event": self.last_file_event,
+                "last_archive_update": self.last_archive_update,
+                "wakeups_last_hour": self.wakeups.len(),
+                "recent_wakeups": self.wakeups.iter().map(|(_, timestamp)| timestamp).collect::<Vec<_>>(),
+                "updated_at": Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+            }),
+        )
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn run_event_loop(
     store: &Store,
@@ -2376,13 +2439,20 @@ fn run_event_loop(
     let initial_paths = recent_rollouts(sessions_root, since)?;
     let mut known_stamps = rollout_stamps(&initial_paths)?;
     let mut last_activity = std::time::Instant::now();
+    let mut telemetry = CollectorTelemetry::new();
+    telemetry.write(store, ACTIVE_FALLBACK)?;
     eprintln!(
         "memory-wuxian-collector ready (kqueue with adaptive 5s/30s/5m metadata fallback): {}",
         sessions_root.display()
     );
     loop {
-        let received_event = watcher.wait(adaptive_fallback(last_activity.elapsed()))?;
+        let interval = adaptive_fallback(last_activity.elapsed());
+        if CollectorTelemetry::mode(interval) != telemetry.last_mode {
+            telemetry.write(store, interval)?;
+        }
+        let received_event = watcher.wait(interval)?;
         if received_event {
+            telemetry.record_event();
             std::thread::sleep(Duration::from_millis(debounce_ms));
         }
         let current_paths = recent_rollouts(sessions_root, since)?;
@@ -2393,8 +2463,12 @@ fn run_event_loop(
             .cloned()
             .collect();
         let sync_succeeded = changed_paths.is_empty() || sync_and_emit(store, changed_paths);
+        if sync_succeeded && known_stamps != current_stamps {
+            telemetry.record_archive();
+        }
         if received_event || known_stamps != current_stamps {
             last_activity = std::time::Instant::now();
+            telemetry.write(store, ACTIVE_FALLBACK)?;
         }
         if received_event || known_stamps.len() != current_stamps.len() {
             watcher = KqueueWatcher::new(sessions_root, since)?;
@@ -2420,17 +2494,26 @@ fn run_event_loop(
     let initial_paths = recent_rollouts(sessions_root, since)?;
     let mut known_stamps = rollout_stamps(&initial_paths)?;
     let mut last_activity = std::time::Instant::now();
+    let mut telemetry = CollectorTelemetry::new();
+    telemetry.write(store, ACTIVE_FALLBACK)?;
     eprintln!(
         "memory-wuxian-collector ready (native watcher with adaptive 5s/30s/5m metadata fallback): {}",
         sessions_root.display()
     );
     loop {
-        let first = match receiver.recv_timeout(adaptive_fallback(last_activity.elapsed())) {
+        let interval = adaptive_fallback(last_activity.elapsed());
+        if CollectorTelemetry::mode(interval) != telemetry.last_mode {
+            telemetry.write(store, interval)?;
+        }
+        let first = match receiver.recv_timeout(interval) {
             Ok(value) => Some(value),
             Err(RecvTimeoutError::Timeout) => None,
             Err(RecvTimeoutError::Disconnected) => bail!("filesystem watcher stopped"),
         };
         let received_event = first.is_some();
+        if received_event {
+            telemetry.record_event();
+        }
         let mut candidates = BTreeSet::new();
         if let Some(first) = first {
             match first {
@@ -2459,8 +2542,12 @@ fn run_event_loop(
         );
         let sync_succeeded =
             candidates.is_empty() || sync_and_emit(store, candidates.into_iter().collect());
+        if sync_succeeded && known_stamps != current_stamps {
+            telemetry.record_archive();
+        }
         if received_event || known_stamps != current_stamps {
             last_activity = std::time::Instant::now();
+            telemetry.write(store, ACTIVE_FALLBACK)?;
         }
         if sync_succeeded {
             known_stamps = current_stamps;

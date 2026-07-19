@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.0.3 - 2026-07-19
+
+- Add atomic collector runtime telemetry for mode, fallback interval, recent file/archive activity, wakeups, and process identity.
+- Show collector activity plus CPU and memory in the Chinese, English, and Japanese status console.
+- Add `psutil` to the optional native-dashboard dependencies for cross-platform process metrics.
+
 ## 1.0.2 - 2026-07-19
 
 - Adapt macOS and Windows metadata safety checks from 5 seconds while active to 30 seconds after 2 idle minutes and 5 minutes after 15 idle minutes.

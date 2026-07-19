@@ -74,8 +74,8 @@ $dashboardWindowReady = $false
 if ($python) {
     $dashboardWindowReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('webview') else '0')") -eq "1"
     if (-not $dashboardWindowReady -and $InstallMissing) {
-        & $python -m pip install "pywebview>=6.2,<7"
-        if ($LASTEXITCODE -ne 0) { throw "pywebview installation failed: $LASTEXITCODE" }
+        & $python -m pip install "pywebview>=6.2,<7" "psutil>=7,<8"
+        if ($LASTEXITCODE -ne 0) { throw "dashboard dependency installation failed: $LASTEXITCODE" }
         $dashboardWindowReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('webview') else '0')") -eq "1"
     }
 }

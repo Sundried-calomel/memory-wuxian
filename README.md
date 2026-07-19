@@ -93,6 +93,8 @@ Every imported conversation is also written to its own file under `memory/conver
 
 On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the exact executable in the generated plist before claiming automatic capture is active.
 
+The collector publishes lightweight runtime telemetry under `imports/codex/collector-telemetry.json`. The status console shows its active, idle, or deep-idle mode, current safety interval, latest filesystem event, latest archive write, wakeups during the last hour, and CPU/memory use. Telemetry is written only on activity or mode transitions.
+
 ## Automatic Codex capture on Windows
 
 Run the environment bootstrap first. It reports the detected Python version and paths for Python, Codex CLI, the bundled collector, and Codex sessions. With `-InstallMissing`, it installs Python only when no compatible `>=3.9` runtime or Codex-bundled Python exists.
