@@ -2349,6 +2349,22 @@ fn rollout_stamps(paths: &[PathBuf]) -> Result<HashMap<PathBuf, (u64, SystemTime
         .collect()
 }
 
+const ACTIVE_FALLBACK: Duration = Duration::from_secs(5);
+const IDLE_FALLBACK: Duration = Duration::from_secs(30);
+const DEEP_IDLE_FALLBACK: Duration = Duration::from_secs(300);
+const IDLE_AFTER: Duration = Duration::from_secs(120);
+const DEEP_IDLE_AFTER: Duration = Duration::from_secs(900);
+
+fn adaptive_fallback(idle_for: Duration) -> Duration {
+    if idle_for >= DEEP_IDLE_AFTER {
+        DEEP_IDLE_FALLBACK
+    } else if idle_for >= IDLE_AFTER {
+        IDLE_FALLBACK
+    } else {
+        ACTIVE_FALLBACK
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn run_event_loop(
     store: &Store,
@@ -2359,12 +2375,13 @@ fn run_event_loop(
     let mut watcher = KqueueWatcher::new(sessions_root, since)?;
     let initial_paths = recent_rollouts(sessions_root, since)?;
     let mut known_stamps = rollout_stamps(&initial_paths)?;
+    let mut last_activity = std::time::Instant::now();
     eprintln!(
-        "memory-wuxian-collector ready (kqueue with 5s metadata fallback): {}",
+        "memory-wuxian-collector ready (kqueue with adaptive 5s/30s/5m metadata fallback): {}",
         sessions_root.display()
     );
     loop {
-        let received_event = watcher.wait(Duration::from_secs(5))?;
+        let received_event = watcher.wait(adaptive_fallback(last_activity.elapsed()))?;
         if received_event {
             std::thread::sleep(Duration::from_millis(debounce_ms));
         }
@@ -2376,6 +2393,9 @@ fn run_event_loop(
             .cloned()
             .collect();
         let sync_succeeded = changed_paths.is_empty() || sync_and_emit(store, changed_paths);
+        if received_event || known_stamps != current_stamps {
+            last_activity = std::time::Instant::now();
+        }
         if received_event || known_stamps.len() != current_stamps.len() {
             watcher = KqueueWatcher::new(sessions_root, since)?;
         }
@@ -2399,16 +2419,18 @@ fn run_event_loop(
     watcher.watch(sessions_root, RecursiveMode::Recursive)?;
     let initial_paths = recent_rollouts(sessions_root, since)?;
     let mut known_stamps = rollout_stamps(&initial_paths)?;
+    let mut last_activity = std::time::Instant::now();
     eprintln!(
-        "memory-wuxian-collector ready (native watcher with 5s metadata fallback): {}",
+        "memory-wuxian-collector ready (native watcher with adaptive 5s/30s/5m metadata fallback): {}",
         sessions_root.display()
     );
     loop {
-        let first = match receiver.recv_timeout(Duration::from_secs(5)) {
+        let first = match receiver.recv_timeout(adaptive_fallback(last_activity.elapsed())) {
             Ok(value) => Some(value),
             Err(RecvTimeoutError::Timeout) => None,
             Err(RecvTimeoutError::Disconnected) => bail!("filesystem watcher stopped"),
         };
+        let received_event = first.is_some();
         let mut candidates = BTreeSet::new();
         if let Some(first) = first {
             match first {
@@ -2437,9 +2459,24 @@ fn run_event_loop(
         );
         let sync_succeeded =
             candidates.is_empty() || sync_and_emit(store, candidates.into_iter().collect());
+        if received_event || known_stamps != current_stamps {
+            last_activity = std::time::Instant::now();
+        }
         if sync_succeeded {
             known_stamps = current_stamps;
         }
+    }
+}
+
+#[cfg(test)]
+mod adaptive_fallback_tests {
+    use super::*;
+
+    #[test]
+    fn backs_off_after_idle_periods() {
+        assert_eq!(adaptive_fallback(Duration::from_secs(0)), ACTIVE_FALLBACK);
+        assert_eq!(adaptive_fallback(IDLE_AFTER), IDLE_FALLBACK);
+        assert_eq!(adaptive_fallback(DEEP_IDLE_AFTER), DEEP_IDLE_FALLBACK);
     }
 }
 
