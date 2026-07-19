@@ -209,6 +209,26 @@ def session_telemetry(path: Path) -> dict[str, int] | None:
     return latest
 
 
+def collector_telemetry(root: Path) -> dict[str, Any] | None:
+    path = root / "imports/codex/collector-telemetry.json"
+    try:
+        telemetry = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    telemetry["cpu_percent"] = None
+    telemetry["memory_bytes"] = None
+    try:
+        import psutil
+
+        process = psutil.Process(int(telemetry["pid"]))
+        telemetry["cpu_percent"] = round(process.cpu_percent(interval=0.05), 1)
+        telemetry["memory_bytes"] = int(process.memory_info().rss)
+        telemetry["process_running"] = process.is_running()
+    except (ImportError, KeyError, TypeError, ValueError, OSError):
+        telemetry["process_running"] = None
+    return telemetry
+
+
 def dashboard_data(store: MemoryStore) -> dict[str, Any]:
     records = store.read_all_raw()
     summaries = store.summary_records()
@@ -260,6 +280,7 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         "generated_at": now.isoformat(),
         "archive_root": str(store.root),
         "health": "ok" if not status.get("completed_rounds_out_of_order") else "attention",
+        "collector": collector_telemetry(store.root),
         "totals": {
             "conversations": len(conversations),
             "messages": len(records),

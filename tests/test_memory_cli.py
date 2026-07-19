@@ -111,6 +111,28 @@ safety:
         )
         self.assertIsNone(result["conversations"][0]["telemetry"])
 
+    def test_dashboard_reports_collector_activity(self):
+        telemetry_path = self.root / "imports/codex/collector-telemetry.json"
+        telemetry_path.parent.mkdir(parents=True, exist_ok=True)
+        telemetry_path.write_text(
+            json.dumps({
+                "format_version": 1,
+                "pid": 999999,
+                "mode": "idle",
+                "fallback_interval_seconds": 30,
+                "last_file_event": "2026-07-19T01:00:00Z",
+                "last_archive_update": "2026-07-19T01:00:01Z",
+                "wakeups_last_hour": 4,
+            }),
+            encoding="utf-8",
+        )
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        result = dashboard_data(MemoryStore(self.root, load_simple_yaml(self.config)))
+        self.assertEqual(result["collector"]["mode"], "idle")
+        self.assertEqual(result["collector"]["fallback_interval_seconds"], 30)
+        self.assertEqual(result["collector"]["wakeups_last_hour"], 4)
+
     def test_default_root_uses_active_archive_pointer(self):
         codex_home = self.base / "codex-home"
         codex_home.mkdir()
