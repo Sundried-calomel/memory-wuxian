@@ -219,13 +219,16 @@ def collector_telemetry(root: Path) -> dict[str, Any] | None:
     telemetry["memory_bytes"] = None
     try:
         import psutil
-
+    except ImportError:
+        telemetry["process_running"] = None
+        return telemetry
+    try:
         process = psutil.Process(int(telemetry["pid"]))
         telemetry["cpu_percent"] = round(process.cpu_percent(interval=0.05), 1)
         telemetry["memory_bytes"] = int(process.memory_info().rss)
         telemetry["process_running"] = process.is_running()
-    except (ImportError, KeyError, TypeError, ValueError, OSError):
-        telemetry["process_running"] = None
+    except (psutil.Error, KeyError, TypeError, ValueError, OSError):
+        telemetry["process_running"] = False
     return telemetry
 
 
@@ -256,8 +259,26 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         conversation_text = "".join(str(item.get("text", "")) for item in items)
         conversations.append({
             "conversation_id": conversation_id,
-            "title": titles.get(conversation_id.removeprefix("codex:"), first_user.replace("\n", " ")[:72]),
-            "title_source": "codex-thread" if conversation_id.removeprefix("codex:") in titles else "first-user-message",
+            "title": titles.get(
+                conversation_id.removeprefix("codex:"),
+                next(
+                    (
+                        str(item.get("source", {}).get("conversation_title"))
+                        for item in items
+                        if item.get("source", {}).get("conversation_title")
+                    ),
+                    first_user.replace("\n", " ")[:72],
+                ),
+            ),
+            "title_source": (
+                "codex-thread"
+                if conversation_id.removeprefix("codex:") in titles
+                else (
+                    "source-title"
+                    if any(item.get("source", {}).get("conversation_title") for item in items)
+                    else "first-user-message"
+                )
+            ),
             "message_count": len(items),
             "tool_activity_count": sum(item.get("speaker") == "tool" for item in items),
             "character_count": sum(len(str(item.get("text", ""))) for item in items),

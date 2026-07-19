@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.1.0 - 2026-07-19
+
+- Import ChatGPT official data-export ZIPs, extracted directories, or `conversations.json` files into the same immutable archive.
+- Follow each conversation's current visible branch, preserve exported titles and stable source IDs, and keep repeat/update imports idempotent.
+- Exclude system messages and abandoned regenerated-answer branches while retaining user and assistant text plus source metadata.
+- Show exported ChatGPT titles in the status console and include imports in normal indexing, backup, summary, and retrieval flows.
+
 ## 1.0.3 - 2026-07-19
 
 - Add atomic collector runtime telemetry for mode, fallback interval, recent file/archive activity, wakeups, and process identity.

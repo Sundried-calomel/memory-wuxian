@@ -14,6 +14,7 @@ import shutil
 import sys
 import tempfile
 import unicodedata
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -1162,6 +1163,160 @@ class MemoryStore:
             "repaired_transcripts": repaired_transcripts,
             "created_summary_job": created_job,
             "deterministic_indexes": deterministic_indexes,
+        }
+
+    @staticmethod
+    def chatgpt_message_text(message: Dict[str, Any]) -> str:
+        content = message.get("content") or {}
+        parts = content.get("parts")
+        if not isinstance(parts, list):
+            text = content.get("text")
+            parts = [text] if isinstance(text, str) else []
+        rendered: List[str] = []
+        for part in parts:
+            if isinstance(part, str):
+                rendered.append(part)
+            elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                rendered.append(part["text"])
+            elif part is not None:
+                rendered.append(json.dumps(part, ensure_ascii=False, sort_keys=True))
+        return "\n".join(item for item in rendered if item).strip()
+
+    @staticmethod
+    def chatgpt_conversation_messages(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
+        mapping = conversation.get("mapping") or {}
+        current = conversation.get("current_node")
+        nodes: List[Dict[str, Any]] = []
+        seen = set()
+        while current and current in mapping and current not in seen:
+            seen.add(current)
+            node = mapping[current]
+            nodes.append(node)
+            current = node.get("parent")
+        if nodes:
+            nodes.reverse()
+        else:
+            nodes = sorted(
+                mapping.values(),
+                key=lambda node: (
+                    float((node.get("message") or {}).get("create_time") or 0),
+                    str(node.get("id") or ""),
+                ),
+            )
+        return [node["message"] for node in nodes if isinstance(node.get("message"), dict)]
+
+    @staticmethod
+    def chatgpt_timestamp(value: Any, fallback: Any) -> str:
+        seconds = value if isinstance(value, (int, float)) else fallback
+        if not isinstance(seconds, (int, float)):
+            seconds = 0
+        return dt.datetime.fromtimestamp(seconds, tz=dt.timezone.utc).isoformat()
+
+    def import_chatgpt_export(
+        self,
+        export_path: Path,
+        conversation_ids: Optional[Iterable[str]] = None,
+    ) -> Dict[str, Any]:
+        export_path = export_path.expanduser().resolve()
+        if export_path.is_dir():
+            source_file = export_path / "conversations.json"
+            payload = json.loads(source_file.read_text(encoding="utf-8-sig"))
+            source_label = str(source_file)
+        elif export_path.suffix.casefold() == ".zip":
+            with zipfile.ZipFile(export_path) as archive:
+                candidates = [
+                    name for name in archive.namelist()
+                    if name.rsplit("/", 1)[-1] == "conversations.json"
+                ]
+                if len(candidates) != 1:
+                    raise ValueError(
+                        "ChatGPT export ZIP must contain exactly one conversations.json"
+                    )
+                payload = json.loads(archive.read(candidates[0]).decode("utf-8-sig"))
+            source_label = f"{export_path}!/{candidates[0]}"
+        else:
+            payload = json.loads(export_path.read_text(encoding="utf-8-sig"))
+            source_label = str(export_path)
+        if not isinstance(payload, list):
+            raise ValueError("ChatGPT conversations.json must contain a JSON array")
+
+        selected = {str(value) for value in conversation_ids or []}
+        imported = duplicates = repaired = skipped = 0
+        conversations_seen = 0
+        imported_conversation_ids: List[str] = []
+        for conversation in payload:
+            if not isinstance(conversation, dict):
+                skipped += 1
+                continue
+            native_id = str(
+                conversation.get("id") or conversation.get("conversation_id") or ""
+            ).strip()
+            if not native_id or (selected and native_id not in selected):
+                continue
+            conversations_seen += 1
+            conversation_id = f"chatgpt:{native_id}"
+            title = str(
+                conversation.get("title") or "Untitled ChatGPT conversation"
+            ).strip()
+            had_import = False
+            for message in self.chatgpt_conversation_messages(conversation):
+                role = str((message.get("author") or {}).get("role") or "")
+                if role not in {"user", "assistant"}:
+                    skipped += 1
+                    continue
+                text = self.chatgpt_message_text(message)
+                if not text:
+                    skipped += 1
+                    continue
+                native_message_id = str(message.get("id") or "").strip()
+                if not native_message_id:
+                    native_message_id = canonical_sha256({
+                        "role": role,
+                        "text": text,
+                        "time": message.get("create_time"),
+                    })[:24]
+                suffix = "u" if role == "user" else "a"
+                timestamp = self.chatgpt_timestamp(
+                    message.get("create_time"), conversation.get("create_time")
+                )
+                result = self.append_message(
+                    role,
+                    text,
+                    timestamp,
+                    conversation_id,
+                    f"chatgpt-{native_id}-{native_message_id}-{suffix}",
+                    None,
+                    False,
+                    source={
+                        "kind": "chatgpt-data-export",
+                        "path": "conversations.json",
+                        "conversation_id": native_id,
+                        "message_id": native_message_id,
+                        "conversation_title": title,
+                        "content_type": str(
+                            (message.get("content") or {}).get("content_type") or "text"
+                        ),
+                    },
+                )
+                if result["status"] == "appended":
+                    imported += 1
+                    had_import = True
+                else:
+                    duplicates += 1
+                repaired += int(bool(result.get("transcript_repaired")))
+            if had_import:
+                imported_conversation_ids.append(conversation_id)
+        indexes = self.refresh_deterministic_indexes() if imported else None
+        return {
+            "status": "imported" if imported else "no-change",
+            "source": source_label,
+            "conversations_seen": conversations_seen,
+            "imported_conversations": imported_conversation_ids,
+            "imported_messages": imported,
+            "duplicate_messages": duplicates,
+            "repaired_transcripts": repaired,
+            "skipped_items": skipped,
+            "deterministic_indexes": indexes,
         }
 
     def read_raw_file(self, path: Path) -> List[Dict[str, Any]]:
@@ -3225,6 +3380,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--since",
         help="When scanning --sessions-root, include files modified at or after this ISO-8601 time",
     )
+    chatgpt_parser = subparsers.add_parser(
+        "import-chatgpt",
+        help="Import ChatGPT data export ZIP, directory, or conversations.json",
+    )
+    chatgpt_parser.add_argument(
+        "--export",
+        required=True,
+        help="ChatGPT export ZIP, extracted directory, or conversations.json path",
+    )
+    chatgpt_parser.add_argument(
+        "--conversation-id",
+        action="append",
+        default=[],
+        help="Import only this native ChatGPT conversation ID; may be repeated",
+    )
 
     subparsers.add_parser("status", help="Print archive counters and pending work")
     for name, help_text in (
@@ -3311,6 +3481,23 @@ def dispatch_command(
                     "imported_messages": result["imported_messages"],
                     "repaired_transcripts": result["repaired_transcripts"],
                     "session_ids": [item["session_id"] for item in result["sessions"]],
+                },
+            )
+            result["backup"] = str(backup) if backup else None
+        else:
+            result["backup"] = None
+    elif args.command == "import-chatgpt":
+        result = store.import_chatgpt_export(
+            Path(args.export),
+            args.conversation_id,
+        )
+        if result["imported_messages"] or result["repaired_transcripts"]:
+            backup = store.create_backup_snapshot(
+                "chatgpt-export-import",
+                {
+                    "source": result["source"],
+                    "imported_messages": result["imported_messages"],
+                    "imported_conversations": result["imported_conversations"],
                 },
             )
             result["backup"] = str(backup) if backup else None

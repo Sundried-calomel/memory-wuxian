@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -132,6 +133,84 @@ safety:
         self.assertEqual(result["collector"]["mode"], "idle")
         self.assertEqual(result["collector"]["fallback_interval_seconds"], 30)
         self.assertEqual(result["collector"]["wakeups_last_hour"], 4)
+
+    def test_chatgpt_export_import_is_branch_aware_and_idempotent(self):
+        export_zip = self.base / "chatgpt-export.zip"
+        conversation = {
+            "id": "chat-123",
+            "title": "Imported Chat title",
+            "create_time": 1000,
+            "current_node": "assistant-new",
+            "mapping": {
+                "root": {
+                    "id": "root",
+                    "parent": None,
+                    "message": {
+                        "id": "system-1",
+                        "author": {"role": "system"},
+                        "create_time": 1000,
+                        "content": {"content_type": "text", "parts": ["hidden"]},
+                    },
+                },
+                "user": {
+                    "id": "user",
+                    "parent": "root",
+                    "message": {
+                        "id": "user-1",
+                        "author": {"role": "user"},
+                        "create_time": 1001,
+                        "content": {"content_type": "text", "parts": ["Remember this chat"]},
+                    },
+                },
+                "assistant-old": {
+                    "id": "assistant-old",
+                    "parent": "user",
+                    "message": {
+                        "id": "assistant-old-1",
+                        "author": {"role": "assistant"},
+                        "create_time": 1002,
+                        "content": {"content_type": "text", "parts": ["Discarded branch"]},
+                    },
+                },
+                "assistant-new": {
+                    "id": "assistant-new",
+                    "parent": "user",
+                    "message": {
+                        "id": "assistant-new-1",
+                        "author": {"role": "assistant"},
+                        "create_time": 1003,
+                        "content": {"content_type": "text", "parts": ["Visible answer"]},
+                    },
+                },
+            },
+        }
+        with zipfile.ZipFile(export_zip, "w") as archive:
+            archive.writestr(
+                "export/conversations.json",
+                json.dumps([conversation], ensure_ascii=False),
+            )
+
+        first = self.run_cli("import-chatgpt", "--export", str(export_zip))
+        second = self.run_cli("import-chatgpt", "--export", str(export_zip))
+        self.assertEqual(first["imported_messages"], 2)
+        self.assertEqual(first["skipped_items"], 1)
+        self.assertEqual(second["imported_messages"], 0)
+        self.assertEqual(second["duplicate_messages"], 2)
+
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+        records = [
+            item for item in store.read_all_raw()
+            if item["conversation_id"] == "chatgpt:chat-123"
+        ]
+        self.assertEqual([item["text"] for item in records], ["Remember this chat", "Visible answer"])
+        self.assertTrue(records[-1]["completes_round"])
+        self.assertEqual(records[0]["source"]["kind"], "chatgpt-data-export")
+        self.assertEqual(
+            next(item for item in dashboard_data(store)["conversations"] if item["conversation_id"] == "chatgpt:chat-123")["title"],
+            "Imported Chat title",
+        )
 
     def test_default_root_uses_active_archive_pointer(self):
         codex_home = self.base / "codex-home"

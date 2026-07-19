@@ -95,6 +95,16 @@ On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archi
 
 The collector publishes lightweight runtime telemetry under `imports/codex/collector-telemetry.json`. The status console shows its active, idle, or deep-idle mode, current safety interval, latest filesystem event, latest archive write, wakeups during the last hour, and CPU/memory use. Telemetry is written only on activity or mode transitions.
 
+## Import ChatGPT conversations
+
+ChatGPT ordinary chats are not exposed through the Codex rollout stream. Import an official ChatGPT data export without extracting it first, or pass its extracted directory or `conversations.json` directly:
+
+```bash
+python3 scripts/memory_cli.py import-chatgpt --export /path/to/chatgpt-export.zip
+```
+
+Use repeated `--conversation-id <native-id>` options to select specific conversations. The importer follows the export's current visible branch, skips system messages and abandoned regenerated-answer branches, preserves titles and stable IDs, and safely imports the same or a newer export again without duplication. Imported chats use `chatgpt:<conversation-id>` and enter the normal backup, indexing, summary, retrieval, and dashboard flows. This is an export adapter, not real-time ChatGPT capture.
+
 ## Automatic Codex capture on Windows
 
 Run the environment bootstrap first. It reports the detected Python version and paths for Python, Codex CLI, the bundled collector, and Codex sessions. With `-InstallMissing`, it installs Python only when no compatible `>=3.9` runtime or Codex-bundled Python exists.
