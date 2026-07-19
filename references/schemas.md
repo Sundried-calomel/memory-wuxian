@@ -30,7 +30,7 @@ Each daily Markdown file contains append-only fenced JSON records. Required keys
 
 The JSON payload inside the raw Markdown file is authoritative. Machine-readable indexes contain routing metadata and do not replace it.
 
-`source` is required for client-imported records and omitted for manually appended records. Imported `commentary` is preserved with `completes_round: false`; a visible `final_answer` completes only the pending user round in the same conversation. New records use `round_scope: conversation`. A visible assistant message without a pending user is stored with `round_number: 0`, `reply_to: null`, and `completes_round: false`.
+`source` is required for client-imported records and omitted for manually appended records. ChatGPT export records use `source.kind: chatgpt-data-export` and include the export path, native conversation/message IDs, exported conversation title, and content type; their archive conversation ID is prefixed with `chatgpt:`. Imported `commentary` is preserved with `completes_round: false`; a visible `final_answer` completes only the pending user round in the same conversation. New records use `round_scope: conversation`. A visible assistant message without a pending user is stored with `round_number: 0`, `reply_to: null`, and `completes_round: false`.
 
 ## Round state
 

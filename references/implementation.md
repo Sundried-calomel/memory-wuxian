@@ -13,7 +13,9 @@
 9. Version-1 boundary
 10. Integrity and reconstruction
 11. Codex client integration
-12. External backup snapshots
+12. ChatGPT export adapter
+13. External backup snapshots
+14. Runtime context refresh
 
 ## 1. Storage layout
 
@@ -185,13 +187,17 @@ Codex Desktop does not expose an in-process post-turn hook to a plain Skill. On 
 
 The native collector owns high-frequency parsing, raw append, per-conversation transcript append, deterministic conversation-index append, cursor updates, due Level-1 job creation, and post-mutation backup snapshots. Trigger detection uses only completed rounds: commentary may increase the pending character count, but the range is not assigned until `final_answer` closes that round. For a newly created job, the collector runs one synchronous ephemeral semantic worker after releasing the archive lock; the worker invokes Codex CLI only for summary JSON, verifies the source hash during ingestion, writes the summary and backup, and exits. Python remains authoritative for summary ingestion, higher-level job maintenance, retrieval, heartbeat checks, and preview-first reconstruction. Both implementations hold `memory/.locks/archive.lock` for a complete event batch or maintenance command so readers cannot observe a partial archive transaction. Contract tests must compare parsed raw records, hashes, round state, cursor positions, and shared-lock behavior across both implementations.
 
-## 12. External backup snapshots
+## 12. ChatGPT export adapter
+
+Ordinary ChatGPT chats are outside the Codex rollout stream. Accept official export ZIPs, extracted export directories, and direct `conversations.json` files as explicit import sources. Follow the `current_node` parent chain to preserve only the current visible branch; use chronological mapping order only for older exports without that field. Import user and assistant text, skip system roles and empty content, preserve the exported conversation title and stable IDs in `source`, and derive deterministic IDs only when an export omits a message ID. Prefix conversation IDs with `chatgpt:` and message IDs with `chatgpt-`. Repeated or newer exports must be idempotent. Treat this as batch import, never as evidence of real-time ChatGPT access.
+
+## 13. External backup snapshots
 
 When backup is enabled, complete the primary raw/index/state mutation first. Then copy the archive to a new timestamped directory outside the primary root. Exclude transient lock files. Write a manifest containing the archive state and SHA-256/size of copied files, then atomically expose the completed snapshot and append `backup-log.jsonl` in the backup root.
 
 Create one snapshot per successful synchronization batch or other logical mutation. After the new manifest-backed snapshot is complete, prune older snapshot directories beyond `backup.retention_count`; the default retention is one. Keep `backup-log.jsonl` as operation history. A no-op synchronization creates no snapshot. Desktop backups are recovery copies; the workspace archive remains the writable authority.
 
-## 13. Runtime context refresh
+## 14. Runtime context refresh
 
 Keep context refresh derived and rebuildable under `retrieval/context-refresh-state.json`; it is not authoritative conversation history and does not require an archive snapshot. At the start of an Agent turn, inspect the newest top-level rollout for its latest `token_count` event and compare completed rounds with the last acknowledgement. Mark refresh due after the configured round interval, when utilization first crosses 65% or 80%, or when usage drops by at least 20 percentage points after reaching the low threshold, which indicates client compaction.
 

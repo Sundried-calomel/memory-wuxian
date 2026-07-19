@@ -42,6 +42,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 8. Run `heartbeat` for validation and recovery. Keep count-based events as primary triggers.
 9. Preview `rebuild-state`, `rebuild-conversations`, or `rebuild-indexes` before applying a recovery operation.
 10. Use the native collector for automatic Codex import. Use `sync-codex` only as a manual compatibility and recovery adapter. Both paths must remain idempotent and storage-compatible.
+11. Use `import-chatgpt` for an official ChatGPT data-export ZIP, extracted directory, or `conversations.json`. It is incremental and idempotent, but it is not a real-time ChatGPT listener.
 11. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
 12. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
 13. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
@@ -54,6 +55,7 @@ python3 scripts/memory_cli.py init
 python3 scripts/memory_cli.py append --speaker user --text "..."
 python3 scripts/memory_cli.py append --speaker assistant --text "..."
 python3 scripts/memory_cli.py sync-codex --session-file ~/.codex/sessions/YYYY/MM/DD/rollout-....jsonl
+python3 scripts/memory_cli.py import-chatgpt --export /path/to/chatgpt-export.zip
 python3 scripts/memory_cli.py status
 python3 scripts/memory_cli.py context-refresh-status
 python3 scripts/memory_cli.py context-capsule
