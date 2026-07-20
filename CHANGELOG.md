@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Encode Level-1 source messages and higher-level child summaries as locally verified, reversible tabular model payloads to reduce repeated prompt structure without changing source text, order, provenance, or hashes.
+- Allocate higher-level summary IDs across both persisted summaries and pending jobs to prevent parent-job collisions during backlog processing.
+- Resolve current Codex task titles through the bundled macOS CLI and native thread title field before falling back to the first user message.
+
 ## 1.1.0 - 2026-07-19
 
 - Import ChatGPT official data-export ZIPs, extracted directories, or `conversations.json` files into the same immutable archive.

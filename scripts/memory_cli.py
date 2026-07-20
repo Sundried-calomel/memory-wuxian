@@ -1671,6 +1671,9 @@ class MemoryStore:
         with exclusive_lock(self.locks_dir / "summary-jobs.lock"):
             state = self.load_state()
             existing = self.pending_jobs()
+            parent_job = self.build_due_parent_job(state, existing)
+            if parent_job is not None:
+                return parent_job
             raw_records = self.read_all_raw()
             completed = self.completed_rounds_by_conversation(raw_records)
             summarized = {
@@ -1744,48 +1747,55 @@ class MemoryStore:
                 )
                 return self.persist_job(state, job)
 
-            grouped_children = {
-                entry["child_summary_id"]
-                for entry in self.summary_registry()
-                if entry.get("event") == "grouped"
-            }
-            summaries = self.summary_records()
-            for level in range(1, self.maximum_depth):
-                conversation_ids = sorted({
-                    str(entry.get("conversation_id"))
-                    for entry in summaries
-                    if int(entry["level"]) == level and entry.get("conversation_id")
-                })
-                for conversation_id in conversation_ids:
-                    candidates = [
-                        entry for entry in summaries
-                        if int(entry["level"]) == level
-                        and entry["summary_id"] not in grouped_children
-                        and entry.get("conversation_id") == conversation_id
-                    ]
-                    candidates.sort(key=lambda entry: entry["summary_id"])
-                    if len(candidates) < self.higher_trigger:
-                        continue
-                    children = candidates[: self.higher_trigger]
-                    signature = (
-                        f"conversation:{conversation_id}:children:"
-                        + ",".join(entry["summary_id"] for entry in children)
-                    )
-                    match = next(
-                        (job for job in existing if job.get("source_signature") == signature),
-                        None,
-                    )
-                    if match:
-                        return Path(match["_path"])
-                    job = self.build_parent_job(
-                        state,
-                        level + 1,
-                        children,
-                        signature,
-                        conversation_id,
-                    )
-                    return self.persist_job(state, job)
             return None
+
+    def build_due_parent_job(
+        self,
+        state: Dict[str, Any],
+        existing: List[Dict[str, Any]],
+    ) -> Optional[Path]:
+        grouped_children = {
+            entry["child_summary_id"]
+            for entry in self.summary_registry()
+            if entry.get("event") == "grouped"
+        }
+        summaries = self.summary_records()
+        for level in range(1, self.maximum_depth):
+            conversation_ids = sorted({
+                str(entry.get("conversation_id"))
+                for entry in summaries
+                if int(entry["level"]) == level and entry.get("conversation_id")
+            })
+            for conversation_id in conversation_ids:
+                candidates = [
+                    entry for entry in summaries
+                    if int(entry["level"]) == level
+                    and entry["summary_id"] not in grouped_children
+                    and entry.get("conversation_id") == conversation_id
+                ]
+                candidates.sort(key=lambda entry: entry["summary_id"])
+                if len(candidates) < self.higher_trigger:
+                    continue
+                children = candidates[: self.higher_trigger]
+                signature = (
+                    f"conversation:{conversation_id}:children:"
+                    + ",".join(entry["summary_id"] for entry in children)
+                )
+                match = next(
+                    (job for job in existing if job.get("source_signature") == signature),
+                    None,
+                )
+                if match:
+                    return Path(match["_path"])
+                job = self.build_parent_job(
+                    state,
+                    level + 1,
+                    children,
+                    signature,
+                    conversation_id,
+                )
+                return self.persist_job(state, job)
+        return None
 
     def build_level_1_job(
         self,
@@ -1865,11 +1875,26 @@ class MemoryStore:
         }
 
     def persist_job(self, state: Dict[str, Any], job: Dict[str, Any]) -> Path:
+        level_number = int(job["summary_level"])
+        used_summary_ids = {
+            str(entry["summary_id"])
+            for entry in self.summary_records()
+        } | {
+            str(entry.get("target_summary_id"))
+            for entry in self.pending_jobs()
+            if entry.get("target_summary_id")
+        }
+        summary_number = int(state["next_summary_ids"][str(level_number)])
+        target_summary_id = f"L{level_number}-{summary_number:06d}"
+        while target_summary_id in used_summary_ids:
+            summary_number += 1
+            target_summary_id = f"L{level_number}-{summary_number:06d}"
+        job["target_summary_id"] = target_summary_id
         path = self.pending_dir / f"{job['job_id']}.json"
         atomic_write_json(path, job)
         state["next_job_id"] = int(state["next_job_id"]) + 1
-        level = str(int(job["summary_level"]))
-        state["next_summary_ids"][level] = int(state["next_summary_ids"][level]) + 1
+        level = str(level_number)
+        state["next_summary_ids"][level] = summary_number + 1
         self.save_state(state)
         self.refresh_unsummarized_registry()
         return path

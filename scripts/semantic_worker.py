@@ -13,10 +13,12 @@ from pathlib import Path
 from memory_cli import (
     MemoryStore,
     append_jsonl,
+    canonical_sha256,
     exclusive_lock,
     load_simple_yaml,
     nested_get,
     now_iso,
+    raw_record_sha256,
 )
 
 
@@ -36,19 +38,171 @@ def parse_result(path: Path) -> dict:
     return value
 
 
+def pack_source_records(records: list[dict]) -> dict:
+    flattened = []
+    for record in records:
+        item = {key: value for key, value in record.items() if key not in {"source", "content_sha256"}}
+        item.update({f"source.{key}": value for key, value in (record.get("source") or {}).items()})
+        flattened.append(item)
+    columns = sorted(set().union(*(item.keys() for item in flattened))) if flattened else []
+    constants = {}
+    variable = []
+    for column in columns:
+        values = [item.get(column) for item in flattened]
+        if values and all(value == values[0] for value in values):
+            constants[column] = values[0]
+        else:
+            variable.append(column)
+    packed = {
+        "format": "memory-wuxian-lossless-tabular-v1",
+        "record_count": len(flattened),
+        "constants": constants,
+        "columns": variable,
+        "rows": [[item.get(column) for column in variable] for item in flattened],
+        "derived_fields": ["content_sha256"],
+    }
+    restored = unpack_source_records(packed)
+    if canonical_sha256(restored) != canonical_sha256(records):
+        raise RuntimeError("Lossless summary payload verification failed")
+    return packed
+
+
+def unpack_source_records(packed: dict) -> list[dict]:
+    if packed.get("format") != "memory-wuxian-lossless-tabular-v1":
+        raise ValueError("Unsupported lossless summary payload format")
+    columns = list(packed.get("columns", []))
+    constants = dict(packed.get("constants", {}))
+    records = []
+    for row in packed.get("rows", []):
+        if len(row) != len(columns):
+            raise ValueError("Lossless summary payload row width mismatch")
+        flat = {**constants, **dict(zip(columns, row))}
+        source = {
+            key.removeprefix("source."): value
+            for key, value in flat.items()
+            if key.startswith("source.")
+        }
+        record = {
+            key: value
+            for key, value in flat.items()
+            if not key.startswith("source.")
+        }
+        if source:
+            record["source"] = source
+        if "content_sha256" in packed.get("derived_fields", []):
+            record["content_sha256"] = raw_record_sha256(record)
+        records.append(record)
+    if len(records) != int(packed.get("record_count", -1)):
+        raise ValueError("Lossless summary payload record count mismatch")
+    return records
+
+
+def pack_source_summaries(summaries: list[dict]) -> dict:
+    flattened = []
+    for summary in summaries:
+        item = {key: value for key, value in summary.items() if key != "metadata"}
+        item.update({f"metadata.{key}": value for key, value in (summary.get("metadata") or {}).items()})
+        flattened.append(item)
+    columns = sorted(set().union(*(item.keys() for item in flattened))) if flattened else []
+    constants = {}
+    variable = []
+    for column in columns:
+        values = [item.get(column) for item in flattened]
+        if values and all(value == values[0] for value in values):
+            constants[column] = values[0]
+        else:
+            variable.append(column)
+    packed = {
+        "format": "memory-wuxian-lossless-summary-tabular-v1",
+        "summary_count": len(flattened),
+        "constants": constants,
+        "columns": variable,
+        "rows": [[item.get(column) for column in variable] for item in flattened],
+    }
+    restored = unpack_source_summaries(packed)
+    if canonical_sha256(restored) != canonical_sha256(summaries):
+        raise RuntimeError("Lossless child-summary payload verification failed")
+    return packed
+
+
+def unpack_source_summaries(packed: dict) -> list[dict]:
+    if packed.get("format") != "memory-wuxian-lossless-summary-tabular-v1":
+        raise ValueError("Unsupported lossless child-summary payload format")
+    columns = list(packed.get("columns", []))
+    constants = dict(packed.get("constants", {}))
+    summaries = []
+    for row in packed.get("rows", []):
+        if len(row) != len(columns):
+            raise ValueError("Lossless child-summary payload row width mismatch")
+        flat = {**constants, **dict(zip(columns, row))}
+        metadata = {
+            key.removeprefix("metadata."): value
+            for key, value in flat.items()
+            if key.startswith("metadata.")
+        }
+        summary = {
+            key: value
+            for key, value in flat.items()
+            if not key.startswith("metadata.")
+        }
+        if metadata:
+            summary["metadata"] = metadata
+        summaries.append(summary)
+    if len(summaries) != int(packed.get("summary_count", -1)):
+        raise ValueError("Lossless child-summary payload count mismatch")
+    return summaries
+
+
+def build_prompt_payload(job: dict) -> dict:
+    records = job.get("source_records")
+    if records:
+        metadata = {
+            key: value
+            for key, value in job.items()
+            if key not in {"source_records", "source_message_ids"}
+        }
+        return {
+            "task": metadata,
+            "source_message_ids_derivation": "Decode records and read message_id in order.",
+            "lossless_source_records": pack_source_records(records),
+        }
+    summaries = job.get("source_summary_payload")
+    if summaries:
+        metadata = {
+            key: value
+            for key, value in job.items()
+            if key != "source_summary_payload"
+        }
+        return {
+            "task": metadata,
+            "lossless_source_summaries": pack_source_summaries(summaries),
+        }
+    return job
+
+
 def build_prompt(job: dict) -> str:
     instructions = (SKILL_ROOT / "prompts/summarize.md").read_text(encoding="utf-8")
-    payload = json.dumps(job, ensure_ascii=False, separators=(",", ":"))
+    payload = json.dumps(build_prompt_payload(job), ensure_ascii=False, separators=(",", ":"))
     return (
         instructions
-        + "\n\nThe following JSON is the complete assigned source payload. "
-        + "Use no information outside it.\n\n"
+        + "\n\nThe following JSON contains a lossless tabular representation of the complete "
+        + "assigned source. Apply constants to every row and map columns to row values. "
+        + "For lossless_source_records, restore source.* keys under source and "
+        + "deterministically recompute content_sha256. For lossless_source_summaries, "
+        + "restore metadata.* keys under metadata. No source text or state meaning has been removed. "
+        + "Use no information outside this payload.\n\n"
         + payload
         + "\n"
     )
 
 
-def run_job(root: Path, config_path: Path, job_path: Path, dry_run: bool) -> dict:
+def run_job(
+    root: Path,
+    config_path: Path,
+    job_path: Path,
+    dry_run: bool,
+    create_backup: bool = True,
+) -> dict:
     config = load_simple_yaml(config_path)
     store = MemoryStore(root, config)
     job_path = job_path.resolve()
@@ -112,10 +266,12 @@ def run_job(root: Path, config_path: Path, job_path: Path, dry_run: bool) -> dic
         )
         with exclusive_lock(root / ".locks/archive.lock"):
             summary_path = store.ingest_summary(job_path, result_path)
-            backup_path = store.create_backup_snapshot(
-                "one-shot-ai-summary-ingested",
-                {"job_id": job["job_id"], "summary": str(summary_path)},
-            )
+            backup_path = None
+            if create_backup:
+                backup_path = store.create_backup_snapshot(
+                    "one-shot-ai-summary-ingested",
+                    {"job_id": job["job_id"], "summary": str(summary_path)},
+                )
     return {
         "status": "ingested",
         "job_id": job["job_id"],
@@ -130,6 +286,11 @@ def main() -> int:
     parser.add_argument("--config", required=True)
     parser.add_argument("--job", required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--no-backup",
+        action="store_true",
+        help="Skip the per-job snapshot when a batch controller will create one later.",
+    )
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
     log_path = root / "pending/semantic-worker.jsonl"
@@ -140,6 +301,7 @@ def main() -> int:
                 Path(args.config).expanduser().resolve(),
                 Path(args.job).expanduser(),
                 args.dry_run,
+                create_backup=not args.no_backup,
             )
         append_jsonl(log_path, {"timestamp": now_iso(), **result})
         print(json.dumps(result, ensure_ascii=False))

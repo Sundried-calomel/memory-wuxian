@@ -64,6 +64,7 @@ python3 scripts/memory_dashboard.py --root /path/to/archive --config /path/to/co
 python3 scripts/memory_cli.py backup
 python3 scripts/memory_cli.py make-summary-job
 python3 scripts/semantic_worker.py --root memory --config config.yaml --job memory/pending/<job>.json
+python3 scripts/semantic_backfill.py --root memory --config config.yaml --max-jobs 20
 python3 scripts/memory_cli.py ingest-summary --job memory/pending/<job>.json --summary-json <summary>.json
 python3 scripts/memory_cli.py retrieve --query "..."
 python3 scripts/memory_cli.py rebuild-state
@@ -83,6 +84,11 @@ powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
 python scripts/install_agent_rules.py --agents-file /path/to/workspace/AGENTS.md
 python scripts/install_codex_autosync_windows.py --archive-root C:\path\to\memory --load
 ```
+
+Use `semantic_backfill.py` for historical summary debt. It processes higher-level
+parent jobs before Level-1 jobs, is safe to rerun, and creates one recovery snapshot
+after the batch instead of copying the complete archive after every summary. Keep
+`--max-jobs` bounded for routine maintenance; `--max-jobs 0` drains all due work.
 
 Pass `--root <memory-directory>` before the subcommand to use a memory archive outside this skill folder.
 
