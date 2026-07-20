@@ -68,7 +68,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
           $installer = Get-Item "dist\MemoryWuxian-$version-Windows-x64-Setup.exe"
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $($installer.Name)" | Set-Content "$($installer.FullName).sha256" -Encoding ascii
+          [IO.File]::WriteAllText(
+            "$($installer.FullName).sha256",
+            "$hash  $($installer.Name)`n",
+            [Text.UTF8Encoding]::new($false)
+          )
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
