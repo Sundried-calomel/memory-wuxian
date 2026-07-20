@@ -40,5 +40,8 @@ pkgbuild \
   --install-location / \
   "$output_dir/MemoryWuxian-$version-macOS-universal.pkg"
 
-shasum -a 256 "$output_dir/MemoryWuxian-$version-macOS-universal.pkg" \
-  > "$output_dir/MemoryWuxian-$version-macOS-universal.pkg.sha256"
+(
+  cd "$output_dir"
+  shasum -a 256 "MemoryWuxian-$version-macOS-universal.pkg" \
+    > "MemoryWuxian-$version-macOS-universal.pkg.sha256"
+)
