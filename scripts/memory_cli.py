@@ -3616,7 +3616,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         config = resolve_config(Path(args.config))
         store = MemoryStore(resolve_root(args.root, config), config)
-        if args.command == "retrieve":
+        if args.command in {"retrieve", "context-refresh-status", "context-capsule"}:
             return dispatch_command(args, parser, store)
         with exclusive_lock(store.root / ".locks" / "archive.lock"):
             return dispatch_command(args, parser, store)

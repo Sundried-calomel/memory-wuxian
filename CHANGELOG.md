@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.2.1 - 2026-07-21
+
+- Run read-only context refresh status and capsule generation without opening the archive write lock, so Codex tasks with read-only archive access can refresh context normally.
+
 ## 1.2.0 - 2026-07-21
 
 - Add single-file macOS PKG and Windows EXE installers that install the Skill, initialize an external archive, and activate continuous Codex capture.
