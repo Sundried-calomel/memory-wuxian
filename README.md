@@ -25,6 +25,23 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 
 ## Install
 
+### One-file installers
+
+Download the installer for the operating system from the latest GitHub Release:
+
+- macOS: `MemoryWuxian-<version>-macOS-universal.pkg`
+- Windows: `MemoryWuxian-<version>-Windows-x64-Setup.exe`
+
+Opening that one file installs the Skill under the current user's Codex directory,
+initializes `Documents/MemoryWuxianArchive`, and activates continuous Codex capture.
+Reinstalling or upgrading preserves the existing configuration and archive. Uninstalling
+removes the program and background integration but deliberately leaves conversation
+history in place. Public builds are unsigned unless the release workflow is supplied
+with platform code-signing credentials, so the operating system may request an explicit
+security confirmation.
+
+### Codex Skill installer
+
 Install the Skill from its GitHub directory, then restart Codex so it can discover the new Skill:
 
 ```text
