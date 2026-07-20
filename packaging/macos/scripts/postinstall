@@ -1,0 +1,77 @@
+#!/bin/bash
+set -euo pipefail
+
+console_user="$(/usr/bin/stat -f '%Su' /dev/console)"
+if [[ -z "$console_user" || "$console_user" == "root" || "$console_user" == "loginwindow" ]]; then
+  echo "MemoryWuxian requires a logged-in macOS user." >&2
+  exit 1
+fi
+
+user_home="$(/usr/bin/dscl . -read "/Users/$console_user" NFSHomeDirectory | /usr/bin/awk '{print $2}')"
+source_root="/Library/Application Support/MemoryWuxian/skill"
+skill_root="$user_home/.codex/skills/memory-wuxian"
+archive_root="$user_home/Documents/MemoryWuxianArchive"
+sessions_root="$user_home/.codex/sessions"
+
+find_python() {
+  local candidate
+  for candidate in \
+    "/opt/homebrew/bin/python3" \
+    "/usr/local/bin/python3" \
+    "/usr/bin/python3"; do
+    if [[ -x "$candidate" ]] && "$candidate" -c 'import sys; raise SystemExit(sys.version_info < (3, 9))' 2>/dev/null; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  candidate="$(/usr/bin/find "$user_home/.cache/codex-runtimes" -type f -path '*/dependencies/python/bin/python3' -perm -111 -print -quit 2>/dev/null || true)"
+  if [[ -n "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  return 1
+}
+
+python_executable="$(find_python || true)"
+codex_cli="/Applications/ChatGPT.app/Contents/Resources/codex"
+if [[ ! -x "$codex_cli" ]]; then
+  codex_cli="$user_home/.codex/.sandbox-bin/codex"
+fi
+if [[ -z "$python_executable" || ! -x "$python_executable" ]]; then
+  echo "MemoryWuxian requires Python 3.9 or newer. Open Codex once, then run this installer again." >&2
+  exit 1
+fi
+if [[ ! -x "$codex_cli" ]]; then
+  echo "MemoryWuxian requires the Codex desktop application." >&2
+  exit 1
+fi
+
+preserved_config="$(/usr/bin/mktemp)"
+if [[ -f "$skill_root/config.yaml" ]]; then
+  /bin/cp -p "$skill_root/config.yaml" "$preserved_config"
+fi
+/bin/mkdir -p "$skill_root" "$archive_root" "$sessions_root" "$user_home/.codex"
+/usr/bin/rsync -a --delete --exclude memory/ "$source_root/" "$skill_root/"
+if [[ -s "$preserved_config" ]]; then
+  /bin/cp -p "$preserved_config" "$skill_root/config.yaml"
+fi
+/bin/rm -f "$preserved_config"
+/bin/chmod +x "$skill_root/bin/memory-wuxian-collector" "$skill_root/scripts/"*.py
+/usr/sbin/chown -R "$console_user":staff "$skill_root" "$archive_root" "$sessions_root"
+
+/usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
+  "$python_executable" "$skill_root/scripts/memory_cli.py" \
+  --root "$archive_root" --config "$skill_root/config.yaml" init >/dev/null
+
+/usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
+  "$python_executable" "$skill_root/scripts/install_codex_autosync.py" \
+  --archive-root "$archive_root" \
+  --skill-root "$skill_root" \
+  --sessions-root "$sessions_root" \
+  --python-executable "$python_executable" \
+  --codex-cli "$codex_cli" \
+  --load >/dev/null
+
+printf '%s\n' "$archive_root" > "$user_home/.codex/memory-wuxian-active-root.txt"
+/usr/sbin/chown "$console_user":staff "$user_home/.codex/memory-wuxian-active-root.txt"
+exit 0

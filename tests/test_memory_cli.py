@@ -141,6 +141,22 @@ safety:
             summaries,
         )
 
+    def test_single_file_installer_sources_preserve_external_archives(self):
+        mac_postinstall = (SKILL_ROOT / "packaging/macos/scripts/postinstall").read_text(encoding="utf-8")
+        windows_install = (SKILL_ROOT / "packaging/windows/install.ps1").read_text(encoding="utf-8")
+        windows_uninstall = (SKILL_ROOT / "packaging/windows/uninstall.ps1").read_text(encoding="utf-8")
+        inno_setup = (SKILL_ROOT / "packaging/windows/MemoryWuxian.iss").read_text(encoding="utf-8")
+        release_workflow = (SKILL_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+
+        self.assertIn("MemoryWuxianArchive", mac_postinstall)
+        self.assertIn("preserved_config", mac_postinstall)
+        self.assertIn("--python-executable", mac_postinstall)
+        self.assertIn("MemoryWuxianArchive", windows_install)
+        self.assertNotIn("Remove-Item", windows_uninstall)
+        self.assertIn("PrivilegesRequired=lowest", inno_setup)
+        self.assertIn("memory\\*", inno_setup)
+        self.assertIn("softprops/action-gh-release@v2", release_workflow)
+
     def run_cli(self, *arguments, expect_json=True):
         completed = self.invoke_cli(*arguments)
         if completed.returncode != 0:

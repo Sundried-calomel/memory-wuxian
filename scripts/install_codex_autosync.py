@@ -50,6 +50,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Compiled collector; defaults to <skill-root>/bin/memory-wuxian-collector",
     )
     parser.add_argument(
+        "--python-executable",
+        help="Python used only when a due semantic-summary job is executed",
+    )
+    parser.add_argument(
+        "--codex-cli",
+        help="Codex CLI used by the ephemeral semantic-summary worker",
+    )
+    parser.add_argument(
         "--since",
         help="Only monitor session files modified from this ISO-8601 time; defaults to installation time",
     )
@@ -95,6 +103,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
     since = args.since or dt.datetime.now().astimezone().isoformat(timespec="seconds")
     dt.datetime.fromisoformat(since[:-1] + "+00:00" if since.endswith("Z") else since)
+    environment = {"RUST_BACKTRACE": "1"}
+    if args.python_executable:
+        python_executable = Path(args.python_executable).expanduser().resolve()
+        if not python_executable.is_file():
+            raise SystemExit(f"Python executable does not exist: {python_executable}")
+        environment["MEMORY_WUXIAN_PYTHON"] = str(python_executable)
+    if args.codex_cli:
+        codex_cli = Path(args.codex_cli).expanduser().resolve()
+        if not codex_cli.is_file():
+            raise SystemExit(f"Codex CLI does not exist: {codex_cli}")
+        environment["MEMORY_WUXIAN_CODEX"] = str(codex_cli)
 
     log_dir = archive_root / "imports" / "codex"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -117,7 +136,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "KeepAlive": True,
         "ThrottleInterval": 5,
         "ProcessType": "Background",
-        "EnvironmentVariables": {"RUST_BACKTRACE": "1"},
+        "EnvironmentVariables": environment,
         "StandardOutPath": str(log_dir / "launch-agent.stdout.log"),
         "StandardErrorPath": str(log_dir / "launch-agent.stderr.log"),
     }
