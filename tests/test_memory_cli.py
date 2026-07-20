@@ -163,7 +163,7 @@ safety:
             self.fail(f"Command failed: {completed.args}\nstdout={completed.stdout}\nstderr={completed.stderr}")
         return json.loads(completed.stdout) if expect_json else completed.stdout
 
-    def invoke_cli(self, *arguments):
+    def invoke_cli(self, *arguments, timeout=None):
         command = [
             sys.executable,
             str(CLI),
@@ -179,6 +179,7 @@ safety:
             encoding="utf-8",
             capture_output=True,
             check=False,
+            timeout=timeout,
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
 
@@ -1629,6 +1630,14 @@ summaries:
         status = self.run_cli("context-refresh-status")
         self.assertTrue(status["due"])
         self.assertEqual(status["capsule_token_budget"], 1000)
+        archive_lock = self.root / ".locks" / "archive.lock"
+        with exclusive_lock(archive_lock):
+            unlocked_status = self.invoke_cli("context-refresh-status", timeout=5)
+            unlocked_capsule = self.invoke_cli("context-capsule", timeout=5)
+        self.assertEqual(unlocked_status.returncode, 0, unlocked_status.stderr)
+        self.assertEqual(unlocked_capsule.returncode, 0, unlocked_capsule.stderr)
+        self.assertTrue(json.loads(unlocked_status.stdout)["due"])
+        self.assertIn("# Memory无限运行时记忆胶囊", unlocked_capsule.stdout)
         acknowledged = self.run_cli("ack-context-refresh")
         self.assertEqual(acknowledged["status"], "acknowledged")
         self.assertFalse(self.run_cli("context-refresh-status")["due"])
