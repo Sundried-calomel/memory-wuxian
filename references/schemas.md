@@ -92,6 +92,24 @@ A pending job records:
 
 Jobs remain pending until successfully ingested. Re-running job creation for an already assigned source range returns the existing job.
 
+Before a Level-1 job is sent to the semantic model, its `source_records` may be
+converted to `memory-wuxian-lossless-tabular-v1`. The representation moves fields
+that are identical across all records into `constants`, lists remaining field names
+once in `columns`, and stores exact values in ordered `rows`. Nested `source` keys use
+the `source.` prefix. `content_sha256` may be omitted only because it is
+deterministically recomputed from the restored canonical record. The worker must
+decode the payload locally and verify canonical SHA-256 equality with the original
+records before invoking the model. This prompt representation never replaces the
+pending job or authoritative raw archive.
+
+Before a Level-2 or higher job is sent to the semantic model, its
+`source_summary_payload` is converted to
+`memory-wuxian-lossless-summary-tabular-v1`. Repeated top-level and nested
+`metadata` fields are stored once as constants or columns. Complete child-summary
+Markdown and recorded SHA-256 values remain exact. The worker reconstructs the
+complete child-summary objects locally and requires canonical SHA-256 equality
+before invoking the model.
+
 ## Deterministic hybrid index
 
 `indexes/deterministic/level-N.jsonl` is generated entirely from authoritative raw records. A Level-1 record includes conversation ID, source message and round boundaries, timestamps, source SHA-256, round count, visible-character count, and normalized user/assistant excerpts. It is emitted after 5 completed rounds or 20,000 visible characters by default. Higher levels contain ordered child index IDs and mechanically aggregated boundaries and counts. Per-conversation copies live under `indexes/by-conversation/<conversation>/deterministic-level-N.jsonl`.

@@ -52,8 +52,16 @@ def codex_runtime_titles() -> dict[str, str]:
     global RUNTIME_TITLE_CACHE
     if time.monotonic() - RUNTIME_TITLE_CACHE[0] < 60:
         return RUNTIME_TITLE_CACHE[1]
-    codex = Path.home() / ".codex/.sandbox-bin/codex.exe"
-    executable = str(codex) if codex.exists() else shutil.which("codex")
+    bundled_codex = Path("/Applications/ChatGPT.app/Contents/Resources/codex")
+    windows_codex = Path.home() / ".codex/.sandbox-bin/codex.exe"
+    executable = next(
+        (
+            str(candidate)
+            for candidate in (bundled_codex, windows_codex)
+            if candidate.exists()
+        ),
+        shutil.which("codex"),
+    )
     if not executable:
         return {}
     process = None
@@ -85,8 +93,9 @@ def codex_runtime_titles() -> dict[str, str]:
             if response.get("id") != 2:
                 continue
             for thread in (response.get("result") or {}).get("data", []):
-                if thread.get("id") and thread.get("name"):
-                    titles[str(thread["id"])] = str(thread["name"]).strip()
+                title = thread.get("title") or thread.get("name")
+                if thread.get("id") and title:
+                    titles[str(thread["id"])] = str(title).strip()
             break
     except (OSError, json.JSONDecodeError, subprocess.SubprocessError):
         titles = {}

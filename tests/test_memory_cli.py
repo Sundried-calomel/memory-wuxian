@@ -18,6 +18,13 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 from platform_lock import exclusive_lock
 from memory_dashboard import dashboard_data, estimate_context_tokens
 from memory_cli import resolve_root
+from semantic_worker import (
+    build_prompt_payload,
+    pack_source_records,
+    pack_source_summaries,
+    unpack_source_records,
+    unpack_source_summaries,
+)
 
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
@@ -61,6 +68,78 @@ safety:
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def test_lossless_summary_payload_round_trip(self):
+        records = [
+            {
+                "record_type": "raw_message",
+                "sequence": number,
+                "message_id": f"codex-thread-{number:08d}-u",
+                "conversation_id": "codex:thread",
+                "timestamp": f"2026-07-20T12:00:0{number}+09:00",
+                "speaker": "user",
+                "round_number": 1,
+                "round_scope": "conversation",
+                "reply_to": None,
+                "text": "完全保留的正文" * number,
+                "completes_round": False,
+                "redacted": False,
+                "source": {
+                    "kind": "codex-rollout-jsonl",
+                    "session_id": "thread",
+                    "path": "/tmp/rollout.jsonl",
+                    "line": number,
+                    "phase": "user",
+                },
+            }
+            for number in (1, 2)
+        ]
+        from memory_cli import raw_record_sha256
+        for record in records:
+            record["content_sha256"] = raw_record_sha256(record)
+        packed = pack_source_records(records)
+        self.assertEqual(unpack_source_records(packed), records)
+        prompt_payload = build_prompt_payload({
+            "job_id": "job-1",
+            "source_message_ids": [record["message_id"] for record in records],
+            "source_records": records,
+        })
+        self.assertNotIn("source_records", prompt_payload["task"])
+        self.assertNotIn("source_message_ids", prompt_payload["task"])
+        self.assertEqual(
+            unpack_source_records(prompt_payload["lossless_source_records"]),
+            records,
+        )
+
+    def test_lossless_parent_summary_payload_round_trip(self):
+        summaries = [
+            {
+                "summary_id": f"L1-{number:06d}",
+                "metadata": {
+                    "summary_level": 1,
+                    "conversation_id": "codex:thread",
+                    "source_start_sequence": number * 10,
+                    "source_end_sequence": number * 10 + 9,
+                    "concepts": ["分层记忆", f"主题 {number}"],
+                },
+                "content": f"# L1 摘要 {number}\n\n完整语义内容。\n",
+                "summary_sha256": f"digest-{number}",
+            }
+            for number in (1, 2)
+        ]
+        packed = pack_source_summaries(summaries)
+        self.assertEqual(unpack_source_summaries(packed), summaries)
+        prompt_payload = build_prompt_payload({
+            "job_id": "job-parent",
+            "summary_level": 2,
+            "source_summaries": [item["summary_id"] for item in summaries],
+            "source_summary_payload": summaries,
+        })
+        self.assertNotIn("source_summary_payload", prompt_payload["task"])
+        self.assertEqual(
+            unpack_source_summaries(prompt_payload["lossless_source_summaries"]),
+            summaries,
+        )
 
     def run_cli(self, *arguments, expect_json=True):
         completed = self.invoke_cli(*arguments)

@@ -82,7 +82,26 @@ Build deterministic Level-1 indexes after one conversation accumulates `level_1_
 
 Automatic semantic-job creation is enabled in the installed configuration. After a due job is frozen at a completed-round boundary, invoke one ephemeral Codex CLI process for constrained summary JSON, ingest it after source-hash verification, and exit. Existing pending jobs retain their original source ranges and hashes.
 
+Construct the model payload with the reversible `memory-wuxian-lossless-tabular-v1`
+representation. Deduplicate repeated structural fields without changing source text,
+record order, message state, or provenance. Before every model call, decode the
+representation locally and require canonical SHA-256 equality with the assigned
+records. Keep the complete pending job and raw source unchanged on disk.
+
+For Level-2 and higher jobs, apply the corresponding reversible
+`memory-wuxian-lossless-summary-tabular-v1` representation to child summaries.
+Deduplicate repeated child-summary metadata without changing complete summary text,
+source hashes, order, or hierarchy. Reconstruct every child-summary object locally
+and require canonical SHA-256 equality before invoking the model.
+
 Evaluate automatic job creation only when the current synchronization batch increases the number of completed rounds. User messages, commentary, maintenance writes, process restarts, and cursor catch-up without a new `final_answer` must not drain historical summary backlog or start AI work.
+
+Drain an explicitly requested historical backlog with `scripts/semantic_backfill.py`.
+The backfill is bounded and resumable, prefers an already-due higher-level parent
+before creating another Level-1 job, and creates one external recovery snapshot at
+the end of each successful batch. This keeps routine event-driven capture unchanged
+while allowing old imported conversations to catch up without a complete archive
+copy after every generated summary.
 
 Create Level-N jobs after one conversation accumulates `higher_level_trigger_count` ungrouped Level-(N-1) summaries. A parent and all children must share one conversation ID. Routine parent generation reads only assigned child summaries and their metadata. Consult raw history only to resolve a contradiction. Preserve child summaries and persist parent-child relationships.
 
