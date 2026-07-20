@@ -65,6 +65,7 @@ jobs:
             throw "Tag $env:GITHUB_REF_NAME does not match project version $version"
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DSourceRoot=$PWD" "/DAppVersion=$version" packaging/windows/MemoryWuxian.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
           $installer = Get-Item "dist\MemoryWuxian-$version-Windows-x64-Setup.exe"
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $($installer.Name)" | Set-Content "$($installer.FullName).sha256" -Encoding ascii
