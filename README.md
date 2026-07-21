@@ -58,6 +58,13 @@ For a manual local installation, place the repository at:
 
 Start with [`SKILL.md`](SKILL.md). Use an external archive root for real conversation history so a source checkout or Skill update cannot mix with private memory data.
 
+Official installers register a daily stable-release check. The updater ignores branches,
+drafts, and prereleases, downloads both the platform installer and its published SHA-256
+file, and refuses to stage an update unless the checksum and filename match. Windows
+installs a verified update silently at the next login; macOS keeps the verified PKG ready
+for the operating system's required installation authorization. Disable the check with
+`python scripts/install_auto_update.py --uninstall`.
+
 ```bash
 ARCHIVE="$HOME/Documents/MemoryWuxianArchive"
 

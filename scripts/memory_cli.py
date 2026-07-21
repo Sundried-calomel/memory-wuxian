@@ -908,6 +908,7 @@ class MemoryStore:
                         "parent_thread_id": metadata.get("parent_thread_id"),
                         "is_subagent": isinstance(metadata.get("source"), dict)
                         and "subagent" in metadata.get("source", {}),
+                        "is_exec": metadata.get("source") == "exec",
                     }
         raise ValueError(f"Codex session metadata is missing an ID: {path}")
 
@@ -970,7 +971,12 @@ class MemoryStore:
         total_lines = 0
         visible_events = 0
 
+        excluded_reason = None
         if session_metadata["is_subagent"]:
+            excluded_reason = "subagent-session"
+        elif session_metadata["is_exec"]:
+            excluded_reason = "exec-session"
+        if excluded_reason:
             total_lines = sum(1 for _ in source_path.open("r", encoding="utf-8"))
             atomic_write_json(
                 cursor_path,
@@ -980,7 +986,7 @@ class MemoryStore:
                     "source_path": str(source_path),
                     "last_line": total_lines,
                     "file_change_format_version": 1,
-                    "excluded_reason": "subagent-session",
+                    "excluded_reason": excluded_reason,
                     "updated_at": now_iso(),
                 },
             )
@@ -992,7 +998,7 @@ class MemoryStore:
                 "imported_messages": 0,
                 "duplicate_messages": 0,
                 "repaired_transcripts": 0,
-                "excluded_reason": "subagent-session",
+                "excluded_reason": excluded_reason,
             }
 
         with source_path.open("r", encoding="utf-8") as handle:

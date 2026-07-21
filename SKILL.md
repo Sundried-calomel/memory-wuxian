@@ -83,6 +83,8 @@ powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
 python scripts/install_agent_rules.py --agents-file /path/to/workspace/AGENTS.md
 python scripts/install_codex_autosync_windows.py --archive-root C:\path\to\memory --load
+python scripts/install_auto_update.py --skill-root /path/to/memory-wuxian
+python scripts/auto_update.py --check-only --force
 ```
 
 Use `semantic_backfill.py` for historical summary debt. It processes higher-level
