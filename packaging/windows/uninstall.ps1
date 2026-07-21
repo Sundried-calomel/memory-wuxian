@@ -1,5 +1,10 @@
 param([Parameter(Mandatory = $true)][string]$SkillRoot)
 
+$python = Get-Command python.exe -ErrorAction SilentlyContinue
+if ($python -and (Test-Path (Join-Path $SkillRoot "scripts\install_auto_update.py"))) {
+  & $python.Source (Join-Path $SkillRoot "scripts\install_auto_update.py") --skill-root $SkillRoot --uninstall
+}
+
 $archiveRoot = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "MemoryWuxianArchive"
 $python = Get-Command python.exe -ErrorAction SilentlyContinue
 if ($python) {

@@ -26,3 +26,8 @@ if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian archive initialization failed." }
   --codex-cli $codexCli `
   --load
 if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian background collector activation failed." }
+
+& $python (Join-Path $SkillRoot "scripts\install_auto_update.py") `
+  --skill-root $SkillRoot `
+  --python-executable $python
+if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian automatic update activation failed." }

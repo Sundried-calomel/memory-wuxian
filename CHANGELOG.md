@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.3.0 - 2026-07-21
+
+- Add a daily updater for stable GitHub Releases with strict semantic-version checks and SHA-256 verification.
+- Stage verified Windows updates for silent installation at the next login and retain macOS packages until system installation authorization is available.
+- Register the updater through Task Scheduler with a per-user login fallback on Windows and a daily LaunchAgent on macOS.
+
 ## 1.2.1 - 2026-07-21
 
 - Run read-only context refresh status and capsule generation without opening the archive write lock, so Codex tasks with read-only archive access can refresh context normally.

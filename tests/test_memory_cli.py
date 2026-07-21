@@ -155,7 +155,10 @@ safety:
         self.assertNotIn("Remove-Item", windows_uninstall)
         self.assertIn("PrivilegesRequired=lowest", inno_setup)
         self.assertIn("memory\\*", inno_setup)
+        self.assertIn('Flags: onlyifdoesntexist', inno_setup)
         self.assertIn("softprops/action-gh-release@v2", release_workflow)
+        self.assertIn("install_auto_update.py", mac_postinstall)
+        self.assertIn("install_auto_update.py", windows_install)
 
     def run_cli(self, *arguments, expect_json=True):
         completed = self.invoke_cli(*arguments)

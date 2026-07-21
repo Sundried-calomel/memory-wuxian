@@ -72,6 +72,11 @@ fi
   --codex-cli "$codex_cli" \
   --load >/dev/null
 
+/usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
+  "$python_executable" "$skill_root/scripts/install_auto_update.py" \
+  --skill-root "$skill_root" \
+  --python-executable "$python_executable" >/dev/null
+
 printf '%s\n' "$archive_root" > "$user_home/.codex/memory-wuxian-active-root.txt"
 /usr/sbin/chown "$console_user":staff "$user_home/.codex/memory-wuxian-active-root.txt"
 exit 0
