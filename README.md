@@ -32,6 +32,11 @@ Download the installer for the operating system from the latest GitHub Release:
 - macOS: `MemoryWuxian-<version>-macOS-universal.pkg`
 - Windows: `MemoryWuxian-<version>-Windows-x64-Setup.exe`
 
+The status console opens from its last successful browser-local response and a
+persisted, source-validated statistics snapshot. Unchanged archives do not need
+to reread the complete raw history; stale or malformed snapshots rebuild
+automatically from authoritative archive records.
+
 Opening that one file installs the Skill under the current user's Codex directory,
 initializes `Documents/MemoryWuxianArchive`, and activates continuous Codex capture.
 Reinstalling or upgrading preserves the existing configuration and archive. Uninstalling

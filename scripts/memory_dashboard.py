@@ -4,13 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
-import shutil
-import sqlite3
-import subprocess
 import threading
-import time
 import webbrowser
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -19,7 +16,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from memory_cli import MemoryStore, load_simple_yaml
+from conversation_titles import (
+    archive_conversation_titles,
+    codex_thread_metadata,
+    codex_thread_titles,
+)
+from memory_cli import MemoryStore, atomic_write_json, load_simple_yaml
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -38,9 +40,6 @@ def parse_time(value: str | None) -> datetime | None:
 
 TELEMETRY_CACHE: dict[str, tuple[int, dict[str, int] | None]] = {}
 CJK_PATTERN = re.compile(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]")
-THREAD_ID_PATTERN = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
-THREAD_ID_SEARCH_PATTERN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.IGNORECASE)
-RUNTIME_TITLE_CACHE: tuple[float, dict[str, str]] = (0.0, {})
 SESSION_SOURCE_CACHE: dict[str, tuple[int, str | None]] = {}
 
 
@@ -70,136 +69,6 @@ def codex_session_source(path: Path) -> str | None:
         source = None
     SESSION_SOURCE_CACHE[str(path)] = (mtime, source)
     return source
-
-
-def codex_runtime_titles() -> dict[str, str]:
-    global RUNTIME_TITLE_CACHE
-    if time.monotonic() - RUNTIME_TITLE_CACHE[0] < 60:
-        return RUNTIME_TITLE_CACHE[1]
-    bundled_codex = Path("/Applications/ChatGPT.app/Contents/Resources/codex")
-    windows_codex = Path.home() / ".codex/.sandbox-bin/codex.exe"
-    executable = next(
-        (
-            str(candidate)
-            for candidate in (bundled_codex, windows_codex)
-            if candidate.exists()
-        ),
-        shutil.which("codex"),
-    )
-    if not executable:
-        return {}
-    process = None
-    killer = None
-    titles: dict[str, str] = {}
-    try:
-        process = subprocess.Popen(
-            [executable, "app-server", "--stdio"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            encoding="utf-8",
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        killer = threading.Timer(3, process.terminate)
-        killer.start()
-        assert process.stdin and process.stdout
-        requests = [
-            {"id": 1, "method": "initialize", "params": {"clientInfo": {"name": "memory-wuxian-dashboard", "version": "1.0"}}},
-            {"method": "initialized", "params": {}},
-            {"id": 2, "method": "thread/list", "params": {"limit": 100, "archived": False}},
-        ]
-        for request in requests:
-            process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
-        process.stdin.flush()
-        for line in process.stdout:
-            response = json.loads(line)
-            if response.get("id") != 2:
-                continue
-            for thread in (response.get("result") or {}).get("data", []):
-                title = thread.get("title") or thread.get("name")
-                if thread.get("id") and title:
-                    titles[str(thread["id"])] = str(title).strip()
-            break
-    except (OSError, json.JSONDecodeError, subprocess.SubprocessError):
-        titles = {}
-    finally:
-        if killer:
-            killer.cancel()
-        if process and process.poll() is None:
-            process.terminate()
-        if process:
-            try:
-                process.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=1)
-            if process.stdin:
-                process.stdin.close()
-            if process.stdout:
-                process.stdout.close()
-    RUNTIME_TITLE_CACHE = (time.monotonic(), titles)
-    return titles
-
-
-def codex_thread_titles() -> dict[str, str]:
-    runtime_titles = codex_runtime_titles()
-    global_state = Path.home() / ".codex/.codex-global-state.json"
-    sidebar_candidates: dict[str, list[str]] = defaultdict(list)
-    try:
-        state = json.loads(global_state.read_text(encoding="utf-8"))
-
-        def visit(value: Any) -> None:
-            if isinstance(value, dict):
-                object_id = str(value.get("id", ""))
-                object_title = value.get("title")
-                if THREAD_ID_PATTERN.fullmatch(object_id) and isinstance(object_title, str):
-                    sidebar_candidates[object_id].append(object_title.strip())
-                for key, child in value.items():
-                    key_text = str(key)
-                    embedded_id = THREAD_ID_SEARCH_PATTERN.search(key_text)
-                    candidate_id = key_text if THREAD_ID_PATTERN.fullmatch(key_text) else (
-                        embedded_id.group(0) if embedded_id and "title" in key_text.casefold() else None
-                    )
-                    if candidate_id and isinstance(child, str):
-                        candidate = child.strip()
-                        if (
-                            candidate
-                            and "\\" not in candidate
-                            and "/" not in candidate
-                            and not candidate.startswith(("client-", "local-", "remote-"))
-                            and len(candidate) <= 120
-                        ):
-                            sidebar_candidates[candidate_id].append(candidate)
-                    visit(child)
-            elif isinstance(value, list):
-                for child in value:
-                    visit(child)
-
-        visit(state)
-    except (OSError, json.JSONDecodeError):
-        pass
-
-    database = Path.home() / ".codex/state_5.sqlite"
-    database_titles: dict[str, str] = {}
-    try:
-        connection = sqlite3.connect(f"file:{database.as_posix()}?mode=ro", uri=True, timeout=1)
-        try:
-            database_titles = {
-                str(thread_id): str(title).strip()
-                for thread_id, title in connection.execute("SELECT id, title FROM threads")
-                if str(title).strip()
-            }
-        finally:
-            connection.close()
-    except sqlite3.Error:
-        pass
-    fallback_titles = {
-        thread_id: min(candidates, key=len)
-        for thread_id in set(database_titles) | set(sidebar_candidates)
-        if (candidates := sidebar_candidates.get(thread_id) or [database_titles[thread_id]])
-    }
-    return {**fallback_titles, **runtime_titles}
 
 
 def session_telemetry(path: Path) -> dict[str, int] | None:
@@ -289,6 +158,8 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
 
     summary_counts: dict[str, Counter[int]] = defaultdict(Counter)
     titles = codex_thread_titles()
+    thread_metadata = codex_thread_metadata()
+    archive_titles = archive_conversation_titles(records)
     for summary in summaries:
         summary_counts[str(summary.get("conversation_id"))][int(summary["level"])] += 1
 
@@ -299,19 +170,13 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         source_path = next((item.get("source", {}).get("path") for item in reversed(items) if item.get("source", {}).get("path")), None)
         telemetry = session_telemetry(Path(source_path)) if source_path else None
         conversation_text = "".join(str(item.get("text", "")) for item in items)
+        native_id = conversation_id.removeprefix("codex:")
+        metadata = thread_metadata.get(native_id, {})
+        source_kind = str((items[0].get("source") or {}).get("kind") or "")
+        default_project = "ChatGPT" if source_kind == "chatgpt-data-export" else "Unassigned"
         conversations.append({
             "conversation_id": conversation_id,
-            "title": titles.get(
-                conversation_id.removeprefix("codex:"),
-                next(
-                    (
-                        str(item.get("source", {}).get("conversation_title"))
-                        for item in items
-                        if item.get("source", {}).get("conversation_title")
-                    ),
-                    first_user.replace("\n", " ")[:72],
-                ),
-            ),
+            "title": archive_titles[conversation_id],
             "title_source": (
                 "codex-thread"
                 if conversation_id.removeprefix("codex:") in titles
@@ -321,6 +186,8 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
                     else "first-user-message"
                 )
             ),
+            "archived": bool(metadata.get("archived", False)),
+            "project": str(metadata.get("project") or default_project),
             "message_count": len(items),
             "tool_activity_count": sum(item.get("speaker") == "tool" for item in items),
             "character_count": sum(len(str(item.get("text", ""))) for item in items),
@@ -332,6 +199,8 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
             "telemetry": telemetry,
         })
     conversations.sort(key=lambda item: str(item.get("last_timestamp", "")), reverse=True)
+    active_conversations = [item for item in conversations if not item["archived"]]
+    archived_conversations = [item for item in conversations if item["archived"]]
 
     timestamps = [parse_time(str(item.get("timestamp", ""))) for item in records]
     timestamps = [item for item in timestamps if item]
@@ -346,6 +215,8 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         "collector": collector_telemetry(store.root),
         "totals": {
             "conversations": len(conversations),
+            "active_conversations": len(active_conversations),
+            "archived_conversations": len(archived_conversations),
             "messages": len(records),
             "tool_activities": sum(item.get("speaker") == "tool" for item in records),
             "characters": archived_characters,
@@ -360,20 +231,113 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
             for day in sorted(daily_messages)
         ],
         "conversations": conversations,
+        "active_conversations": active_conversations,
+        "archived_conversations": archived_conversations,
         "character_note": "Visible user and assistant source text stored in the append-only raw archive; summaries are excluded.",
         "estimation_note": "The archive estimate covers visible stored dialogue only. Codex request telemetry has a different scope and can include instructions, tools, reasoning, and outputs; its ratio to the advertised model window is not a precise remaining-context gauge.",
     }
 
 
+class DashboardSnapshotCache:
+    """Persist expensive archive statistics and invalidate them by file metadata."""
+
+    FORMAT_VERSION = 1
+
+    def __init__(self, store: MemoryStore):
+        self.store = store
+        self.path = store.root / "dashboard/status-snapshot.json"
+        self._lock = threading.Lock()
+        self._signature = ""
+        self._payload: dict[str, Any] | None = None
+
+    @staticmethod
+    def _file_stamp(path: Path) -> tuple[str, int, int]:
+        stat = path.stat()
+        return str(path), stat.st_size, stat.st_mtime_ns
+
+    def source_signature(self) -> str:
+        paths = [
+            self.store.state_path,
+            self.store.index_dir / "summaries.jsonl",
+            self.store.summaries_dir / "registry.jsonl",
+            self.store.title_index_path,
+            Path.home() / ".codex/state_5.sqlite",
+            Path.home() / ".codex/state_5.sqlite-wal",
+            Path.home() / ".codex/.codex-global-state.json",
+        ]
+        paths.extend(self.store.raw_dir.rglob("*.md"))
+        paths.extend(self.store.pending_dir.glob("job-*.json"))
+        stamps = []
+        for path in sorted(set(paths), key=str):
+            try:
+                stamps.append(self._file_stamp(path))
+            except OSError:
+                continue
+        encoded = json.dumps(stamps, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _load_persisted(self, signature: str) -> dict[str, Any] | None:
+        try:
+            snapshot = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if (
+            snapshot.get("format_version") != self.FORMAT_VERSION
+            or snapshot.get("source_signature") != signature
+            or not isinstance(snapshot.get("payload"), dict)
+        ):
+            return None
+        return snapshot["payload"]
+
+    def get(self) -> dict[str, Any]:
+        signature = self.source_signature()
+        with self._lock:
+            if self._payload is not None and self._signature == signature:
+                payload = self._payload
+            else:
+                payload = self._load_persisted(signature)
+                if payload is None:
+                    payload = dashboard_data(self.store)
+                    signature = self.source_signature()
+                    atomic_write_json(
+                        self.path,
+                        {
+                            "format_version": self.FORMAT_VERSION,
+                            "source_signature": signature,
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                            "payload": payload,
+                        },
+                    )
+                self._payload = payload
+                self._signature = signature
+        response = dict(payload)
+        response["collector"] = collector_telemetry(self.store.root)
+        response["served_at"] = datetime.now(timezone.utc).isoformat()
+        response["snapshot"] = {
+            "source_signature": signature,
+            "persisted": True,
+        }
+        return response
+
+
 def make_handler(store: MemoryStore):
+    snapshot_cache = DashboardSnapshotCache(store)
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             path = urlparse(self.path).path
             if path == "/api/status":
-                body = json.dumps(dashboard_data(store), ensure_ascii=False).encode("utf-8")
+                body = json.dumps(snapshot_cache.get(), ensure_ascii=False).encode("utf-8")
+                etag = f'"{hashlib.sha256(body).hexdigest()}"'
+                if self.headers.get("If-None-Match") == etag:
+                    self.send_response(304)
+                    self.send_header("ETag", etag)
+                    self.end_headers()
+                    return
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
+                self.send_header("ETag", etag)
             elif path in {"/", "/index.html"}:
                 body = INDEX_HTML.read_bytes()
                 self.send_response(200)

@@ -16,6 +16,7 @@
 12. ChatGPT export adapter
 13. External backup snapshots
 14. Runtime context refresh
+15. Dashboard status cache
 
 ## 1. Storage layout
 
@@ -116,6 +117,7 @@ Maintain both Markdown and JSONL indexes:
 - Conversations: raw routing metadata without replacing raw payloads.
 - Summaries: level, path, source range, child relationships, and concepts.
 - Deterministic hierarchy: hybrid chunk boundaries, source hashes, exact excerpts, and parent-child index IDs.
+- Conversation titles: append-only user-confirmed and source-observed aliases keyed by conversation ID. Titles route to IDs but never replace IDs as identity.
 
 Maintain the same navigational categories separately for each conversation under `indexes/by-conversation/`. Global indexes route across conversations; conversation indexes never contain another conversation ID.
 
@@ -142,6 +144,8 @@ Exclude currently incomplete rounds from historical matching so the user's activ
 Narrow to the smallest plausible source range. Use a Level-1 summary to route to original messages. Read matching messages plus the configured number of neighboring messages. Insert retrieved history into working context with date, time range, file, message range, and retrieval reason.
 
 Answer factual historical questions from verified text. Distinguish quoted recollection from interpretation. Log the query, matched concepts, summaries, raw files, message range, and verification level.
+
+For a title-targeted historical continuation, exclude the active conversation ID before title matching. A missing or ambiguous result is a hard stop. Persist a user-confirmed title alias in the local title index rather than editing Codex client databases.
 
 ## 6. Heartbeat, idempotency, and recovery
 
@@ -221,3 +225,23 @@ Create one snapshot per successful synchronization batch or other logical mutati
 Keep context refresh derived and rebuildable under `retrieval/context-refresh-state.json`; it is not authoritative conversation history and does not require an archive snapshot. At the start of an Agent turn, inspect the newest top-level rollout for its latest `token_count` event and compare completed rounds with the last acknowledgement. Mark refresh due after the configured round interval, when utilization first crosses 65% or 80%, or when usage drops by at least 20 percentage points after reaching the low threshold, which indicates client compaction.
 
 Render a capsule from the highest available semantic summary levels, omit child summaries already covered by a selected parent, append uncovered newer summaries, and finish with a bounded recent-task tail. Cap the estimated budget at the smallest of 1% of the rollout-reported effective context window, 3,000 tokens, and 10,000 tokens. Load the capsule as tool context and acknowledge only after it was read. Never append the capsule to raw history or submit it as semantic-summary source.
+
+## 15. Dashboard status cache
+
+Store expensive dashboard statistics in `dashboard/status-snapshot.json`. The
+snapshot is derived and disposable: it must contain a format version, a
+fingerprint of archive and Codex metadata sources, and the complete last
+verified dashboard payload. Write it atomically and never include it in source
+authority, summary provenance, or retrieval results.
+
+At startup, compare source file size and modification metadata with the
+persisted fingerprint. Reuse the snapshot when they match. Rebuild it from
+authoritative archive records when it is missing, stale, malformed, or from an
+unsupported format version. Refresh lightweight collector telemetry separately
+so it does not force a historical archive scan.
+
+The browser may render its last successful API response from local storage
+before the server finishes verification. Replace that display with the current
+local API response when available. Browser and server caches must remain
+optional performance layers; deleting either cache must never remove or alter
+conversation history.

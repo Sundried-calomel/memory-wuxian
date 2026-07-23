@@ -29,6 +29,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 18. Keep only the configured number of newest complete external snapshots; the default is one.
 19. Keep only the configured number of newest workspace recovery backups under `memory/archive/`; the default is one.
 20. Do not keep an AI conversation active. Let scripts detect completed-round or character thresholds, then run one ephemeral AI process only to generate the due semantic summary.
+21. Treat dashboard snapshots as disposable derived caches. Validate them against source metadata and rebuild from the archive when stale or malformed.
 
 ## Operating workflow
 
@@ -47,6 +48,8 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 12. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
 13. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
 14. At the start of each user turn, run `context-refresh-status`. When due, load `context-capsule` into the current reasoning context and run `ack-context-refresh` only after the capsule was read. Do not quote the capsule to the user unless requested, and never archive it as a source message.
+15. When the user names another or historical Codex conversation and asks to continue it or restore its latest messages, run `conversation-tail --title "..." --exclude-conversation-id "codex:<active-task-id>" --messages N`. Resolve the title after excluding the active task and before selecting messages. Never substitute the latest conversation when the title is missing or ambiguous. When the user confirms a title-to-task relationship, persist it with `register-title` so later retrieval does not depend on mutable client title metadata.
+16. Let the dashboard render its last successful browser-local response immediately. The local server validates `memory/dashboard/status-snapshot.json` against archive metadata and rebuilds it from authoritative records only when needed.
 
 ## Commands
 
@@ -67,6 +70,8 @@ python3 scripts/semantic_worker.py --root memory --config config.yaml --job memo
 python3 scripts/semantic_backfill.py --root memory --config config.yaml --max-jobs 20
 python3 scripts/memory_cli.py ingest-summary --job memory/pending/<job>.json --summary-json <summary>.json
 python3 scripts/memory_cli.py retrieve --query "..."
+python3 scripts/memory_cli.py conversation-tail --title "Codex conversation title" --exclude-conversation-id "codex:<active-task-id>" --messages 20
+python3 scripts/memory_cli.py register-title --conversation-id "codex:<task-id>" --title "Confirmed title"
 python3 scripts/memory_cli.py rebuild-state
 python3 scripts/memory_cli.py rebuild-state --apply
 python3 scripts/memory_cli.py rebuild-conversations

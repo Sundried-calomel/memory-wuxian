@@ -16,7 +16,7 @@ from unittest.mock import patch
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 from platform_lock import exclusive_lock
-from memory_dashboard import dashboard_data, estimate_context_tokens
+from memory_dashboard import DashboardSnapshotCache, dashboard_data, estimate_context_tokens
 from memory_cli import resolve_root
 from semantic_worker import (
     build_prompt_payload,
@@ -233,6 +233,100 @@ safety:
         self.assertEqual(result["collector"]["fallback_interval_seconds"], 30)
         self.assertEqual(result["collector"]["wakeups_last_hour"], 4)
 
+    def test_dashboard_separates_archived_conversations_and_groups_projects(self):
+        for conversation_id, text in (
+            ("codex:active-thread", "ACTIVE"),
+            ("codex:archived-thread", "ARCHIVED"),
+            ("codex:other-project", "OTHER"),
+        ):
+            self.run_cli(
+                "append", "--speaker", "user", "--conversation-id", conversation_id,
+                "--text", text,
+            )
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        metadata = {
+            "active-thread": {"archived": False, "project": "Project A", "cwd": "/a"},
+            "archived-thread": {"archived": True, "project": "Project A", "cwd": "/a"},
+            "other-project": {"archived": False, "project": "Project B", "cwd": "/b"},
+        }
+        with patch("memory_dashboard.codex_thread_metadata", return_value=metadata):
+            result = dashboard_data(MemoryStore(self.root, load_simple_yaml(self.config)))
+
+        self.assertEqual(result["totals"]["active_conversations"], 2)
+        self.assertEqual(result["totals"]["archived_conversations"], 1)
+        self.assertEqual(
+            {item["conversation_id"] for item in result["active_conversations"]},
+            {"codex:active-thread", "codex:other-project"},
+        )
+        self.assertEqual(
+            [item["conversation_id"] for item in result["archived_conversations"]],
+            ["codex:archived-thread"],
+        )
+        self.assertEqual(
+            {item["project"] for item in result["active_conversations"]},
+            {"Project A", "Project B"},
+        )
+
+    def test_dashboard_achievement_settings_are_local_and_hide_empty_levels(self):
+        html = (Path(__file__).resolve().parents[1] / "dashboard/index.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("memory-wuxian-dashboard-settings-v1", html)
+        self.assertIn("memory-wuxian-achievements-v1", html)
+        self.assertIn("memory-wuxian-dashboard-status-v1", html)
+        self.assertIn("settings.achievementsEnabled", html)
+        self.assertIn("settings.animationsEnabled", html)
+        self.assertIn("settings.toastsEnabled", html)
+        self.assertIn("settings.compactMode", html)
+        self.assertIn("+l<=8&&+n>0", html)
+        self.assertNotIn("fetch('/api/settings", html)
+        self.assertNotIn("fetch('/api/achievements", html)
+
+    def test_dashboard_snapshot_is_reused_and_invalidated(self):
+        self.append_round(1)
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+        cache = DashboardSnapshotCache(store)
+        with (
+            patch.object(cache, "source_signature", side_effect=["v1", "v1", "v1", "v2", "v2"]),
+            patch("memory_dashboard.dashboard_data", wraps=dashboard_data) as build,
+        ):
+            first = cache.get()
+            second = cache.get()
+            third = cache.get()
+
+        self.assertEqual(build.call_count, 2)
+        self.assertEqual(first["totals"], second["totals"])
+        self.assertEqual(second["totals"], third["totals"])
+        self.assertTrue(cache.path.exists())
+
+    def test_dashboard_snapshot_survives_restart_and_recovers_from_corruption(self):
+        self.append_round(1)
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+        first_cache = DashboardSnapshotCache(store)
+        with patch.object(first_cache, "source_signature", return_value="stable"):
+            expected = first_cache.get()["totals"]
+
+        restarted = DashboardSnapshotCache(store)
+        with (
+            patch.object(restarted, "source_signature", return_value="stable"),
+            patch("memory_dashboard.dashboard_data", side_effect=AssertionError("must use snapshot")),
+        ):
+            self.assertEqual(restarted.get()["totals"], expected)
+
+        restarted.path.write_text("{broken", encoding="utf-8")
+        recovered = DashboardSnapshotCache(store)
+        with (
+            patch.object(recovered, "source_signature", return_value="stable"),
+            patch("memory_dashboard.dashboard_data", wraps=dashboard_data) as rebuild,
+        ):
+            self.assertEqual(recovered.get()["totals"], expected)
+        self.assertEqual(rebuild.call_count, 1)
+
     def test_chatgpt_export_import_is_branch_aware_and_idempotent(self):
         export_zip = self.base / "chatgpt-export.zip"
         conversation = {
@@ -416,6 +510,91 @@ safety:
         self.assertIn("长度 L +/-51 bp", retrieval)
         self.assertNotIn("CURRENT QUERY ECHO", retrieval)
         self.assertNotIn("OTHER THREAD PRIVATE CONTEXT", retrieval)
+
+    def test_conversation_tail_resolves_title_before_selecting_latest_messages(self):
+        for conversation_id, title, marker in (
+            ("codex:target-thread", "指定项目对话", "TARGET"),
+            ("codex:newest-thread", "最近但不应选中的对话", "NEWEST"),
+        ):
+            self.run_cli(
+                "append", "--speaker", "user", "--conversation-id", conversation_id,
+                "--text", title,
+            )
+            for number in range(1, 4):
+                self.run_cli(
+                    "append", "--speaker", "assistant", "--conversation-id", conversation_id,
+                    "--text", f"{marker} assistant {number}",
+                )
+                self.run_cli(
+                    "append", "--speaker", "user", "--conversation-id", conversation_id,
+                    "--text", f"{marker} user {number}",
+                )
+
+        output = self.run_cli(
+            "conversation-tail", "--title", "指定项目", "--messages", "3",
+            expect_json=False,
+        )
+        self.assertIn("Conversation ID: `codex:target-thread`", output)
+        self.assertIn("TARGET user 2", output)
+        self.assertIn("TARGET assistant 3", output)
+        self.assertIn("TARGET user 3", output)
+        self.assertNotIn("TARGET assistant 1", output)
+        self.assertNotIn("NEWEST", output)
+
+    def test_conversation_tail_rejects_missing_or_ambiguous_titles(self):
+        for conversation_id, title in (
+            ("codex:first-thread", "重复标题甲"),
+            ("codex:second-thread", "重复标题乙"),
+        ):
+            self.run_cli(
+                "append", "--speaker", "user", "--conversation-id", conversation_id,
+                "--text", title,
+            )
+        ambiguous = self.invoke_cli(
+            "conversation-tail", "--title", "重复标题", "--messages", "20",
+        )
+        missing = self.invoke_cli(
+            "conversation-tail", "--title", "不存在的标题", "--messages", "20",
+        )
+        self.assertNotEqual(ambiguous.returncode, 0)
+        self.assertIn("ambiguous", ambiguous.stderr)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("No archived conversation matched title", missing.stderr)
+
+    def test_conversation_tail_uses_persisted_title_and_excludes_current_task(self):
+        old_id = "codex:old-thread"
+        current_id = "codex:current-thread"
+        for conversation_id, text in (
+            (old_id, "OLD HISTORY"),
+            (current_id, "梳理Pilot与近期报告记录"),
+        ):
+            self.run_cli(
+                "append", "--speaker", "user", "--conversation-id", conversation_id,
+                "--text", text,
+            )
+        registered = self.run_cli(
+            "register-title",
+            "--conversation-id", old_id,
+            "--title", "梳理Pilot与近期报告记录",
+        )
+        self.assertEqual(registered["status"], "registered")
+
+        ambiguous = self.invoke_cli(
+            "conversation-tail", "--title", "梳理Pilot与近期报告记录",
+        )
+        self.assertNotEqual(ambiguous.returncode, 0)
+        self.assertIn("ambiguous", ambiguous.stderr)
+
+        output = self.run_cli(
+            "conversation-tail",
+            "--title", "梳理Pilot与近期报告记录",
+            "--exclude-conversation-id", current_id,
+            "--messages", "5",
+            expect_json=False,
+        )
+        self.assertIn(f"Conversation ID: `{old_id}`", output)
+        self.assertIn("OLD HISTORY", output)
+        self.assertNotIn("codex:current-thread`", output.split("## Verified Raw Messages", 1)[1])
 
     def test_default_level_one_threshold_is_five_rounds(self):
         default_root = self.base / "default-memory"

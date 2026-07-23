@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 - 2026-07-23
+
+- Add deterministic title-targeted conversation tails: resolve all known Codex title aliases to one archived conversation before selecting its latest visible messages, and fail on missing or ambiguous titles instead of falling back to the newest conversation.
+- Persist user-confirmed conversation-title aliases and allow historical title lookup to exclude the active task ID, preventing a newly auto-titled task from capturing its own history request.
+- Separate active and archived Codex conversations in the status console, keep archived history fully retrievable, and group both views by the Codex project name with project-root fallback.
+- Hide summary levels that do not yet exist, instead of displaying empty higher-level rows.
+- Add a local achievement system with archive, message, summary, time-span, and project milestones; existing milestones are silently initialized and only newly crossed milestones trigger optional animations and bottom-right notifications.
+- Add local dashboard settings for achievements, milestone effects, notifications, compact mode, default conversation view, and automatic refresh interval.
+- Persist a derived dashboard status snapshot guarded by archive and Codex metadata fingerprints, so unchanged archives open without rereading all historical source text.
+- Render the last successful dashboard response from browser-local storage immediately, then refresh it from the verified local API in the background.
+- Recover automatically from missing, stale, or malformed status snapshots by rebuilding them from authoritative archive records.
 
 ## 1.3.0 - 2026-07-21
 

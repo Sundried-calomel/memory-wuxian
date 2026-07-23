@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from platform_lock import exclusive_lock
+from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -299,6 +300,7 @@ class MemoryStore:
         self.conversation_dir = self.root / "conversations"
         self.summaries_dir = self.root / "summaries"
         self.index_dir = self.root / "indexes"
+        self.title_index_path = self.index_dir / "conversation-titles.jsonl"
         self.deterministic_index_dir = self.index_dir / "deterministic"
         self.retrieval_dir = self.root / "retrieval"
         self.pending_dir = self.root / "pending"
@@ -397,6 +399,7 @@ class MemoryStore:
             self.index_dir / "timeline.md": "# Timeline Index\n",
             self.index_dir / "concepts.md": "# Concept Index\n",
             self.index_dir / "conversations.jsonl": "",
+            self.title_index_path: "",
             self.index_dir / "summaries.jsonl": "",
             self.index_dir / "concepts.jsonl": "",
             self.deterministic_index_dir / "level-1.jsonl": "",
@@ -3067,6 +3070,103 @@ class MemoryStore:
             metadata["query_log"] = "skipped-read-only"
         return output, metadata
 
+    def conversation_title_aliases(self, records: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+        aliases = archive_conversation_title_aliases(records)
+        for entry in read_jsonl(self.title_index_path):
+            conversation_id = str(entry.get("conversation_id", ""))
+            title = str(entry.get("title", "")).strip()
+            if conversation_id in aliases and title:
+                aliases[conversation_id] = list(dict.fromkeys([title, *aliases[conversation_id]]))
+        return aliases
+
+    def register_conversation_title(
+        self,
+        conversation_id: str,
+        title: str,
+        source: str = "user-confirmed",
+    ) -> Dict[str, Any]:
+        title = title.strip()
+        if not title:
+            raise ValueError("Conversation title must not be empty")
+        known_ids = {str(record.get("conversation_id")) for record in self.read_all_raw()}
+        if conversation_id not in known_ids:
+            raise ValueError(f"Conversation is not present in the archive: {conversation_id}")
+        existing = read_jsonl(self.title_index_path)
+        normalized = self.normalize_search_text(title)
+        for entry in existing:
+            if (
+                str(entry.get("conversation_id")) == conversation_id
+                and str(entry.get("normalized")) == normalized
+            ):
+                return {"status": "unchanged", **entry}
+        entry = {
+            "event": "title_registered",
+            "conversation_id": conversation_id,
+            "title": title,
+            "normalized": normalized,
+            "source": source,
+            "recorded_at": now_iso(),
+        }
+        append_jsonl(self.title_index_path, entry)
+        return {"status": "registered", **entry}
+
+    def conversation_tail(
+        self,
+        title: str,
+        message_count: int,
+        excluded_conversation_ids: Iterable[str] = (),
+    ) -> Tuple[str, Dict[str, Any]]:
+        if message_count < 1:
+            raise ValueError("Message count must be at least 1")
+        records = self.read_all_raw()
+        conversation_id, resolved_title = resolve_conversation_title(
+            title,
+            self.conversation_title_aliases(records),
+            excluded_conversation_ids,
+        )
+        selected = [
+            record for record in records
+            if str(record.get("conversation_id")) == conversation_id
+            and record.get("speaker") in {"user", "assistant"}
+        ][-message_count:]
+        if not selected:
+            raise ValueError(f"Archived conversation has no visible dialogue messages: {resolved_title}")
+        lines = [
+            "# Memory無限 Conversation Tail",
+            "",
+            f"- Requested title: {title}",
+            f"- Resolved title: {resolved_title}",
+            f"- Conversation ID: `{conversation_id}`",
+            f"- Excluded conversation IDs: {', '.join(excluded_conversation_ids) or 'None'}",
+            f"- Requested messages: {message_count}",
+            f"- Returned messages: {len(selected)}",
+            "- Confidence: `verified`",
+            "",
+            "## Verified Raw Messages",
+            "",
+        ]
+        for record in selected:
+            lines.extend([
+                f"### {record['message_id']} ({record['speaker']})",
+                "",
+                f"- Timestamp: `{record['timestamp']}`",
+                f"- Raw file: `{record['_path']}`",
+                "",
+                str(record["text"]),
+                "",
+            ])
+        metadata = {
+            "timestamp": now_iso(),
+            "requested_title": title,
+            "resolved_title": resolved_title,
+            "conversation_id": conversation_id,
+            "requested_messages": message_count,
+            "returned_messages": len(selected),
+            "message_ids": [record["message_id"] for record in selected],
+            "verification": "verified",
+        }
+        return "\n".join(lines).rstrip() + "\n", metadata
+
     def status(self) -> Dict[str, Any]:
         self.init()
         state = self.load_state()
@@ -3446,6 +3546,25 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser.add_argument("--summary-json", required=True)
     retrieve_parser = subparsers.add_parser("retrieve", help="Search indexes and verify against raw history")
     retrieve_parser.add_argument("--query", required=True)
+    tail_parser = subparsers.add_parser(
+        "conversation-tail",
+        help="Resolve an archived conversation by title and return its latest visible messages",
+    )
+    tail_parser.add_argument("--title", required=True)
+    tail_parser.add_argument("--messages", type=int, default=20)
+    tail_parser.add_argument(
+        "--exclude-conversation-id",
+        action="append",
+        default=[],
+        help="Conversation ID that must not satisfy this historical lookup; may be repeated",
+    )
+    register_title_parser = subparsers.add_parser(
+        "register-title",
+        help="Persist a user-confirmed title alias for one archived conversation",
+    )
+    register_title_parser.add_argument("--conversation-id", required=True)
+    register_title_parser.add_argument("--title", required=True)
+    register_title_parser.add_argument("--source", default="user-confirmed")
     rebuild_state_parser = subparsers.add_parser("rebuild-state", help="Preview or apply state reconstruction from persisted files")
     rebuild_state_parser.add_argument("--apply", action="store_true", help="Back up and replace state.json")
     rebuild_conversations_parser = subparsers.add_parser(
@@ -3580,6 +3699,26 @@ def dispatch_command(
         output, _ = store.retrieve(args.query)
         print(output, end="")
         return 0
+    elif args.command == "conversation-tail":
+        output, _ = store.conversation_tail(
+            args.title,
+            args.messages,
+            args.exclude_conversation_id,
+        )
+        print(output, end="")
+        return 0
+    elif args.command == "register-title":
+        result = store.register_conversation_title(
+            args.conversation_id,
+            args.title,
+            args.source,
+        )
+        if result["status"] == "registered":
+            backup = store.create_backup_snapshot(
+                "conversation-title-registered",
+                {"conversation_id": args.conversation_id, "title": args.title},
+            )
+            result["backup"] = str(backup) if backup else None
     elif args.command == "rebuild-state":
         result = store.rebuild_state(args.apply)
         if args.apply and result.get("changed"):
@@ -3622,7 +3761,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         config = resolve_config(Path(args.config))
         store = MemoryStore(resolve_root(args.root, config), config)
-        if args.command in {"retrieve", "context-refresh-status", "context-capsule"}:
+        if args.command in {"retrieve", "conversation-tail", "context-refresh-status", "context-capsule"}:
             return dispatch_command(args, parser, store)
         with exclusive_lock(store.root / ".locks" / "archive.lock"):
             return dispatch_command(args, parser, store)
