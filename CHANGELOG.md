@@ -11,6 +11,7 @@
 - Skip unchanged rollout files during collector startup by comparing their persisted source-size and modification-time cursors, while still importing new or changed files.
 - Keep Windows scheduler output ASCII-safe for paths containing non-Latin characters and tolerate platform-specific limits when tests inject pre-epoch local timestamps.
 - Keep macOS LaunchAgent installation testable from Windows by resolving the launchd user domain without assuming `os.getuid()` exists.
+- Use short same-directory temporary envelope names before atomic publication so long Windows exchange paths remain supported.
 - Keep native local collection, immutable archives, read-only peer replicas, SSH host authentication, global retrieval, and summary behavior unchanged.
 
 ## 1.5.0 - 2026-07-23

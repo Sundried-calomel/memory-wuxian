@@ -10,6 +10,7 @@ import re
 import subprocess
 import tempfile
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Protocol
@@ -594,7 +595,9 @@ class CloudFolderTransport:
         target_node_id: str,
     ) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        partial = destination.with_name(f".{destination.name}.{os.getpid()}.partial")
+        partial = destination.parent / (
+            f".mw-partial-{os.getpid()}-{uuid.uuid4().hex[:16]}.tmp"
+        )
         try:
             self.crypto.seal(
                 plaintext,
