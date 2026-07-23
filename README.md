@@ -35,7 +35,9 @@ Download the installer for the operating system from the latest GitHub Release:
 The status console opens from its last successful browser-local response and a
 persisted, source-validated statistics snapshot. Unchanged archives do not need
 to reread the complete raw history; stale or malformed snapshots rebuild
-automatically from authoritative archive records.
+automatically from authoritative archive records. Its optional local achievement
+system tracks archive size, archive-context and message-only token estimates,
+dialogue depth, project growth, summary hierarchy, and raw-verified retrieval.
 
 Opening that one file installs the Skill under the current user's Codex directory,
 initializes `Documents/MemoryWuxianArchive`, and activates continuous Codex capture.

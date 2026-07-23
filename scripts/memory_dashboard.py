@@ -21,7 +21,7 @@ from conversation_titles import (
     codex_thread_metadata,
     codex_thread_titles,
 )
-from memory_cli import MemoryStore, atomic_write_json, load_simple_yaml
+from memory_cli import MemoryStore, atomic_write_json, load_simple_yaml, read_jsonl
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -134,6 +134,46 @@ def collector_telemetry(root: Path) -> dict[str, Any] | None:
     return telemetry
 
 
+def archive_storage_bytes(store: MemoryStore) -> int:
+    paths = [store.state_path]
+    for directory in (
+        store.raw_dir,
+        store.conversation_dir,
+        store.summaries_dir,
+        store.index_dir,
+    ):
+        paths.extend(path for path in directory.rglob("*") if path.is_file())
+    total = 0
+    for path in paths:
+        try:
+            total += path.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def verified_retrieval_stats(store: MemoryStore) -> dict[str, int]:
+    verified = [
+        entry
+        for entry in read_jsonl(store.retrieval_dir / "retrieval-log.jsonl")
+        if entry.get("verification") == "verified"
+    ]
+    source_files = {
+        str(path)
+        for entry in verified
+        for path in entry.get("raw_files", [])
+        if path
+    }
+    return {
+        "verified_retrievals": len(verified),
+        "retrieval_source_files": len(source_files),
+        "max_retrieval_sources": max(
+            (len(set(filter(None, entry.get("raw_files", [])))) for entry in verified),
+            default=0,
+        ),
+    }
+
+
 def dashboard_data(store: MemoryStore) -> dict[str, Any]:
     all_records = store.read_all_raw()
     hidden_conversations: set[str] = set()
@@ -207,7 +247,13 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
     first = min(timestamps) if timestamps else None
     now = datetime.now(timezone.utc)
     archived_text = "".join(str(item.get("text", "")) for item in records)
+    message_text = "".join(
+        str(item.get("text", ""))
+        for item in records
+        if item.get("speaker") in {"user", "assistant"}
+    )
     archived_characters = len(archived_text)
+    retrieval_stats = verified_retrieval_stats(store)
     return {
         "generated_at": now.isoformat(),
         "archive_root": str(store.root),
@@ -221,6 +267,9 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
             "tool_activities": sum(item.get("speaker") == "tool" for item in records),
             "characters": archived_characters,
             "estimated_tokens": estimate_context_tokens(archived_text),
+            "message_estimated_tokens": estimate_context_tokens(message_text),
+            "storage_bytes": archive_storage_bytes(store),
+            **retrieval_stats,
             "summary_counts": status.get("summary_counts", {}),
             "pending_summary_jobs": status.get("pending_summary_jobs", 0),
             "archived_days": max(1, (now - first.astimezone(timezone.utc)).days + 1) if first else 0,
@@ -258,14 +307,15 @@ class DashboardSnapshotCache:
     def source_signature(self) -> str:
         paths = [
             self.store.state_path,
-            self.store.index_dir / "summaries.jsonl",
-            self.store.summaries_dir / "registry.jsonl",
-            self.store.title_index_path,
+            self.store.retrieval_dir / "retrieval-log.jsonl",
             Path.home() / ".codex/state_5.sqlite",
             Path.home() / ".codex/state_5.sqlite-wal",
             Path.home() / ".codex/.codex-global-state.json",
         ]
         paths.extend(self.store.raw_dir.rglob("*.md"))
+        paths.extend(path for path in self.store.conversation_dir.rglob("*") if path.is_file())
+        paths.extend(path for path in self.store.summaries_dir.rglob("*") if path.is_file())
+        paths.extend(path for path in self.store.index_dir.rglob("*") if path.is_file())
         paths.extend(self.store.pending_dir.glob("job-*.json"))
         stamps = []
         for path in sorted(set(paths), key=str):

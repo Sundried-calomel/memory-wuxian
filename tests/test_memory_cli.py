@@ -16,7 +16,12 @@ from unittest.mock import patch
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 from platform_lock import exclusive_lock
-from memory_dashboard import DashboardSnapshotCache, dashboard_data, estimate_context_tokens
+from memory_dashboard import (
+    DashboardSnapshotCache,
+    archive_storage_bytes,
+    dashboard_data,
+    estimate_context_tokens,
+)
 from memory_cli import resolve_root
 from semantic_worker import (
     build_prompt_payload,
@@ -203,6 +208,12 @@ safety:
             result["totals"]["estimated_tokens"],
             estimate_context_tokens("第 1 轮讨论分层记忆第 1 轮确认原文必须保留"),
         )
+        self.assertEqual(
+            result["totals"]["message_estimated_tokens"],
+            result["totals"]["estimated_tokens"],
+        )
+        self.assertEqual(result["totals"]["storage_bytes"], archive_storage_bytes(store))
+        self.assertEqual(result["totals"]["verified_retrievals"], 0)
         self.assertEqual(len(result["conversations"]), 1)
         self.assertIn("title", result["conversations"][0])
         self.assertEqual(
@@ -210,6 +221,38 @@ safety:
             result["totals"]["estimated_tokens"],
         )
         self.assertIsNone(result["conversations"][0]["telemetry"])
+
+    def test_dashboard_separates_message_tokens_and_counts_verified_retrievals(self):
+        self.append_round(1)
+        self.run_cli("append", "--speaker", "tool", "--text", "工具活动 " * 100)
+        retrieval_log = self.root / "retrieval/retrieval-log.jsonl"
+        retrieval_log.write_text(
+            "\n".join([
+                json.dumps({
+                    "verification": "verified",
+                    "raw_files": ["raw/2026/07/one.md", "raw/2026/07/two.md"],
+                }),
+                json.dumps({
+                    "verification": "summary-supported",
+                    "raw_files": ["raw/2026/07/three.md"],
+                }),
+                json.dumps({
+                    "verification": "verified",
+                    "raw_files": ["raw/2026/07/two.md"],
+                }),
+            ]) + "\n",
+            encoding="utf-8",
+        )
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        result = dashboard_data(MemoryStore(self.root, load_simple_yaml(self.config)))
+        self.assertGreater(
+            result["totals"]["estimated_tokens"],
+            result["totals"]["message_estimated_tokens"],
+        )
+        self.assertEqual(result["totals"]["verified_retrievals"], 2)
+        self.assertEqual(result["totals"]["retrieval_source_files"], 2)
+        self.assertEqual(result["totals"]["max_retrieval_sources"], 2)
 
     def test_dashboard_reports_collector_activity(self):
         telemetry_path = self.root / "imports/codex/collector-telemetry.json"
@@ -283,6 +326,18 @@ safety:
         self.assertIn("[3,[5,10,25]]", html)
         self.assertIn("[4,[1,2,5,10]]", html)
         self.assertIn("[8,[1]]", html)
+        self.assertIn("id:`storage-${megabytes}mb`", html)
+        self.assertIn("id:`archive-tokens-${tokens}`", html)
+        self.assertIn("id:`message-tokens-${tokens}`", html)
+        self.assertIn("id:`conversation-rounds-${rounds}`", html)
+        self.assertIn("id:`project-conversations-${count}`", html)
+        self.assertIn("id:`project-characters-${characters}`", html)
+        self.assertIn("id:`verified-retrievals-${count}`", html)
+        self.assertIn("id:`retrieval-sources-${count}`", html)
+        self.assertIn("[5000000,'五百万上下文'", html)
+        self.assertIn("[5000000,'五百万消息'", html)
+        self.assertIn("[25,'项目文库'", html)
+        self.assertIn("[5,'五卷联查'", html)
         self.assertIn("+l<=8&&+n>0", html)
         self.assertNotIn("fetch('/api/settings", html)
         self.assertNotIn("fetch('/api/achievements", html)

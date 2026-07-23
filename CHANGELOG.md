@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.2 - 2026-07-23
+
+- Add archive-file-size achievements using the actual persisted raw, conversation, summary, index, and state files.
+- Add separate archive-context and user/assistant-message token-estimate achievements so visible tool activity does not inflate the message-only track.
+- Add objective dialogue-depth, per-project growth, raw-verified retrieval, and cross-file retrieval achievements without importance scoring.
+
 ## 1.4.1 - 2026-07-23
 
 - Add progressive higher-level summary achievements for L2 through L8, with quantity milestones scaled to the increasing cost of each hierarchy level.
