@@ -2242,6 +2242,9 @@ struct KqueueWatcher {
 }
 
 #[cfg(target_os = "macos")]
+const MAX_KQUEUE_ROLLOUT_WATCHES: usize = 64;
+
+#[cfg(target_os = "macos")]
 impl KqueueWatcher {
     fn new(root: &Path, since: Option<DateTime<FixedOffset>>) -> Result<Self> {
         let queue_fd = unsafe { libc::kqueue() };
@@ -2249,34 +2252,45 @@ impl KqueueWatcher {
             return Err(std::io::Error::last_os_error()).context("create kqueue");
         }
         let queue = unsafe { File::from_raw_fd(queue_fd) };
-        let mut watched = Vec::new();
+        let mut directories = Vec::new();
+        let mut rollout_files = Vec::new();
         for entry in WalkDir::new(root).follow_links(false) {
             let entry = entry?;
-            let should_watch = if entry.file_type().is_dir() {
-                true
-            } else if entry.file_type().is_file()
-                && entry
+            if entry.file_type().is_dir() {
+                directories.push(entry.path().to_path_buf());
+                continue;
+            }
+            if !entry.file_type().is_file()
+                || !entry
                     .file_name()
                     .to_str()
                     .is_some_and(|name| name.starts_with("rollout-") && name.ends_with(".jsonl"))
             {
-                if let Some(since) = since {
-                    let modified: DateTime<Utc> = entry.metadata()?.modified()?.into();
-                    modified.timestamp() >= since.timestamp()
-                } else {
-                    true
-                }
-            } else {
-                false
-            };
-            if !should_watch {
                 continue;
             }
-            let path = CString::new(entry.path().as_os_str().as_bytes())?;
+            let modified = entry.metadata()?.modified()?;
+            if let Some(since) = since {
+                let modified_utc: DateTime<Utc> = modified.into();
+                if modified_utc.timestamp() < since.timestamp() {
+                    continue;
+                }
+            }
+            rollout_files.push((modified, entry.path().to_path_buf()));
+        }
+        rollout_files
+            .sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
+        rollout_files.truncate(MAX_KQUEUE_ROLLOUT_WATCHES);
+
+        let mut watched = Vec::new();
+        for watch_path in directories
+            .into_iter()
+            .chain(rollout_files.into_iter().map(|(_, path)| path))
+        {
+            let path = CString::new(watch_path.as_os_str().as_bytes())?;
             let fd = unsafe { libc::open(path.as_ptr(), libc::O_EVTONLY | libc::O_CLOEXEC) };
             if fd < 0 {
                 return Err(std::io::Error::last_os_error())
-                    .with_context(|| format!("watch {}", entry.path().display()));
+                    .with_context(|| format!("watch {}", watch_path.display()));
             }
             let file = unsafe { File::from_raw_fd(fd) };
             let change = libc::kevent {
@@ -2303,7 +2317,7 @@ impl KqueueWatcher {
             };
             if result < 0 {
                 return Err(std::io::Error::last_os_error())
-                    .with_context(|| format!("register {}", entry.path().display()));
+                    .with_context(|| format!("register {}", watch_path.display()));
             }
             watched.push(file);
         }
@@ -2572,6 +2586,28 @@ mod adaptive_fallback_tests {
         assert_eq!(adaptive_fallback(Duration::from_secs(0)), ACTIVE_FALLBACK);
         assert_eq!(adaptive_fallback(IDLE_AFTER), IDLE_FALLBACK);
         assert_eq!(adaptive_fallback(DEEP_IDLE_AFTER), DEEP_IDLE_FALLBACK);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn kqueue_rollout_watch_count_is_bounded() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let day = temporary.path().join("2026/07/23");
+        fs::create_dir_all(&day)?;
+        for index in 0..100 {
+            fs::write(
+                day.join(format!("rollout-{index:03}.jsonl")),
+                b"{\"type\":\"session_meta\"}\n",
+            )?;
+        }
+
+        let watcher = KqueueWatcher::new(temporary.path(), None)?;
+        let directory_count = 4;
+        assert_eq!(
+            watcher._watched.len(),
+            directory_count + MAX_KQUEUE_ROLLOUT_WATCHES
+        );
+        Ok(())
     }
 }
 
