@@ -208,6 +208,12 @@ def validate_install_paths(
         raise SystemExit(f"Python executable is not a file: {python_executable}")
 
 
+def launchctl_domain() -> str:
+    getuid = getattr(os, "getuid", None)
+    uid = int(getuid()) if callable(getuid) else int(os.environ.get("UID", "0"))
+    return f"gui/{uid}"
+
+
 def install_macos(
     archive_root: Path,
     skill_root: Path,
@@ -222,7 +228,7 @@ def install_macos(
     payload = macos_plist(python_executable, skill_root, archive_root)
     atomic_write_bytes(output, plistlib.dumps(payload, sort_keys=True))
     if load:
-        domain = f"gui/{os.getuid()}"
+        domain = launchctl_domain()
         runner(
             ["/bin/launchctl", "bootout", domain, str(output)],
             check=False,
@@ -235,7 +241,7 @@ def install_macos(
 
 def uninstall_macos(*, runner: Runner) -> Path:
     output = Path.home() / "Library" / "LaunchAgents" / f"{MACOS_LABEL}.plist"
-    domain = f"gui/{os.getuid()}"
+    domain = launchctl_domain()
     runner(
         ["/bin/launchctl", "bootout", domain, str(output)],
         check=False,

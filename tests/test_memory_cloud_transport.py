@@ -433,7 +433,7 @@ safety:
         sent = self.run_cli(real_a, "cloud-sync", "--force")
         received = self.run_cli(real_b, "cloud-sync", "--force")
         acknowledged = self.run_cli(real_a, "cloud-sync", "--force")
-        self.assertEqual(len(sent["published"]), 1)
+        self.assertEqual(len(sent["published"]), 1, sent)
         self.assertEqual(received["imports"][0]["status"], "imported")
         self.assertEqual(len(acknowledged["acks"]), 1)
         encrypted_path = Path(sent["published"][0]["path"])
