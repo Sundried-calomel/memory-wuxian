@@ -7,6 +7,7 @@ import argparse
 import base64
 import datetime as dt
 import getpass
+import json
 import os
 import plistlib
 import subprocess
@@ -341,7 +342,7 @@ def main(
             return 0
         if platform_name == "win32":
             uninstall_windows(runner=runner)
-            print(f"task:{WINDOWS_TASK_NAME}")
+            print(json.dumps({"task": WINDOWS_TASK_NAME}, ensure_ascii=True))
             return 0
         raise SystemExit("Cloud-sync scheduling supports Windows and macOS")
 
@@ -367,8 +368,12 @@ def main(
             load=args.load,
             runner=runner,
         )
-        print(f"task:{WINDOWS_TASK_NAME}")
-        print(f"wrapper:{output}")
+        print(
+            json.dumps(
+                {"task": WINDOWS_TASK_NAME, "wrapper": str(output)},
+                ensure_ascii=True,
+            )
+        )
         return 0
     raise SystemExit("Cloud-sync scheduling supports Windows and macOS")
 

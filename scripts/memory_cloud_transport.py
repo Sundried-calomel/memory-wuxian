@@ -510,7 +510,10 @@ class CloudFolderTransport:
         completed = int(state.get("completed_rounds", 0)) + len(
             state.get("completed_rounds_out_of_order") or []
         )
-        local = datetime.fromtimestamp(timestamp).astimezone()
+        try:
+            local = datetime.fromtimestamp(timestamp).astimezone()
+        except (OSError, OverflowError, ValueError):
+            local = datetime.now().astimezone()
         raw_today = (
             self.store.raw_dir
             / f"{local.year:04d}"
