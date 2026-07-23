@@ -912,31 +912,29 @@ impl Store {
     }
 
     fn changed_rollouts(&self, paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
-        let cursor_root = self.root.join("imports/codex");
-        let mut cursors = HashMap::new();
-        if cursor_root.exists() {
-            for entry in fs::read_dir(cursor_root)? {
-                let path = entry?.path();
-                if path.extension().and_then(|value| value.to_str()) != Some("json") {
-                    continue;
-                }
-                let cursor = match read_json(&path) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                };
-                if let Some(source_path) = cursor.get("source_path").and_then(Value::as_str) {
-                    cursors.insert(source_path.to_owned(), cursor);
-                }
-            }
-        }
-
-        paths
+        let session_pattern =
+            Regex::new(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$")?;
+        let changed = paths
             .into_iter()
             .filter_map(|path| {
-                let key = portable_path(&path);
-                let Some(cursor) = cursors.get(&key) else {
+                let session_id = path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .and_then(|value| session_pattern.captures(value))
+                    .and_then(|captures| captures.get(1))
+                    .map(|value| value.as_str());
+                let Some(session_id) = session_id else {
                     return Some(Ok(path));
                 };
+                let cursor_path = self.cursor_path(session_id);
+                let cursor = match read_json(&cursor_path) {
+                    Ok(value) => value,
+                    Err(_) => return Some(Ok(path)),
+                };
+                let key = portable_path(&path);
+                if cursor.get("source_path").and_then(Value::as_str) != Some(key.as_str()) {
+                    return Some(Ok(path));
+                }
                 let metadata = match fs::metadata(&path) {
                     Ok(value) => value,
                     Err(error) => return Some(Err(error.into())),
@@ -963,7 +961,9 @@ impl Store {
                     _ => Some(Ok(path)),
                 }
             })
-            .collect()
+            .collect::<Result<Vec<_>>>()?;
+        eprintln!("memory-wuxian-collector startup: cursor comparison completed");
+        Ok(changed)
     }
 
     fn sync_file(&self, source_path: &Path) -> Result<FileSyncResult> {
@@ -2692,12 +2692,22 @@ fn run() -> Result<()> {
             .map(|path| expand_tilde(path).and_then(|p| Ok(p.canonicalize()?)))
             .collect::<Result<Vec<_>>>()?
     };
+    eprintln!(
+        "memory-wuxian-collector startup: discovered {} rollout files",
+        initial_paths.len()
+    );
     let initial_paths = if args.once {
         initial_paths
     } else {
         store.changed_rollouts(initial_paths)?
     };
+    eprintln!(
+        "memory-wuxian-collector startup: {} rollout files require synchronization",
+        initial_paths.len()
+    );
+    eprintln!("memory-wuxian-collector startup: synchronization started");
     let initial = store.sync_batch(initial_paths)?;
+    eprintln!("memory-wuxian-collector startup: synchronization completed");
     if args.once {
         emit(&initial)?;
         return Ok(());

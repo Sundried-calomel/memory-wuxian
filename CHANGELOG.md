@@ -9,6 +9,7 @@
 - Add short-lived five-minute cloud synchronization tasks for macOS and Windows, with a fifteen-minute merge window, one-megabyte early flush, sixty-minute maximum pending interval, and manual immediate synchronization.
 - Bound macOS `kqueue` rollout watches to the 64 most recently modified files while retaining directory events and adaptive metadata fallback, preventing long histories from exhausting file descriptors.
 - Skip unchanged rollout files during collector startup by comparing their persisted source-size and modification-time cursors, while still importing new or changed files.
+- Log compact startup-stage counts without conversation content so collector catch-up delays can be diagnosed from the LaunchAgent log.
 - Keep Windows scheduler output ASCII-safe for paths containing non-Latin characters and tolerate platform-specific limits when tests inject pre-epoch local timestamps.
 - Keep macOS LaunchAgent installation testable from Windows by resolving the launchd user domain without assuming `os.getuid()` exists.
 - Use short same-directory temporary envelope names before atomic publication so long Windows exchange paths remain supported.
