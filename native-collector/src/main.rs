@@ -911,6 +911,61 @@ impl Store {
         self.root.join("imports/codex").join(format!("{safe}.json"))
     }
 
+    fn changed_rollouts(&self, paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
+        let cursor_root = self.root.join("imports/codex");
+        let mut cursors = HashMap::new();
+        if cursor_root.exists() {
+            for entry in fs::read_dir(cursor_root)? {
+                let path = entry?.path();
+                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let cursor = match read_json(&path) {
+                    Ok(value) => value,
+                    Err(_) => continue,
+                };
+                if let Some(source_path) = cursor.get("source_path").and_then(Value::as_str) {
+                    cursors.insert(source_path.to_owned(), cursor);
+                }
+            }
+        }
+
+        paths
+            .into_iter()
+            .filter_map(|path| {
+                let key = portable_path(&path);
+                let Some(cursor) = cursors.get(&key) else {
+                    return Some(Ok(path));
+                };
+                let metadata = match fs::metadata(&path) {
+                    Ok(value) => value,
+                    Err(error) => return Some(Err(error.into())),
+                };
+                if cursor.get("source_size").and_then(Value::as_u64) != Some(metadata.len()) {
+                    return Some(Ok(path));
+                }
+                if cursor.get("excluded_reason").is_some() {
+                    return None;
+                }
+                let cursor_modified = cursor
+                    .get("source_mtime")
+                    .and_then(Value::as_str)
+                    .and_then(|value| DateTime::parse_from_rfc3339(value).ok());
+                let current_modified: DateTime<Utc> =
+                    metadata.modified().unwrap_or(SystemTime::now()).into();
+                match cursor_modified {
+                    Some(value)
+                        if value.timestamp_nanos_opt()
+                            == current_modified.timestamp_nanos_opt() =>
+                    {
+                        None
+                    }
+                    _ => Some(Ok(path)),
+                }
+            })
+            .collect()
+    }
+
     fn sync_file(&self, source_path: &Path) -> Result<FileSyncResult> {
         let source_path = source_path.canonicalize()?;
         let bytes = fs::read(&source_path)?;
@@ -2636,6 +2691,11 @@ fn run() -> Result<()> {
             .iter()
             .map(|path| expand_tilde(path).and_then(|p| Ok(p.canonicalize()?)))
             .collect::<Result<Vec<_>>>()?
+    };
+    let initial_paths = if args.once {
+        initial_paths
+    } else {
+        store.changed_rollouts(initial_paths)?
     };
     let initial = store.sync_batch(initial_paths)?;
     if args.once {

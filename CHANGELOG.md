@@ -8,6 +8,7 @@
 - Add single-writer per-node outboxes, signed encrypted acknowledgements, stop-and-wait delivery, idempotent imports, transient placeholder handling, and sender-owned retention cleanup.
 - Add short-lived five-minute cloud synchronization tasks for macOS and Windows, with a fifteen-minute merge window, one-megabyte early flush, sixty-minute maximum pending interval, and manual immediate synchronization.
 - Bound macOS `kqueue` rollout watches to the 64 most recently modified files while retaining directory events and adaptive metadata fallback, preventing long histories from exhausting file descriptors.
+- Skip unchanged rollout files during collector startup by comparing their persisted source-size and modification-time cursors, while still importing new or changed files.
 - Keep Windows scheduler output ASCII-safe for paths containing non-Latin characters and tolerate platform-specific limits when tests inject pre-epoch local timestamps.
 - Keep macOS LaunchAgent installation testable from Windows by resolving the launchd user domain without assuming `os.getuid()` exists.
 - Keep native local collection, immutable archives, read-only peer replicas, SSH host authentication, global retrieval, and summary behavior unchanged.
