@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1 - 2026-07-23
+
+- Add progressive higher-level summary achievements for L2 through L8, with quantity milestones scaled to the increasing cost of each hierarchy level.
+
 ## 1.4.0 - 2026-07-23
 
 - Add deterministic title-targeted conversation tails: resolve all known Codex title aliases to one archived conversation before selecting its latest visible messages, and fail on missing or ambiguous titles instead of falling back to the newest conversation.
