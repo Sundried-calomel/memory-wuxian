@@ -109,3 +109,57 @@ Normalize mixed natural-language queries and rank explicit terms deterministical
 Status: Accepted.
 
 Keep persistent memory separate from the client-managed active context. At each Agent turn, inspect the active top-level rollout's latest token telemetry and completed-round count. Refresh after 10 completed rounds, at 65% and 80% effective context utilization, or after a detected compaction drop. Inject a derived capsule through tool context rather than archiving it as a source message. Prefer the highest available summary level, add only uncovered lower summaries and recent task state, and cap the capsule at 1% of the effective model context with a 3,000-token soft limit and 10,000-token absolute limit.
+
+## D-019: Federation preserves single-writer local authority
+
+Status: Accepted.
+
+Each device exclusively writes its own local archive. Imported artifacts live
+in a separate read-only sibling federation cache and never modify local raw
+records, state, rounds, sequences, or summary counters. Only locally originated
+artifacts may be exported, preventing replica circulation.
+
+## D-020: Global identity is origin-qualified
+
+Status: Accepted.
+
+Keep original artifact payloads and hashes unchanged. Build reconstructible
+global indexes by qualifying message, conversation, and summary identifiers
+with the origin node.
+
+## D-021: Delta continuity is explicit
+
+Status: Accepted.
+
+Use an artifact event ledger so late summaries and title updates are exported.
+Verify artifact SHA-256, reject event-sequence gaps and overlaps, and require
+each noninitial bundle to name the SHA-256 of the previously accepted bundle.
+Treat repeated accepted bundles as no change and conflicting artifacts as
+integrity failures.
+
+## D-022: SSH protects transport, not the bundle format
+
+Status: Accepted.
+
+Use SSH pull with strict host-key checking and existing SSH user
+authentication. Support `posix` and `powershell` remote shells. SSH encrypts and
+authenticates the transport connection. The offline `.mwxb` container is
+compressed but neither encrypted nor cryptographically signed, so it may travel
+only through a trusted channel.
+
+## D-023: Federation identity is independent of OpenAI
+
+Status: Accepted.
+
+Use Memory無限 node IDs and explicit local peer trust. Do not reuse OpenAI
+sessions, Codex credentials, or an OpenAI active-device list as federation
+identity or authorization.
+
+## D-024: Replicas are reconstructible and excluded from primary backups
+
+Status: Accepted.
+
+Keep peer replicas under the default sibling `<archive>-federation-cache` or an
+explicitly configured equivalent. Do not include replicas in the desktop backup
+of the writable primary archive. Rebuild global indexes from local authority
+and imported replicas.

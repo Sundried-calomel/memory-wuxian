@@ -20,6 +20,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from platform_lock import exclusive_lock
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
+from memory_federation import FederationManager
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -3586,6 +3587,72 @@ def build_parser() -> argparse.ArgumentParser:
         "rebuild-deterministic-indexes",
         help="Rebuild script-only hybrid indexes from authoritative raw records",
     )
+    init_node_parser = subparsers.add_parser(
+        "init-node",
+        help="Create this archive's stable federation node identity",
+    )
+    init_node_parser.add_argument("--display-name")
+    init_node_parser.add_argument("--node-id")
+    add_peer_parser = subparsers.add_parser(
+        "add-peer",
+        help="Register a trusted Memory Wuxian peer and optional SSH transport",
+    )
+    add_peer_parser.add_argument("--node-id", required=True)
+    add_peer_parser.add_argument("--display-name")
+    add_peer_parser.add_argument("--host")
+    add_peer_parser.add_argument("--port", type=int, default=22)
+    add_peer_parser.add_argument("--remote-root")
+    add_peer_parser.add_argument("--remote-config")
+    add_peer_parser.add_argument("--remote-cli")
+    add_peer_parser.add_argument("--remote-python", default="python3")
+    add_peer_parser.add_argument(
+        "--remote-shell",
+        choices=["posix", "powershell"],
+        default="posix",
+    )
+    revoke_peer_parser = subparsers.add_parser(
+        "revoke-peer",
+        help="Reject future imports and SSH synchronization from one peer",
+    )
+    revoke_peer_parser.add_argument("--node-id", required=True)
+    export_delta_parser = subparsers.add_parser(
+        "export-delta",
+        help="Export new local artifacts as one verifiable federation bundle",
+    )
+    export_delta_parser.add_argument("--output", required=True)
+    export_delta_parser.add_argument("--after-event-sequence", type=int, default=0)
+    export_delta_parser.add_argument("--previous-bundle-sha256")
+    export_delta_parser.add_argument("--target-node-id")
+    inspect_bundle_parser = subparsers.add_parser(
+        "inspect-bundle",
+        help="Validate a federation bundle without importing it",
+    )
+    inspect_bundle_parser.add_argument("--bundle", required=True)
+    import_delta_parser = subparsers.add_parser(
+        "import-delta",
+        help="Import one trusted peer bundle into its read-only replica",
+    )
+    import_delta_parser.add_argument("--bundle", required=True)
+    import_delta_parser.add_argument("--expected-node-id")
+    subparsers.add_parser(
+        "rebuild-global-index",
+        help="Rebuild cross-device indexes from read-only replicas",
+    )
+    retrieve_global_parser = subparsers.add_parser(
+        "retrieve-global",
+        help="Search local authority and all synchronized peer replicas",
+    )
+    retrieve_global_parser.add_argument("--query", required=True)
+    retrieve_global_parser.add_argument("--node")
+    subparsers.add_parser(
+        "federation-status",
+        help="Show this node, trusted peers, replica cursors, and recent synchronization",
+    )
+    sync_peer_parser = subparsers.add_parser(
+        "sync-peer",
+        help="Pull and import a peer's next delta over authenticated SSH",
+    )
+    sync_peer_parser.add_argument("--node-id", required=True)
     return parser
 
 
@@ -3748,6 +3815,78 @@ def dispatch_command(
                 },
             )
             result["backup"] = str(backup) if backup else None
+    elif args.command == "init-node":
+        result = FederationManager(store).init_node(args.display_name, args.node_id)
+        if result["status"] == "created":
+            backup = store.create_backup_snapshot(
+                "federation-node-created",
+                {"node_id": result["node"]["node_id"]},
+            )
+            result["backup"] = str(backup) if backup else None
+    elif args.command == "add-peer":
+        result = FederationManager(store).add_peer(
+            args.node_id,
+            args.display_name,
+            args.host,
+            args.port,
+            args.remote_root,
+            args.remote_config,
+            args.remote_cli,
+            args.remote_python,
+            args.remote_shell,
+        )
+        backup = store.create_backup_snapshot(
+            "federation-peer-registered",
+            {"node_id": result["peer"]["node_id"]},
+        )
+        result["backup"] = str(backup) if backup else None
+    elif args.command == "revoke-peer":
+        result = FederationManager(store).revoke_peer(args.node_id)
+        backup = store.create_backup_snapshot(
+            "federation-peer-revoked",
+            {"node_id": result["peer"]["node_id"]},
+        )
+        result["backup"] = str(backup) if backup else None
+    elif args.command == "export-delta":
+        manager = FederationManager(store)
+        if args.output == "-":
+            with tempfile.TemporaryDirectory(prefix="memory-wuxian-export-") as directory:
+                bundle = Path(directory) / "delta.mwxb"
+                result = manager.export_delta(
+                    bundle,
+                    args.after_event_sequence,
+                    args.target_node_id,
+                    args.previous_bundle_sha256,
+                )
+                if result["status"] == "no-change":
+                    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+                else:
+                    sys.stdout.buffer.write(bundle.read_bytes())
+                    sys.stdout.buffer.flush()
+                return 0
+        result = manager.export_delta(
+            Path(args.output),
+            args.after_event_sequence,
+            args.target_node_id,
+            args.previous_bundle_sha256,
+        )
+    elif args.command == "inspect-bundle":
+        result = FederationManager(store).inspect_bundle(Path(args.bundle))
+    elif args.command == "import-delta":
+        result = FederationManager(store).import_delta(
+            Path(args.bundle),
+            args.expected_node_id,
+        )
+    elif args.command == "rebuild-global-index":
+        result = FederationManager(store).rebuild_global_indexes()
+    elif args.command == "retrieve-global":
+        output, _ = FederationManager(store).retrieve_global(args.query, args.node)
+        print(output, end="")
+        return 0
+    elif args.command == "federation-status":
+        result = FederationManager(store).status()
+    elif args.command == "sync-peer":
+        result = FederationManager(store).sync_peer(args.node_id)
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2
@@ -3761,8 +3900,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         config = resolve_config(Path(args.config))
         store = MemoryStore(resolve_root(args.root, config), config)
-        if args.command in {"retrieve", "conversation-tail", "context-refresh-status", "context-capsule"}:
+        if args.command in {
+            "retrieve",
+            "conversation-tail",
+            "context-refresh-status",
+            "context-capsule",
+            "inspect-bundle",
+            "retrieve-global",
+            "federation-status",
+        }:
             return dispatch_command(args, parser, store)
+        if args.command in {
+            "init-node",
+            "add-peer",
+            "revoke-peer",
+            "import-delta",
+            "rebuild-global-index",
+            "sync-peer",
+        }:
+            with exclusive_lock(store.root / ".locks" / "federation.lock"):
+                return dispatch_command(args, parser, store)
         with exclusive_lock(store.root / ".locks" / "archive.lock"):
             return dispatch_command(args, parser, store)
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:

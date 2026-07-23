@@ -30,6 +30,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 19. Keep only the configured number of newest workspace recovery backups under `memory/archive/`; the default is one.
 20. Do not keep an AI conversation active. Let scripts detect completed-round or character thresholds, then run one ephemeral AI process only to generate the due semantic summary.
 21. Treat dashboard snapshots as disposable derived caches. Validate them against source metadata and rebuild from the archive when stale or malformed.
+22. Keep each node's local archive exclusively writable by that node. Store imported peer history only in read-only replicas under the federation cache.
+23. Qualify federated message, conversation, and summary identities by origin node. Never merge remote records into local counters or authoritative raw files.
+24. Export only locally originated artifacts. Verify artifact SHA-256, event-sequence continuity, and predecessor bundle SHA-256 before committing an import.
+25. Treat `.mwxb` as a compressed integrity-checked container, not as an encrypted or signed message. Transfer it only through SSH or another trusted channel.
+26. Keep federation identity separate from OpenAI sessions and exclude reconstructible peer replicas from primary-archive desktop backups.
 
 ## Operating workflow
 
@@ -50,6 +55,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 14. At the start of each user turn, run `context-refresh-status`. When due, load `context-capsule` into the current reasoning context and run `ack-context-refresh` only after the capsule was read. Do not quote the capsule to the user unless requested, and never archive it as a source message.
 15. When the user names another or historical Codex conversation and asks to continue it or restore its latest messages, run `conversation-tail --title "..." --exclude-conversation-id "codex:<active-task-id>" --messages N`. Resolve the title after excluding the active task and before selecting messages. Never substitute the latest conversation when the title is missing or ambiguous. When the user confirms a title-to-task relationship, persist it with `register-title` so later retrieval does not depend on mutable client title metadata.
 16. Let the dashboard render its last successful browser-local response immediately. The local server validates `memory/dashboard/status-snapshot.json` against archive metadata and rebuilds it from authoritative records only when needed.
+17. For federation, run `init-node` once, register only explicitly trusted peers, and use `export-delta`, `inspect-bundle`, and `import-delta` for offline exchange.
+18. Use `sync-peer` only after SSH host identity is present in the local known-hosts trust store. Select `posix` or `powershell` to match the remote shell.
+19. Use `retrieve-global` for cross-device history. Treat a peer result as verified only after its imported artifact hash has been checked.
+20. Use `revoke-peer` to reject future imports and SSH pulls from a device. Revocation does not silently delete previously imported history.
 
 ## Commands
 
@@ -82,6 +91,16 @@ python3 scripts/memory_cli.py rebuild-deterministic-indexes
 python3 scripts/memory_cli.py heartbeat --check-only
 python3 scripts/memory_cli.py heartbeat
 python3 scripts/memory_cli.py heartbeat --repair
+python3 scripts/memory_cli.py init-node --display-name "This computer"
+python3 scripts/memory_cli.py add-peer --node-id <peer-node-id>
+python3 scripts/memory_cli.py export-delta --output /trusted/path/update.mwxb --target-node-id <peer-node-id>
+python3 scripts/memory_cli.py inspect-bundle --bundle /trusted/path/update.mwxb
+python3 scripts/memory_cli.py import-delta --bundle /trusted/path/update.mwxb --expected-node-id <peer-node-id>
+python3 scripts/memory_cli.py rebuild-global-index
+python3 scripts/memory_cli.py retrieve-global --query "..."
+python3 scripts/memory_cli.py federation-status
+python3 scripts/memory_cli.py sync-peer --node-id <peer-node-id>
+python3 scripts/memory_cli.py revoke-peer --node-id <peer-node-id>
 scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
 powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1
@@ -110,3 +129,11 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 ## Client integration boundary
 
 Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or Windows scheduled task. Both keep only the Rust collector alive, use immediate native filesystem events plus an adaptive 5-second, 30-second, and 5-minute metadata fallback, and share the same archive contract. They import user messages, visible assistant commentary/final answers, lightweight task-timeline tool activity, and successful structured file-change diffs from top-level sessions; they exclude subagent sessions, system prompts, hidden reasoning, and general tool output. When a complete-round boundary makes a summary due, the collector runs one ephemeral Codex CLI summary worker and waits for it to exit. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.
+
+Federation is a separate low-frequency layer and does not change collector
+ownership of the local archive. By default, imported replicas live in the
+sibling `<archive>-federation-cache`, remain read-only, and are omitted from the
+desktop primary-archive backup. SSH protects and authenticates the transport;
+the offline `.mwxb` bundle itself is neither encrypted nor signed. Federation
+does not use OpenAI login sessions and does not currently provide automatic
+public address discovery, NAT traversal, or mobile access.

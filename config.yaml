@@ -62,6 +62,12 @@ codex:
   collector: "native-event-driven"
   debounce_milliseconds: 400
 
+federation:
+  enabled: false
+  replica_directory: ""
+  transport: "offline"
+  ssh_strict_host_key_checking: true
+
 context_refresh:
   enabled: true
   round_interval: 10

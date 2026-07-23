@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/delta-manifest.schema.json",
+  "title": "Memory Wuxian Delta Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "protocol_version",
+    "minimum_protocol_version",
+    "bundle_id",
+    "origin_node_id",
+    "target_node_id",
+    "base_event_sequence",
+    "previous_bundle_sha256",
+    "from_event_sequence",
+    "to_event_sequence",
+    "artifact_count",
+    "payload_path",
+    "payload_bytes",
+    "payload_sha256"
+  ],
+  "properties": {
+    "format": {"const": "memory-wuxian-delta-v1"},
+    "protocol_version": {"const": 1},
+    "minimum_protocol_version": {"const": 1},
+    "bundle_id": {"type": "string", "pattern": "^mwb-[0-9a-f]{32}$"},
+    "origin_node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "target_node_id": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "base_event_sequence": {"type": "integer", "minimum": 0},
+    "previous_bundle_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "from_event_sequence": {"type": "integer", "minimum": 1},
+    "to_event_sequence": {"type": "integer", "minimum": 1},
+    "artifact_count": {"type": "integer", "minimum": 1},
+    "payload_path": {"const": "payload/artifacts.jsonl"},
+    "payload_bytes": {"type": "integer", "minimum": 1},
+    "payload_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

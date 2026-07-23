@@ -63,6 +63,12 @@ fi
   "$python_executable" "$skill_root/scripts/memory_cli.py" \
   --root "$archive_root" --config "$skill_root/config.yaml" init >/dev/null
 
+node_display_name="$(/usr/sbin/scutil --get ComputerName 2>/dev/null || /bin/hostname)"
+/usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
+  "$python_executable" "$skill_root/scripts/memory_cli.py" \
+  --root "$archive_root" --config "$skill_root/config.yaml" \
+  init-node --display-name "$node_display_name" >/dev/null
+
 /usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
   "$python_executable" "$skill_root/scripts/install_codex_autosync.py" \
   --archive-root "$archive_root" \

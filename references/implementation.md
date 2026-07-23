@@ -17,6 +17,7 @@
 13. External backup snapshots
 14. Runtime context refresh
 15. Dashboard status cache
+16. Federated memory
 
 ## 1. Storage layout
 
@@ -245,3 +246,146 @@ before the server finishes verification. Replace that display with the current
 local API response when available. Browser and server caches must remain
 optional performance layers; deleting either cache must never remove or alter
 conversation history.
+
+## 16. Federated memory
+
+### 16.1 Authority and layout
+
+Each node owns one writable local archive. Federation never imports remote
+messages through the local append path and never changes local `state.json`,
+round numbers, message sequences, or summary counters.
+
+Node metadata and the export ledger live under the local archive:
+
+```text
+<archive>/federation/
+├── node.json
+├── export-state.json
+├── export-ledger.jsonl
+├── peers/<node-id>.json
+└── sync-log.jsonl
+```
+
+Imported data uses the default sibling cache:
+
+```text
+<archive>-federation-cache/
+├── peers/<origin-node-id>/
+│   ├── raw-records.jsonl
+│   ├── conversation-titles.jsonl
+│   ├── summaries/
+│   ├── receipts/
+│   └── replica-state.json
+└── global-index/
+```
+
+The cache is read-only from the receiving node's perspective and can be
+recreated from source nodes. It is not included in the desktop backup of the
+primary archive. A configured replica directory may replace the default sibling
+path without changing these authority rules.
+
+### 16.2 Node and artifact identity
+
+`init-node` creates a stable Memory無限 node identity. Federation does not use
+OpenAI session state, Codex credentials, or an OpenAI account's active-device
+list. Peer trust is explicit and local.
+
+Global indexes qualify message, conversation, and summary identifiers with the
+origin node. Original payloads keep their existing identifiers and hashes.
+Only locally originated artifacts enter a node's export ledger; imported
+replicas are never re-exported.
+
+The append-only artifact ledger assigns an event sequence whenever a local raw
+record, semantic summary, or confirmed conversation title first appears or its
+locally authoritative content changes. This captures summaries or titles
+created after the original raw message range was archived.
+
+### 16.3 Delta bundle
+
+`export-delta` writes one ZIP-compressed `.mwxb` containing `manifest.json` and
+`payload/artifacts.jsonl`. The manifest identifies the origin and optional
+target node, event-sequence range, artifact count, payload size, payload
+SHA-256, and predecessor bundle SHA-256.
+
+Initial bundles start after event sequence zero and declare no predecessor.
+Every noninitial export requires the receiving peer's last imported event
+sequence and last bundle SHA-256. Import rejects event-sequence gaps, partial
+overlaps, origin mismatch, target mismatch, an invalid predecessor chain,
+artifact hash mismatch, path-unsafe content, and conflicting duplicate
+artifacts. Reimporting an already accepted bundle returns no change.
+
+Exports are bounded by both artifact count and uncompressed payload bytes. A
+result with `has_more: true` is the next contiguous page, not a completed
+backlog. The append-only export ledger is authoritative; `export-state.json` is
+a reconstructible cache.
+
+`inspect-bundle` performs structural and integrity validation without importing.
+`import-delta` validates every artifact before writing, uses atomic per-file
+replacement, and leaves a durable transaction marker until replica state and
+the accepted-bundle receipt are complete. Retrying the same bundle resumes or
+finishes an interrupted transaction. Accepted bundle receipts and replica state
+provide the idempotency and continuation cursor.
+
+### 16.4 Global retrieval
+
+`rebuild-global-index` derives cross-device node, conversation, message,
+summary, and concept routes from peer replicas. `retrieve-global` combines
+those routes with the current local authority and verifies a matching peer
+result against its imported payload SHA-256. The existing `retrieve` command
+remains local-only.
+
+`revoke-peer` marks a peer untrusted and rejects later imports or SSH pulls.
+Revocation does not silently delete already imported historical replicas.
+
+### 16.5 SSH pull transport
+
+`sync-peer` is a pull operation. It invokes the remote node's `export-delta`
+through SSH, receives either the next `.mwxb` bytes or a no-change response, and
+passes the bundle through the same local import validation. Peer configuration
+supports `posix` and `powershell` remote command construction.
+
+SSH must use strict host-key checking and the user's existing SSH
+authentication. SSH encrypts the connection and authenticates the transport
+endpoints. The `.mwxb` format itself is not encrypted and is not
+cryptographically signed. SHA-256 detects content changes but does not
+authenticate the sender. Offline bundles must therefore travel only through a
+trusted channel.
+
+Version 1.5.0 does not implement public-internet automatic discovery, NAT
+traversal, relay service, or a mobile client.
+
+### 16.6 Command examples
+
+```bash
+python3 scripts/memory_cli.py --root /path/to/archive init-node --display-name "Lab Mac"
+python3 scripts/memory_cli.py --root /path/to/archive add-peer --node-id <peer-node-id>
+python3 scripts/memory_cli.py --root /path/to/archive export-delta \
+  --output /trusted/path/update.mwxb \
+  --target-node-id <peer-node-id>
+python3 scripts/memory_cli.py --root /path/to/archive inspect-bundle \
+  --bundle /trusted/path/update.mwxb
+python3 scripts/memory_cli.py --root /path/to/archive import-delta \
+  --bundle /trusted/path/update.mwxb \
+  --expected-node-id <peer-node-id>
+python3 scripts/memory_cli.py --root /path/to/archive rebuild-global-index
+python3 scripts/memory_cli.py --root /path/to/archive retrieve-global --query "topic"
+python3 scripts/memory_cli.py --root /path/to/archive federation-status
+python3 scripts/memory_cli.py --root /path/to/archive revoke-peer --node-id <peer-node-id>
+```
+
+For SSH pull:
+
+```bash
+python3 scripts/memory_cli.py --root /path/to/local add-peer \
+  --node-id <peer-node-id> \
+  --host user@example-host \
+  --port 22 \
+  --remote-root /path/to/remote/archive \
+  --remote-config /path/to/remote/config.yaml \
+  --remote-cli /path/to/remote/scripts/memory_cli.py \
+  --remote-python python3 \
+  --remote-shell posix
+python3 scripts/memory_cli.py --root /path/to/local sync-peer --node-id <peer-node-id>
+```
+
+Use `--remote-shell powershell` and Windows paths for a Windows peer.

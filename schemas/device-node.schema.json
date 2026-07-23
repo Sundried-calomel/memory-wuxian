@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/device-node.schema.json",
+  "title": "Memory Wuxian Federation Node",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "protocol_version",
+    "node_id",
+    "display_name",
+    "created_at",
+    "replica_root"
+  ],
+  "properties": {
+    "format_version": {"const": 1},
+    "protocol_version": {"const": 1},
+    "node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "display_name": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 1},
+    "replica_root": {"type": "string", "minLength": 1}
+  }
+}

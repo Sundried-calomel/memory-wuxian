@@ -20,5 +20,11 @@
 18. Keep continuous capture and trigger detection script-only. Invoke AI only as an ephemeral worker for a due semantic summary, after the current dialogue round has completed.
 19. Keep runtime context capsules derived, bounded, acknowledgement-driven, and separate from authoritative archive records.
 20. Cap every runtime context capsule at 10,000 estimated tokens even when the active model exposes a larger context window.
+21. Give each device exclusive write authority over its local archive and export only locally originated artifacts.
+22. Store imported peer artifacts in a sibling read-only federation cache, separate from local raw records, state, counters, and desktop backups.
+23. Namespace federated identities by origin node and make global indexes reconstructible routing data.
+24. Require artifact SHA-256, contiguous event sequences, and a predecessor bundle SHA-256 chain for delta import.
+25. Keep federation trust independent of OpenAI sessions and Codex credentials.
+26. Use SSH strict host-key checking for automated transport. Do not describe the offline `.mwxb` container as encrypted or signed.
 
 Architectural changes must preserve these invariants or document an explicit replacement decision in `references/decisions.md` before implementation.

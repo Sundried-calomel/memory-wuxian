@@ -128,3 +128,70 @@ New summary files persist `source_sha256` in frontmatter. Summary indexes and re
 `retrieval/context-refresh-state.json` is derived runtime state keyed by conversation ID. Each acknowledgement records timestamp, completed-round count, utilization stage, detected compaction count, last used tokens, and effective model context window. Deleting this file causes a safe initial refresh; it never removes raw history or summaries.
 
 `context-refresh-status` reports the selected top-level session, due reasons, latest token usage, utilization, compaction count, and capsule budget. `context-capsule` emits derived Markdown plus machine-readable metadata. It prefers higher-level summaries over their covered children and is not a raw-message record.
+
+## Federation node
+
+`federation/node.json` conforms to `schemas/device-node.schema.json` and records
+the format and federation protocol versions, stable ASCII `node_id`,
+human-readable `display_name`, creation time, and resolved replica root.
+
+The node ID is a Memory無限 namespace identifier. It is not an OpenAI account,
+session, access token, or cryptographic public-key identity.
+
+## Federation peer
+
+Each `federation/peers/<node-id>.json` contains the peer node ID, display name,
+`trusted` state, and transport settings. An offline peer uses transport type
+`offline`. An SSH peer records its host, port, remote archive, optional remote
+config and CLI paths, remote Python command, and `posix` or `powershell` shell.
+
+Peer files contain no OpenAI credentials. Setting `trusted: false` rejects
+future imports and SSH pulls.
+
+## Artifact export ledger
+
+`federation/export-ledger.jsonl` is append-only derived routing state. Each
+entry assigns a monotonically increasing local `event_sequence` to one locally
+originated artifact and records its artifact ID, kind, and content SHA-256.
+`export-state.json` stores the next sequence and latest known
+artifact hashes. Imported replicas never enter this ledger.
+
+## Delta manifest
+
+`manifest.json` inside a `.mwxb` conforms to
+`schemas/delta-manifest.schema.json`. It records:
+
+- bundle format and protocol compatibility
+- deterministic bundle ID
+- origin node and optional target node
+- base, first, and last event sequence
+- optional predecessor bundle SHA-256
+- artifact count
+- payload path, byte length, and SHA-256
+
+The payload is newline-delimited canonical JSON under
+`payload/artifacts.jsonl`. Each event includes its original payload and
+artifact SHA-256. An initial bundle has base sequence zero and no predecessor.
+A noninitial bundle must continue the receiving replica's sequence and name the
+SHA-256 of its immediately preceding accepted bundle.
+
+The `.mwxb` ZIP container is compressed, not encrypted, and not
+cryptographically signed. Its SHA-256 fields provide integrity checks only.
+
+## Federated index entry
+
+Entries under `<archive>-federation-cache/global-index/` conform to
+`schemas/federated-index-entry.schema.json`. They identify the origin node,
+artifact kind, original ID, qualified cross-node ID, conversation and timing
+metadata, searchable text, source replica path, and verified content SHA-256.
+
+Qualified identifiers use the origin node as a namespace. The original remote
+payload is not rewritten to add that namespace.
+
+## Replica state and receipts
+
+Each peer replica stores `replica-state.json` with its last contiguous imported
+event sequence, last accepted bundle ID, and last accepted bundle SHA-256.
+Receipts make repeated import idempotent. A later bundle is rejected when it
+creates a gap or overlap or names a predecessor different from the recorded
+bundle SHA-256.

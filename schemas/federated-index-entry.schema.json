@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/federated-index-entry.schema.json",
+  "title": "Memory Wuxian Federated Message Index Entry",
+  "type": "object",
+  "required": [
+    "origin_node_id",
+    "qualified_message_id",
+    "qualified_conversation_id",
+    "message_id",
+    "conversation_id",
+    "content_sha256"
+  ],
+  "properties": {
+    "origin_node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "qualified_message_id": {"type": "string", "minLength": 1},
+    "qualified_conversation_id": {"type": "string", "minLength": 1},
+    "message_id": {"type": "string", "minLength": 1},
+    "conversation_id": {"type": "string", "minLength": 1},
+    "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

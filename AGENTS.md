@@ -33,6 +33,14 @@ Use Memory無限 to preserve conversation history outside the active context win
 25. Keep only the native collector continuously active. After a completed round reaches either summary threshold, run one ephemeral AI worker to generate and ingest that summary, then exit.
 26. Check automatic semantic backlog only when a synchronization batch completes a new dialogue round. Commentary, restart catch-up, and other nonfinal writes must not trigger AI work.
 27. Preserve lightweight tool activity already visible in the Codex task timeline: tool name, nested tool names, and command text when available. Preserve successful structured file-change events with exact unified diffs as the sole tool-output exception. Keep both in the corresponding conversation and round, but exclude general tool output and hidden reasoning.
+28. Treat the current node's local archive as its exclusive writable authority. Import peer data only into the read-only federation cache, never into local raw history or local counters.
+29. Identify every federated object by its origin node and preserve the original artifact bytes and SHA-256.
+30. Before importing a delta, require a trusted peer, validate bundle structure and artifact hashes, reject sequence gaps or overlaps, and validate the predecessor bundle SHA-256 chain.
+31. Export only artifacts originated by the current node. Never re-export a replica received from another peer.
+32. Use SSH with strict host-key checking for automated peer pulls. Select the declared `posix` or `powershell` remote shell and do not weaken host authentication.
+33. Treat an offline `.mwxb` as unencrypted and unsigned. Do not send it through an untrusted channel or describe SHA-256 as sender authentication.
+34. Do not use OpenAI sessions, Codex credentials, or account login state as Memory無限 device identity.
+35. Keep reconstructible peer replicas outside the primary archive and outside its desktop backup. Use `retrieve-global` when cross-device history is requested.
 
 ## Authority order
 

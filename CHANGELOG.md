@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.0 - 2026-07-23
+
+- Add stable Memory無限 node identities and explicit trusted-peer registration without reusing OpenAI account sessions or Codex credentials.
+- Add artifact-ledger-based `export-delta`, `inspect-bundle`, and `import-delta` workflows for idempotent `.mwxb` exchange.
+- Store imported history as read-only peer replicas in the default sibling `<archive>-federation-cache`, leaving each local archive under exclusive local write authority.
+- Validate artifact SHA-256, event-sequence gaps and overlaps, target and origin nodes, and predecessor bundle SHA-256 continuity before import.
+- Bound large exports into contiguous pages and reconstruct the export-state cache from the append-only artifact ledger after interrupted writes.
+- Contain untrusted summary identifiers with hashed replica filenames, reject nested replica roots, preflight peer trust, and bound SSH execution time.
+- Add reconstructible global indexes, `retrieve-global`, federation status, and peer revocation.
+- Add SSH peer pull with strict host-key checking and `posix` or `powershell` remote command construction.
+- Document that SSH encrypts and authenticates transport, while offline `.mwxb` bundles are not encrypted or signed and must use a trusted channel.
+- Exclude reconstructible peer replicas from desktop primary-archive backups.
+
 ## 1.4.2 - 2026-07-23
 
 - Add archive-file-size achievements using the actual persisted raw, conversation, summary, index, and state files.

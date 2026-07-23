@@ -22,6 +22,7 @@ from conversation_titles import (
     codex_thread_titles,
 )
 from memory_cli import MemoryStore, atomic_write_json, load_simple_yaml, read_jsonl
+from memory_federation import FederationManager
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -388,6 +389,14 @@ def make_handler(store: MemoryStore):
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("ETag", etag)
+            elif path == "/api/devices":
+                body = json.dumps(
+                    FederationManager(store).status(),
+                    ensure_ascii=False,
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
             elif path in {"/", "/index.html"}:
                 body = INDEX_HTML.read_bytes()
                 self.send_response(200)

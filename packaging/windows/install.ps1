@@ -18,6 +18,13 @@ New-Item -ItemType Directory -Force -Path $archiveRoot, $sessionsRoot | Out-Null
 & $python (Join-Path $SkillRoot "scripts\memory_cli.py") --root $archiveRoot --config (Join-Path $SkillRoot "config.yaml") init | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian archive initialization failed." }
 
+& $python (Join-Path $SkillRoot "scripts\memory_cli.py") `
+  --root $archiveRoot `
+  --config (Join-Path $SkillRoot "config.yaml") `
+  init-node `
+  --display-name $env:COMPUTERNAME | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian node initialization failed." }
+
 & $python (Join-Path $SkillRoot "scripts\install_codex_autosync_windows.py") `
   --archive-root $archiveRoot `
   --skill-root $SkillRoot `

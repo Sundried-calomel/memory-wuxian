@@ -16,6 +16,8 @@ memory/pending/*
 memory/archive/*
 memory/.locks/*
 memory/imports/*
+memory/federation/*
+*-federation-cache/
 bin/*
 !bin/memory-wuxian-collector.exe
 native-collector/target/

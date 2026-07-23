@@ -21,6 +21,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Event-driven synchronization through a native macOS LaunchAgent or Windows scheduled task
 - One latest verified desktop snapshot with a SHA-256 manifest and an append-only backup log
 - One latest workspace recovery backup for derived-file reconstruction
+- Federated read-only replicas with delta bundles, artifact-ledger cursors, and cross-device retrieval
 - A transparent file layout with no database dependency
 
 ## Install
@@ -185,12 +186,88 @@ The default Level-1 boundary is 5 completed dialogue rounds or 20,000 visible ch
 
 Automatic semantic-summary jobs and the one-shot worker are enabled in the installed configuration. No AI process remains active between due summaries. Existing pending jobs keep their immutable source ranges and are not silently rewritten when thresholds change.
 
+## Federated memory
+
+Version 1.5.0 keeps every device's local archive as that device's exclusive
+writable authority. A device exports its own new raw records, summaries, and
+confirmed conversation titles as `.mwxb` delta bundles. A trusted peer imports
+them into a read-only replica under the default sibling directory:
+
+```text
+<archive>-federation-cache/
+├── peers/<origin-node-id>/
+└── global-index/
+```
+
+Peer records never enter the receiving device's local `raw/`, `state.json`,
+round counters, or summary counters. Reconstructible peer indexes qualify
+identifiers by origin node; `retrieve-global` combines those routes with the
+current local authority at query time. `retrieve` remains local-only.
+
+Initialize two nodes and exchange an offline delta:
+
+```bash
+python3 scripts/memory_cli.py --root /path/to/node-a init-node --display-name "Node A"
+python3 scripts/memory_cli.py --root /path/to/node-b init-node --display-name "Node B"
+python3 scripts/memory_cli.py --root /path/to/node-b add-peer --node-id <node-a-id>
+python3 scripts/memory_cli.py --root /path/to/node-a export-delta \
+  --output /trusted/path/node-a-0001.mwxb \
+  --target-node-id <node-b-id>
+python3 scripts/memory_cli.py --root /path/to/node-b inspect-bundle \
+  --bundle /trusted/path/node-a-0001.mwxb
+python3 scripts/memory_cli.py --root /path/to/node-b import-delta \
+  --bundle /trusted/path/node-a-0001.mwxb \
+  --expected-node-id <node-a-id>
+python3 scripts/memory_cli.py --root /path/to/node-b retrieve-global \
+  --query "earlier topic"
+```
+
+The artifact ledger detects locally authoritative artifacts even when a summary
+or title is created after its original message range. Import verifies artifact
+SHA-256, rejects event-sequence gaps and overlaps, and requires each noninitial
+bundle to name the SHA-256 of its imported predecessor. Reimporting an accepted
+bundle is idempotent. `revoke-peer` blocks future imports and SSH pulls without
+silently deleting already imported history.
+
+Large backlogs are exported as bounded, contiguous pages. When `has_more` is
+true, use the returned `to_event_sequence` and bundle SHA-256 as the next
+export cursor and predecessor. Export state is reconstructible from the
+append-only artifact ledger after an interrupted state-cache write.
+
+For authenticated transport, register an SSH peer and pull its next delta:
+
+```bash
+python3 scripts/memory_cli.py --root /path/to/local add-peer \
+  --node-id <remote-node-id> \
+  --host user@example-host \
+  --remote-root /path/to/remote/archive \
+  --remote-config /path/to/remote/config.yaml \
+  --remote-cli /path/to/remote/scripts/memory_cli.py \
+  --remote-shell posix
+python3 scripts/memory_cli.py --root /path/to/local sync-peer \
+  --node-id <remote-node-id>
+```
+
+Use `--remote-shell powershell` for a Windows peer. SSH encrypts the connection
+and authenticates the transport through strict host-key checking and the
+configured SSH user credentials. SSH synchronization also uses bounded
+connection and command timeouts. The `.mwxb` format itself is compressed but is
+not encrypted and is not cryptographically signed. Offline bundles must
+therefore travel only through a trusted channel.
+
+Federation uses Memory無限 node identities and explicit peer records. It does
+not reuse OpenAI account sessions, Codex credentials, or OpenAI device identity.
+The reconstructible federation cache is excluded from desktop primary-archive
+backups. Version 1.5.0 does not provide public-internet automatic discovery,
+NAT traversal, or a mobile client.
+
 ## Privacy and integration boundary
 
 - Use `--root` outside the repository for private archives.
 - Mutable files under the bundled `memory/` directory are excluded by `.gitignore`.
 - The CLI can redact obvious secrets when explicitly configured, but users remain responsible for deciding what may be persisted.
 - Automatic capture requires the supplied native LaunchAgent, Windows scheduled task, or another explicitly configured client hook.
+- Offline `.mwxb` bundles contain readable archive material. Use SSH or another trusted transfer channel; SHA-256 does not provide encryption or sender authentication.
 
 ## Development
 
