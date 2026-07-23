@@ -490,7 +490,7 @@ class FederationManager:
                     + b"\n",
                 )
                 archive.writestr("payload/artifacts.jsonl", payload_bytes)
-            with temporary.open("rb") as handle:
+            with temporary.open("rb+") as handle:
                 os.fsync(handle.fileno())
             os.replace(temporary, output)
         finally:
