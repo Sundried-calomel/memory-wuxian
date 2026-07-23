@@ -56,7 +56,10 @@ if [[ -s "$preserved_config" ]]; then
   /bin/cp -p "$preserved_config" "$skill_root/config.yaml"
 fi
 /bin/rm -f "$preserved_config"
-/bin/chmod +x "$skill_root/bin/memory-wuxian-collector" "$skill_root/scripts/"*.py
+/bin/chmod +x \
+  "$skill_root/bin/memory-wuxian-collector" \
+  "$skill_root/bin/memory-wuxian-envelope" \
+  "$skill_root/scripts/"*.py
 /usr/sbin/chown -R "$console_user":staff "$skill_root" "$archive_root" "$sessions_root"
 
 /usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \

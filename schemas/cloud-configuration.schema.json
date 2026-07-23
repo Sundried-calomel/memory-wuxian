@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/cloud-configuration.schema.json",
+  "title": "Memory Wuxian Cloud Folder Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "enabled",
+    "exchange_root",
+    "identity_private_path",
+    "envelope_binary",
+    "merge_window_seconds",
+    "early_flush_bytes",
+    "maximum_pending_seconds",
+    "cleanup_grace_seconds",
+    "schedule",
+    "outbound"
+  ],
+  "properties": {
+    "format_version": {"const": 1},
+    "enabled": {"type": "boolean"},
+    "exchange_root": {"type": "string"},
+    "identity_private_path": {"type": "string"},
+    "envelope_binary": {"type": "string"},
+    "merge_window_seconds": {"type": "integer", "minimum": 0},
+    "early_flush_bytes": {"type": "integer", "minimum": 1},
+    "maximum_pending_seconds": {"type": "integer", "minimum": 1},
+    "cleanup_grace_seconds": {"type": "integer", "minimum": 0},
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pending_since", "observed", "published"],
+      "properties": {
+        "pending_since": {"type": ["number", "null"], "minimum": 0},
+        "last_attempt_at": {"type": ["number", "null"], "minimum": 0},
+        "observed": {"$ref": "#/$defs/marker"},
+        "published": {"$ref": "#/$defs/marker"}
+      }
+    },
+    "outbound": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/outboundPeer"}
+    }
+  },
+  "$defs": {
+    "fileMarker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size", "mtime_ns"],
+      "properties": {
+        "size": {"type": "integer", "minimum": 0},
+        "mtime_ns": {"type": "integer", "minimum": 0}
+      }
+    },
+    "marker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completed_rounds", "raw_today", "summary_registry", "title_index"],
+      "properties": {
+        "completed_rounds": {"type": "integer", "minimum": 0},
+        "raw_today": {"$ref": "#/$defs/fileMarker"},
+        "summary_registry": {"$ref": "#/$defs/fileMarker"},
+        "title_index": {"$ref": "#/$defs/fileMarker"}
+      }
+    },
+    "cursor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["last_event_sequence", "last_bundle_id", "last_bundle_sha256"],
+      "properties": {
+        "last_event_sequence": {"type": "integer", "minimum": 0},
+        "last_bundle_id": {"type": ["string", "null"]},
+        "last_bundle_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "acknowledged_at": {"type": ["string", "null"]}
+      }
+    },
+    "outstanding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "bundle_id",
+        "bundle_sha256",
+        "from_event_sequence",
+        "to_event_sequence",
+        "published_at"
+      ],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "bundle_id": {"type": "string", "pattern": "^mwb-[0-9a-f]{32}$"},
+        "bundle_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "from_event_sequence": {"type": "integer", "minimum": 1},
+        "to_event_sequence": {"type": "integer", "minimum": 1},
+        "published_at": {"type": "number", "minimum": 0}
+      }
+    },
+    "outboundPeer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acknowledged", "outstanding"],
+      "properties": {
+        "acknowledged": {"$ref": "#/$defs/cursor"},
+        "outstanding": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/outstanding"}
+          ]
+        }
+      }
+    }
+  }
+}

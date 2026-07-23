@@ -1,5 +1,9 @@
 param([Parameter(Mandatory = $true)][string]$SkillRoot)
 
+$systemSchtasks = Join-Path $env:SystemRoot "System32\schtasks.exe"
+& $systemSchtasks /End /TN MemoryWuxianCloudSync 2>$null
+& $systemSchtasks /Delete /TN MemoryWuxianCloudSync /F 2>$null
+
 $python = Get-Command python.exe -ErrorAction SilentlyContinue
 if ($python -and (Test-Path (Join-Path $SkillRoot "scripts\install_auto_update.py"))) {
   & $python.Source (Join-Path $SkillRoot "scripts\install_auto_update.py") --skill-root $SkillRoot --uninstall

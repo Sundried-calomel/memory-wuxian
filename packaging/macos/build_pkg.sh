@@ -8,15 +8,18 @@ work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 
 collector="$repo_root/bin/memory-wuxian-collector"
-if [[ ! -x "$collector" ]]; then
-  echo "Missing executable collector: $collector" >&2
-  exit 1
-fi
-architectures="$(lipo -archs "$collector")"
-if [[ "$architectures" != *"arm64"* || "$architectures" != *"x86_64"* ]]; then
-  echo "macOS release collector must be universal (arm64 and x86_64): $architectures" >&2
-  exit 1
-fi
+envelope="$repo_root/bin/memory-wuxian-envelope"
+for binary in "$collector" "$envelope"; do
+  if [[ ! -x "$binary" ]]; then
+    echo "Missing executable native binary: $binary" >&2
+    exit 1
+  fi
+  architectures="$(lipo -archs "$binary")"
+  if [[ "$architectures" != *"arm64"* || "$architectures" != *"x86_64"* ]]; then
+    echo "macOS release binary must be universal (arm64 and x86_64): $binary: $architectures" >&2
+    exit 1
+  fi
+done
 
 payload_skill="$work_dir/root/Library/Application Support/MemoryWuxian/skill"
 mkdir -p "$payload_skill" "$output_dir"

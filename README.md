@@ -22,6 +22,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - One latest verified desktop snapshot with a SHA-256 manifest and an append-only backup log
 - One latest workspace recovery backup for derived-file reconstruction
 - Federated read-only replicas with delta bundles, artifact-ledger cursors, and cross-device retrieval
+- Parallel SSH and encrypted cloud-folder federation transports
 - A transparent file layout with no database dependency
 
 ## Install
@@ -188,7 +189,7 @@ Automatic semantic-summary jobs and the one-shot worker are enabled in the insta
 
 ## Federated memory
 
-Version 1.5.0 keeps every device's local archive as that device's exclusive
+Version 1.6.0 keeps every device's local archive as that device's exclusive
 writable authority. A device exports its own new raw records, summaries, and
 confirmed conversation titles as `.mwxb` delta bundles. A trusted peer imports
 them into a read-only replica under the default sibling directory:
@@ -258,8 +259,62 @@ therefore travel only through a trusted channel.
 Federation uses Memory無限 node identities and explicit peer records. It does
 not reuse OpenAI account sessions, Codex credentials, or OpenAI device identity.
 The reconstructible federation cache is excluded from desktop primary-archive
-backups. Version 1.5.0 does not provide public-internet automatic discovery,
+backups. Version 1.6.0 does not provide public-internet automatic discovery,
 NAT traversal, or a mobile client.
+
+## Encrypted cloud-folder exchange
+
+Version 1.6.0 adds an asynchronous transport for a user-selected iCloud Drive,
+OneDrive, or compatible synchronized directory. Memory無限 does not receive or
+store provider credentials. It writes only target-specific `.mwxe` envelopes
+after signing the inner `.mwxb` with the origin device's Ed25519 key and
+encrypting it to the target device with age/X25519.
+
+Each device keeps its private identity outside the archive, replica cache, and
+synchronized directory. Pairing files contain public keys and a fingerprint
+only. Compare the fingerprint through a trusted channel before import:
+
+```bash
+ARCHIVE="$HOME/Documents/MemoryWuxianArchive"
+SHARED="$HOME/Library/CloudStorage/OneDrive-Personal"
+
+python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-configure \
+  --directory "$SHARED"
+python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-pair-export \
+  --output /trusted/path/this-device-pairing.json
+python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-pair-import \
+  --pairing-file /trusted/path/other-device-pairing.json \
+  --expected-fingerprint <fingerprint-shown-on-the-other-device>
+python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-sync --force
+python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-status
+```
+
+The selected directory must already exist so a mistyped path cannot silently
+become an unsynchronized local folder. On Windows, select the local OneDrive or
+iCloud Drive directory shown in File Explorer.
+
+Register the short-lived five-minute scheduler after configuration:
+
+```bash
+python3 scripts/install_cloud_sync.py \
+  --archive-root "$ARCHIVE" \
+  --skill-root "$HOME/.codex/skills/memory-wuxian" \
+  --python-executable "$(command -v python3)" \
+  --load
+```
+
+The task imports available peer envelopes on every wake. Ordinary local changes
+are coalesced for 15 minutes, approximately 1 MiB of pending material may flush
+early, and the oldest pending change is attempted after 60 minutes. These
+timings describe writes into the local synchronized directory; the provider
+client controls when network upload completes. Empty checks create no files and
+invoke no AI process.
+
+The cloud folder is a transport queue rather than a shared writable archive.
+Every node writes only its own outbox and acknowledgements. Imported history
+continues to live in read-only peer replicas, and `retrieve-global` follows the
+same verified source path for SSH and cloud deliveries. Use `cloud-disable` to
+stop exchange without deleting archives, keys, or encrypted cloud files.
 
 ## Privacy and integration boundary
 
@@ -268,6 +323,7 @@ NAT traversal, or a mobile client.
 - The CLI can redact obvious secrets when explicitly configured, but users remain responsible for deciding what may be persisted.
 - Automatic capture requires the supplied native LaunchAgent, Windows scheduled task, or another explicitly configured client hook.
 - Offline `.mwxb` bundles contain readable archive material. Use SSH or another trusted transfer channel; SHA-256 does not provide encryption or sender authentication.
+- Cloud directories contain signed, target-encrypted `.mwxe` envelopes and encrypted acknowledgements. Private device identities never enter the synchronized directory.
 
 ## Development
 

@@ -21,6 +21,9 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 PROTOCOL_VERSION = 1
 BUNDLE_FORMAT = "memory-wuxian-delta-v1"
 NODE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{2,63}$")
+AGE_PUBLIC_KEY_PATTERN = re.compile(r"^age1[0-9a-z]{50,80}$")
+SIGNING_PUBLIC_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_-]{40,128}$")
+KEY_FINGERPRINT_PATTERN = re.compile(r"^[0-9a-f]{16,64}$")
 MAX_BUNDLE_FILES = 4
 MAX_BUNDLE_BYTES = 512 * 1024 * 1024
 MAX_ARTIFACTS = 100_000
@@ -261,9 +264,43 @@ class FederationManager:
                 "remote_python": remote_python,
                 "remote_shell": remote_shell,
             },
+            "cloud_identity": existing.get("cloud_identity"),
         }
         atomic_write_json(path, peer)
         return {"status": "registered", "peer": peer}
+
+    def set_peer_cloud_identity(
+        self,
+        node_id: str,
+        encryption_public_key: str,
+        signing_public_key: str,
+        fingerprint: str,
+    ) -> Dict[str, Any]:
+        path = self.peer_path(node_id)
+        if not path.exists():
+            raise ValueError(
+                f"Unknown peer: {safe_node_id(node_id)}; register it with add-peer first"
+            )
+        encryption_public_key = encryption_public_key.strip()
+        signing_public_key = signing_public_key.strip()
+        fingerprint = fingerprint.strip().lower()
+        if not AGE_PUBLIC_KEY_PATTERN.fullmatch(encryption_public_key):
+            raise ValueError("Invalid age encryption public key")
+        if not SIGNING_PUBLIC_KEY_PATTERN.fullmatch(signing_public_key):
+            raise ValueError("Invalid Ed25519 signing public key")
+        if not KEY_FINGERPRINT_PATTERN.fullmatch(fingerprint):
+            raise ValueError("Invalid cloud identity fingerprint")
+        peer = read_json(path)
+        if not peer.get("trusted"):
+            raise ValueError(f"Peer {safe_node_id(node_id)} is revoked")
+        peer["cloud_identity"] = {
+            "format_version": 1,
+            "encryption_public_key": encryption_public_key,
+            "signing_public_key": signing_public_key,
+            "fingerprint": fingerprint,
+        }
+        atomic_write_json(path, peer)
+        return {"status": "cloud-identity-registered", "peer": peer}
 
     def revoke_peer(self, node_id: str) -> Dict[str, Any]:
         path = self.peer_path(node_id)
@@ -1134,10 +1171,14 @@ class FederationManager:
         return output, metadata
 
     def status(self) -> Dict[str, Any]:
-        self.init_layout()
         node = read_json(self.node_path) if self.node_path.exists() else None
         devices = []
-        for peer in self.peers():
+        peer_paths = (
+            sorted(self.peers_dir.glob("*.json"))
+            if self.peers_dir.exists()
+            else []
+        )
+        for peer in (read_json(path) for path in peer_paths):
             node_id = str(peer["node_id"])
             state = self.replica_state(node_id)
             peer_root = self.replica_peer_root(node_id)
@@ -1152,6 +1193,7 @@ class FederationManager:
                     "display_name": peer.get("display_name") or node_id,
                     "trusted": bool(peer.get("trusted")),
                     "transport": (peer.get("transport") or {}).get("type", "offline"),
+                    "cloud_identity": peer.get("cloud_identity"),
                     "last_event_sequence": int(state.get("last_event_sequence", 0)),
                     "last_sync_at": state.get("last_sync_at"),
                     "last_bundle_id": state.get("last_bundle_id"),
@@ -1165,7 +1207,11 @@ class FederationManager:
             "node": node,
             "replica_root": str(self.replica_root),
             "devices": devices,
-            "recent_sync": read_jsonl(self.sync_log_path)[-20:],
+            "recent_sync": (
+                read_jsonl(self.sync_log_path)[-20:]
+                if self.sync_log_path.exists()
+                else []
+            ),
         }
 
     def log_sync(

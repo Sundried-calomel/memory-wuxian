@@ -22,6 +22,7 @@ from conversation_titles import (
     codex_thread_titles,
 )
 from memory_cli import MemoryStore, atomic_write_json, load_simple_yaml, read_jsonl
+from memory_cloud_transport import CloudFolderTransport
 from memory_federation import FederationManager
 
 
@@ -390,8 +391,13 @@ def make_handler(store: MemoryStore):
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("ETag", etag)
             elif path == "/api/devices":
+                federation_manager = FederationManager(store)
+                devices = federation_manager.status()
+                devices["cloud"] = CloudFolderTransport(
+                    federation_manager
+                ).status()
                 body = json.dumps(
-                    FederationManager(store).status(),
+                    devices,
                     ensure_ascii=False,
                 ).encode("utf-8")
                 self.send_response(200)

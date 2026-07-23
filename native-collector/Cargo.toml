@@ -1,22 +1,28 @@
 [package]
 name = "memory-wuxian-collector"
-version = "1.1.0"
+version = "1.6.0"
 edition = "2024"
 license = "MIT"
 description = "Event-driven native Codex conversation collector for Memory Wuxian"
 
 [dependencies]
+age = "0.11"
 anyhow = "1"
+base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
 fs2 = "0.4"
+hex = "0.4"
 libc = "0.2"
 notify = "8"
+rand_core = { version = "0.6", features = ["getrandom"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 sha2 = "0.10"
+tempfile = "3"
 walkdir = "2"
 
 [profile.release]

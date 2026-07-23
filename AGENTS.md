@@ -41,6 +41,10 @@ Use Memory無限 to preserve conversation history outside the active context win
 33. Treat an offline `.mwxb` as unencrypted and unsigned. Do not send it through an untrusted channel or describe SHA-256 as sender authentication.
 34. Do not use OpenAI sessions, Codex credentials, or account login state as Memory無限 device identity.
 35. Keep reconstructible peer replicas outside the primary archive and outside its desktop backup. Use `retrieve-global` when cross-device history is requested.
+36. Keep SSH and encrypted cloud-folder exchange as separate transports over the same federation import contract.
+37. Before placing a delta in iCloud Drive, OneDrive, or another synchronized folder, sign it with the origin device identity and encrypt it to the target device. Never upload readable `.mwxb` files or private keys.
+38. Let each node write only its own cloud outbox and acknowledgements. Imported cloud history remains a read-only peer replica.
+39. Run cloud exchange as a short-lived low-frequency task. Keep the native collector's local event capture and adaptive fallback unchanged, and do not use AI for cloud transfer.
 
 ## Authority order
 

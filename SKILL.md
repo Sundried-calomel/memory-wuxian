@@ -35,6 +35,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 24. Export only locally originated artifacts. Verify artifact SHA-256, event-sequence continuity, and predecessor bundle SHA-256 before committing an import.
 25. Treat `.mwxb` as a compressed integrity-checked container, not as an encrypted or signed message. Transfer it only through SSH or another trusted channel.
 26. Keep federation identity separate from OpenAI sessions and exclude reconstructible peer replicas from primary-archive desktop backups.
+27. Keep SSH and encrypted cloud-folder exchange as parallel transports over the same `.mwxb` import contract.
+28. Sign every cloud-bound delta with the origin device identity and encrypt it to the target device before it enters a synchronized folder.
+29. Keep cloud private keys on their owning devices and never store cloud-account credentials in Memory無限.
+30. Run cloud synchronization as a low-frequency, short-lived, model-free task. Do not place cloud polling in the native collector.
 
 ## Operating workflow
 
@@ -59,6 +63,8 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 18. Use `sync-peer` only after SSH host identity is present in the local known-hosts trust store. Select `posix` or `powershell` to match the remote shell.
 19. Use `retrieve-global` for cross-device history. Treat a peer result as verified only after its imported artifact hash has been checked.
 20. Use `revoke-peer` to reject future imports and SSH pulls from a device. Revocation does not silently delete previously imported history.
+21. Use `cloud-configure`, `cloud-pair-export`, and `cloud-pair-import` to prepare an explicitly selected iCloud Drive, OneDrive, or compatible synchronized directory.
+22. Use `cloud-sync` for one encrypted bidirectional exchange pass. The scheduled task wakes every five minutes, while ordinary exports are coalesced and empty checks create no files.
 
 ## Commands
 
@@ -101,6 +107,12 @@ python3 scripts/memory_cli.py retrieve-global --query "..."
 python3 scripts/memory_cli.py federation-status
 python3 scripts/memory_cli.py sync-peer --node-id <peer-node-id>
 python3 scripts/memory_cli.py revoke-peer --node-id <peer-node-id>
+python3 scripts/memory_cli.py cloud-configure --directory /path/to/synchronized/MemoryWuxianExchange
+python3 scripts/memory_cli.py cloud-pair-export
+python3 scripts/memory_cli.py cloud-pair-import --pairing-file /trusted/path/peer.json
+python3 scripts/memory_cli.py cloud-sync
+python3 scripts/memory_cli.py cloud-sync --force
+python3 scripts/memory_cli.py cloud-status
 scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
 powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1
@@ -135,5 +147,8 @@ ownership of the local archive. By default, imported replicas live in the
 sibling `<archive>-federation-cache`, remain read-only, and are omitted from the
 desktop primary-archive backup. SSH protects and authenticates the transport;
 the offline `.mwxb` bundle itself is neither encrypted nor signed. Federation
-does not use OpenAI login sessions and does not currently provide automatic
-public address discovery, NAT traversal, or mobile access.
+does not use OpenAI login sessions and does not provide automatic public address
+discovery, NAT traversal, or mobile access. The optional cloud-folder transport
+uses the user's existing filesystem synchronization client without receiving
+its account credentials. It signs and encrypts each target-specific envelope
+before publication and keeps the five-second local collector path unchanged.

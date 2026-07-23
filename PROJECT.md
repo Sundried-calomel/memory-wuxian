@@ -26,5 +26,10 @@
 24. Require artifact SHA-256, contiguous event sequences, and a predecessor bundle SHA-256 chain for delta import.
 25. Keep federation trust independent of OpenAI sessions and Codex credentials.
 26. Use SSH strict host-key checking for automated transport. Do not describe the offline `.mwxb` container as encrypted or signed.
+27. Keep SSH and cloud-folder exchange as parallel federation transports that feed the same verified `.mwxb` import path.
+28. Never place a readable `.mwxb` in a cloud-synchronized directory. Encrypt it to the receiving device and sign it with the sending device identity first.
+29. Keep every cloud private key on its owning device. Persist only public encryption keys, public signing keys, and fingerprints in peer records.
+30. Run cloud exchange as a low-frequency, short-lived task. Do not add cloud scanning, network credentials, or AI work to the native collector.
+31. Treat a cloud folder as an asynchronous transport queue, not as a writable archive or a replacement for verified recovery snapshots.
 
 Architectural changes must preserve these invariants or document an explicit replacement decision in `references/decisions.md` before implementation.

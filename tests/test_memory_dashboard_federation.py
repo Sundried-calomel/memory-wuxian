@@ -13,6 +13,7 @@ from urllib.request import urlopen
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
+from memory_cli import MemoryStore
 from memory_dashboard import DashboardSnapshotCache, make_handler
 
 
@@ -86,10 +87,38 @@ class MemoryDashboardFederationTest(unittest.TestCase):
                 }
             ],
         }
+        cloud_status = {
+            "enabled": True,
+            "configured": True,
+            "encrypted": True,
+            "identity_ready": True,
+            "schedule": {
+                "last_attempt_at": "2026-07-23T10:01:00+09:00",
+                "pending_since": None,
+            },
+            "peers": [
+                {
+                    "node_id": "mw-peer-node",
+                    "display_name": "Work PC",
+                    "ssh_transport": True,
+                    "cloud_ready": True,
+                    "cloud_fingerprint": "1234567890abcdef",
+                    "acknowledged": {"last_event_sequence": 40},
+                    "outstanding": {"to_event_sequence": 42},
+                    "last_sync_at": "2026-07-23T10:00:00+09:00",
+                }
+            ],
+        }
         manager = Mock()
         manager.status.return_value = federation_status
+        cloud_transport = Mock()
+        cloud_transport.status.return_value = cloud_status
         with (
             patch("memory_dashboard.FederationManager", return_value=manager),
+            patch(
+                "memory_dashboard.CloudFolderTransport",
+                return_value=cloud_transport,
+            ) as cloud_factory,
             patch(
                 "memory_dashboard.DashboardSnapshotCache.get",
                 side_effect=AssertionError("devices API must not build the archive snapshot"),
@@ -111,8 +140,33 @@ class MemoryDashboardFederationTest(unittest.TestCase):
                 server.server_close()
                 thread.join(timeout=5)
 
-        self.assertEqual(payload, federation_status)
+        self.assertEqual(payload, {**federation_status, "cloud": cloud_status})
         manager.status.assert_called_once_with()
+        cloud_factory.assert_called_once_with(manager)
+        cloud_transport.status.assert_called_once_with()
+
+    def test_devices_api_does_not_create_federation_cloud_or_snapshot_files(self):
+        root = self.store.root
+        store = MemoryStore(root, {"federation": {}})
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(store))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with urlopen(
+                f"http://127.0.0.1:{server.server_port}/api/devices",
+                timeout=5,
+            ) as response:
+                payload = json.load(response)
+                self.assertEqual(response.status, 200)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertFalse(payload["enabled"])
+        self.assertFalse(payload["cloud"]["configured"])
+        self.assertFalse((root / "federation").exists())
+        self.assertFalse((root / "dashboard/status-snapshot.json").exists())
 
     def test_dashboard_html_keeps_existing_features_and_adds_federation_views(self):
         html = (SKILL_ROOT / "dashboard/index.html").read_text(encoding="utf-8")
@@ -129,6 +183,20 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "device.last_event_sequence",
             "device.replica_bytes",
             "d.recent_sync",
+            "d.cloud",
+            "cloudPeer.ssh_transport",
+            "cloudPeer.cloud_ready",
+            "cloudPeer.cloud_fingerprint",
+            "cloudPeer.last_sync_at",
+            "cloudPeer.acknowledged",
+            "cloudPeer.outstanding",
+            "cloudFailureAlertsEnabled",
+            "云同步失败提醒",
+            "Cloud sync failure alerts",
+            "クラウド同期失敗通知",
+            "加密并签名",
+            "Encrypted and signed",
+            "暗号化・署名済み",
             "尚未初始化本机联邦节点",
             "The local federation node is not initialized",
             "ローカル連携ノードは未初期化です",
@@ -142,6 +210,7 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "settings.animationsEnabled",
             "settings.toastsEnabled",
             "settings.compactMode",
+            "settings.cloudFailureAlertsEnabled",
             "memory-wuxian-language",
         ):
             self.assertIn(preserved_contract, html)

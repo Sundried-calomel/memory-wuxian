@@ -163,3 +163,36 @@ Keep peer replicas under the default sibling `<archive>-federation-cache` or an
 explicitly configured equivalent. Do not include replicas in the desktop backup
 of the writable primary archive. Rebuild global indexes from local authority
 and imported replicas.
+
+## D-025: Cloud folders transport encrypted, signed envelopes
+
+Status: Accepted.
+
+Use iCloud Drive, OneDrive, or another user-selected synchronized directory only
+as an asynchronous federation transport. Preserve `.mwxb` as the inner delta
+contract, sign each inner payload with the origin device's Ed25519 identity, and
+encrypt the signed envelope to the target device with age/X25519 before writing
+it to the synchronized directory. Verify decryption, signature, origin, target,
+payload size, payload SHA-256, and the existing `.mwxb` chain before import.
+Never upload a readable `.mwxb`, a private key, or a cloud-account credential.
+
+## D-026: Cloud exchange is single-writer and acknowledgement-driven
+
+Status: Accepted.
+
+Give each node its own cloud outbox and acknowledgement namespace. A receiving
+node reads but never edits or removes another node's files. Send at most one
+unacknowledged delta per peer, make retries idempotent, and let the sender remove
+only its own acknowledged envelopes after the configured retention period.
+Treat missing, partial, placeholder, and temporarily unavailable cloud files as
+transient delivery state rather than archive corruption.
+
+## D-027: Cloud scheduling is low-frequency and model-free
+
+Status: Accepted.
+
+Keep the event-driven native collector unchanged. Wake one short-lived cloud
+sync process every five minutes, coalesce ordinary local changes for fifteen
+minutes, allow an approximately one-megabyte pending delta to flush early, and
+attempt a flush after at most sixty minutes. A manual force operation may run
+immediately. Empty checks create no cloud files and invoke no AI process.

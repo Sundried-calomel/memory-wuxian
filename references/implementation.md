@@ -351,7 +351,7 @@ cryptographically signed. SHA-256 detects content changes but does not
 authenticate the sender. Offline bundles must therefore travel only through a
 trusted channel.
 
-Version 1.5.0 does not implement public-internet automatic discovery, NAT
+Version 1.6.0 does not implement public-internet automatic discovery, NAT
 traversal, relay service, or a mobile client.
 
 ### 16.6 Command examples
@@ -389,3 +389,44 @@ python3 scripts/memory_cli.py --root /path/to/local sync-peer --node-id <peer-no
 ```
 
 Use `--remote-shell powershell` and Windows paths for a Windows peer.
+
+### 16.7 Encrypted cloud-folder transport
+
+Keep `.mwxb` as the sole inner federation delta. The cloud transport wraps it
+in `memory-wuxian-envelope-v1`: the origin node signs the framed payload with
+Ed25519 and encrypts it to both the origin and target age/X25519 recipients.
+Encrypting to the origin allows durable outbox recovery without retaining a
+second plaintext bundle. The target verifies the trusted peer signing key,
+origin, target, envelope kind, payload length, and payload SHA-256 before the
+normal `.mwxb` importer runs.
+
+Store private identities under the user's local Codex key directory by default.
+Reject an identity path inside the primary archive, replica cache, or
+synchronized directory. Peer records contain public keys and fingerprints only.
+
+Use this single-writer cloud layout:
+
+```text
+<selected-sync-directory>/MemoryWuxianExchange/v1/
+└── nodes/<writer-node-id>/
+    ├── outbox/<target-node-id>/*.mwxe
+    └── acks/<origin-node-id>/*.mwxa
+```
+
+A node may create, atomically replace, or remove only files under its own
+writer namespace. It never moves, deletes, or quarantines a peer's synchronized
+file. Invalid peer files produce local quarantine metadata under
+`<archive>/federation/cloud-quarantine/`.
+
+Cloud delivery is stop-and-wait per peer. The sender publishes no later delta
+until it imports a signed encrypted acknowledgement for the current outstanding
+bundle. Retries are safe because the normal replica receipt and event chain
+remain authoritative. Preserve the newest acknowledgement per peer and remove
+older acknowledgements or acknowledged outbox envelopes only after the
+configured retention interval.
+
+Run a short process every 300 seconds. Mark local material pending only after a
+round closes or a summary/title artifact for closed history changes. Coalesce
+for 900 seconds, permit an estimated 1,048,576-byte early flush, and attempt
+delivery after 3,600 seconds. A forced pass bypasses the merge window. Provider
+upload completion is outside this contract.

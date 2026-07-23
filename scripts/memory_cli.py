@@ -20,6 +20,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from platform_lock import exclusive_lock
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
+from memory_cloud_transport import CloudFolderTransport
 from memory_federation import FederationManager
 
 
@@ -3653,6 +3654,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pull and import a peer's next delta over authenticated SSH",
     )
     sync_peer_parser.add_argument("--node-id", required=True)
+    cloud_configure_parser = subparsers.add_parser(
+        "cloud-configure",
+        help="Configure an encrypted iCloud Drive, OneDrive, or compatible folder transport",
+    )
+    cloud_configure_parser.add_argument("--directory", required=True)
+    cloud_configure_parser.add_argument("--identity-path")
+    cloud_configure_parser.add_argument("--envelope-binary")
+    cloud_pair_export_parser = subparsers.add_parser(
+        "cloud-pair-export",
+        help="Export this node's public cloud pairing record",
+    )
+    cloud_pair_export_parser.add_argument("--output")
+    cloud_pair_import_parser = subparsers.add_parser(
+        "cloud-pair-import",
+        help="Trust a peer's public cloud pairing record",
+    )
+    cloud_pair_import_parser.add_argument("--pairing-file", required=True)
+    cloud_pair_import_parser.add_argument("--expected-fingerprint")
+    cloud_sync_parser = subparsers.add_parser(
+        "cloud-sync",
+        help="Run one encrypted bidirectional cloud-folder synchronization pass",
+    )
+    cloud_sync_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Bypass the merge window for local exports",
+    )
+    subparsers.add_parser(
+        "cloud-status",
+        help="Show encrypted cloud-folder configuration and peer delivery state",
+    )
+    subparsers.add_parser(
+        "cloud-enable",
+        help="Enable an already configured cloud-folder transport",
+    )
+    subparsers.add_parser(
+        "cloud-disable",
+        help="Disable cloud-folder synchronization without deleting data or keys",
+    )
     return parser
 
 
@@ -3887,6 +3927,113 @@ def dispatch_command(
         result = FederationManager(store).status()
     elif args.command == "sync-peer":
         result = FederationManager(store).sync_peer(args.node_id)
+    elif args.command == "cloud-configure":
+        manager = FederationManager(store)
+        transport = CloudFolderTransport(manager)
+        node_id = manager.node()["node_id"]
+        identity_path = (
+            Path(args.identity_path).expanduser()
+            if args.identity_path
+            else Path.home()
+            / ".codex"
+            / "memory-wuxian"
+            / "keys"
+            / f"{node_id}.json"
+        )
+        cloud_defaults = (
+            store.config.get("cloud_transport")
+            if isinstance(store.config.get("cloud_transport"), dict)
+            else {}
+        )
+        result = transport.configure(
+            Path(args.directory),
+            identity_path,
+            Path(args.envelope_binary) if args.envelope_binary else None,
+            enabled=True,
+            merge_window_seconds=int(
+                cloud_defaults.get("merge_window_seconds", 900)
+            ),
+            early_flush_bytes=int(
+                cloud_defaults.get("early_flush_bytes", 1024 * 1024)
+            ),
+            maximum_pending_seconds=int(
+                cloud_defaults.get("maximum_pending_seconds", 3600)
+            ),
+            cleanup_grace_seconds=int(
+                cloud_defaults.get("acknowledged_retention_seconds", 2592000)
+            ),
+        )
+        result["identity"] = transport.initialize_identity()
+        result["scheduler_install_command"] = [
+            sys.executable,
+            str(SKILL_ROOT / "scripts" / "install_cloud_sync.py"),
+            "--archive-root",
+            str(store.root.resolve()),
+            "--skill-root",
+            str(SKILL_ROOT),
+            "--python-executable",
+            sys.executable,
+            "--load",
+        ]
+    elif args.command == "cloud-pair-export":
+        manager = FederationManager(store)
+        transport = CloudFolderTransport(manager)
+        node = manager.node()
+        pairing = {
+            "format": "memory-wuxian-cloud-pairing-v1",
+            "protocol_version": 1,
+            "node_id": node["node_id"],
+            "display_name": node.get("display_name") or node["node_id"],
+            "cloud_identity": transport.public_identity(),
+        }
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            atomic_write_json(output, pairing)
+            result = {
+                "status": "exported",
+                "output": str(output),
+                "fingerprint": pairing["cloud_identity"]["fingerprint"],
+            }
+        else:
+            result = pairing
+    elif args.command == "cloud-pair-import":
+        pairing = read_json(Path(args.pairing_file).expanduser().resolve())
+        if pairing.get("format") != "memory-wuxian-cloud-pairing-v1":
+            raise ValueError("Unsupported cloud pairing record")
+        if int(pairing.get("protocol_version", 0)) != 1:
+            raise ValueError("Unsupported cloud pairing protocol")
+        node_id = str(pairing.get("node_id", ""))
+        identity = pairing.get("cloud_identity")
+        if not isinstance(identity, dict):
+            raise ValueError("Cloud pairing record has no public identity")
+        fingerprint = str(identity.get("fingerprint", "")).lower()
+        if (
+            args.expected_fingerprint
+            and fingerprint != args.expected_fingerprint.strip().lower()
+        ):
+            raise ValueError("Cloud pairing fingerprint does not match the expected value")
+        manager = FederationManager(store)
+        if not manager.peer_path(node_id).exists():
+            manager.add_peer(
+                node_id,
+                display_name=str(pairing.get("display_name") or node_id),
+            )
+        result = manager.set_peer_cloud_identity(
+            node_id,
+            str(identity.get("encryption_public_key", "")),
+            str(identity.get("signing_public_key", "")),
+            fingerprint,
+        )
+    elif args.command == "cloud-sync":
+        result = CloudFolderTransport(FederationManager(store)).sync(
+            force=args.force
+        )
+    elif args.command == "cloud-status":
+        result = CloudFolderTransport(FederationManager(store)).status()
+    elif args.command == "cloud-enable":
+        result = CloudFolderTransport(FederationManager(store)).set_enabled(True)
+    elif args.command == "cloud-disable":
+        result = CloudFolderTransport(FederationManager(store)).set_enabled(False)
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2
@@ -3908,6 +4055,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "inspect-bundle",
             "retrieve-global",
             "federation-status",
+            "cloud-pair-export",
+            "cloud-status",
         }:
             return dispatch_command(args, parser, store)
         if args.command in {
@@ -3917,6 +4066,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "import-delta",
             "rebuild-global-index",
             "sync-peer",
+            "cloud-configure",
+            "cloud-pair-import",
+            "cloud-sync",
+            "cloud-enable",
+            "cloud-disable",
         }:
             with exclusive_lock(store.root / ".locks" / "federation.lock"):
                 return dispatch_command(args, parser, store)

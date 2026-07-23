@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0 - 2026-07-23
+
+- Add encrypted cloud-folder federation alongside direct SSH synchronization, using user-selected iCloud Drive, OneDrive, or compatible synchronized directories without handling provider credentials.
+- Preserve `.mwxb` as the inner delta protocol while signing each cloud payload with the origin device's Ed25519 identity and encrypting it to the receiving device with age/X25519.
+- Keep private identities on their owning devices and store only public encryption keys, public signing keys, and fingerprints in trusted-peer records.
+- Add single-writer per-node outboxes, signed encrypted acknowledgements, stop-and-wait delivery, idempotent imports, transient placeholder handling, and sender-owned retention cleanup.
+- Add short-lived five-minute cloud synchronization tasks for macOS and Windows, with a fifteen-minute merge window, one-megabyte early flush, sixty-minute maximum pending interval, and manual immediate synchronization.
+- Keep native local collection, immutable archives, read-only peer replicas, SSH host authentication, global retrieval, and summary behavior unchanged.
+
 ## 1.5.0 - 2026-07-23
 
 - Add stable Memory無限 node identities and explicit trusted-peer registration without reusing OpenAI account sessions or Codex credentials.

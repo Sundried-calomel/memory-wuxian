@@ -68,6 +68,15 @@ federation:
   transport: "offline"
   ssh_strict_host_key_checking: true
 
+cloud_transport:
+  enabled: false
+  directory: ""
+  check_interval_seconds: 300
+  merge_window_seconds: 900
+  early_flush_bytes: 1048576
+  maximum_pending_seconds: 3600
+  acknowledged_retention_seconds: 2592000
+
 context_refresh:
   enabled: true
   round_interval: 10

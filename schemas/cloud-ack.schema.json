@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/cloud-ack.schema.json",
+  "title": "Memory Wuxian Cloud Acknowledgement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "protocol_version",
+    "origin_node_id",
+    "target_node_id",
+    "last_event_sequence",
+    "last_bundle_id",
+    "last_bundle_sha256",
+    "acknowledged_at"
+  ],
+  "properties": {
+    "format": {"const": "memory-wuxian-cloud-ack-v1"},
+    "protocol_version": {"const": 1},
+    "origin_node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "target_node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "last_event_sequence": {"type": "integer", "minimum": 1},
+    "last_bundle_id": {"type": "string", "pattern": "^mwb-[0-9a-f]{32}$"},
+    "last_bundle_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "acknowledged_at": {"type": "string", "minLength": 1}
+  }
+}
