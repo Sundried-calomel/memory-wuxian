@@ -1,5 +1,7 @@
 # Memory無限
 
+[English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
+
 Memory無限 is a file-based Codex Skill for persistent, hierarchical, and verifiable conversation memory beyond the active context window.
 
 The installable Skill identifier is `memory-wuxian`; `Memory無限` is its project and display name. The design keeps exact source records as historical authority, uses summaries as navigation, and returns to raw text before treating a historical claim as verified.
@@ -350,7 +352,7 @@ $HOME/.cargo/bin/cargo test --locked --manifest-path native-collector/Cargo.toml
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
-Architecture decisions and implementation contracts are documented in [`PROJECT.md`](PROJECT.md) and [`references/`](references/). Changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
+Architecture decisions and implementation contracts are documented in [`PROJECT.md`](PROJECT.md) and [`references/`](references/). Changes are recorded in [`CHANGELOG.md`](CHANGELOG.md). `README.md`, `README.zh-CN.md`, and `README.ja.md` are maintained as one documentation contract and must be updated together when documented behavior changes.
 
 ## License
 

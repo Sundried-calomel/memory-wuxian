@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.3 - 2026-07-24
+
+- Add complete Simplified Chinese and Japanese README translations.
+- Add language navigation between English, Simplified Chinese, and Japanese documentation.
+- Require all three README files to remain synchronized whenever documented behavior changes.
+
 ## 1.6.2 - 2026-07-24
 
 - Add an experimental ChatGPT official-export importer to Dashboard Settings.

@@ -40,6 +40,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 29. Keep cloud private keys on their owning devices and never store cloud-account credentials in Memory無限.
 30. Run cloud synchronization as a low-frequency, short-lived, model-free task. Do not place cloud polling in the native collector.
 31. Treat ChatGPT export import as an explicit local operation. Never upload the selected export, and label the adapter experimental until a real official user export has been validated.
+32. Keep `README.md`, `README.zh-CN.md`, and `README.ja.md` semantically synchronized whenever documented features, installation, commands, limitations, privacy boundaries, or release behavior change.
 
 ## Operating workflow
 
@@ -67,6 +68,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 22. Use `cloud-configure`, `cloud-pair-export`, and `cloud-pair-import` to prepare an explicitly selected iCloud Drive, OneDrive, or compatible synchronized directory.
 23. Let users manage routine cloud synchronization from Dashboard > Settings. The cloud switch must enable or disable both transport configuration and its background scheduler, the status view must expose the configured directory and scheduler state, and the manual sync command must run one encrypted exchange pass without requiring an AI conversation.
 24. Keep `cloud-enable`, `cloud-disable`, and `cloud-sync` as equivalent CLI and recovery controls. The scheduled task wakes every five minutes, while ordinary exports are coalesced and empty checks create no files.
+25. Treat all three localized README files as one documentation contract. Update and verify English, Simplified Chinese, and Japanese in the same change.
 
 ## Commands
 
