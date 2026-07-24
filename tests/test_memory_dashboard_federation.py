@@ -17,7 +17,7 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from memory_cli import MemoryStore
-from memory_dashboard import DashboardSnapshotCache, make_handler
+from memory_dashboard import DashboardSnapshotCache, dashboard_health, make_handler
 
 
 class MemoryDashboardFederationTest(unittest.TestCase):
@@ -27,6 +27,21 @@ class MemoryDashboardFederationTest(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def test_dashboard_health_ignores_normal_concurrent_round_order(self):
+        self.assertEqual(
+            dashboard_health({"completed_rounds_out_of_order": [4, 7, 9]}),
+            "ok",
+        )
+        self.assertEqual(
+            dashboard_health(
+                {
+                    "completed_rounds_out_of_order": [4, 7, 9],
+                    "integrity_issues": ["missing source"],
+                }
+            ),
+            "attention",
+        )
 
     def test_federation_activity_does_not_invalidate_archive_snapshot(self):
         root = self.store.root

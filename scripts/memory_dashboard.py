@@ -261,6 +261,21 @@ def verified_retrieval_stats(store: MemoryStore) -> dict[str, int]:
     }
 
 
+def dashboard_health(status: dict[str, Any]) -> str:
+    actionable_fields = (
+        "integrity_issues",
+        "issues",
+        "warnings",
+        "failed_jobs",
+        "failed_summary_jobs",
+    )
+    return (
+        "attention"
+        if any(status.get(field) for field in actionable_fields)
+        else "ok"
+    )
+
+
 def dashboard_data(store: MemoryStore) -> dict[str, Any]:
     all_records = store.read_all_raw()
     hidden_conversations: set[str] = set()
@@ -344,7 +359,7 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
     return {
         "generated_at": now.isoformat(),
         "archive_root": str(store.root),
-        "health": "ok" if not status.get("completed_rounds_out_of_order") else "attention",
+        "health": dashboard_health(status),
         "collector": collector_telemetry(store.root),
         "totals": {
             "conversations": len(conversations),
@@ -382,7 +397,7 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
 class DashboardSnapshotCache:
     """Persist expensive archive statistics and invalidate them by file metadata."""
 
-    FORMAT_VERSION = 1
+    FORMAT_VERSION = 2
 
     def __init__(self, store: MemoryStore):
         self.store = store

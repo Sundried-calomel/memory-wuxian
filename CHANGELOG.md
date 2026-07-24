@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.3 - 2026-07-24
+
+- Stop treating normal out-of-order completion across concurrent conversations as a dashboard health warning.
+- Keep dashboard attention status reserved for actionable integrity, warning, or failed-job fields.
+- Invalidate the previous dashboard snapshot so the corrected health status appears immediately without changing archive or summary data.
+
 ## 1.7.2 - 2026-07-24
 
 - Audit Level-1 summaries by raw-message range and higher summaries by direct child-summary identity, eliminating false overlap reports from interleaved historical backfill.
