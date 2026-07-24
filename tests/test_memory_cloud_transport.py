@@ -432,10 +432,15 @@ safety:
         )
         sent = self.run_cli(real_a, "cloud-sync", "--force")
         received = self.run_cli(real_b, "cloud-sync", "--force")
-        acknowledged = self.run_cli(real_a, "cloud-sync", "--force")
+        ack_deadline = time.monotonic() + 2.0
+        while True:
+            acknowledged = self.run_cli(real_a, "cloud-sync", "--force")
+            if acknowledged["acks"] or time.monotonic() >= ack_deadline:
+                break
+            time.sleep(0.05)
         self.assertEqual(len(sent["published"]), 1, sent)
         self.assertEqual(received["imports"][0]["status"], "imported")
-        self.assertEqual(len(acknowledged["acks"]), 1)
+        self.assertEqual(len(acknowledged["acks"]), 1, acknowledged)
         encrypted_path = Path(sent["published"][0]["path"])
         self.assertNotIn(b"encrypted cloud user", encrypted_path.read_bytes())
 
