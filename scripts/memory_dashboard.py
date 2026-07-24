@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serve the read-only Memory Wuxian status dashboard."""
+"""Serve the local Memory Wuxian dashboard."""
 
 from __future__ import annotations
 
@@ -10,14 +10,16 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import webbrowser
+import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from conversation_titles import (
     archive_conversation_titles,
@@ -509,12 +511,16 @@ def make_handler(store: MemoryStore):
             self.wfile.write(body)
 
         def do_POST(self):
-            if urlparse(self.path).path != "/api/cloud":
+            path = urlparse(self.path).path
+            if path not in {"/api/cloud", "/api/import-chatgpt"}:
                 self.send_error(404)
                 return
             origin = self.headers.get("Origin")
             if origin and urlparse(origin).netloc != self.headers.get("Host"):
                 self.send_json(403, {"error": "origin-not-allowed"})
+                return
+            if path == "/api/import-chatgpt":
+                self.import_chatgpt()
                 return
             if not self.headers.get("Content-Type", "").startswith(
                 "application/json"
@@ -568,6 +574,57 @@ def make_handler(store: MemoryStore):
                         "returncode": exc.returncode,
                     },
                 )
+            except Exception as exc:
+                self.send_json(500, {"error": str(exc)})
+
+        def import_chatgpt(self) -> None:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 20 * 1024 * 1024 * 1024:
+                    raise ValueError("invalid export file size")
+                filename = Path(
+                    unquote(self.headers.get("X-Filename", "chatgpt-export.zip"))
+                ).name
+                suffix = Path(filename).suffix.casefold()
+                if suffix not in {".zip", ".json"}:
+                    raise ValueError("select a ChatGPT export ZIP or conversations.json")
+                temporary_path: Path | None = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        prefix="memory-wuxian-chatgpt-",
+                        suffix=suffix,
+                        delete=False,
+                    ) as temporary:
+                        temporary_path = Path(temporary.name)
+                        remaining = length
+                        while remaining:
+                            chunk = self.rfile.read(min(1024 * 1024, remaining))
+                            if not chunk:
+                                raise ValueError("incomplete export upload")
+                            temporary.write(chunk)
+                            remaining -= len(chunk)
+                    result = store.import_chatgpt_export(temporary_path)
+                    if result["imported_messages"] or result["repaired_transcripts"]:
+                        backup = store.create_backup_snapshot(
+                            "chatgpt-export-import",
+                            {
+                                "source": filename,
+                                "imported_messages": result["imported_messages"],
+                                "imported_conversations": result[
+                                    "imported_conversations"
+                                ],
+                            },
+                        )
+                        result["backup"] = str(backup) if backup else None
+                    else:
+                        result["backup"] = None
+                    result["source"] = filename
+                    self.send_json(200, {"result": result})
+                finally:
+                    if temporary_path is not None:
+                        temporary_path.unlink(missing_ok=True)
+            except (ValueError, json.JSONDecodeError, OSError, zipfile.BadZipFile) as exc:
+                self.send_json(400, {"error": str(exc)})
             except Exception as exc:
                 self.send_json(500, {"error": str(exc)})
 

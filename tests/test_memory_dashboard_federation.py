@@ -1,8 +1,10 @@
 import json
+import io
 import sys
 import tempfile
 import threading
 import unittest
+import zipfile
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
@@ -263,6 +265,75 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             server.server_close()
             thread.join(timeout=5)
 
+    def test_chatgpt_import_api_streams_into_existing_importer(self):
+        root = self.store.root
+        store = MemoryStore(root, {"memory": {"backup_after_mutation": False}})
+        conversation = {
+            "id": "dashboard-chat-1",
+            "title": "Dashboard import",
+            "current_node": "assistant",
+            "mapping": {
+                "user": {
+                    "id": "user",
+                    "parent": None,
+                    "message": {
+                        "id": "dashboard-user",
+                        "author": {"role": "user"},
+                        "create_time": 1001,
+                        "content": {"content_type": "text", "parts": ["Imported locally"]},
+                    },
+                },
+                "assistant": {
+                    "id": "assistant",
+                    "parent": "user",
+                    "message": {
+                        "id": "dashboard-assistant",
+                        "author": {"role": "assistant"},
+                        "create_time": 1002,
+                        "content": {"content_type": "text", "parts": ["Stored locally"]},
+                    },
+                },
+            },
+        }
+        export = io.BytesIO()
+        with zipfile.ZipFile(export, "w") as archive:
+            archive.writestr(
+                "export/conversations.json",
+                json.dumps([conversation], ensure_ascii=False),
+            )
+        payload_bytes = export.getvalue()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(store))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            request = Request(
+                f"http://127.0.0.1:{server.server_port}/api/import-chatgpt",
+                data=payload_bytes,
+                headers={
+                    "Content-Type": "application/octet-stream",
+                    "X-Filename": "chatgpt-export.zip",
+                },
+                method="POST",
+            )
+            with urlopen(request, timeout=5) as response:
+                first = json.load(response)["result"]
+            with urlopen(request, timeout=5) as response:
+                second = json.load(response)["result"]
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertEqual(first["imported_messages"], 2)
+        self.assertEqual(second["imported_messages"], 0)
+        self.assertEqual(second["duplicate_messages"], 2)
+        self.assertEqual(first["source"], "chatgpt-export.zip")
+        records = store.read_all_raw()
+        self.assertEqual(
+            [record["text"] for record in records],
+            ["Imported locally", "Stored locally"],
+        )
+
     def test_dashboard_html_keeps_existing_features_and_adds_federation_views(self):
         html = (SKILL_ROOT / "dashboard/index.html").read_text(encoding="utf-8")
 
@@ -295,6 +366,12 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "云同步失败提醒",
             "Cloud sync failure alerts",
             "クラウド同期失敗通知",
+            "data-chatgpt-import",
+            "data-chatgpt-file",
+            "fetch('/api/import-chatgpt'",
+            "尚未使用真实用户导出包验证",
+            "no real user export has been tested yet",
+            "実際のユーザー書き出しでは未検証です",
             "加密并签名",
             "Encrypted and signed",
             "暗号化・署名済み",

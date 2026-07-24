@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.2 - 2026-07-24
+
+- Add an experimental ChatGPT official-export importer to Dashboard Settings.
+- Stream selected ZIP or JSON exports only through the localhost server and remove the temporary upload after import.
+- Reuse the existing visible-branch, stable-ID, duplicate-safe importer and verified backup flow.
+- Document that synthetic fixtures are tested but no real user-provided ChatGPT export has been validated yet.
+
 ## 1.6.1 - 2026-07-24
 
 - Add explicit cloud-sync controls to the dashboard Settings panel.

@@ -23,6 +23,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - One latest workspace recovery backup for derived-file reconstruction
 - Federated read-only replicas with delta bundles, artifact-ledger cursors, and cross-device retrieval
 - Parallel SSH and encrypted cloud-folder federation transports
+- An experimental local adapter for official ChatGPT export ZIP files and `conversations.json`
 - A transparent file layout with no database dependency
 
 ## Install
@@ -96,7 +97,7 @@ The capsule budget is derived from the model context window. The default is one 
 
 ## Local status dashboard
 
-On Windows, start the read-only dashboard as a native application window. It uses the installed Microsoft Edge WebView2 runtime, the bundled Memory Wuxian archive/infinity application icon, and preserves the complete dashboard UI without browser chrome:
+On Windows, start the local dashboard as a native application window. It uses the installed Microsoft Edge WebView2 runtime, the bundled Memory Wuxian archive/infinity application icon, and preserves the complete dashboard UI without browser chrome:
 
 ```powershell
 python scripts/memory_dashboard.py `
@@ -105,7 +106,9 @@ python scripts/memory_dashboard.py `
   --window
 ```
 
-Run `scripts/bootstrap_windows.ps1 -InstallMissing` once if the environment check reports that the open-source `pywebview` package is missing. The window offers persistent Chinese, English, and Japanese UI modes, refreshes quietly in the background every 30 seconds, and shows the Codex task title for each conversation, messages, completed rounds, summary levels, daily archive volume, pending summaries, archived visible source characters, and an explicitly labeled archive-token estimate. Character totals include stored user and visible assistant dialogue but exclude generated summaries. Estimated archive tokens use a CJK-aware size heuristic; they are neither billing usage nor the tokens consumed by summary generation. Separately, per-conversation Codex telemetry shows the most recent model-request token count against the advertised model context window. That request count can include instructions, tools, reasoning, and outputs, so its ratio may exceed 100 percent and must not be read as a precise current occupancy or remaining-context gauge. The app binds only to localhost, performs no writes, and sends no archive data to an external service. Without `--window`, the cross-platform browser mode remains available; use `--no-browser` to start only the local server, or `--port` to choose another local port.
+Run `scripts/bootstrap_windows.ps1 -InstallMissing` once if the environment check reports that the open-source `pywebview` package is missing. The window offers persistent Chinese, English, and Japanese UI modes, refreshes quietly in the background every 30 seconds, and shows the Codex task title for each conversation, messages, completed rounds, summary levels, daily archive volume, pending summaries, archived visible source characters, and an explicitly labeled archive-token estimate. Character totals include stored user and visible assistant dialogue but exclude generated summaries. Estimated archive tokens use a CJK-aware size heuristic; they are neither billing usage nor the tokens consumed by summary generation. Separately, per-conversation Codex telemetry shows the most recent model-request token count against the advertised model context window. That request count can include instructions, tools, reasoning, and outputs, so its ratio may exceed 100 percent and must not be read as a precise current occupancy or remaining-context gauge.
+
+The dashboard binds only to localhost and sends no archive data to an external service. Its routine status views are read-only. Explicit Settings actions may enable or disable encrypted cloud-folder exchange, run one immediate exchange pass, or import a user-selected ChatGPT export into the local archive. Without `--window`, the cross-platform browser mode remains available; use `--no-browser` to start only the local server, or `--port` to choose another local port.
 
 ## Automatic Codex capture on macOS
 
@@ -137,6 +140,10 @@ python3 scripts/memory_cli.py import-chatgpt --export /path/to/chatgpt-export.zi
 ```
 
 Use repeated `--conversation-id <native-id>` options to select specific conversations. The importer follows the export's current visible branch, skips system messages and abandoned regenerated-answer branches, preserves titles and stable IDs, and safely imports the same or a newer export again without duplication. Imported chats use `chatgpt:<conversation-id>` and enter the normal backup, indexing, summary, retrieval, and dashboard flows. This is an export adapter, not real-time ChatGPT capture.
+
+The same adapter is available under Dashboard > Settings > Import ChatGPT conversations. The selected ZIP or JSON file is streamed only to the localhost dashboard server, parsed through the existing importer, and removed from temporary storage after the operation. Memory無限 does not log in to ChatGPT, request account credentials, or upload the export to another service.
+
+This feature is **experimental**. Automated tests cover synthetic ZIP and JSON fixtures, visible-branch selection, duplicate-safe repeated imports, stable IDs, and local dashboard upload. It has **not yet been tested with a real user-provided ChatGPT official export**, because no such export has been supplied to this project. Export schemas may change, so the first real import should be treated as a validation run and its counts and recovered conversations should be reviewed before relying on it.
 
 ## Automatic Codex capture on Windows
 

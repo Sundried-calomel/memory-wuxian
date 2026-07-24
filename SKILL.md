@@ -39,6 +39,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 28. Sign every cloud-bound delta with the origin device identity and encrypt it to the target device before it enters a synchronized folder.
 29. Keep cloud private keys on their owning devices and never store cloud-account credentials in Memory無限.
 30. Run cloud synchronization as a low-frequency, short-lived, model-free task. Do not place cloud polling in the native collector.
+31. Treat ChatGPT export import as an explicit local operation. Never upload the selected export, and label the adapter experimental until a real official user export has been validated.
 
 ## Operating workflow
 
@@ -52,20 +53,20 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 8. Run `heartbeat` for validation and recovery. Keep count-based events as primary triggers.
 9. Preview `rebuild-state`, `rebuild-conversations`, or `rebuild-indexes` before applying a recovery operation.
 10. Use the native collector for automatic Codex import. Use `sync-codex` only as a manual compatibility and recovery adapter. Both paths must remain idempotent and storage-compatible.
-11. Use `import-chatgpt` for an official ChatGPT data-export ZIP, extracted directory, or `conversations.json`. It is incremental and idempotent, but it is not a real-time ChatGPT listener.
-11. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
-12. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
-13. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
-14. At the start of each user turn, run `context-refresh-status`. When due, load `context-capsule` into the current reasoning context and run `ack-context-refresh` only after the capsule was read. Do not quote the capsule to the user unless requested, and never archive it as a source message.
-15. When the user names another or historical Codex conversation and asks to continue it or restore its latest messages, run `conversation-tail --title "..." --exclude-conversation-id "codex:<active-task-id>" --messages N`. Resolve the title after excluding the active task and before selecting messages. Never substitute the latest conversation when the title is missing or ambiguous. When the user confirms a title-to-task relationship, persist it with `register-title` so later retrieval does not depend on mutable client title metadata.
-16. Let the dashboard render its last successful browser-local response immediately. The local server validates `memory/dashboard/status-snapshot.json` against archive metadata and rebuilds it from authoritative records only when needed.
-17. For federation, run `init-node` once, register only explicitly trusted peers, and use `export-delta`, `inspect-bundle`, and `import-delta` for offline exchange.
-18. Use `sync-peer` only after SSH host identity is present in the local known-hosts trust store. Select `posix` or `powershell` to match the remote shell.
-19. Use `retrieve-global` for cross-device history. Treat a peer result as verified only after its imported artifact hash has been checked.
-20. Use `revoke-peer` to reject future imports and SSH pulls from a device. Revocation does not silently delete previously imported history.
-21. Use `cloud-configure`, `cloud-pair-export`, and `cloud-pair-import` to prepare an explicitly selected iCloud Drive, OneDrive, or compatible synchronized directory.
-22. Let users manage routine cloud synchronization from Dashboard > Settings. The cloud switch must enable or disable both transport configuration and its background scheduler, the status view must expose the configured directory and scheduler state, and the manual sync command must run one encrypted exchange pass without requiring an AI conversation.
-23. Keep `cloud-enable`, `cloud-disable`, and `cloud-sync` as equivalent CLI and recovery controls. The scheduled task wakes every five minutes, while ordinary exports are coalesced and empty checks create no files.
+11. Use `import-chatgpt` for an official ChatGPT data-export ZIP, extracted directory, or `conversations.json`. It is incremental and idempotent, but it is not a real-time ChatGPT listener. The same experimental adapter is available under Dashboard > Settings; current automated coverage uses synthetic exports and does not constitute validation against a real user export.
+12. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
+13. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
+14. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
+15. At the start of each user turn, run `context-refresh-status`. When due, load `context-capsule` into the current reasoning context and run `ack-context-refresh` only after the capsule was read. Do not quote the capsule to the user unless requested, and never archive it as a source message.
+16. When the user names another or historical Codex conversation and asks to continue it or restore its latest messages, run `conversation-tail --title "..." --exclude-conversation-id "codex:<active-task-id>" --messages N`. Resolve the title after excluding the active task and before selecting messages. Never substitute the latest conversation when the title is missing or ambiguous. When the user confirms a title-to-task relationship, persist it with `register-title` so later retrieval does not depend on mutable client title metadata.
+17. Let the dashboard render its last successful browser-local response immediately. The local server validates `memory/dashboard/status-snapshot.json` against archive metadata and rebuilds it from authoritative records only when needed.
+18. For federation, run `init-node` once, register only explicitly trusted peers, and use `export-delta`, `inspect-bundle`, and `import-delta` for offline exchange.
+19. Use `sync-peer` only after SSH host identity is present in the local known-hosts trust store. Select `posix` or `powershell` to match the remote shell.
+20. Use `retrieve-global` for cross-device history. Treat a peer result as verified only after its imported artifact hash has been checked.
+21. Use `revoke-peer` to reject future imports and SSH pulls from a device. Revocation does not silently delete previously imported history.
+22. Use `cloud-configure`, `cloud-pair-export`, and `cloud-pair-import` to prepare an explicitly selected iCloud Drive, OneDrive, or compatible synchronized directory.
+23. Let users manage routine cloud synchronization from Dashboard > Settings. The cloud switch must enable or disable both transport configuration and its background scheduler, the status view must expose the configured directory and scheduler state, and the manual sync command must run one encrypted exchange pass without requiring an AI conversation.
+24. Keep `cloud-enable`, `cloud-disable`, and `cloud-sync` as equivalent CLI and recovery controls. The scheduled task wakes every five minutes, while ordinary exports are coalesced and empty checks create no files.
 
 ## Commands
 
