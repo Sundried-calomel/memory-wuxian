@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.0 - 2026-07-24
+
+- Add strict source-cited policy events to Level-1 semantic summaries.
+- Derive append-only policy lineage with active, superseded, withdrawn, proposed, conflict, and unresolved states.
+- Add `retrieve --mode current-policy` to restore policy lineage, cited raw messages, and newer matching evidence.
+- Add current-policy guidance to runtime context capsules without rewriting historical summaries.
+- Rebuild and audit global and per-conversation policy indexes alongside existing derived indexes.
+- Keep legacy summary jobs and summary files readable by defaulting missing policy events to an empty array.
+
 ## 1.6.3 - 2026-07-24
 
 - Add complete Simplified Chinese and Japanese README translations.

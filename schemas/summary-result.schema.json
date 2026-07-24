@@ -6,7 +6,8 @@
     "topics",
     "established_conclusions",
     "open_questions",
-    "concepts"
+    "concepts",
+    "policy_events"
   ],
   "properties": {
     "topics": {
@@ -24,6 +25,43 @@
     "concepts": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "policy_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "topic",
+          "statement",
+          "scope",
+          "event_type",
+          "prior_statement",
+          "source_message_ids"
+        ],
+        "properties": {
+          "topic": { "type": "string", "minLength": 1 },
+          "statement": { "type": "string", "minLength": 1 },
+          "scope": { "type": "string" },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "adopted",
+              "revised",
+              "withdrawn",
+              "reaffirmed",
+              "proposed",
+              "uncertain"
+            ]
+          },
+          "prior_statement": { "type": "string" },
+          "source_message_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
     }
   }
 }

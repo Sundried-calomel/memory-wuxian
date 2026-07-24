@@ -71,11 +71,27 @@ The Agent returns this contract to `ingest-summary`:
   "topics": ["Explicit topic"],
   "established_conclusions": ["Conclusion explicitly accepted in the source"],
   "open_questions": ["Question left unresolved in the source"],
-  "concepts": ["Explicit concept or label"]
+  "concepts": ["Explicit concept or label"],
+  "policy_events": [{
+    "topic": "Explicit policy topic",
+    "statement": "Current statement in this event",
+    "scope": "Where this rule applies",
+    "event_type": "adopted",
+    "prior_statement": "",
+    "source_message_ids": ["msg-000001-u"]
+  }]
 }
 ```
 
-All four values must be arrays of strings. Empty arrays are valid. A higher-level summary uses the same schema and only summarizes its assigned child summaries.
+The first four values are arrays of strings. `policy_events` is an array of
+strict objects and may be empty. Level-1 events must cite messages inside the
+assigned source range. Higher-level summaries always return an empty
+`policy_events` array.
+
+`event_type` is one of `adopted`, `revised`, `withdrawn`, `reaffirmed`,
+`proposed`, or `uncertain`. A `revised`, `withdrawn`, or `reaffirmed` event
+changes current validity only when `prior_statement` exactly identifies one
+active statement in the same scope.
 
 ## Summary job
 

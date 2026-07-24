@@ -140,6 +140,14 @@ Search in this order:
 
 Normalize natural-language queries and rank explicit terms across each layer rather than requiring the entire query to appear as one unchanged substring. Use deterministic term frequency and document rarity only; do not invoke a model for retrieval routing. Search authoritative raw text even when generated indexes are incomplete.
 
+For mutable operational rules, run retrieval in `current-policy` mode. Search
+the append-only policy-event index, derive validity from exact statement and
+scope links, expand both earlier and later events in the matched lineage, and
+restore every cited raw message. Also include newer raw matches so archives
+created before policy events existed do not default silently to the earliest
+matching rule. Unresolved, conflicting, uncertain, and proposed events are
+review signals, not current policy.
+
 Exclude currently incomplete rounds from historical matching so the user's active request and visible assistant commentary cannot satisfy their own lookup. Once a raw message matches, restore neighboring records only from the same conversation ID. Never label a routed summary range as verified unless at least one raw record actually matched the query.
 
 Narrow to the smallest plausible source range. Use a Level-1 summary to route to original messages. Read matching messages plus the configured number of neighboring messages. Insert retrieved history into working context with date, time range, file, message range, and retrieval reason.

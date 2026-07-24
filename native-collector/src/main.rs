@@ -1740,7 +1740,7 @@ impl Store {
                 "source_message_ids": source_message_ids,
                 "source_sha256": raw_source_sha256(&records)?,
                 "source_records": source_records,
-                "required_result_keys": ["topics", "established_conclusions", "open_questions", "concepts"],
+                "required_result_keys": ["topics", "established_conclusions", "open_questions", "concepts", "policy_events"],
             });
             let path = self.root.join("pending").join(format!("job-{job_number:06}.json"));
             atomic_write_json(&path, &job)?;

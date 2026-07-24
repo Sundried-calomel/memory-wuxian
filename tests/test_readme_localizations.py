@@ -17,7 +17,7 @@ class ReadmeLocalizationTest(unittest.TestCase):
         heading_counts = [len(re.findall(r"^#{1,3} ", text, re.MULTILINE)) for text in texts]
         fence_counts = [len(re.findall(r"^```", text, re.MULTILINE)) for text in texts]
 
-        self.assertEqual(heading_counts, [17, 17, 17])
+        self.assertEqual(heading_counts, [18, 18, 18])
         self.assertEqual(fence_counts, [30, 30, 30])
         for text in texts:
             self.assertIn("[English](README.md)", text)

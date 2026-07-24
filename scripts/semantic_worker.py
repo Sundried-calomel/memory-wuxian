@@ -259,7 +259,11 @@ def run_job(
                 + completed.stderr[-2000:]
             )
         payload = parse_result(result_path)
-        normalized = store.validate_summary_payload(payload, job["required_result_keys"])
+        normalized = store.validate_summary_payload(
+            payload,
+            job["required_result_keys"],
+            int(job["summary_level"]),
+        )
         result_path.write_text(
             json.dumps(normalized, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",

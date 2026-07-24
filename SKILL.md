@@ -41,6 +41,8 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 30. Run cloud synchronization as a low-frequency, short-lived, model-free task. Do not place cloud polling in the native collector.
 31. Treat ChatGPT export import as an explicit local operation. Never upload the selected export, and label the adapter experimental until a real official user export has been validated.
 32. Keep `README.md`, `README.zh-CN.md`, and `README.ja.md` semantically synchronized whenever documented features, installation, commands, limitations, privacy boundaries, or release behavior change.
+33. Record explicit operational-rule changes as append-only Level-1 policy events. Require exact prior-statement linkage before a revision, withdrawal, or reaffirmation changes current validity.
+34. Use current-policy retrieval for rules or strategies that may have changed. Recency alone must never supersede an earlier policy.
 
 ## Operating workflow
 
@@ -89,6 +91,7 @@ python3 scripts/semantic_worker.py --root memory --config config.yaml --job memo
 python3 scripts/semantic_backfill.py --root memory --config config.yaml --max-jobs 20
 python3 scripts/memory_cli.py ingest-summary --job memory/pending/<job>.json --summary-json <summary>.json
 python3 scripts/memory_cli.py retrieve --query "..."
+python3 scripts/memory_cli.py retrieve --query "..." --mode current-policy
 python3 scripts/memory_cli.py conversation-tail --title "Codex conversation title" --exclude-conversation-id "codex:<active-task-id>" --messages 20
 python3 scripts/memory_cli.py register-title --conversation-id "codex:<task-id>" --title "Confirmed title"
 python3 scripts/memory_cli.py rebuild-state

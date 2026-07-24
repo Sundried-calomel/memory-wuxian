@@ -494,6 +494,7 @@ safety:
                     "established_conclusions": ["原始对话先持久化"],
                     "open_questions": [],
                     "concepts": [concept],
+                    "policy_events": [],
                 },
                 ensure_ascii=False,
             ),
@@ -521,6 +522,109 @@ safety:
         status = self.run_cli("status")
         self.assertEqual(status["last_summarized_round"], 2)
         self.assertEqual(status["pending_summary_jobs"], 0)
+
+    def test_current_policy_retrieval_tracks_explicit_revision(self):
+        for number in (1, 2):
+            self.run_cli(
+                "append",
+                "--speaker", "user",
+                "--text", f"第 {number} 轮采用每 20 轮生成一级摘要。",
+            )
+            self.run_cli(
+                "append",
+                "--speaker", "assistant",
+                "--text", "已确认每 20 轮生成一级摘要。",
+            )
+        first_job_result = self.run_cli("make-summary-job")
+        first_job = json.loads(
+            Path(first_job_result["job"]).read_text(encoding="utf-8")
+        )
+        first_summary = self.base / "policy-first.json"
+        first_summary.write_text(
+            json.dumps(
+                {
+                    "topics": ["摘要触发规则"],
+                    "established_conclusions": ["每 20 轮生成一级摘要"],
+                    "open_questions": [],
+                    "concepts": ["一级摘要", "触发轮数"],
+                    "policy_events": [{
+                        "topic": "一级摘要触发",
+                        "statement": "每 20 轮生成一级摘要",
+                        "scope": "Memory無限摘要调度",
+                        "event_type": "adopted",
+                        "prior_statement": "",
+                        "source_message_ids": [first_job["source_message_ids"][-1]],
+                    }],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        self.run_cli(
+            "ingest-summary",
+            "--job", first_job_result["job"],
+            "--summary-json", str(first_summary),
+        )
+
+        for number in (3, 4):
+            self.run_cli(
+                "append",
+                "--speaker", "user",
+                "--text", f"第 {number} 轮修订一级摘要触发规则。",
+            )
+            self.run_cli(
+                "append",
+                "--speaker", "assistant",
+                "--text", "规则更新为每 5 轮或 20000 字符生成一级摘要。",
+            )
+        second_job_result = self.run_cli("make-summary-job")
+        second_job = json.loads(
+            Path(second_job_result["job"]).read_text(encoding="utf-8")
+        )
+        second_summary = self.base / "policy-second.json"
+        second_summary.write_text(
+            json.dumps(
+                {
+                    "topics": ["摘要触发规则修订"],
+                    "established_conclusions": ["每 5 轮或 20000 字符生成一级摘要"],
+                    "open_questions": [],
+                    "concepts": ["一级摘要", "触发轮数"],
+                    "policy_events": [{
+                        "topic": "一级摘要触发",
+                        "statement": "每 5 轮或 20000 字符生成一级摘要",
+                        "scope": "Memory無限摘要调度",
+                        "event_type": "revised",
+                        "prior_statement": "每 20 轮生成一级摘要",
+                        "source_message_ids": [second_job["source_message_ids"][-1]],
+                    }],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        self.run_cli(
+            "ingest-summary",
+            "--job", second_job_result["job"],
+            "--summary-json", str(second_summary),
+        )
+
+        retrieval = self.run_cli(
+            "retrieve",
+            "--query", "一级摘要触发",
+            "--mode", "current-policy",
+            expect_json=False,
+        )
+        self.assertIn("Validity: `superseded`", retrieval)
+        self.assertIn("Validity: `active`", retrieval)
+        self.assertIn("每 5 轮或 20000 字符生成一级摘要", retrieval)
+        current_view = (self.root / "indexes/policies-current.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Status: `active`", current_view)
+        self.assertIn("每 5 轮或 20000 字符生成一级摘要", current_view)
+        status = self.run_cli("status")
+        self.assertEqual(status["policy_events"], 2)
+        self.assertEqual(status["active_policies"], 1)
 
     def test_retrieve_matches_natural_language_terms_and_excludes_pending_echo(self):
         self.run_cli(
@@ -979,6 +1083,7 @@ summaries:
                     "established_conclusions": [],
                     "open_questions": [],
                     "concepts": ["漂移检查"],
+                    "policy_events": [],
                 },
                 ensure_ascii=False,
             ),

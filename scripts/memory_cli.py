@@ -254,6 +254,7 @@ def parse_summary_markdown(path: Path) -> Dict[str, Any]:
         "Established Conclusions": [],
         "Open Questions": [],
         "Concepts": [],
+        "Policy Events": [],
     }
     current_section: Optional[str] = None
     for line in lines[end + 1 :]:
@@ -264,12 +265,22 @@ def parse_summary_markdown(path: Path) -> Dict[str, Any]:
             value = line[2:].strip()
             if value != "None recorded.":
                 sections[current_section].append(value)
+    policy_events = []
+    for value in sections["Policy Events"]:
+        try:
+            event = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid policy event JSON in {path}: {value}") from exc
+        if not isinstance(event, dict):
+            raise ValueError(f"Policy event must be an object in {path}")
+        policy_events.append(event)
     return {
         **metadata,
         "topics": sections["Topics"],
         "established_conclusions": sections["Established Conclusions"],
         "open_questions": sections["Open Questions"],
         "concepts": sections["Concepts"],
+        "policy_events": policy_events,
     }
 
 
@@ -303,6 +314,8 @@ class MemoryStore:
         self.summaries_dir = self.root / "summaries"
         self.index_dir = self.root / "indexes"
         self.title_index_path = self.index_dir / "conversation-titles.jsonl"
+        self.policy_index_path = self.index_dir / "policies.jsonl"
+        self.current_policy_path = self.index_dir / "policies-current.md"
         self.deterministic_index_dir = self.index_dir / "deterministic"
         self.retrieval_dir = self.root / "retrieval"
         self.pending_dir = self.root / "pending"
@@ -404,6 +417,8 @@ class MemoryStore:
             self.title_index_path: "",
             self.index_dir / "summaries.jsonl": "",
             self.index_dir / "concepts.jsonl": "",
+            self.policy_index_path: "",
+            self.current_policy_path: "# Current Policy View\n",
             self.deterministic_index_dir / "level-1.jsonl": "",
             self.deterministic_index_dir / "timeline.md": "# Deterministic Index Timeline\n",
             self.summaries_dir / "registry.jsonl": "",
@@ -472,6 +487,7 @@ class MemoryStore:
             directory / "messages.jsonl": "",
             directory / "summaries.jsonl": "",
             directory / "concepts.jsonl": "",
+            directory / "policies.jsonl": "",
             directory / "timeline.md": (
                 "# Conversation Timeline\n\n"
                 f"- Conversation ID: `{conversation_id}`\n"
@@ -1840,7 +1856,13 @@ class MemoryStore:
             "source_message_ids": [record["message_id"] for record in records],
             "source_sha256": raw_source_sha256(records),
             "source_records": [{key: value for key, value in record.items() if key != "_path"} for record in records],
-            "required_result_keys": ["topics", "established_conclusions", "open_questions", "concepts"],
+            "required_result_keys": [
+                "topics",
+                "established_conclusions",
+                "open_questions",
+                "concepts",
+                "policy_events",
+            ],
         }
 
     def build_parent_job(
@@ -1882,7 +1904,13 @@ class MemoryStore:
             "source_files": list(dict.fromkeys(path for child in children for path in child.get("source_files", []))),
             "source_sha256": canonical_sha256(child_digests),
             "source_summary_payload": child_payload,
-            "required_result_keys": ["topics", "established_conclusions", "open_questions", "concepts"],
+            "required_result_keys": [
+                "topics",
+                "established_conclusions",
+                "open_questions",
+                "concepts",
+                "policy_events",
+            ],
         }
 
     def persist_job(self, state: Dict[str, Any], job: Dict[str, Any]) -> Path:
@@ -1916,14 +1944,80 @@ class MemoryStore:
             jobs.append({key: value for key, value in job.items() if key not in {"_path", "source_records", "source_summary_payload"}})
         atomic_write_json(self.pending_dir / "unsummarized.json", {"format_version": 1, "pending_jobs": jobs})
 
-    def validate_summary_payload(self, payload: Dict[str, Any], required: Iterable[str]) -> Dict[str, List[str]]:
-        normalized: Dict[str, List[str]] = {}
-        for key in required:
-            value = payload.get(key)
+    def validate_policy_events(
+        self,
+        value: Any,
+        summary_level: int,
+    ) -> List[Dict[str, Any]]:
+        if not isinstance(value, list):
+            raise ValueError("Summary key 'policy_events' must be an array")
+        if summary_level > 1 and value:
+            raise ValueError("Higher-level summaries must not create policy events")
+        allowed_types = {
+            "adopted",
+            "revised",
+            "withdrawn",
+            "reaffirmed",
+            "proposed",
+            "uncertain",
+        }
+        normalized = []
+        required = {
+            "topic",
+            "statement",
+            "scope",
+            "event_type",
+            "prior_statement",
+            "source_message_ids",
+        }
+        for index, event in enumerate(value):
+            if not isinstance(event, dict):
+                raise ValueError(f"Policy event {index} must be an object")
+            if set(event) != required:
+                raise ValueError(
+                    f"Policy event {index} must contain exactly: "
+                    + ", ".join(sorted(required))
+                )
+            text_fields = {
+                key: str(event[key]).strip()
+                for key in ("topic", "statement", "scope", "event_type", "prior_statement")
+            }
+            if not text_fields["topic"] or not text_fields["statement"]:
+                raise ValueError(f"Policy event {index} requires topic and statement")
+            if text_fields["event_type"] not in allowed_types:
+                raise ValueError(f"Unsupported policy event type: {text_fields['event_type']}")
+            source_ids = event["source_message_ids"]
+            if not isinstance(source_ids, list) or not source_ids or not all(
+                isinstance(item, str) and item.strip() for item in source_ids
+            ):
+                raise ValueError(
+                    f"Policy event {index} requires nonempty source_message_ids"
+                )
+            normalized.append({
+                **text_fields,
+                "source_message_ids": list(dict.fromkeys(item.strip() for item in source_ids)),
+            })
+        return normalized
+
+    def validate_summary_payload(
+        self,
+        payload: Dict[str, Any],
+        required: Iterable[str],
+        summary_level: int,
+    ) -> Dict[str, Any]:
+        normalized: Dict[str, Any] = {}
+        required_keys = list(required)
+        if "policy_events" not in required_keys:
+            required_keys.append("policy_events")
+        for key in required_keys:
+            value = payload.get(key, [] if key == "policy_events" else None)
+            if key == "policy_events":
+                normalized[key] = self.validate_policy_events(value, summary_level)
+                continue
             if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
                 raise ValueError(f"Summary key {key!r} must be an array of strings")
             normalized[key] = [item.strip() for item in value if item.strip()]
-        extra = set(payload) - set(required)
+        extra = set(payload) - set(required_keys)
         if extra:
             raise ValueError(f"Unexpected summary keys: {', '.join(sorted(extra))}")
         return normalized
@@ -1973,8 +2067,25 @@ class MemoryStore:
             raise ValueError("Job must be an existing file in the memory pending directory")
         job = json.loads(job_path.read_text(encoding="utf-8"))
         payload = json.loads(summary_json_path.read_text(encoding="utf-8"))
-        summary = self.validate_summary_payload(payload, job["required_result_keys"])
         level = int(job["summary_level"])
+        summary = self.validate_summary_payload(
+            payload,
+            job["required_result_keys"],
+            level,
+        )
+        if level == 1:
+            assigned_message_ids = set(job.get("source_message_ids", []))
+            for index, event in enumerate(summary.get("policy_events", [])):
+                outside_range = [
+                    message_id
+                    for message_id in event["source_message_ids"]
+                    if message_id not in assigned_message_ids
+                ]
+                if outside_range:
+                    raise ValueError(
+                        f"Policy event {index} cites messages outside its assigned source range: "
+                        + ", ".join(outside_range)
+                    )
         summary_id = job["target_summary_id"]
         level_dir = self.summaries_dir / f"level-{level}"
         level_dir.mkdir(parents=True, exist_ok=True)
@@ -2018,6 +2129,8 @@ class MemoryStore:
                 f"## Established Conclusions\n\n{markdown_bullets(summary['established_conclusions'])}\n\n"
                 f"## Open Questions\n\n{markdown_bullets(summary['open_questions'])}\n\n"
                 f"## Concepts\n\n{markdown_bullets(summary['concepts'])}\n\n"
+                f"## Policy Events\n\n"
+                f"{markdown_bullets([json.dumps(event, ensure_ascii=False, sort_keys=True) for event in summary.get('policy_events', [])])}\n\n"
                 f"## Source References\n\n{markdown_bullets(job.get('source_files', []) or job.get('source_summaries', []))}\n"
             )
             output_path.write_text(body, encoding="utf-8")
@@ -2070,6 +2183,7 @@ class MemoryStore:
                 })
             self.update_human_indexes(index_record)
             self.update_concept_indexes(index_record)
+            self.update_policy_indexes(index_record)
 
             state = self.load_state()
             if level == 1:
@@ -2144,6 +2258,184 @@ class MemoryStore:
                     f"`{summary.get('source_end')}`\n",
                 )
 
+    def policy_event_records(self, summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if int(summary.get("level", 0)) != 1:
+            return []
+        records = []
+        for index, event in enumerate(summary.get("policy_events", []), start=1):
+            records.append({
+                "event": "policy-event",
+                "policy_event_id": f"P-{summary['summary_id']}-E{index:03d}",
+                "conversation_id": summary.get("conversation_id"),
+                "summary_id": summary["summary_id"],
+                "topic": event["topic"],
+                "statement": event["statement"],
+                "scope": event["scope"],
+                "event_type": event["event_type"],
+                "prior_statement": event["prior_statement"],
+                "source_message_ids": event["source_message_ids"],
+                "start_time": summary.get("start_time"),
+                "end_time": summary.get("end_time"),
+                "source_start_sequence": summary.get("source_start_sequence"),
+                "source_end_sequence": summary.get("source_end_sequence"),
+                "source_files": summary.get("source_files", []),
+            })
+        return records
+
+    def policy_records(self) -> List[Dict[str, Any]]:
+        return read_jsonl(self.policy_index_path)
+
+    def policy_view(
+        self,
+        records: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
+        ordered = sorted(
+            records if records is not None else self.policy_records(),
+            key=lambda item: (
+                int(item.get("source_end_sequence") or 0),
+                str(item.get("policy_event_id", "")),
+            ),
+        )
+        resolved: Dict[str, Dict[str, Any]] = {}
+        active_ids: List[str] = []
+
+        def normalized(value: Any) -> str:
+            return self.normalize_search_text(str(value or ""))
+
+        def eligible_active(event: Dict[str, Any]) -> List[str]:
+            prior = normalized(event.get("prior_statement"))
+            scope = normalized(event.get("scope"))
+            if not prior:
+                return []
+            return [
+                event_id
+                for event_id in active_ids
+                if normalized(resolved[event_id].get("statement")) == prior
+                and normalized(resolved[event_id].get("scope")) == scope
+            ]
+
+        for event in ordered:
+            event_id = str(event["policy_event_id"])
+            current = {**event, "validity": "unresolved", "supersedes_policy_event_id": None}
+            event_type = str(event.get("event_type", "uncertain"))
+            if event_type == "proposed":
+                current["validity"] = "proposed"
+            elif event_type == "uncertain":
+                current["validity"] = "uncertain"
+            elif event_type == "adopted":
+                same_scope_topic = [
+                    active_id
+                    for active_id in active_ids
+                    if normalized(resolved[active_id].get("scope")) == normalized(event.get("scope"))
+                    and normalized(resolved[active_id].get("topic")) == normalized(event.get("topic"))
+                ]
+                if not same_scope_topic:
+                    current["validity"] = "active"
+                    active_ids.append(event_id)
+                elif all(
+                    normalized(resolved[active_id].get("statement"))
+                    == normalized(event.get("statement"))
+                    for active_id in same_scope_topic
+                ):
+                    current["validity"] = "active"
+                    for active_id in same_scope_topic:
+                        resolved[active_id]["validity"] = "reaffirmed-by-later"
+                        active_ids.remove(active_id)
+                    active_ids.append(event_id)
+                else:
+                    current["validity"] = "conflict"
+            elif event_type in {"revised", "reaffirmed", "withdrawn"}:
+                matches = eligible_active(event)
+                if len(matches) == 1:
+                    prior_id = matches[0]
+                    current["supersedes_policy_event_id"] = prior_id
+                    if event_type == "withdrawn":
+                        resolved[prior_id]["validity"] = "withdrawn-by-later"
+                    elif event_type == "reaffirmed":
+                        resolved[prior_id]["validity"] = "reaffirmed-by-later"
+                    else:
+                        resolved[prior_id]["validity"] = "superseded"
+                    active_ids.remove(prior_id)
+                    if event_type == "withdrawn":
+                        current["validity"] = "withdrawn"
+                    else:
+                        current["validity"] = "active"
+                        active_ids.append(event_id)
+                else:
+                    current["validity"] = "unresolved"
+            resolved[event_id] = current
+        return [resolved[str(event["policy_event_id"])] for event in ordered]
+
+    def render_current_policy_view(
+        self,
+        records: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
+        view = self.policy_view(records)
+        sections = [
+            ("Active", [item for item in view if item["validity"] == "active"]),
+            (
+                "Needs Review",
+                [
+                    item
+                    for item in view
+                    if item["validity"] in {"conflict", "unresolved", "uncertain"}
+                ],
+            ),
+            ("Proposed", [item for item in view if item["validity"] == "proposed"]),
+            ("Withdrawn", [item for item in view if item["validity"] == "withdrawn"]),
+        ]
+        lines = [
+            "# Current Policy View",
+            "",
+            "This file is a derived view. Raw messages and immutable summaries remain authoritative.",
+            "",
+        ]
+        for title, items in sections:
+            lines.extend([f"## {title}", ""])
+            if not items:
+                lines.extend(["- None recorded.", ""])
+                continue
+            for item in items:
+                lines.extend([
+                    f"### {item['policy_event_id']}: {item['topic']}",
+                    "",
+                    f"- Status: `{item['validity']}`",
+                    f"- Scope: {item.get('scope') or 'Unspecified'}",
+                    f"- Statement: {item['statement']}",
+                    f"- Event type: `{item['event_type']}`",
+                    f"- Summary: `{item['summary_id']}`",
+                    f"- Source messages: {', '.join(f'`{value}`' for value in item['source_message_ids'])}",
+                    "",
+                ])
+        return "\n".join(lines).rstrip() + "\n"
+
+    def update_policy_indexes(self, summary: Dict[str, Any]) -> None:
+        records = self.policy_event_records(summary)
+        if not records:
+            return
+        known_ids = {
+            str(item.get("policy_event_id"))
+            for item in self.policy_records()
+        }
+        for record in records:
+            if record["policy_event_id"] not in known_ids:
+                append_jsonl(self.policy_index_path, record)
+            if record.get("conversation_id"):
+                directory = self.ensure_conversation_index_files(
+                    str(record["conversation_id"])
+                )
+                conversation_path = directory / "policies.jsonl"
+                conversation_ids = {
+                    str(item.get("policy_event_id"))
+                    for item in read_jsonl(conversation_path)
+                }
+                if record["policy_event_id"] not in conversation_ids:
+                    append_jsonl(conversation_path, record)
+        atomic_write_text(
+            self.current_policy_path,
+            self.render_current_policy_view(),
+        )
+
     def summary_records_from_files(self) -> List[Dict[str, Any]]:
         raw_records = self.read_all_raw()
         raw_by_id = {record["message_id"]: record for record in raw_records}
@@ -2182,6 +2474,7 @@ class MemoryStore:
                 "established_conclusions": parsed["established_conclusions"],
                 "open_questions": parsed["open_questions"],
                 "concepts": parsed["concepts"],
+                "policy_events": parsed["policy_events"],
             })
         return sorted(records, key=lambda record: (int(record["level"]), record["summary_id"]))
 
@@ -2476,6 +2769,7 @@ class MemoryStore:
 
         registry = []
         concepts = []
+        policies = []
         timeline_lines = ["# Timeline Index", ""]
         concept_lines = ["# Concept Index", ""]
         for summary in summaries:
@@ -2538,13 +2832,16 @@ class MemoryStore:
                     f"- Source: `{summary.get('source_start')}` through `{summary.get('source_end')}`",
                     "",
                 ])
+            policies.extend(self.policy_event_records(summary))
 
         targets = [
             self.index_dir / "conversations.jsonl",
             self.index_dir / "summaries.jsonl",
             self.index_dir / "concepts.jsonl",
+            self.policy_index_path,
             self.index_dir / "timeline.md",
             self.index_dir / "concepts.md",
+            self.current_policy_path,
             self.summaries_dir / "registry.jsonl",
             self.index_dir / "by-conversation",
         ]
@@ -2554,8 +2851,13 @@ class MemoryStore:
             write_jsonl(self.index_dir / "conversations.jsonl", conversations)
             write_jsonl(self.index_dir / "summaries.jsonl", summaries)
             write_jsonl(self.index_dir / "concepts.jsonl", concepts)
+            write_jsonl(self.policy_index_path, policies)
             atomic_write_text(self.index_dir / "timeline.md", "\n".join(timeline_lines).rstrip() + "\n")
             atomic_write_text(self.index_dir / "concepts.md", "\n".join(concept_lines).rstrip() + "\n")
+            atomic_write_text(
+                self.current_policy_path,
+                self.render_current_policy_view(policies),
+            )
             write_jsonl(self.summaries_dir / "registry.jsonl", registry)
             by_conversation_root = self.index_dir / "by-conversation"
             if by_conversation_root.exists():
@@ -2578,9 +2880,14 @@ class MemoryStore:
                     concept for concept in concepts
                     if concept.get("conversation_id") == conversation_id
                 ]
+                policy_records = [
+                    policy for policy in policies
+                    if policy.get("conversation_id") == conversation_id
+                ]
                 write_jsonl(directory / "messages.jsonl", message_records)
                 write_jsonl(directory / "summaries.jsonl", summary_records)
                 write_jsonl(directory / "concepts.jsonl", concept_records)
+                write_jsonl(directory / "policies.jsonl", policy_records)
 
                 message_timeline = [
                     "# Conversation Timeline",
@@ -2649,6 +2956,7 @@ class MemoryStore:
             "raw_messages": len(conversations),
             "summaries": len(summaries),
             "concept_entries": len(concepts),
+            "policy_events": len(policies),
             "registry_entries": len(registry),
             "integrity_issues": integrity_issues,
             "can_apply": not integrity_issues,
@@ -2780,7 +3088,25 @@ class MemoryStore:
             repairable_issues.append(
                 f"concept index records={len(concept_index)} but expected={expected_concept_entries}"
             )
-        for human_index in (self.index_dir / "timeline.md", self.index_dir / "concepts.md"):
+        expected_policy_entries = sum(
+            len(summary.get("policy_events", []))
+            for summary in summary_files
+            if int(summary["level"]) == 1
+        )
+        try:
+            policy_index = read_jsonl(self.policy_index_path)
+        except ValueError as exc:
+            policy_index = []
+            repairable_issues.append(str(exc))
+        if len(policy_index) != expected_policy_entries:
+            repairable_issues.append(
+                f"policy index records={len(policy_index)} but expected={expected_policy_entries}"
+            )
+        for human_index in (
+            self.index_dir / "timeline.md",
+            self.index_dir / "concepts.md",
+            self.current_policy_path,
+        ):
             if not human_index.exists():
                 repairable_issues.append(f"human index missing: {self.relative(human_index)}")
 
@@ -2880,9 +3206,15 @@ class MemoryStore:
             "failed_jobs": len(failed_jobs),
         }
 
-    def retrieve(self, query: str) -> Tuple[str, Dict[str, Any]]:
+    def retrieve(
+        self,
+        query: str,
+        mode: str = "historical",
+    ) -> Tuple[str, Dict[str, Any]]:
         if not self.root.exists() or not self.state_path.exists():
             raise FileNotFoundError(f"Memory archive is not initialized: {self.root}")
+        if mode not in {"historical", "current-policy"}:
+            raise ValueError("Retrieval mode must be historical or current-policy")
         query_normalized = self.normalize_search_text(query)
         if not query_normalized:
             raise ValueError("Query must not be empty")
@@ -2918,8 +3250,24 @@ class MemoryStore:
             terms,
             lambda summary: "\n".join(
                 item
-                for key in ("topics", "established_conclusions", "open_questions", "concepts")
+                for key in (
+                    "topics",
+                    "established_conclusions",
+                    "open_questions",
+                    "concepts",
+                    "policy_events",
+                )
                 for item in summary.get(key, [])
+                for item in (
+                    [
+                        str(item.get("topic", "")),
+                        str(item.get("statement", "")),
+                        str(item.get("scope", "")),
+                        str(item.get("prior_statement", "")),
+                    ]
+                    if isinstance(item, dict)
+                    else [str(item)]
+                )
             ),
         )
         summary_matches = self.strongest_matches(
@@ -2976,6 +3324,70 @@ class MemoryStore:
             len(terms),
             maximum_candidates,
         )
+        if mode == "current-policy":
+            known_raw_ids = {
+                str(item["record"]["message_id"])
+                for item in raw_matches
+            }
+            newest_matching = sorted(
+                raw_ranked,
+                key=lambda item: int(item["record"].get("sequence", 0)),
+                reverse=True,
+            )[:maximum_candidates]
+            for item in newest_matching:
+                message_id = str(item["record"]["message_id"])
+                if message_id not in known_raw_ids:
+                    raw_matches.append(item)
+                    known_raw_ids.add(message_id)
+
+        policy_matches: List[Dict[str, Any]] = []
+        policy_history: List[Dict[str, Any]] = []
+        if mode == "current-policy":
+            policy_view = self.policy_view()
+            policy_ranked = self.ranked_search(
+                policy_view,
+                query_normalized,
+                terms,
+                lambda item: "\n".join([
+                    str(item.get("topic", "")),
+                    str(item.get("statement", "")),
+                    str(item.get("scope", "")),
+                    str(item.get("prior_statement", "")),
+                ]),
+            )
+            policy_matches = self.strongest_matches(
+                policy_ranked,
+                len(terms),
+                maximum_candidates,
+            )
+            matched_ids = {
+                str(item["record"]["policy_event_id"])
+                for item in policy_matches
+            }
+            related_ids = set(matched_ids)
+            changed = True
+            while changed:
+                changed = False
+                for item in policy_view:
+                    event_id = str(item["policy_event_id"])
+                    prior_id = item.get("supersedes_policy_event_id")
+                    if (
+                        event_id in related_ids
+                        or prior_id in related_ids
+                    ) and event_id not in related_ids:
+                        related_ids.add(event_id)
+                        changed = True
+                    if event_id in related_ids and prior_id and prior_id not in related_ids:
+                        related_ids.add(str(prior_id))
+                        changed = True
+            policy_history = [
+                item
+                for item in policy_view
+                if str(item["policy_event_id"]) in related_ids
+            ]
+            policy_history.sort(
+                key=lambda item: int(item.get("source_end_sequence") or 0)
+            )
 
         before = int(nested_get(self.config, ["retrieval", "context_messages_before"], 3))
         after = int(nested_get(self.config, ["retrieval", "context_messages_after"], 3))
@@ -2992,6 +3404,17 @@ class MemoryStore:
         }
         selected: List[Dict[str, Any]] = []
         selected_ids = set()
+        if mode == "current-policy":
+            raw_by_id = {
+                str(record["message_id"]): record
+                for record in historical_raw
+            }
+            for policy in policy_history:
+                for message_id in policy.get("source_message_ids", []):
+                    record = raw_by_id.get(str(message_id))
+                    if record and record["message_id"] not in selected_ids:
+                        selected_ids.add(record["message_id"])
+                        selected.append(record)
         for match in raw_matches:
             record = match["record"]
             conversation_records = records_by_conversation[str(record["conversation_id"])]
@@ -3017,12 +3440,38 @@ class MemoryStore:
             "# Memory無限 Retrieval",
             "",
             f"- Query: {query}",
+            f"- Mode: `{mode}`",
             f"- Confidence: `{confidence}`",
             f"- Matched summaries: {', '.join(summary['summary_id'] for summary in summary_hits) or 'None'}",
             f"- Matched deterministic indexes: {', '.join(record['index_id'] for record in deterministic_hits) or 'None'}",
             f"- Matched raw messages: {', '.join(item['record']['message_id'] for item in raw_matches) or 'None'}",
             "",
         ]
+        if mode == "current-policy":
+            lines.extend([
+                "## Policy Validity",
+                "",
+                "Current-policy mode searches later matching evidence and explicit policy-event links before presenting an operational answer.",
+                "An unresolved or conflicting event must not replace an earlier policy automatically.",
+                "",
+            ])
+            if policy_history:
+                for item in policy_history:
+                    lines.extend([
+                        f"### {item['policy_event_id']}: {item['topic']}",
+                        "",
+                        f"- Validity: `{item['validity']}`",
+                        f"- Event type: `{item['event_type']}`",
+                        f"- Scope: {item.get('scope') or 'Unspecified'}",
+                        f"- Statement: {item['statement']}",
+                        f"- Source messages: {', '.join(f'`{value}`' for value in item['source_message_ids'])}",
+                        "",
+                    ])
+            else:
+                lines.extend([
+                    "- No explicit policy lineage matched. Review the newest verified raw matches before treating an early statement as current.",
+                    "",
+                ])
         if selected:
             lines.extend(["## Verified Raw Context", ""])
             for record in selected:
@@ -3045,6 +3494,7 @@ class MemoryStore:
         metadata = {
             "timestamp": now_iso(),
             "query": query,
+            "mode": mode,
             "matched_concepts": [record["concept"] for record in concept_hits],
             "matched_terms": sorted({
                 term for item in raw_matches for term in item["matched_terms"]
@@ -3062,6 +3512,14 @@ class MemoryStore:
             "raw_files": list(dict.fromkeys(record["_path"] for record in selected)),
             "message_range": f"{selected[0]['message_id']}..{selected[-1]['message_id']}" if selected else None,
             "verification": confidence,
+            "policy_events": [
+                {
+                    "policy_event_id": item["policy_event_id"],
+                    "validity": item["validity"],
+                    "event_type": item["event_type"],
+                }
+                for item in policy_history
+            ],
         }
         try:
             (self.retrieval_dir / "last-query.md").write_text(output, encoding="utf-8")
@@ -3205,6 +3663,15 @@ class MemoryStore:
                 for level in range(1, self.maximum_depth + 1)
             },
             "grouped_child_summaries": len(grouped),
+            "policy_events": len(self.policy_records()),
+            "active_policies": sum(
+                1 for item in self.policy_view() if item["validity"] == "active"
+            ),
+            "policy_events_needing_review": sum(
+                1
+                for item in self.policy_view()
+                if item["validity"] in {"conflict", "unresolved", "uncertain"}
+            ),
             "deterministic_index_counts": deterministic_counts,
             "automatic_semantic_jobs": self.automatic_semantic_jobs,
             "ai_summary_enabled": self.ai_summary_enabled,
@@ -3341,12 +3808,68 @@ class MemoryStore:
             "- This is derived runtime context, not a new source message.",
             "",
         ]
+        local_policy_records = [
+            item
+            for item in self.policy_records()
+            if item.get("conversation_id") == conversation_id
+        ]
+        local_policy_keys = {
+            (
+                self.normalize_search_text(str(item.get("topic", ""))),
+                self.normalize_search_text(str(item.get("scope", ""))),
+            )
+            for item in local_policy_records
+        }
+        conversation_policies = [
+            item
+            for item in self.policy_view()
+            if (
+                self.normalize_search_text(str(item.get("topic", ""))),
+                self.normalize_search_text(str(item.get("scope", ""))),
+            ) in local_policy_keys
+        ]
+        active_policies = [
+            item for item in conversation_policies if item["validity"] == "active"
+        ]
+        review_policies = [
+            item
+            for item in conversation_policies
+            if item["validity"] in {"conflict", "unresolved", "uncertain"}
+        ]
+        lines.extend([
+            "## Current Policy View",
+            "",
+            "Use active policy events for current operational behavior. "
+            "Summary conclusions below remain historical routing evidence.",
+            "",
+        ])
+        if active_policies:
+            for item in active_policies:
+                lines.append(
+                    f"- `{item['topic']}` [{item.get('scope') or 'unspecified scope'}]: "
+                    f"{item['statement']} "
+                    f"(source `{item['summary_id']}`; "
+                    f"{', '.join(item['source_message_ids'])})"
+                )
+        else:
+            lines.append("- No active policy event is recorded for this conversation.")
+        if review_policies:
+            lines.extend([
+                "",
+                "### Policy Events Requiring Review",
+                "",
+            ])
+            for item in review_policies:
+                lines.append(
+                    f"- `{item['validity']}` `{item['topic']}`: {item['statement']}"
+                )
+        lines.append("")
         for summary in selected:
             lines.extend([
                 f"## {summary['summary_id']} (Level {summary['level']})",
                 "",
                 "### Topics", markdown_bullets(summary.get("topics", [])), "",
-                "### Established Conclusions",
+                "### Historical Established Conclusions",
                 markdown_bullets(summary.get("established_conclusions", [])), "",
                 "### Open Questions", markdown_bullets(summary.get("open_questions", [])), "",
                 "### Concepts", markdown_bullets(summary.get("concepts", [])), "",
@@ -3548,6 +4071,12 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser.add_argument("--summary-json", required=True)
     retrieve_parser = subparsers.add_parser("retrieve", help="Search indexes and verify against raw history")
     retrieve_parser.add_argument("--query", required=True)
+    retrieve_parser.add_argument(
+        "--mode",
+        choices=("historical", "current-policy"),
+        default="historical",
+        help="Use current-policy to include explicit policy validity and later matching evidence",
+    )
     tail_parser = subparsers.add_parser(
         "conversation-tail",
         help="Resolve an archived conversation by title and return its latest visible messages",
@@ -3803,7 +4332,7 @@ def dispatch_command(
         backup = store.create_backup_snapshot("summary-ingested", {"summary": str(path)})
         result["backup"] = str(backup) if backup else None
     elif args.command == "retrieve":
-        output, _ = store.retrieve(args.query)
+        output, _ = store.retrieve(args.query, args.mode)
         print(output, end="")
         return 0
     elif args.command == "conversation-tail":

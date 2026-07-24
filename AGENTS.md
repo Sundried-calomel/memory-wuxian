@@ -45,11 +45,15 @@ Use Memory無限 to preserve conversation history outside the active context win
 37. Before placing a delta in iCloud Drive, OneDrive, or another synchronized folder, sign it with the origin device identity and encrypt it to the target device. Never upload readable `.mwxb` files or private keys.
 38. Let each node write only its own cloud outbox and acknowledgements. Imported cloud history remains a read-only peer replica.
 39. Run cloud exchange as a short-lived low-frequency task. Keep the native collector's local event capture and adaptive fallback unchanged, and do not use AI for cloud transfer.
+40. Record explicit operational-rule changes as append-only policy events in Level-1 summaries. Never infer supersession from recency alone.
+41. Use `retrieve --mode current-policy` when a historical rule, strategy, default, or decision may have been revised. Prefer `active` policy events, preserve their lineage, and verify the cited raw messages.
+42. Do not treat `conflict`, `unresolved`, `uncertain`, or `proposed` policy events as current operating rules.
 
 ## Authority order
 
 ```text
 Raw conversation segment
+  > active policy event verified against its raw source
   > Level-1 summary
   > Level-2 summary
   > higher-level summary

@@ -196,3 +196,24 @@ sync process every five minutes, coalesce ordinary local changes for fifteen
 minutes, allow an approximately one-megabyte pending delta to flush early, and
 attempt a flush after at most sixty minutes. A manual force operation may run
 immediately. Empty checks create no cloud files and invoke no AI process.
+
+## D-028: Policy supersession is explicit and append-only
+
+Status: Accepted.
+
+Preserve raw conversations and existing summaries unchanged. Let Level-1
+summaries emit source-cited policy events, then derive a current-policy view
+from those events. A revision, withdrawal, or reaffirmation changes validity
+only when it identifies exactly one active prior statement in the same scope.
+Do not use a newest-record-wins rule.
+
+## D-029: Historical and current-policy retrieval are separate modes
+
+Status: Accepted.
+
+Keep ordinary historical retrieval chronological and evidence-oriented. Use a
+separate current-policy mode for operational questions, returning the full
+matched lineage and cited raw records. Treat unresolved, conflicting,
+uncertain, and proposed events as requiring review. When old summaries contain
+no policy events, search newer matching raw records and disclose that no
+explicit lineage was available.

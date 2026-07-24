@@ -17,6 +17,8 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Ephemeral AI summary generation only when a completed round makes a summary due
 - Bounded runtime context refresh after configured round, utilization, or compaction thresholds
 - Index-first retrieval with raw-text verification
+- Append-only policy events with explicit revision, withdrawal, and reaffirmation lineage
+- A `current-policy` retrieval mode that prevents explicitly superseded rules from being presented as current
 - Preview-first state and index recovery
 - Heartbeat validation, maintenance, and repair modes
 - Incremental Codex rollout parsing with stable source IDs and per-session cursors
@@ -87,6 +89,7 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" sync-codex --session-file "$HOME
 python3 scripts/memory_cli.py --root "$ARCHIVE" status
 python3 scripts/memory_cli.py --root "$ARCHIVE" backup
 python3 scripts/memory_cli.py --root "$ARCHIVE" heartbeat --check-only
+python3 scripts/memory_cli.py --root "$ARCHIVE" retrieve --query "summary trigger" --mode current-policy
 ```
 
 Continuous capture does not call a model. Scripts create a source-locked summary job only after a complete dialogue round reaches a configured threshold. The one-shot semantic worker then invokes the authenticated Codex CLI in ephemeral mode, ingests the constrained JSON summary, and exits.
@@ -96,6 +99,21 @@ Continuous capture does not call a model. Scripts create a source-locked summary
 Memory無限 can periodically restore compressed history into a continuing Codex task without opening a replacement task. `context-refresh-status` detects configured completed-round intervals, context utilization stages, and context compaction. When refresh is due, `context-capsule` selects the highest useful semantic-summary levels, suppresses covered child summaries, adds a small recent-dialogue tail, and emits temporary derived context. `ack-context-refresh` records that the capsule was read so it is not repeatedly injected.
 
 The capsule budget is derived from the model context window. The default is one percent, with a 3,000-token soft cap and an absolute 10,000-token ceiling. A capsule is navigation context rather than historical authority: claims still return to append-only raw records for verification, and the generated capsule must never be archived as a new source message. Reusable rules for workspace `AGENTS.md` files are shipped under `agents/` and `templates/`.
+
+## Policy evolution
+
+Level-1 summaries may record explicit policy events as `adopted`, `revised`,
+`withdrawn`, `reaffirmed`, `proposed`, or `uncertain`. A revision or withdrawal
+supersedes an active rule only when it cites the exact prior statement in the
+same scope. Recency alone never changes validity. Derived policy indexes remain
+rebuildable, while raw conversations and existing summaries stay immutable.
+
+Use `retrieve --mode current-policy` for operational rules, defaults, and
+strategies that may have changed. It returns the matched lineage, restores its
+source messages, and also searches newer matching raw text. Existing summaries
+created before this feature contain no policy events unless they are separately
+reanalyzed; in that case the command reports that no explicit lineage matched
+instead of silently treating an early statement as current.
 
 ## Local status dashboard
 

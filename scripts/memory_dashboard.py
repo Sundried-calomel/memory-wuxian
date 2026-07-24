@@ -358,6 +358,11 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
             "storage_bytes": archive_storage_bytes(store),
             **retrieval_stats,
             "summary_counts": status.get("summary_counts", {}),
+            "policy_events": status.get("policy_events", 0),
+            "active_policies": status.get("active_policies", 0),
+            "policy_events_needing_review": status.get(
+                "policy_events_needing_review", 0
+            ),
             "pending_summary_jobs": status.get("pending_summary_jobs", 0),
             "archived_days": max(1, (now - first.astimezone(timezone.utc)).days + 1) if first else 0,
             "first_archived_at": first.isoformat() if first else None,

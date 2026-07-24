@@ -283,6 +283,7 @@ safety:
                     "established_conclusions": ["远端副本只读"],
                     "open_questions": [],
                     "concepts": ["联邦记忆"],
+                    "policy_events": [],
                 },
                 ensure_ascii=False,
             ),
