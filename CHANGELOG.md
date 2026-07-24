@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.1 - 2026-07-24
+
+- Restore the documented bounded semantic-backfill batch entrypoint.
+- Process queued higher-level summaries before Level-1 debt, stop on the first failed job, and create one verified snapshot after a successful batch.
+
 ## 1.7.0 - 2026-07-24
 
 - Add strict source-cited policy events to Level-1 semantic summaries.

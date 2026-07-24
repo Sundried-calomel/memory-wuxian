@@ -30,6 +30,7 @@ from semantic_worker import (
     unpack_source_records,
     unpack_source_summaries,
 )
+from semantic_backfill import ordered_pending_jobs
 
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
@@ -144,6 +145,32 @@ safety:
         self.assertEqual(
             unpack_source_summaries(prompt_payload["lossless_source_summaries"]),
             summaries,
+        )
+
+    def test_semantic_backfill_prioritizes_higher_summary_levels(self):
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        pending = self.root / "pending"
+        (pending / "job-low.json").write_text(
+            json.dumps({
+                "job_id": "job-low",
+                "summary_level": 1,
+                "created_at": "2026-07-24T10:00:00+09:00",
+            }),
+            encoding="utf-8",
+        )
+        (pending / "job-high.json").write_text(
+            json.dumps({
+                "job_id": "job-high",
+                "summary_level": 3,
+                "created_at": "2026-07-24T11:00:00+09:00",
+            }),
+            encoding="utf-8",
+        )
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+        self.assertEqual(
+            [path.name for path in ordered_pending_jobs(store)[:2]],
+            ["job-high.json", "job-low.json"],
         )
 
     def test_single_file_installer_sources_preserve_external_archives(self):
