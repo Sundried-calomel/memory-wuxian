@@ -1,12 +1,12 @@
 [package]
 name = "memory-wuxian-collector"
-version = "1.7.1"
+version = "1.7.2"
 edition = "2024"
 license = "MIT"
 description = "Event-driven native Codex conversation collector for Memory Wuxian"
 
 [dependencies]
-age = "0.11"
+age = "0.12.1"
 anyhow = "1"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }

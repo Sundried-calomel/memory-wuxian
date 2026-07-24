@@ -1800,7 +1800,11 @@ class MemoryStore:
                     and entry["summary_id"] not in grouped_children
                     and entry.get("conversation_id") == conversation_id
                 ]
-                candidates.sort(key=lambda entry: entry["summary_id"])
+                candidates.sort(key=lambda entry: (
+                    int(entry.get("source_start_sequence") or 0),
+                    int(entry.get("source_end_sequence") or 0),
+                    entry["summary_id"],
+                ))
                 if len(candidates) < self.higher_trigger:
                     continue
                 children = candidates[: self.higher_trigger]
@@ -2965,14 +2969,25 @@ class MemoryStore:
     @staticmethod
     def overlapping_ranges(records: Iterable[Dict[str, Any]], label: str) -> List[str]:
         by_scope: Dict[Tuple[int, str], List[Tuple[int, int, str]]] = {}
+        higher_level_children: Dict[
+            Tuple[int, str], List[Tuple[str, set[str]]]
+        ] = {}
         for record in records:
+            level = int(record.get("level", record.get("summary_level", 1)))
+            conversation_id = str(record.get("conversation_id") or "legacy-global")
+            identifier = record.get("summary_id", record.get("job_id", "unknown"))
+            source_summaries = {
+                str(value) for value in record.get("source_summaries", []) if value
+            }
+            if level > 1 and source_summaries:
+                higher_level_children.setdefault(
+                    (level, conversation_id), []
+                ).append((str(identifier), source_summaries))
+                continue
             start = record.get("source_start_sequence")
             end = record.get("source_end_sequence")
             if start is None or end is None:
                 continue
-            level = int(record.get("level", record.get("summary_level", 1)))
-            conversation_id = str(record.get("conversation_id") or "legacy-global")
-            identifier = record.get("summary_id", record.get("job_id", "unknown"))
             by_scope.setdefault((level, conversation_id), []).append(
                 (int(start), int(end), identifier)
             )
@@ -2985,6 +3000,16 @@ class MemoryStore:
                         f"{label} level {level} overlap for {conversation_id}: "
                         f"{previous[2]} and {current[2]}"
                     )
+        for (level, conversation_id), entries in higher_level_children.items():
+            for index, (left_id, left_children) in enumerate(entries):
+                for right_id, right_children in entries[index + 1:]:
+                    shared = sorted(left_children & right_children)
+                    if shared:
+                        overlaps.append(
+                            f"{label} level {level} reuses child summaries for "
+                            f"{conversation_id}: {left_id} and {right_id}: "
+                            + ", ".join(shared)
+                        )
         return overlaps
 
     def audit(self) -> Dict[str, Any]:

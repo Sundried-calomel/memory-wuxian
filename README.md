@@ -12,6 +12,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - One complete, automatically updated Markdown transcript per conversation
 - Conversation-scoped pending rounds and reply relationships during concurrent tasks
 - Conversation-scoped Level-1 summaries and conversation-scoped higher-level summaries
+- Source-aware hierarchy audits: raw ranges for Level-1 and direct child identities for higher levels
 - Separate message, timeline, concept, and summary indexes for every conversation, plus global routing indexes
 - Script-detected summary boundaries after 5 completed rounds or 20,000 visible characters
 - Ephemeral AI summary generation only when a completed round makes a summary due

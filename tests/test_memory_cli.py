@@ -173,6 +173,63 @@ safety:
             ["job-high.json", "job-low.json"],
         )
 
+    def test_overlap_audit_uses_direct_sources_for_each_summary_level(self):
+        from memory_cli import MemoryStore
+
+        level_one = [
+            {
+                "summary_id": "L1-000001",
+                "level": 1,
+                "conversation_id": "codex:test",
+                "source_start_sequence": 10,
+                "source_end_sequence": 20,
+            },
+            {
+                "summary_id": "L1-000002",
+                "level": 1,
+                "conversation_id": "codex:test",
+                "source_start_sequence": 20,
+                "source_end_sequence": 30,
+            },
+        ]
+        self.assertEqual(len(MemoryStore.overlapping_ranges(level_one, "summary")), 1)
+
+        disjoint_children_with_overlapping_envelopes = [
+            {
+                "summary_id": "L2-000001",
+                "level": 2,
+                "conversation_id": "codex:test",
+                "source_start_sequence": 10,
+                "source_end_sequence": 100,
+                "source_summaries": ["L1-000001", "L1-000003"],
+            },
+            {
+                "summary_id": "L2-000002",
+                "level": 2,
+                "conversation_id": "codex:test",
+                "source_start_sequence": 20,
+                "source_end_sequence": 30,
+                "source_summaries": ["L1-000002", "L1-000004"],
+            },
+        ]
+        self.assertEqual(
+            MemoryStore.overlapping_ranges(
+                disjoint_children_with_overlapping_envelopes, "summary"
+            ),
+            [],
+        )
+
+        disjoint_children_with_overlapping_envelopes[1]["source_summaries"] = [
+            "L1-000003",
+            "L1-000004",
+        ]
+        warnings = MemoryStore.overlapping_ranges(
+            disjoint_children_with_overlapping_envelopes, "summary"
+        )
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("reuses child summaries", warnings[0])
+        self.assertIn("L1-000003", warnings[0])
+
     def test_single_file_installer_sources_preserve_external_archives(self):
         mac_postinstall = (SKILL_ROOT / "packaging/macos/scripts/postinstall").read_text(encoding="utf-8")
         windows_install = (SKILL_ROOT / "packaging/windows/install.ps1").read_text(encoding="utf-8")

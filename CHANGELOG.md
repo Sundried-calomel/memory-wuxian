@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.2 - 2026-07-24
+
+- Audit Level-1 summaries by raw-message range and higher summaries by direct child-summary identity, eliminating false overlap reports from interleaved historical backfill.
+- Sort future parent-summary candidates by source chronology instead of completion-assigned summary ID.
+- Upgrade `age` to 0.12.1, removing the transitive `proc-macro-error2` future-incompatibility warning while preserving encrypted-envelope tests.
+- Rebuild stale derived round state from immutable raw records before resuming semantic backfill.
+
 ## 1.7.1 - 2026-07-24
 
 - Restore the documented bounded semantic-backfill batch entrypoint.
