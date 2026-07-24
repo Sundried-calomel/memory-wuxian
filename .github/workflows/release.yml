@@ -39,7 +39,7 @@ jobs:
             exit 1
           fi
           packaging/macos/build_pkg.sh "$version" dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-installer
           path: dist/*
@@ -76,7 +76,7 @@ jobs:
             "$hash  $($installer.Name)`n",
             [Text.UTF8Encoding]::new($false)
           )
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-installer
           path: dist/*
@@ -86,7 +86,7 @@ jobs:
     needs: [macos-installer, windows-installer]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
