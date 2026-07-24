@@ -287,6 +287,8 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-pair-import \
   --expected-fingerprint <fingerprint-shown-on-the-other-device>
 python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-sync --force
 python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-status
+python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-disable
+python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-enable
 ```
 
 The selected directory must already exist so a mistyped path cannot silently
@@ -315,6 +317,13 @@ Every node writes only its own outbox and acknowledgements. Imported history
 continues to live in read-only peer replicas, and `retrieve-global` follows the
 same verified source path for SSH and cloud deliveries. Use `cloud-disable` to
 stop exchange without deleting archives, keys, or encrypted cloud files.
+
+Version 1.6.1 also exposes these operations in the dashboard Settings panel.
+The Cloud sync switch enables or disables encrypted exchange together with its
+five-minute scheduler. Sync now performs one immediate encrypted exchange pass.
+The panel displays the configured provider directory and the observed scheduler
+state, so ordinary operation does not require an AI conversation or terminal
+commands.
 
 ## Privacy and integration boundary
 

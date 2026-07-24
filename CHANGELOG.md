@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.1 - 2026-07-24
+
+- Add explicit cloud-sync controls to the dashboard Settings panel.
+- Let the dashboard enable or disable both encrypted exchange and its five-minute scheduler.
+- Add a one-click forced encrypted synchronization action and display the configured provider directory and scheduler state.
+- Restrict dashboard mutation requests to local same-origin JSON calls.
+
 ## 1.6.0 - 2026-07-23
 
 - Add encrypted cloud-folder federation alongside direct SSH synchronization, using user-selected iCloud Drive, OneDrive, or compatible synchronized directories without handling provider credentials.

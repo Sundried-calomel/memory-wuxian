@@ -427,6 +427,7 @@ class CloudFolderTransport:
             "enabled": bool(self.config.get("enabled")),
             "configured": configured,
             "encrypted": configured,
+            "exchange_root": str(self.config.get("exchange_root", "")),
             "exchange_provider_path_configured": bool(
                 str(self.config.get("exchange_root", "")).strip()
             ),

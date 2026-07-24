@@ -6,7 +6,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import subprocess
+import sys
 import threading
 import webbrowser
 from collections import Counter, defaultdict
@@ -29,6 +32,86 @@ from memory_federation import FederationManager
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 INDEX_HTML = SKILL_ROOT / "dashboard/index.html"
 DASHBOARD_ICON = SKILL_ROOT / "assets/memory-wuxian.ico"
+CLOUD_SCHEDULER_LABEL = "com.openai.codex.memory-wuxian-cloud-sync"
+CLOUD_SCHEDULER_TASK = "MemoryWuxianCloudSync"
+
+
+def cloud_scheduler_status() -> dict[str, Any]:
+    if sys.platform == "darwin":
+        plist = (
+            Path.home()
+            / "Library"
+            / "LaunchAgents"
+            / f"{CLOUD_SCHEDULER_LABEL}.plist"
+        )
+        installed = plist.is_file()
+        running = False
+        if installed:
+            uid = os.getuid()
+            result = subprocess.run(
+                [
+                    "/bin/launchctl",
+                    "print",
+                    f"gui/{uid}/{CLOUD_SCHEDULER_LABEL}",
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            running = result.returncode == 0
+        return {
+            "platform": "macos",
+            "installed": installed,
+            "running": running,
+        }
+    if sys.platform == "win32":
+        schtasks = (
+            Path(os.environ.get("SystemRoot", r"C:\Windows"))
+            / "System32"
+            / "schtasks.exe"
+        )
+        result = subprocess.run(
+            [str(schtasks), "/Query", "/TN", CLOUD_SCHEDULER_TASK],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        installed = result.returncode == 0
+        return {
+            "platform": "windows",
+            "installed": installed,
+            "running": installed,
+        }
+    return {
+        "platform": sys.platform,
+        "installed": False,
+        "running": False,
+    }
+
+
+def set_cloud_scheduler(store: MemoryStore, enabled: bool) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        str(SKILL_ROOT / "scripts" / "install_cloud_sync.py"),
+        "--archive-root",
+        str(store.root.resolve()),
+        "--skill-root",
+        str(SKILL_ROOT),
+        "--python-executable",
+        sys.executable,
+        "--load" if enabled else "--uninstall",
+    ]
+    result = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return {
+        "command": "installed" if enabled else "uninstalled",
+        "detail": result.stdout.strip(),
+        **cloud_scheduler_status(),
+    }
 
 
 def parse_time(value: str | None) -> datetime | None:
@@ -376,6 +459,23 @@ def make_handler(store: MemoryStore):
     snapshot_cache = DashboardSnapshotCache(store)
 
     class Handler(BaseHTTPRequestHandler):
+        def send_json(self, status: int, payload: dict[str, Any]) -> None:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def cloud_payload(self) -> dict[str, Any]:
+            federation_manager = FederationManager(store)
+            devices = federation_manager.status()
+            cloud = CloudFolderTransport(federation_manager).status()
+            cloud["scheduler"] = cloud_scheduler_status()
+            devices["cloud"] = cloud
+            return devices
+
         def do_GET(self):
             path = urlparse(self.path).path
             if path == "/api/status":
@@ -391,15 +491,9 @@ def make_handler(store: MemoryStore):
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("ETag", etag)
             elif path == "/api/devices":
-                federation_manager = FederationManager(store)
-                devices = federation_manager.status()
-                devices["cloud"] = CloudFolderTransport(
-                    federation_manager
-                ).status()
-                body = json.dumps(
-                    devices,
-                    ensure_ascii=False,
-                ).encode("utf-8")
+                body = json.dumps(self.cloud_payload(), ensure_ascii=False).encode(
+                    "utf-8"
+                )
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -413,6 +507,69 @@ def make_handler(store: MemoryStore):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def do_POST(self):
+            if urlparse(self.path).path != "/api/cloud":
+                self.send_error(404)
+                return
+            origin = self.headers.get("Origin")
+            if origin and urlparse(origin).netloc != self.headers.get("Host"):
+                self.send_json(403, {"error": "origin-not-allowed"})
+                return
+            if not self.headers.get("Content-Type", "").startswith(
+                "application/json"
+            ):
+                self.send_json(415, {"error": "json-required"})
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 65536:
+                    raise ValueError("invalid request length")
+                request = json.loads(self.rfile.read(length))
+                action = request.get("action")
+                manager = FederationManager(store)
+                transport = CloudFolderTransport(manager)
+                if action == "enable":
+                    if not transport.status().get("configured"):
+                        raise ValueError("cloud transport is not configured")
+                    transport.set_enabled(True)
+                    try:
+                        scheduler = set_cloud_scheduler(store, True)
+                    except Exception:
+                        transport.set_enabled(False)
+                        raise
+                    result = {"status": "enabled", "scheduler": scheduler}
+                elif action == "disable":
+                    transport.set_enabled(False)
+                    result = {
+                        "status": "disabled",
+                        "scheduler": set_cloud_scheduler(store, False),
+                    }
+                elif action == "sync":
+                    if not transport.status().get("enabled"):
+                        raise ValueError("cloud transport is disabled")
+                    result = transport.sync(force=True)
+                else:
+                    raise ValueError("unsupported cloud action")
+                self.send_json(
+                    200,
+                    {
+                        "result": result,
+                        "devices": self.cloud_payload(),
+                    },
+                )
+            except (ValueError, json.JSONDecodeError) as exc:
+                self.send_json(400, {"error": str(exc)})
+            except subprocess.CalledProcessError as exc:
+                self.send_json(
+                    500,
+                    {
+                        "error": "cloud scheduler command failed",
+                        "returncode": exc.returncode,
+                    },
+                )
+            except Exception as exc:
+                self.send_json(500, {"error": str(exc)})
 
         def log_message(self, _format, *_args):
             return

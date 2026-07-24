@@ -7,7 +7,8 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
-from urllib.request import urlopen
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -120,6 +121,14 @@ class MemoryDashboardFederationTest(unittest.TestCase):
                 return_value=cloud_transport,
             ) as cloud_factory,
             patch(
+                "memory_dashboard.cloud_scheduler_status",
+                return_value={
+                    "platform": "macos",
+                    "installed": True,
+                    "running": True,
+                },
+            ),
+            patch(
                 "memory_dashboard.DashboardSnapshotCache.get",
                 side_effect=AssertionError("devices API must not build the archive snapshot"),
             ),
@@ -140,7 +149,20 @@ class MemoryDashboardFederationTest(unittest.TestCase):
                 server.server_close()
                 thread.join(timeout=5)
 
-        self.assertEqual(payload, {**federation_status, "cloud": cloud_status})
+        self.assertEqual(
+            payload,
+            {
+                **federation_status,
+                "cloud": {
+                    **cloud_status,
+                    "scheduler": {
+                        "platform": "macos",
+                        "installed": True,
+                        "running": True,
+                    },
+                },
+            },
+        )
         manager.status.assert_called_once_with()
         cloud_factory.assert_called_once_with(manager)
         cloud_transport.status.assert_called_once_with()
@@ -168,6 +190,79 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         self.assertFalse((root / "federation").exists())
         self.assertFalse((root / "dashboard/status-snapshot.json").exists())
 
+    def test_cloud_api_enables_transport_and_scheduler(self):
+        manager = Mock()
+        manager.status.return_value = {
+            "enabled": True,
+            "devices": [],
+            "recent_sync": [],
+        }
+        transport = Mock()
+        transport.status.return_value = {
+            "configured": True,
+            "enabled": True,
+            "exchange_root": "/OneDrive/MemoryWuxianExchange",
+        }
+        scheduler = {
+            "platform": "macos",
+            "installed": True,
+            "running": True,
+        }
+        with (
+            patch("memory_dashboard.FederationManager", return_value=manager),
+            patch(
+                "memory_dashboard.CloudFolderTransport",
+                return_value=transport,
+            ),
+            patch("memory_dashboard.set_cloud_scheduler", return_value=scheduler),
+            patch("memory_dashboard.cloud_scheduler_status", return_value=scheduler),
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", 0), make_handler(self.store)
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = Request(
+                    f"http://127.0.0.1:{server.server_port}/api/cloud",
+                    data=json.dumps({"action": "enable"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(request, timeout=5) as response:
+                    payload = json.load(response)
+                    self.assertEqual(response.status, 200)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+
+        self.assertEqual(payload["result"]["status"], "enabled")
+        transport.set_enabled.assert_called_once_with(True)
+
+    def test_cloud_api_rejects_cross_origin_requests(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.store))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            request = Request(
+                f"http://127.0.0.1:{server.server_port}/api/cloud",
+                data=json.dumps({"action": "disable"}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": "https://example.com",
+                },
+                method="POST",
+            )
+            with self.assertRaises(HTTPError) as raised:
+                urlopen(request, timeout=5)
+            self.assertEqual(raised.exception.code, 403)
+            raised.exception.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
     def test_dashboard_html_keeps_existing_features_and_adds_federation_views(self):
         html = (SKILL_ROOT / "dashboard/index.html").read_text(encoding="utf-8")
 
@@ -191,6 +286,12 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "cloudPeer.acknowledged",
             "cloudPeer.outstanding",
             "cloudFailureAlertsEnabled",
+            "data-cloud-toggle",
+            "data-cloud-action",
+            "fetch('/api/cloud'",
+            "云同步设置已更新",
+            "Cloud sync settings updated",
+            "クラウド同期設定を更新しました",
             "云同步失败提醒",
             "Cloud sync failure alerts",
             "クラウド同期失敗通知",

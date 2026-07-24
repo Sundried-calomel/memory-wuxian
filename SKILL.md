@@ -64,7 +64,8 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 19. Use `retrieve-global` for cross-device history. Treat a peer result as verified only after its imported artifact hash has been checked.
 20. Use `revoke-peer` to reject future imports and SSH pulls from a device. Revocation does not silently delete previously imported history.
 21. Use `cloud-configure`, `cloud-pair-export`, and `cloud-pair-import` to prepare an explicitly selected iCloud Drive, OneDrive, or compatible synchronized directory.
-22. Use `cloud-sync` for one encrypted bidirectional exchange pass. The scheduled task wakes every five minutes, while ordinary exports are coalesced and empty checks create no files.
+22. Let users manage routine cloud synchronization from Dashboard > Settings. The cloud switch must enable or disable both transport configuration and its background scheduler, the status view must expose the configured directory and scheduler state, and the manual sync command must run one encrypted exchange pass without requiring an AI conversation.
+23. Keep `cloud-enable`, `cloud-disable`, and `cloud-sync` as equivalent CLI and recovery controls. The scheduled task wakes every five minutes, while ordinary exports are coalesced and empty checks create no files.
 
 ## Commands
 
@@ -110,6 +111,8 @@ python3 scripts/memory_cli.py revoke-peer --node-id <peer-node-id>
 python3 scripts/memory_cli.py cloud-configure --directory /path/to/synchronized/MemoryWuxianExchange
 python3 scripts/memory_cli.py cloud-pair-export
 python3 scripts/memory_cli.py cloud-pair-import --pairing-file /trusted/path/peer.json
+python3 scripts/memory_cli.py cloud-enable
+python3 scripts/memory_cli.py cloud-disable
 python3 scripts/memory_cli.py cloud-sync
 python3 scripts/memory_cli.py cloud-sync --force
 python3 scripts/memory_cli.py cloud-status
