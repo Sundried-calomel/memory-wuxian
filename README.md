@@ -368,6 +368,10 @@ The quick-start sections above cover normal operation. The following names are
 the complete public maintenance surface and are listed explicitly so releases
 cannot silently add an undocumented command:
 
+Since v1.7.4, pull requests and installer releases run a repository-owned
+documentation contract. Functional changes must update all three localized
+READMEs, `CHANGELOG.md`, and the reviewed feature contract together.
+
 ```text
 init
 append

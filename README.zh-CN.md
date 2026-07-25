@@ -304,6 +304,9 @@ python3 scripts/install_cloud_sync.py \
 前面的快速开始章节覆盖日常操作。下面明确列出全部公开维护命令，确保发布流程
 无法悄悄加入未写入文档的命令：
 
+从 v1.7.4 开始，拉取请求和安装包发布都会运行仓库内置的文档契约。功能变更
+必须同时更新三语 README、`CHANGELOG.md` 和已审阅的功能契约。
+
 ```text
 init
 append

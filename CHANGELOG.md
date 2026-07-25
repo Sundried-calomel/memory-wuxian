@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.7.4 - 2026-07-25
 
 - Add a machine-readable documentation contract covering every public CLI
   command and major non-CLI feature across the English, Simplified Chinese, and
