@@ -18,6 +18,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from console_encoding import configure_unicode_stdio
 from platform_lock import exclusive_lock
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
 from memory_cloud_transport import CloudFolderTransport
@@ -4596,6 +4597,7 @@ def dispatch_command(
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    configure_unicode_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

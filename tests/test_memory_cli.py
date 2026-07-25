@@ -278,6 +278,31 @@ safety:
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
 
+    @unittest.skipUnless(sys.platform == "win32", "Windows encoding regression")
+    def test_cli_redirected_output_overrides_inherited_gbk_without_losing_unicode(self):
+        command = [
+            sys.executable,
+            "-c",
+            (
+                "import sys;"
+                f"sys.path.insert(0, {str(SKILL_ROOT / 'scripts')!r});"
+                "from console_encoding import configure_unicode_stdio;"
+                "configure_unicode_stdio();"
+                "print('价格 ¥100・日本語・中文')"
+            ),
+        ]
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            check=False,
+            env={**os.environ, "PYTHONIOENCODING": "gbk"},
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(
+            completed.stdout.decode("utf-8").strip(),
+            "价格 ¥100・日本語・中文",
+        )
+
     def append_round(self, number):
         self.run_cli("append", "--speaker", "user", "--text", f"第 {number} 轮讨论分层记忆")
         self.run_cli("append", "--speaker", "assistant", "--text", f"第 {number} 轮确认原文必须保留")

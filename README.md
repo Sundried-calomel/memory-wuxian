@@ -372,6 +372,11 @@ Since v1.7.4, pull requests and installer releases run a repository-owned
 documentation contract. Functional changes must update all three localized
 READMEs, `CHANGELOG.md`, and the reviewed feature contract together.
 
+Since v1.7.5, redirected Windows CLI output is always UTF-8 even when the
+parent process supplies a legacy `PYTHONIOENCODING` such as GBK. Interactive
+legacy consoles escape only unsupported characters instead of terminating the
+memory operation.
+
 ```text
 init
 append
