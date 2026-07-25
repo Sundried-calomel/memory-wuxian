@@ -299,6 +299,57 @@ python3 scripts/install_cloud_sync.py \
 - 离线 `.mwxb` 包含可读档案内容，只能通过 SSH 或其他可信渠道传输；SHA-256 不提供加密或发送者认证。
 - 云目录包含已签名、面向目标加密的 `.mwxe` 信封和加密确认；设备私钥不会进入同步目录。
 
+## 完整维护命令面
+
+前面的快速开始章节覆盖日常操作。下面明确列出全部公开维护命令，确保发布流程
+无法悄悄加入未写入文档的命令：
+
+```text
+init
+append
+sync-codex
+import-chatgpt
+status
+context-refresh-status
+context-capsule
+ack-context-refresh
+backup
+make-summary-job
+ingest-summary
+retrieve
+conversation-tail
+register-title
+rebuild-state
+rebuild-conversations
+rebuild-indexes
+heartbeat
+rebuild-deterministic-indexes
+init-node
+add-peer
+revoke-peer
+export-delta
+inspect-bundle
+import-delta
+rebuild-global-index
+retrieve-global
+federation-status
+sync-peer
+cloud-configure
+cloud-pair-export
+cloud-pair-import
+cloud-sync
+cloud-status
+cloud-enable
+cloud-disable
+```
+
+手动恢复语义摘要时还会使用 `semantic_worker.py` 和
+`semantic_backfill.py`。提交前可运行文档契约校验：
+
+```bash
+python3 scripts/check_documentation_contract.py
+```
+
 ## 开发
 
 运行功能测试且不生成字节码文件：

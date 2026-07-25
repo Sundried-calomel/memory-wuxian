@@ -11,7 +11,17 @@ permissions:
   contents: write
 
 jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python scripts/check_documentation_contract.py
+
   macos-installer:
+    needs: documentation
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v7
@@ -45,6 +55,7 @@ jobs:
           path: dist/*
 
   windows-installer:
+    needs: documentation
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7

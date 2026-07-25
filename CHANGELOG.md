@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Add a machine-readable documentation contract covering every public CLI
+  command and major non-CLI feature across the English, Simplified Chinese, and
+  Japanese READMEs.
+- Block pull requests with functional changes unless all three READMEs,
+  `CHANGELOG.md`, and the feature contract change together.
+- Block installer releases when the documentation contract is incomplete or
+  the current package version is absent from the changelog.
+- Document the previously omitted conversation recovery, title registration,
+  semantic-summary maintenance, rebuild, and federation-status commands.
+
 ## 1.7.3 - 2026-07-24
 
 - Stop treating normal out-of-order completion across concurrent conversations as a dashboard health warning.

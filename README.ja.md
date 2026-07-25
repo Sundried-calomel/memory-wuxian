@@ -301,6 +301,57 @@ python3 scripts/install_cloud_sync.py \
 - オフライン`.mwxb`には読取可能な履歴が含まれます。SSHまたは信頼経路を使ってください。SHA-256は暗号化や送信者認証ではありません。
 - クラウドフォルダーには署名済み・対象暗号化済み`.mwxe`と暗号化ackだけが入り、デバイス秘密IDは入りません。
 
+## 完全な保守コマンド一覧
+
+前述のクイックスタートは通常運用を説明しています。リリース時に未文書化の
+コマンドが追加されないよう、公開保守コマンドをすべて明示します。
+
+```text
+init
+append
+sync-codex
+import-chatgpt
+status
+context-refresh-status
+context-capsule
+ack-context-refresh
+backup
+make-summary-job
+ingest-summary
+retrieve
+conversation-tail
+register-title
+rebuild-state
+rebuild-conversations
+rebuild-indexes
+heartbeat
+rebuild-deterministic-indexes
+init-node
+add-peer
+revoke-peer
+export-delta
+inspect-bundle
+import-delta
+rebuild-global-index
+retrieve-global
+federation-status
+sync-peer
+cloud-configure
+cloud-pair-export
+cloud-pair-import
+cloud-sync
+cloud-status
+cloud-enable
+cloud-disable
+```
+
+セマンティック要約を手動復旧する場合は、さらに `semantic_worker.py` と
+`semantic_backfill.py` を使用します。コミット前に文書契約を実行できます。
+
+```bash
+python3 scripts/check_documentation_contract.py
+```
+
 ## 開発
 
 バイトコードを生成せず機能テストを実行します。
