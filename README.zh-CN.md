@@ -307,6 +307,10 @@ python3 scripts/install_cloud_sync.py \
 从 v1.7.4 开始，拉取请求和安装包发布都会运行仓库内置的文档契约。功能变更
 必须同时更新三语 README、`CHANGELOG.md` 和已审阅的功能契约。
 
+从 v1.7.5 开始，即使父进程通过 `PYTHONIOENCODING` 传入 GBK 等旧编码，
+Windows CLI 的重定向输出也始终使用 UTF-8。旧式交互控制台遇到无法表示的
+字符时只转义该字符，不会再让记忆操作终止。
+
 ```text
 init
 append

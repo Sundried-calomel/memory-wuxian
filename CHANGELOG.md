@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.5 - 2026-07-26
+
+- Make redirected Windows CLI output explicitly UTF-8 even when Python inherits
+  a legacy code page through `PYTHONIOENCODING`.
+- Keep interactive legacy Windows consoles non-fatal by escaping only
+  characters their active code page cannot represent.
+- Add a Windows regression test that emits `¥`, Japanese, and Chinese text
+  while the child process is forced to inherit GBK.
+
 ## 1.7.4 - 2026-07-25
 
 - Add a machine-readable documentation contract covering every public CLI

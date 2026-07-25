@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "1.7.4",
+  "reviewed_version": "1.7.5",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -54,6 +54,10 @@
     {
       "id": "platform-installers",
       "required_tokens": ["MemoryWuxian-<version>-macOS-universal.pkg", "MemoryWuxian-<version>-Windows-x64-Setup.exe"]
+    },
+    {
+      "id": "windows-unicode-console",
+      "required_tokens": ["PYTHONIOENCODING", "UTF-8"]
     }
   ]
 }
