@@ -362,6 +362,58 @@ commands.
 - Offline `.mwxb` bundles contain readable archive material. Use SSH or another trusted transfer channel; SHA-256 does not provide encryption or sender authentication.
 - Cloud directories contain signed, target-encrypted `.mwxe` envelopes and encrypted acknowledgements. Private device identities never enter the synchronized directory.
 
+## Complete maintenance command surface
+
+The quick-start sections above cover normal operation. The following names are
+the complete public maintenance surface and are listed explicitly so releases
+cannot silently add an undocumented command:
+
+```text
+init
+append
+sync-codex
+import-chatgpt
+status
+context-refresh-status
+context-capsule
+ack-context-refresh
+backup
+make-summary-job
+ingest-summary
+retrieve
+conversation-tail
+register-title
+rebuild-state
+rebuild-conversations
+rebuild-indexes
+heartbeat
+rebuild-deterministic-indexes
+init-node
+add-peer
+revoke-peer
+export-delta
+inspect-bundle
+import-delta
+rebuild-global-index
+retrieve-global
+federation-status
+sync-peer
+cloud-configure
+cloud-pair-export
+cloud-pair-import
+cloud-sync
+cloud-status
+cloud-enable
+cloud-disable
+```
+
+Manual semantic-summary recovery additionally uses `semantic_worker.py` and
+`semantic_backfill.py`. Run the documentation contract before committing:
+
+```bash
+python3 scripts/check_documentation_contract.py
+```
+
 ## Development
 
 Run the functional test suite without creating bytecode files:

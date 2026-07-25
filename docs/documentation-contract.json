@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "reviewed_version": "1.7.3",
+  "readmes": [
+    "README.md",
+    "README.zh-CN.md",
+    "README.ja.md"
+  ],
+  "features": [
+    {
+      "id": "immutable-archive",
+      "required_tokens": ["append", "retrieve", "heartbeat"]
+    },
+    {
+      "id": "semantic-summary-hierarchy",
+      "required_tokens": ["make-summary-job", "semantic_worker.py", "semantic_backfill.py", "ingest-summary"]
+    },
+    {
+      "id": "runtime-context-refresh",
+      "required_tokens": ["context-refresh-status", "context-capsule", "ack-context-refresh"]
+    },
+    {
+      "id": "policy-lineage",
+      "required_tokens": ["current-policy"]
+    },
+    {
+      "id": "native-codex-capture",
+      "required_tokens": ["memory-wuxian-collector", "install_codex_autosync.py", "install_codex_autosync_windows.py"]
+    },
+    {
+      "id": "local-dashboard",
+      "required_tokens": ["memory_dashboard.py", "--window"]
+    },
+    {
+      "id": "chatgpt-export-import",
+      "required_tokens": ["import-chatgpt", "conversations.json"]
+    },
+    {
+      "id": "verified-backup",
+      "required_tokens": ["backup"]
+    },
+    {
+      "id": "federated-memory",
+      "required_tokens": ["init-node", "export-delta", "import-delta", "retrieve-global", "sync-peer"]
+    },
+    {
+      "id": "encrypted-cloud-folder",
+      "required_tokens": ["cloud-configure", "cloud-pair-export", "cloud-pair-import", "cloud-sync", "cloud-enable", "cloud-disable"]
+    },
+    {
+      "id": "automatic-release-updates",
+      "required_tokens": ["install_auto_update.py", "auto_update.py", "--check-only"]
+    },
+    {
+      "id": "platform-installers",
+      "required_tokens": ["MemoryWuxian-<version>-macOS-universal.pkg", "MemoryWuxian-<version>-Windows-x64-Setup.exe"]
+    }
+  ]
+}

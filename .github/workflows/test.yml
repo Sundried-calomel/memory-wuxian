@@ -23,4 +23,20 @@ jobs:
       - run: cargo check --locked --all-targets --manifest-path native-collector/Cargo.toml
       - run: cargo test --locked --manifest-path native-collector/Cargo.toml
       - run: cargo build --locked --bins --manifest-path native-collector/Cargo.toml
+      - run: python scripts/check_documentation_contract.py
       - run: python -m unittest discover -s tests -v
+
+  documentation-change-gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: >-
+          python scripts/check_documentation_changes.py
+          --base "${{ github.event.pull_request.base.sha }}"
+          --head "${{ github.event.pull_request.head.sha }}"
