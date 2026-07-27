@@ -1,7 +1,13 @@
 param([Parameter(Mandatory = $true)][string]$SkillRoot)
 
 $ErrorActionPreference = "Stop"
-$archiveRoot = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "MemoryWuxianArchive"
+$defaultArchiveRoot = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "MemoryWuxianArchive"
+$activeRootPointer = Join-Path $env:USERPROFILE ".codex\memory-wuxian-active-root.txt"
+$archiveRoot = $defaultArchiveRoot
+if (Test-Path -LiteralPath $activeRootPointer) {
+  $preservedArchiveRoot = (Get-Content -LiteralPath $activeRootPointer -Raw -Encoding UTF8).Trim()
+  if ($preservedArchiveRoot) { $archiveRoot = [IO.Path]::GetFullPath($preservedArchiveRoot) }
+}
 $sessionsRoot = Join-Path $env:USERPROFILE ".codex\sessions"
 
 $bootstrapText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $SkillRoot "scripts\bootstrap_windows.ps1") -InstallMissing
@@ -38,3 +44,9 @@ if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian background collector activation f
   --skill-root $SkillRoot `
   --python-executable $python
 if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian automatic update activation failed." }
+
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $SkillRoot "scripts\install_dashboard_shortcut_windows.ps1") `
+  -SkillRoot $SkillRoot `
+  -ArchiveRoot $archiveRoot `
+  -PythonExecutable $python
+if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian dashboard shortcut installation failed." }

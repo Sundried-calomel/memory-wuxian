@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.7.6 - 2026-07-27
+
+- Rebuild `Memory无限状态台.lnk` during every Windows install or automatic
+  upgrade so stale Codex runtime paths cannot break native dashboard startup.
+- Bind the shortcut to the Python runtime that passed the current Windows
+  bootstrap and install the required `pywebview` dependency before creating it.
+- Preserve the existing active archive root during Windows upgrades instead of
+  silently reverting the collector and dashboard to the default archive.
+- Remove the dashboard shortcut during uninstall without deleting the archive.
+
 ## 1.7.5 - 2026-07-26
 
 - Make redirected Windows CLI output explicitly UTF-8 even when Python inherits

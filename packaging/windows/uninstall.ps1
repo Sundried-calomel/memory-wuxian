@@ -1,5 +1,12 @@
 param([Parameter(Mandatory = $true)][string]$SkillRoot)
 
+$archiveRoot = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "MemoryWuxianArchive"
+$activeRootPointer = Join-Path $env:USERPROFILE ".codex\memory-wuxian-active-root.txt"
+if (Test-Path -LiteralPath $activeRootPointer) {
+  $preservedArchiveRoot = (Get-Content -LiteralPath $activeRootPointer -Raw -Encoding UTF8).Trim()
+  if ($preservedArchiveRoot) { $archiveRoot = [IO.Path]::GetFullPath($preservedArchiveRoot) }
+}
+
 $systemSchtasks = Join-Path $env:SystemRoot "System32\schtasks.exe"
 & $systemSchtasks /End /TN MemoryWuxianCloudSync 2>$null
 & $systemSchtasks /Delete /TN MemoryWuxianCloudSync /F 2>$null
@@ -9,7 +16,6 @@ if ($python -and (Test-Path (Join-Path $SkillRoot "scripts\install_auto_update.p
   & $python.Source (Join-Path $SkillRoot "scripts\install_auto_update.py") --skill-root $SkillRoot --uninstall
 }
 
-$archiveRoot = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "MemoryWuxianArchive"
 $python = Get-Command python.exe -ErrorAction SilentlyContinue
 if ($python) {
   & $python.Source (Join-Path $SkillRoot "scripts\install_codex_autosync_windows.py") --archive-root $archiveRoot --uninstall
@@ -17,4 +23,14 @@ if ($python) {
   schtasks.exe /End /TN MemoryWuxianCodexSync 2>$null
   schtasks.exe /Delete /TN MemoryWuxianCodexSync /F 2>$null
   reg.exe DELETE "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /V MemoryWuxianCodexSync /F 2>$null
+}
+
+$shortcutInstaller = Join-Path $SkillRoot "scripts\install_dashboard_shortcut_windows.ps1"
+if (Test-Path -LiteralPath $shortcutInstaller) {
+  $shortcutPython = if ($python) { $python.Source } else { Join-Path $env:USERPROFILE "python.exe" }
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $shortcutInstaller `
+    -SkillRoot $SkillRoot `
+    -ArchiveRoot $archiveRoot `
+    -PythonExecutable $shortcutPython `
+    -Uninstall
 }

@@ -43,6 +43,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 32. Keep `README.md`, `README.zh-CN.md`, and `README.ja.md` semantically synchronized whenever documented features, installation, commands, limitations, privacy boundaries, or release behavior change.
 33. Record explicit operational-rule changes as append-only Level-1 policy events. Require exact prior-statement linkage before a revision, withdrawal, or reaffirmation changes current validity.
 34. Use current-policy retrieval for rules or strategies that may have changed. Recency alone must never supersede an earlier policy.
+35. Rebuild the Windows native-dashboard shortcut after every installer upgrade, using the preserved active archive root and the Python runtime validated by the current bootstrap.
 
 ## Operating workflow
 
@@ -71,6 +72,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 23. Let users manage routine cloud synchronization from Dashboard > Settings. The cloud switch must enable or disable both transport configuration and its background scheduler, the status view must expose the configured directory and scheduler state, and the manual sync command must run one encrypted exchange pass without requiring an AI conversation.
 24. Keep `cloud-enable`, `cloud-disable`, and `cloud-sync` as equivalent CLI and recovery controls. The scheduled task wakes every five minutes, while ordinary exports are coalesced and empty checks create no files.
 25. Treat all three localized README files as one documentation contract. Update and verify English, Simplified Chinese, and Japanese in the same change.
+26. On Windows installation or upgrade, preserve the active archive pointer and recreate `Memory无限状态台.lnk`; never retain an absolute Python path from an older Codex runtime.
 
 ## Commands
 
@@ -130,6 +132,7 @@ python scripts/install_agent_rules.py --agents-file /path/to/workspace/AGENTS.md
 python scripts/install_codex_autosync_windows.py --archive-root C:\path\to\memory --load
 python scripts/install_auto_update.py --skill-root /path/to/memory-wuxian
 python scripts/auto_update.py --check-only --force
+powershell -ExecutionPolicy Bypass -File scripts/install_dashboard_shortcut_windows.ps1 -SkillRoot C:\path\to\memory-wuxian -ArchiveRoot C:\path\to\memory -PythonExecutable C:\path\to\python.exe
 ```
 
 Use `semantic_backfill.py` for historical summary debt. It processes higher-level

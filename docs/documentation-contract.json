@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "1.7.5",
+  "reviewed_version": "1.7.6",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -30,6 +30,10 @@
     {
       "id": "local-dashboard",
       "required_tokens": ["memory_dashboard.py", "--window"]
+    },
+    {
+      "id": "windows-dashboard-shortcut",
+      "required_tokens": ["install_dashboard_shortcut_windows.ps1", "Memory无限状态台.lnk"]
     },
     {
       "id": "chatgpt-export-import",
