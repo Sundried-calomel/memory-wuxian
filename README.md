@@ -7,6 +7,9 @@
 > directly launches `pythonw.exe` with a script and long argument string.
 > Packaged entry: `memory-wuxian-dashboard-launcher.exe`; shortcut policy:
 > `no command-line arguments`.
+> Windows v1.7.9 additionally resolves the real user profile from the current
+> Windows SID, so isolated installer environments cannot write a
+> `CodexSandboxOffline` launcher target.
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 

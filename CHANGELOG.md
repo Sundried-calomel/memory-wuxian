@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.9 - 2026-07-27
+
+- Resolve the real Windows profile from the current user's SID and
+  `ProfileList` before running post-install activation.
+- Prevent installer processes launched from Codex isolation from recreating
+  the native dashboard shortcut with a `CodexSandboxOffline` target.
+
 ## 1.7.8 - 2026-07-27
 
 - Replace the Windows dashboard shortcut's direct `pythonw.exe` script target

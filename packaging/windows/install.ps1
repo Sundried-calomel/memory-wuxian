@@ -1,6 +1,14 @@
 param([Parameter(Mandatory = $true)][string]$SkillRoot)
 
 $ErrorActionPreference = "Stop"
+$currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$profileKey = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$currentSid"
+$profileImagePath = (Get-ItemProperty -LiteralPath $profileKey -Name ProfileImagePath).ProfileImagePath
+$realUserProfile = [Environment]::ExpandEnvironmentVariables($profileImagePath)
+$expectedSkillRoot = Join-Path $realUserProfile ".codex\skills\memory-wuxian"
+if (Test-Path -LiteralPath $expectedSkillRoot) {
+  $SkillRoot = $expectedSkillRoot
+}
 $resolvedSkillRoot = [IO.Path]::GetFullPath($SkillRoot)
 $skillsRoot = Split-Path -Parent $resolvedSkillRoot
 $codexHome = Split-Path -Parent $skillsRoot
