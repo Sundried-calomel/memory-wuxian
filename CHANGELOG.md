@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.8 - 2026-07-27
+
+- Replace the Windows dashboard shortcut's direct `pythonw.exe` script target
+  and long argument string with a dedicated no-console native launcher.
+- Keep the desktop shortcut argument-free and store the validated Python and
+  active archive paths in a local launcher configuration under `.codex`.
+- Validate launcher paths before starting the localhost dashboard, reducing
+  the shortcut pattern that triggered heuristic antivirus detection.
+
 ## 1.7.7 - 2026-07-27
 
 - Resolve the real Windows user profile from the installed Skill path instead

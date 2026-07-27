@@ -42,3 +42,4 @@ if (Test-Path -LiteralPath $shortcutInstaller) {
     -PythonExecutable $shortcutPython `
     -Uninstall
 }
+[IO.File]::Delete((Join-Path $codexHome "memory-wuxian-dashboard-launcher.json"))

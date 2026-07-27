@@ -1,5 +1,11 @@
 # Memory無限
 
+> Windows v1.7.8 安全说明：桌面状态台快捷方式现在只指向无控制台的原生启动器，
+> 且不携带命令行参数。安装器把已验证的 Python 运行时与活动归档路径写入本机
+> `.codex` 配置，不再创建直接以长参数调用 `pythonw.exe` 和脚本的快捷方式。
+> 打包入口：`memory-wuxian-dashboard-launcher.exe`；快捷方式策略：
+> `no command-line arguments`。
+
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 Memory無限 是一个基于文件的 Codex Skill，用于在活动上下文窗口之外建立持久、分层且可验证的对话记忆。

@@ -1,5 +1,13 @@
 # Memory無限
 
+> Windows v1.7.8 security note: the desktop dashboard shortcut now targets a
+> dedicated no-console native launcher with no command-line arguments. The
+> installer stores the validated Python runtime and active archive path in a
+> local `.codex` configuration file; it no longer creates a shortcut that
+> directly launches `pythonw.exe` with a script and long argument string.
+> Packaged entry: `memory-wuxian-dashboard-launcher.exe`; shortcut policy:
+> `no command-line arguments`.
+
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 Memory無限 is a file-based Codex Skill for persistent, hierarchical, and verifiable conversation memory beyond the active context window.

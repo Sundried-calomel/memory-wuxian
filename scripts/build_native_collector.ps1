@@ -22,7 +22,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
-foreach ($Name in @("memory-wuxian-collector.exe", "memory-wuxian-envelope.exe")) {
+foreach ($Name in @("memory-wuxian-collector.exe", "memory-wuxian-envelope.exe", "memory-wuxian-dashboard-launcher.exe")) {
     $Built = Join-Path $SkillRoot "native-collector\target\release\$Name"
     $Output = Join-Path $OutputDirectory $Name
     Copy-Item -Force -LiteralPath $Built -Destination $Output
