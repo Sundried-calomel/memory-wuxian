@@ -40,6 +40,15 @@ CLOUD_SCHEDULER_LABEL = "com.openai.codex.memory-wuxian-cloud-sync"
 CLOUD_SCHEDULER_TASK = "MemoryWuxianCloudSync"
 
 
+def background_subprocess_kwargs() -> dict[str, Any]:
+    """Compatibility wrapper for the shared no-console process policy."""
+    if sys.platform != "win32":
+        return {}
+    return {
+        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+    }
+
+
 def cloud_scheduler_status() -> dict[str, Any]:
     if sys.platform == "darwin":
         plist = (
@@ -110,7 +119,7 @@ def set_cloud_scheduler(store: MemoryStore, enabled: bool) -> dict[str, Any]:
         check=True,
         capture_output=True,
         text=True,
-        **no_window_kwargs(),
+        **background_subprocess_kwargs(),
     )
     return {
         "command": "installed" if enabled else "uninstalled",

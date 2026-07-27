@@ -37,13 +37,7 @@ def main() -> int:
         (
             "python-regressions",
             [
-                python, "-m", "unittest",
-                "tests.test_memory_cli",
-                "tests.test_memory_federation",
-                "tests.test_memory_cloud_transport",
-                "tests.test_dashboard_shortcut",
-                "tests.test_cloud_scheduler",
-                "tests.test_dashboard_realtime",
+                python, "-m", "unittest", "discover", "-s", "tests", "-v",
             ],
         ),
         (
