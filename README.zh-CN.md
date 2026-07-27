@@ -64,6 +64,12 @@ $skill-installer install https://github.com/Sundried-calomel/memory-wuxian
 
 官方安装包会注册每日稳定版本检查。更新器忽略分支、草稿和预发布版本，同时下载平台安装包及其 SHA-256 文件；校验和或文件名不匹配时拒绝暂存更新。Windows 会在下次登录时静默安装已验证更新；macOS 会保留已验证 PKG，等待操作系统要求的安装授权。使用 `python scripts/install_auto_update.py --uninstall` 可关闭检查。
 
+Windows 每次安装或自动升级都会保留
+`~/.codex/memory-wuxian-active-root.txt` 指定的真实档案，检查或安装原生窗口
+依赖，并使用当前验证通过的 Python 原子重建桌面
+`Memory无限状态台.lnk`。因此 Codex 内置运行时升级后，不会继续引用已经失效的
+旧 `pythonw.exe` 绝对路径。
+
 ```bash
 ARCHIVE="$HOME/Documents/MemoryWuxianArchive"
 
@@ -110,6 +116,11 @@ python scripts/memory_dashboard.py `
 ```
 
 如果环境检查提示缺少开源 `pywebview`，运行一次 `scripts/bootstrap_windows.ps1 -InstallMissing`。窗口支持持久化的中文、英文和日文界面，默认每 30 秒静默刷新，并显示各对话的 Codex 标题、消息、完成轮次、摘要等级、每日归档量、待生成摘要、已归档可见来源字符以及明确标注的档案 Token 估算。字符统计包含用户与可见助手对话，不包含生成摘要。档案 Token 使用兼顾 CJK 的大小启发式估算，既不是计费使用量，也不是摘要生成消耗。每个对话还显示最近一次模型请求 Token 与模型标称上下文窗口的比例；该请求可能包含指令、工具、推理和输出，因此比例可能超过 100%，不能视为精确占用率或剩余上下文。
+
+Windows 安装器会在每次首次安装或升级后运行
+`scripts/install_dashboard_shortcut_windows.ps1`，使用当前 Skill 路径、有效档案、
+内置图标和验证通过的 `pythonw.exe` 重新创建
+`Memory无限状态台.lnk`。卸载时只移除快捷方式，不删除记忆档案。
 
 状态台仅绑定 localhost，不向外部服务发送档案。常规状态页面只读；设置页中的明确操作可以开启或关闭加密云文件夹交换、立即执行一次交换，或把用户选择的 ChatGPT 导出包导入本地档案。不使用 `--window` 时仍可使用跨平台浏览器模式；`--no-browser` 只启动本地服务器，`--port` 可指定端口。
 

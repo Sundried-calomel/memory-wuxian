@@ -64,6 +64,12 @@ $skill-installer install https://github.com/Sundried-calomel/memory-wuxian
 
 公式インストーラーは安定版を毎日確認します。更新処理はブランチ、ドラフト、プレリリースを無視し、プラットフォーム用インストーラーとSHA-256ファイルの両方を取得します。チェックサムやファイル名が一致しない更新は保存しません。Windowsは次回ログイン時に検証済み更新をサイレントインストールし、macOSはOSのインストール承認を待つ検証済みPKGを保持します。`python scripts/install_auto_update.py --uninstall`で確認を無効化できます。
 
+Windowsではインストールまたは自動更新のたびに
+`~/.codex/memory-wuxian-active-root.txt`で指定された実アーカイブを保持し、
+ネイティブウィンドウ依存関係を確認または導入して、現在検証済みのPythonで
+デスクトップの`Memory无限状态台.lnk`をアトミックに再構築します。Codex
+ランタイム更新後も、無効になった古い`pythonw.exe`絶対パスを残しません。
+
 ```bash
 ARCHIVE="$HOME/Documents/MemoryWuxianArchive"
 
@@ -112,6 +118,12 @@ python scripts/memory_dashboard.py `
 ```
 
 環境確認でオープンソース`pywebview`が不足している場合は、`scripts/bootstrap_windows.ps1 -InstallMissing`を一度実行します。中国語、英語、日本語UIを保持し、既定で30秒ごとに静かに更新します。会話ごとのCodexタイトル、メッセージ、完了ラウンド、要約レベル、日別アーカイブ量、保留要約、可視ソース文字数、明示されたアーカイブToken推定を表示します。文字数にはユーザーと可視アシスタント会話を含み、生成要約は含みません。Token推定はCJKを考慮したヒューリスティックで、課金使用量や要約生成消費ではありません。会話ごとの最新モデル要求Tokenと公称コンテキストウィンドウの比率も表示しますが、要求には指示、ツール、推論、出力が含まれ得るため100%を超える場合があり、正確な占有率や残量ではありません。
+
+Windowsインストーラーは初回導入または更新のたびに
+`scripts/install_dashboard_shortcut_windows.ps1`を実行し、現在のSkillパス、
+有効なアーカイブ、同梱アイコン、検証済み`pythonw.exe`を使って
+`Memory无限状态台.lnk`を再作成します。アンインストールではショートカット
+だけを削除し、記憶アーカイブは削除しません。
 
 コンソールはlocalhostだけにバインドし、外部サービスへアーカイブを送りません。通常の状態表示は読取専用です。設定画面の明示的操作では、暗号化クラウド交換の有効化・無効化、即時同期、選択したChatGPTエクスポートのローカル取込みができます。`--window`を使わない場合はクロスプラットフォームのブラウザモード、`--no-browser`はローカルサーバーのみ、`--port`はポート指定です。
 

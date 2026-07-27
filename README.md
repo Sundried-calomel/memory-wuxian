@@ -80,6 +80,13 @@ installs a verified update silently at the next login; macOS keeps the verified 
 for the operating system's required installation authorization. Disable the check with
 `python scripts/install_auto_update.py --uninstall`.
 
+Every Windows install or automatic upgrade preserves the archive named by
+`~/.codex/memory-wuxian-active-root.txt`, verifies or installs the native-window
+dependencies, and atomically rebuilds the desktop
+`Memory无限状态台.lnk` shortcut with the current validated Python runtime. This
+prevents a Codex runtime upgrade from leaving the dashboard bound to a stale
+absolute `pythonw.exe` path.
+
 ```bash
 ARCHIVE="$HOME/Documents/MemoryWuxianArchive"
 
@@ -128,6 +135,12 @@ python scripts/memory_dashboard.py `
 ```
 
 Run `scripts/bootstrap_windows.ps1 -InstallMissing` once if the environment check reports that the open-source `pywebview` package is missing. The window offers persistent Chinese, English, and Japanese UI modes, refreshes quietly in the background every 30 seconds, and shows the Codex task title for each conversation, messages, completed rounds, summary levels, daily archive volume, pending summaries, archived visible source characters, and an explicitly labeled archive-token estimate. Character totals include stored user and visible assistant dialogue but exclude generated summaries. Estimated archive tokens use a CJK-aware size heuristic; they are neither billing usage nor the tokens consumed by summary generation. Separately, per-conversation Codex telemetry shows the most recent model-request token count against the advertised model context window. That request count can include instructions, tools, reasoning, and outputs, so its ratio may exceed 100 percent and must not be read as a precise current occupancy or remaining-context gauge.
+
+The Windows installer runs
+`scripts/install_dashboard_shortcut_windows.ps1` after every install or upgrade.
+It recreates `Memory无限状态台.lnk` with the current Skill path, active archive,
+bundled icon, and validated `pythonw.exe`. Uninstalling removes only the shortcut,
+not the archive.
 
 The dashboard binds only to localhost and sends no archive data to an external service. Its routine status views are read-only. Explicit Settings actions may enable or disable encrypted cloud-folder exchange, run one immediate exchange pass, or import a user-selected ChatGPT export into the local archive. Without `--window`, the cross-platform browser mode remains available; use `--no-browser` to start only the local server, or `--port` to choose another local port.
 
