@@ -29,7 +29,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 18. Keep only the configured number of newest complete external snapshots; the default is one.
 19. Keep only the configured number of newest workspace recovery backups under `memory/archive/`; the default is one.
 20. Do not keep an AI conversation active. Let scripts detect completed-round or character thresholds, then run one ephemeral AI process only to generate the due semantic summary.
-21. Treat dashboard snapshots as disposable derived caches. Validate them against source metadata and rebuild from the archive when stale or malformed.
+21. Treat dashboard snapshots as disposable derived caches. Render the last persisted snapshot immediately, validate and rebuild it in a background thread for automatic refresh, and reserve synchronous validation for explicit manual refresh.
 22. Keep each node's local archive exclusively writable by that node. Store imported peer history only in read-only replicas under the federation cache.
 23. Qualify federated message, conversation, and summary identities by origin node. Never merge remote records into local counters or authoritative raw files.
 24. Export only locally originated artifacts. Verify artifact SHA-256, event-sequence continuity, and predecessor bundle SHA-256 before committing an import.
@@ -63,7 +63,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 14. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
 15. At the start of each user turn, run `context-refresh-status`. When due, load `context-capsule` into the current reasoning context and run `ack-context-refresh` only after the capsule was read. Do not quote the capsule to the user unless requested, and never archive it as a source message.
 16. When the user names another or historical Codex conversation and asks to continue it or restore its latest messages, run `conversation-tail --title "..." --exclude-conversation-id "codex:<active-task-id>" --messages N`. Resolve the title after excluding the active task and before selecting messages. Never substitute the latest conversation when the title is missing or ambiguous. When the user confirms a title-to-task relationship, persist it with `register-title` so later retrieval does not depend on mutable client title metadata.
-17. Let the dashboard render its last successful browser-local response immediately. The local server validates `memory/dashboard/status-snapshot.json` against archive metadata and rebuilds it from authoritative records only when needed.
+17. Let the dashboard render its last successful browser-local response immediately. Serve `memory/dashboard/status-snapshot.json` without blocking the first paint, rebuild it from authoritative records in the background, and animate changed values when the refreshed snapshot arrives. On Windows, dashboard status reads must not create visible console subprocesses.
 18. For federation, run `init-node` once, register only explicitly trusted peers, and use `export-delta`, `inspect-bundle`, and `import-delta` for offline exchange.
 19. Use `sync-peer` only after SSH host identity is present in the local known-hosts trust store. Select `posix` or `powershell` to match the remote shell.
 20. Use `retrieve-global` for cross-device history. Treat a peer result as verified only after its imported artifact hash has been checked.
@@ -72,7 +72,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 23. Let users manage routine cloud synchronization from Dashboard > Settings. The cloud switch must enable or disable both transport configuration and its background scheduler, the status view must expose the configured directory and scheduler state, and the manual sync command must run one encrypted exchange pass without requiring an AI conversation.
 24. Keep `cloud-enable`, `cloud-disable`, and `cloud-sync` as equivalent CLI and recovery controls. The scheduled task wakes every five minutes, while ordinary exports are coalesced and empty checks create no files.
 25. Treat all three localized README files as one documentation contract. Update and verify English, Simplified Chinese, and Japanese in the same change.
-26. On Windows installation or upgrade, preserve the active archive pointer and recreate `Memory无限状态台.lnk`; never retain an absolute Python path from an older Codex runtime.
+26. On Windows installation or upgrade, preserve the active archive pointer and recreate `Memory无限状态台.lnk` by default; never retain an absolute Python path from an older Codex runtime. A bare Skill copy has no traditional installer UI, so first activation must run the supplied bootstrap and shortcut installer.
 
 ## Commands
 

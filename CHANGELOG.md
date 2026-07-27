@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.7.11 - 2026-07-27
+
+- Prevent dashboard startup, refresh, and Settings status reads from creating
+  visible Windows console processes or stealing foreground focus.
+- Return the last persisted dashboard snapshot immediately, rebuild stale
+  archive statistics in the background, and keep manual refresh authoritative.
+- Animate changed metrics, timeline bars, and summary progress while preserving
+  a reduced-motion-compatible, readable dashboard.
+- Open Settings before refreshing remote state, normalize command-button text,
+  and vertically center switch thumbs.
+- Run Windows cloud synchronization and automatic update checks without visible
+  consoles, while keeping the desktop shortcut bound to the native launcher.
+- Use Windows extended paths only for long cloud-envelope file operations,
+  without passing extended paths to Python or native process launchers.
+- Reaffirm that Windows installation and upgrade recreate the native dashboard
+  shortcut by default.
+
 ## 1.7.10 - 2026-07-27
 
 - Preserve validated ordinary Windows paths in the native dashboard launcher

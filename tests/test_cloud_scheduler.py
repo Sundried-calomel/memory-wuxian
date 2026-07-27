@@ -155,11 +155,11 @@ class CloudSchedulerTest(unittest.TestCase):
             root.findtext(".//t:Principal/t:LogonType", namespaces=namespace),
             "InteractiveToken",
         )
-        self.assertTrue(
-            root.findtext(".//t:Exec/t:Command", namespaces=namespace).endswith(
-                r"System32\WindowsPowerShell\v1.0\powershell.exe"
-            )
+        task_command = root.findtext(
+            ".//t:Exec/t:Command", namespaces=namespace
         )
+        self.assertEqual(task_command, str(self.python.resolve()))
+        self.assertNotIn("powershell", task_command.lower())
         create_call = next(call for call, _ in runner.calls if "/Create" in call)
         run_call = next(call for call, _ in runner.calls if "/Run" in call)
         self.assertIn(scheduler.WINDOWS_TASK_NAME, create_call)
@@ -200,9 +200,10 @@ class CloudSchedulerTest(unittest.TestCase):
         task_arguments = ET.fromstring(runner.task_xml).findtext(
             f".//{{{scheduler.TASK_XML_NAMESPACE}}}Arguments"
         )
-        encoded = task_arguments.split("-EncodedCommand ", 1)[1]
-        decoded = base64.b64decode(encoded).decode("utf-16le")
-        self.assertIn(scheduler.powershell_quote(wrapper.resolve()), decoded)
+        self.assertIn("memory_cli.py", task_arguments)
+        self.assertIn("cloud-sync", task_arguments)
+        self.assertNotIn("powershell", task_arguments.lower())
+        self.assertNotIn("-EncodedCommand", task_arguments)
 
     def test_windows_uninstall_is_idempotent_and_preserves_data(self):
         runner = FakeRunner()

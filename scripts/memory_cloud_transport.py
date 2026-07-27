@@ -27,6 +27,24 @@ from memory_federation import (
 )
 
 
+def filesystem_native_path(path: Path) -> str:
+    value = str(path.resolve())
+    if os.name != "nt" or value.startswith("\\\\?\\"):
+        return value
+    if value.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + value[2:]
+    return "\\\\?\\" + value
+
+
+def display_path(path: Path) -> str:
+    value = str(path)
+    if value.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + value[8:]
+    if value.startswith("\\\\?\\"):
+        return value[4:]
+    return value
+
+
 CLOUD_FORMAT_VERSION = 1
 ACK_FORMAT = "memory-wuxian-cloud-ack-v1"
 DEFAULT_MERGE_WINDOW_SECONDS = 900
@@ -442,7 +460,8 @@ class CloudFolderTransport:
         value = str(self.config.get("exchange_root", "")).strip()
         if not value:
             raise ValueError("Cloud exchange_root is not configured")
-        return Path(value).expanduser().resolve() / "MemoryWuxianExchange" / "v1"
+        root = Path(value).expanduser().resolve() / "MemoryWuxianExchange" / "v1"
+        return Path(filesystem_native_path(root)) if os.name == "nt" else root
 
     def _identity_private_path(self) -> Path:
         value = str(self.config.get("identity_private_path", "")).strip()
@@ -613,7 +632,10 @@ class CloudFolderTransport:
                 raise RuntimeError("Envelope helper did not create a nonempty output")
             with partial.open("rb+") as handle:
                 os.fsync(handle.fileno())
-            os.replace(partial, destination)
+            os.replace(
+                filesystem_native_path(partial),
+                filesystem_native_path(destination),
+            )
             try:
                 directory_descriptor = os.open(
                     str(destination.parent), getattr(os, "O_DIRECTORY", 0)
@@ -712,14 +734,14 @@ class CloudFolderTransport:
             for path in paths:
                 if ".partial" in path.name:
                     result["transient"].append(
-                        {"peer": peer_id, "type": "ack", "path": str(path)}
+                        {"peer": peer_id, "type": "ack", "path": display_path(path)}
                     )
                     continue
                 if path.suffix != ".mwxa":
                     continue
                 if not ACK_PATTERN.fullmatch(path.name) or not self._stable_candidate(path):
                     result["transient"].append(
-                        {"peer": peer_id, "type": "ack", "path": str(path)}
+                        {"peer": peer_id, "type": "ack", "path": display_path(path)}
                     )
                     continue
                 try:
@@ -771,7 +793,7 @@ class CloudFolderTransport:
                         {
                             "peer": peer_id,
                             "type": "ack",
-                            "path": str(path),
+                            "path": display_path(path),
                             "reason": str(exc),
                         }
                     )
@@ -842,7 +864,7 @@ class CloudFolderTransport:
             for path in paths:
                 if ".partial" in path.name:
                     result["transient"].append(
-                        {"peer": peer_id, "type": "bundle", "path": str(path)}
+                        {"peer": peer_id, "type": "bundle", "path": display_path(path)}
                     )
                     continue
                 if path.suffix != ".mwxe":
@@ -850,7 +872,7 @@ class CloudFolderTransport:
                 match = ENVELOPE_PATTERN.fullmatch(path.name)
                 if not match or not self._stable_candidate(path):
                     result["transient"].append(
-                        {"peer": peer_id, "type": "bundle", "path": str(path)}
+                        {"peer": peer_id, "type": "bundle", "path": display_path(path)}
                     )
                     continue
                 from_sequence = int(match.group("from_sequence"))
@@ -859,7 +881,7 @@ class CloudFolderTransport:
                         {
                             "peer": peer_id,
                             "type": "bundle-gap",
-                            "path": str(path),
+                            "path": display_path(path),
                             "expected_sequence": expected_sequence,
                         }
                     )
@@ -916,7 +938,7 @@ class CloudFolderTransport:
                         {
                             "peer": peer_id,
                             "type": "bundle",
-                            "path": str(path),
+                            "path": display_path(path),
                             "reason": str(exc),
                         }
                     )
@@ -953,7 +975,7 @@ class CloudFolderTransport:
             if candidates:
                 path, match = candidates[0]
                 outstanding = {
-                    "path": str(path),
+                    "path": display_path(path),
                     "bundle_id": match.group("bundle_id"),
                     "bundle_sha256": match.group("bundle_sha256"),
                     "from_event_sequence": int(match.group("from_sequence")),
@@ -1005,7 +1027,7 @@ class CloudFolderTransport:
                 peer_id,
             )
         state["outstanding"] = {
-            "path": str(destination),
+            "path": display_path(destination),
             "bundle_id": exported["bundle_id"],
             "bundle_sha256": exported["sha256"],
             "from_event_sequence": int(exported["from_event_sequence"]),
@@ -1015,7 +1037,7 @@ class CloudFolderTransport:
         result["published"].append(
             {
                 "peer": peer_id,
-                "path": str(destination),
+                "path": display_path(destination),
                 "bundle_id": exported["bundle_id"],
                 "from_event_sequence": int(exported["from_event_sequence"]),
                 "to_event_sequence": int(exported["to_event_sequence"]),
@@ -1045,7 +1067,7 @@ class CloudFolderTransport:
                     if age < grace:
                         continue
                     path.unlink(missing_ok=True)
-                    removed.append(str(path))
+                    removed.append(display_path(path))
             acknowledgements = [
                 path
                 for path in sorted(self._ack_outbox(peer_id).glob("*.mwxa"))
@@ -1059,7 +1081,7 @@ class CloudFolderTransport:
                 if age < grace:
                     continue
                 path.unlink(missing_ok=True)
-                removed.append(str(path))
+                removed.append(display_path(path))
         return removed
 
     def sync(self, force: bool = False, now: Optional[float] = None) -> Dict[str, Any]:

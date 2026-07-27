@@ -12,6 +12,12 @@
 > `CodexSandboxOffline` launcher target.
 > Windows v1.7.10 keeps validated ordinary Windows paths when invoking Python,
 > avoiding extended-path startup failures with non-ASCII installations.
+> Windows v1.7.11 removes visible console subprocesses from dashboard startup
+> and Settings reads, serves the persisted snapshot before background refresh,
+> and animates changed metrics. Windows installation and upgrade recreate the
+> native desktop dashboard shortcut by default. A bare Codex Skill copy has no
+> traditional installer wizard; first activation runs the supplied bootstrap
+> and shortcut installer.
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 

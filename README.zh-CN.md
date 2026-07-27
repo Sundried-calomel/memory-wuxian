@@ -9,6 +9,10 @@
 > 把启动目标重新写成 `CodexSandboxOffline` 路径。
 > Windows v1.7.10 在调用 Python 时保留已验证的普通 Windows 路径，避免中文路径
 > 被转换为扩展路径后导致 `pythonw.exe` 立即退出。
+> Windows v1.7.11 移除状态台启动和设置读取中的可见控制台子进程，先显示持久
+> 快照、再后台刷新，并为变化指标播放轻量动画。Windows 安装或升级默认重建
+> 原生桌面状态台快捷方式。直接复制 Codex Skill 没有传统安装向导，首次启用时
+> 会运行随附的环境检查和快捷方式安装流程。
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
