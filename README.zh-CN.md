@@ -68,7 +68,9 @@ Windows 每次安装或自动升级都会保留
 `~/.codex/memory-wuxian-active-root.txt` 指定的真实档案，检查或安装原生窗口
 依赖，并使用当前验证通过的 Python 原子重建桌面
 `Memory无限状态台.lnk`。因此 Codex 内置运行时升级后，不会继续引用已经失效的
-旧 `pythonw.exe` 绝对路径。
+旧 `pythonw.exe` 绝对路径。安装器从 Skill 的实际安装路径推导真实用户目录，
+因此桌面客户端的隔离 `USERPROFILE` 不会把 collector 或快捷方式重定向到沙箱
+档案。
 
 ```bash
 ARCHIVE="$HOME/Documents/MemoryWuxianArchive"

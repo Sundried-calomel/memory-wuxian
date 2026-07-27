@@ -1,14 +1,22 @@
 param([Parameter(Mandatory = $true)][string]$SkillRoot)
 
 $ErrorActionPreference = "Stop"
-$defaultArchiveRoot = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "MemoryWuxianArchive"
-$activeRootPointer = Join-Path $env:USERPROFILE ".codex\memory-wuxian-active-root.txt"
+$resolvedSkillRoot = [IO.Path]::GetFullPath($SkillRoot)
+$skillsRoot = Split-Path -Parent $resolvedSkillRoot
+$codexHome = Split-Path -Parent $skillsRoot
+$installedUserProfile = Split-Path -Parent $codexHome
+if ((Split-Path -Leaf $codexHome) -ne ".codex") {
+  $installedUserProfile = $env:USERPROFILE
+  $codexHome = Join-Path $installedUserProfile ".codex"
+}
+$defaultArchiveRoot = Join-Path $installedUserProfile "Documents\MemoryWuxianArchive"
+$activeRootPointer = Join-Path $codexHome "memory-wuxian-active-root.txt"
 $archiveRoot = $defaultArchiveRoot
 if (Test-Path -LiteralPath $activeRootPointer) {
   $preservedArchiveRoot = (Get-Content -LiteralPath $activeRootPointer -Raw -Encoding UTF8).Trim()
   if ($preservedArchiveRoot) { $archiveRoot = [IO.Path]::GetFullPath($preservedArchiveRoot) }
 }
-$sessionsRoot = Join-Path $env:USERPROFILE ".codex\sessions"
+$sessionsRoot = Join-Path $codexHome "sessions"
 
 $bootstrapText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $SkillRoot "scripts\bootstrap_windows.ps1") -InstallMissing
 if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian runtime bootstrap failed." }

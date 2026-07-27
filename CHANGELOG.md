@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.7 - 2026-07-27
+
+- Resolve the real Windows user profile from the installed Skill path instead
+  of trusting a launcher or sandbox process `USERPROFILE`.
+- Preserve the real active archive pointer and Codex sessions directory when
+  an installer is launched through an isolated desktop client environment.
+
 ## 1.7.6 - 2026-07-27
 
 - Rebuild `Memory无限状态台.lnk` during every Windows install or automatic
