@@ -5,6 +5,8 @@
 > `.codex` 配置，不再创建直接以长参数调用 `pythonw.exe` 和脚本的快捷方式。
 > 打包入口：`memory-wuxian-dashboard-launcher.exe`；快捷方式策略：
 > `no command-line arguments`。
+> Windows v1.7.9 还会通过当前 Windows SID 解析真实用户目录，避免隔离安装环境
+> 把启动目标重新写成 `CodexSandboxOffline` 路径。
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 

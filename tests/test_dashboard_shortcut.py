@@ -28,6 +28,8 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn("install_dashboard_shortcut_windows.ps1", install)
         self.assertIn("-ArchiveRoot $archiveRoot", install)
         self.assertIn("$installedUserProfile = Split-Path -Parent $codexHome", install)
+        self.assertIn("ProfileList\\$currentSid", install)
+        self.assertIn("$SkillRoot = $expectedSkillRoot", install)
         self.assertIn("$sessionsRoot = Join-Path $codexHome", install)
         self.assertNotIn('Join-Path $env:USERPROFILE ".codex\\memory-wuxian-active-root.txt"', install)
 
