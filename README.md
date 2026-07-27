@@ -85,7 +85,9 @@ Every Windows install or automatic upgrade preserves the archive named by
 dependencies, and atomically rebuilds the desktop
 `Memory无限状态台.lnk` shortcut with the current validated Python runtime. This
 prevents a Codex runtime upgrade from leaving the dashboard bound to a stale
-absolute `pythonw.exe` path.
+absolute `pythonw.exe` path. The installer resolves the real user profile from
+the installed Skill path, so an isolated desktop-client `USERPROFILE` cannot
+redirect the collector or shortcut to a sandbox archive.
 
 ```bash
 ARCHIVE="$HOME/Documents/MemoryWuxianArchive"
