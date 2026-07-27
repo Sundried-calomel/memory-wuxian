@@ -32,7 +32,10 @@ def main() -> int:
             subprocess.run(["schtasks.exe", "/Delete", "/TN", WINDOWS_TASK, "/F"], check=False)
             subprocess.run(["reg.exe", "DELETE", WINDOWS_RUN_KEY, "/V", WINDOWS_RUN_VALUE, "/F"], check=False)
             return 0
-        command = f'"{python}" "{updater}" --skill-root "{skill_root}"'
+        pythonw = python.with_name("pythonw.exe")
+        if not pythonw.is_file():
+            pythonw = python
+        command = f'"{pythonw}" "{updater}" --skill-root "{skill_root}"'
         task = subprocess.run(
             ["schtasks.exe", "/Create", "/TN", WINDOWS_TASK, "/SC", "DAILY", "/ST", "03:00",
              "/RL", "LIMITED", "/TR", command, "/F"],
@@ -41,7 +44,7 @@ def main() -> int:
         if task.returncode == 0:
             print(f"task:{WINDOWS_TASK}")
             return 0
-        encoded = base64.b64encode(f"& '{python}' '{updater}' --skill-root '{skill_root}'".encode("utf-16le")).decode("ascii")
+        encoded = base64.b64encode(f"& '{pythonw}' '{updater}' --skill-root '{skill_root}'".encode("utf-16le")).decode("ascii")
         run_command = f"powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand {encoded}"
         subprocess.run(["reg.exe", "ADD", WINDOWS_RUN_KEY, "/V", WINDOWS_RUN_VALUE,
                         "/T", "REG_SZ", "/D", run_command, "/F"], check=True)

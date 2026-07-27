@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import datetime as dt
 import getpass
 import json
@@ -120,7 +119,9 @@ def windows_wrapper(
 
 
 def windows_task_xml(
-    wrapper_path: Path,
+    python_executable: Path,
+    skill_root: Path,
+    archive_root: Path,
     *,
     user_id: str,
     start_boundary: Optional[str] = None,
@@ -174,16 +175,14 @@ def windows_task_xml(
         {"Context": "Author"},
     )
     exec_action = ET.SubElement(actions, f"{{{TASK_XML_NAMESPACE}}}Exec")
-    powershell = windows_system_executable(
-        r"System32\WindowsPowerShell\v1.0\powershell.exe"
-    )
-    ET.SubElement(exec_action, f"{{{TASK_XML_NAMESPACE}}}Command").text = str(powershell)
-    encoded_wrapper = base64.b64encode(
-        f"& {powershell_quote(wrapper_path)}".encode("utf-16le")
-    ).decode("ascii")
+    pythonw = python_executable.with_name("pythonw.exe")
+    if not pythonw.is_file():
+        pythonw = python_executable
+    ET.SubElement(exec_action, f"{{{TASK_XML_NAMESPACE}}}Command").text = str(pythonw)
     ET.SubElement(exec_action, f"{{{TASK_XML_NAMESPACE}}}Arguments").text = (
-        "-NoProfile -NonInteractive -WindowStyle Hidden "
-        f"-ExecutionPolicy Bypass -EncodedCommand {encoded_wrapper}"
+        subprocess.list2cmdline(
+            cloud_command(python_executable, skill_root, archive_root)[1:]
+        )
     )
     return ET.tostring(task, encoding="utf-16", xml_declaration=True)
 
@@ -269,7 +268,12 @@ def install_windows(
         newline="\r\n",
         encoding="utf-8-sig",
     )
-    task_xml = windows_task_xml(wrapper_path, user_id=windows_user_id())
+    task_xml = windows_task_xml(
+        python_executable,
+        skill_root,
+        archive_root,
+        user_id=windows_user_id(),
+    )
     fd, temporary = tempfile.mkstemp(prefix=".memory-wuxian-cloud-sync.", suffix=".xml")
     os.close(fd)
     temporary_path = Path(temporary)

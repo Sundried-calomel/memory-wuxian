@@ -38,6 +38,12 @@ CLOUD_SCHEDULER_LABEL = "com.openai.codex.memory-wuxian-cloud-sync"
 CLOUD_SCHEDULER_TASK = "MemoryWuxianCloudSync"
 
 
+def background_subprocess_kwargs() -> dict[str, int]:
+    if sys.platform != "win32":
+        return {}
+    return {"creationflags": subprocess.CREATE_NO_WINDOW}
+
+
 def cloud_scheduler_status() -> dict[str, Any]:
     if sys.platform == "darwin":
         plist = (
@@ -67,18 +73,17 @@ def cloud_scheduler_status() -> dict[str, Any]:
             "running": running,
         }
     if sys.platform == "win32":
-        schtasks = (
-            Path(os.environ.get("SystemRoot", r"C:\Windows"))
-            / "System32"
-            / "schtasks.exe"
+        import winreg
+
+        task_key = (
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule"
+            rf"\TaskCache\Tree\{CLOUD_SCHEDULER_TASK}"
         )
-        result = subprocess.run(
-            [str(schtasks), "/Query", "/TN", CLOUD_SCHEDULER_TASK],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        installed = result.returncode == 0
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, task_key):
+                installed = True
+        except OSError:
+            installed = False
         return {
             "platform": "windows",
             "installed": installed,
@@ -108,6 +113,7 @@ def set_cloud_scheduler(store: MemoryStore, enabled: bool) -> dict[str, Any]:
         check=True,
         capture_output=True,
         text=True,
+        **background_subprocess_kwargs(),
     )
     return {
         "command": "installed" if enabled else "uninstalled",
@@ -405,6 +411,7 @@ class DashboardSnapshotCache:
         self._lock = threading.Lock()
         self._signature = ""
         self._payload: dict[str, Any] | None = None
+        self._refreshing = False
 
     @staticmethod
     def _file_stamp(path: Path) -> tuple[str, int, int]:
@@ -476,6 +483,38 @@ class DashboardSnapshotCache:
         }
         return response
 
+    def get_fast(self) -> dict[str, Any]:
+        with self._lock:
+            payload = self._payload
+            if payload is None:
+                try:
+                    snapshot = json.loads(self.path.read_text(encoding="utf-8"))
+                    payload = snapshot.get("payload")
+                except (OSError, json.JSONDecodeError):
+                    payload = None
+            if isinstance(payload, dict):
+                response = dict(payload)
+                response["collector"] = collector_telemetry(self.store.root)
+                response["served_at"] = datetime.now(timezone.utc).isoformat()
+                response["snapshot"] = {"persisted": True, "refreshing": True}
+                if not self._refreshing:
+                    self._refreshing = True
+
+                    def refresh() -> None:
+                        try:
+                            self.get()
+                        finally:
+                            with self._lock:
+                                self._refreshing = False
+
+                    threading.Thread(
+                        target=refresh,
+                        name="memory-wuxian-dashboard-refresh",
+                        daemon=True,
+                    ).start()
+                return response
+        return self.get()
+
 
 def make_handler(store: MemoryStore):
     snapshot_cache = DashboardSnapshotCache(store)
@@ -499,9 +538,15 @@ def make_handler(store: MemoryStore):
             return devices
 
         def do_GET(self):
-            path = urlparse(self.path).path
+            request = urlparse(self.path)
+            path = request.path
             if path == "/api/status":
-                body = json.dumps(snapshot_cache.get(), ensure_ascii=False).encode("utf-8")
+                payload = (
+                    snapshot_cache.get()
+                    if request.query == "refresh=1"
+                    else snapshot_cache.get_fast()
+                )
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 etag = f'"{hashlib.sha256(body).hexdigest()}"'
                 if self.headers.get("If-None-Match") == etag:
                     self.send_response(304)
@@ -664,6 +709,44 @@ def run_window(server: ThreadingHTTPServer, url: str) -> None:
     thread = threading.Thread(target=server.serve_forever, name="memory-wuxian-dashboard", daemon=True)
     thread.start()
     try:
+        def apply_windows_icon() -> None:
+            if os.name != "nt" or not DASHBOARD_ICON.exists():
+                return
+            import ctypes
+            import time
+
+            user32 = ctypes.windll.user32
+            image_icon = 1
+            load_from_file = 0x0010
+            wm_seticon = 0x0080
+            icon_small = 0
+            icon_big = 1
+            handle = 0
+            for _ in range(100):
+                handle = user32.FindWindowW(None, "Memory无限状态台")
+                if handle:
+                    break
+                time.sleep(0.05)
+            if not handle:
+                return
+            icon = user32.LoadImageW(
+                None,
+                str(DASHBOARD_ICON),
+                image_icon,
+                0,
+                0,
+                load_from_file,
+            )
+            if icon:
+                user32.SendMessageW(handle, wm_seticon, icon_big, icon)
+                user32.SendMessageW(handle, wm_seticon, icon_small, icon)
+
+        icon_thread = threading.Thread(
+            target=apply_windows_icon,
+            name="memory-wuxian-window-icon",
+            daemon=True,
+        )
+        icon_thread.start()
         webview.create_window(
             "Memory无限状态台",
             url,

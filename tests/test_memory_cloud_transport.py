@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,7 +15,7 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from memory_cli import MemoryStore, load_simple_yaml
-from memory_cloud_transport import CloudFolderTransport
+from memory_cloud_transport import CloudFolderTransport, filesystem_native_path
 from memory_federation import FederationManager, read_json
 
 
@@ -192,6 +193,8 @@ safety:
         )
 
     def tearDown(self):
+        if os.name == "nt":
+            shutil.rmtree("\\\\?\\" + self.temporary.name, ignore_errors=True)
         self.temporary.cleanup()
 
     @staticmethod
@@ -441,7 +444,7 @@ safety:
         self.assertEqual(len(sent["published"]), 1, sent)
         self.assertEqual(received["imports"][0]["status"], "imported")
         self.assertEqual(len(acknowledged["acks"]), 1, acknowledged)
-        encrypted_path = Path(sent["published"][0]["path"])
+        encrypted_path = Path(filesystem_native_path(Path(sent["published"][0]["path"])))
         self.assertNotIn(b"encrypted cloud user", encrypted_path.read_bytes())
 
     def test_stop_and_wait_keeps_one_durable_unacknowledged_envelope(self):
