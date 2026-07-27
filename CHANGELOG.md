@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.8.0 - 2026-07-28
+
+- Remove the legacy encoded PowerShell collector loop and register the native
+  collector directly through Task Scheduler or the current-user Run key.
+- Apply a shared no-console policy to Windows child processes.
+- Add an append-only dashboard event journal and localhost SSE status stream,
+  with low-frequency polling only as a disconnect fallback.
+- Add project, source, and origin-device conversation filters.
+- Add an auditable release-rehearsal gate with one hashed evidence log per
+  required scenario.
+
 ## 1.7.11 - 2026-07-27
 
 - Prevent dashboard startup, refresh, and Settings status reads from creating

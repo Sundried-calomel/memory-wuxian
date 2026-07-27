@@ -48,6 +48,10 @@ Use Memory無限 to preserve conversation history outside the active context win
 40. Record explicit operational-rule changes as append-only policy events in Level-1 summaries. Never infer supersession from recency alone.
 41. Use `retrieve --mode current-policy` when a historical rule, strategy, default, or decision may have been revised. Prefer `active` policy events, preserve their lineage, and verify the cited raw messages.
 42. Do not treat `conflict`, `unresolved`, `uncertain`, or `proposed` policy events as current operating rules.
+43. Do not claim a release or platform is fully rehearsed unless the required
+    scenario matrix has actually run and produced a passing report with one
+    hashed evidence log per scenario. Skipped, interrupted, inferred, or
+    manually described scenarios are not passes.
 
 ## Authority order
 

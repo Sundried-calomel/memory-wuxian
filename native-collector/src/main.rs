@@ -168,6 +168,10 @@ struct Args {
     sessions_root: PathBuf,
     #[arg(long)]
     since: Option<String>,
+    #[arg(long)]
+    python_executable: Option<PathBuf>,
+    #[arg(long)]
+    codex_cli: Option<PathBuf>,
     #[arg(long, default_value_t = 400)]
     debounce_ms: u64,
     #[arg(long)]
@@ -327,10 +331,17 @@ struct Store {
     config_path: PathBuf,
     config: Config,
     message_cache: RefCell<Option<HashMap<String, Value>>>,
+    python_executable: Option<PathBuf>,
+    codex_cli: Option<PathBuf>,
 }
 
 impl Store {
-    fn new(root: PathBuf, config_path: &Path) -> Result<Self> {
+    fn new(
+        root: PathBuf,
+        config_path: &Path,
+        python_executable: Option<PathBuf>,
+        codex_cli: Option<PathBuf>,
+    ) -> Result<Self> {
         let config_text = fs::read_to_string(config_path)
             .with_context(|| format!("read config {}", config_path.display()))?;
         let config: Config = serde_yaml::from_str(&config_text).context("parse config")?;
@@ -343,6 +354,8 @@ impl Store {
             config_path: config_path.canonicalize()?,
             config,
             message_cache: RefCell::new(None),
+            python_executable,
+            codex_cli,
         };
         store.init()?;
         Ok(store)
@@ -360,6 +373,7 @@ impl Store {
             "archive",
             ".locks",
             "imports/codex",
+            "dashboard",
         ] {
             fs::create_dir_all(self.root.join(relative))?;
         }
@@ -1910,6 +1924,16 @@ impl Store {
         {
             result["semantic_worker"] = self.run_one_shot_summary(Path::new(job));
         }
+        append_jsonl(
+            &self.root.join("dashboard/events.jsonl"),
+            &json!({
+                "event_id": chrono::Utc::now().timestamp_millis(),
+                "created_at": now_iso(),
+                "kind": "archive-updated",
+                "imported_messages": result.get("imported_messages").cloned().unwrap_or(json!(0)),
+                "duplicate_messages": result.get("duplicate_messages").cloned().unwrap_or(json!(0)),
+            }),
+        )?;
         Ok(result)
     }
 
@@ -1923,7 +1947,9 @@ impl Store {
                 .unwrap_or(Path::new("."))
                 .join(worker_path)
         };
-        let python_path = std::env::var("MEMORY_WUXIAN_PYTHON").unwrap_or_else(|_| {
+        let python_path = self.python_executable.as_ref().map(|path| {
+            path.to_string_lossy().into_owned()
+        }).or_else(|| std::env::var("MEMORY_WUXIAN_PYTHON").ok()).unwrap_or_else(|| {
             if cfg!(windows) {
                 self.config
                     .ai_summary
@@ -1935,16 +1961,23 @@ impl Store {
                 self.config.ai_summary.python_path.clone()
             }
         });
-        match Command::new(python_path)
-            .arg(worker_path)
+        let mut command = Command::new(python_path);
+        command.arg(worker_path)
             .arg("--root")
             .arg(&self.root)
             .arg("--config")
             .arg(&self.config_path)
             .arg("--job")
-            .arg(job_path)
-            .output()
+            .arg(job_path);
+        if let Some(codex_cli) = &self.codex_cli {
+            command.env("MEMORY_WUXIAN_CODEX", codex_cli);
+        }
+        #[cfg(windows)]
         {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000);
+        }
+        match command.output() {
             Ok(output) if output.status.success() => json!({
                 "status": "completed",
                 "output": String::from_utf8_lossy(&output.stdout).trim(),
@@ -2683,7 +2716,12 @@ fn run() -> Result<()> {
         .as_deref()
         .map(DateTime::parse_from_rfc3339)
         .transpose()?;
-    let store = Store::new(archive_root, &config_path)?;
+    let store = Store::new(
+        archive_root,
+        &config_path,
+        args.python_executable.clone(),
+        args.codex_cli.clone(),
+    )?;
     let initial_paths = if args.session_files.is_empty() {
         recent_rollouts(&sessions_root, since)?
     } else {

@@ -20,6 +20,7 @@ from memory_cli import (
     now_iso,
     raw_record_sha256,
 )
+from platform_process import no_window_kwargs
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -252,6 +253,7 @@ def run_job(
             timeout=timeout_seconds,
             check=False,
             cwd=tempfile.gettempdir(),
+            **no_window_kwargs(),
         )
         if completed.returncode != 0:
             raise RuntimeError(

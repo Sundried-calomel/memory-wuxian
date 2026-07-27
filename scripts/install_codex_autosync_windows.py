@@ -4,14 +4,16 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import datetime as dt
+import json
 import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Optional, Sequence
+
+from platform_process import detached_no_window_kwargs, no_window_kwargs
 
 
 DEFAULT_TASK_NAME = "MemoryWuxianCodexSync"
@@ -44,6 +46,28 @@ def atomic_write_text(path: Path, text: str) -> None:
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def collector_command(
+    collector: Path,
+    archive_root: Path,
+    config: Path,
+    sessions_root: Path,
+    python_executable: Path,
+    codex_cli: Path,
+    since: str,
+    debounce_ms: int,
+) -> list[str]:
+    return [
+        str(collector),
+        "--archive-root", str(archive_root),
+        "--config", str(config),
+        "--sessions-root", str(sessions_root),
+        "--python-executable", str(python_executable),
+        "--codex-cli", str(codex_cli),
+        "--since", since,
+        "--debounce-ms", str(debounce_ms),
+    ]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -82,18 +106,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            **no_window_kwargs(),
         )
         subprocess.run(
             ["schtasks.exe", "/Delete", "/TN", args.task_name, "/F"],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            **no_window_kwargs(),
         )
         subprocess.run(
             ["reg.exe", "DELETE", RUN_KEY, "/V", RUN_VALUE, "/F"],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            **no_window_kwargs(),
         )
         archive_root = Path(args.archive_root).expanduser().resolve()
         (archive_root / "imports/codex/run-collector-hidden.vbs").unlink(missing_ok=True)
@@ -124,79 +151,77 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     archive_root.mkdir(parents=True, exist_ok=True)
     atomic_write_text(active_root_pointer(), f"{archive_root}\n")
     runtime_dir = archive_root / "imports" / "codex"
-    output = Path(args.output).expanduser().resolve() if args.output else runtime_dir / "run-collector.cmd"
+    output = Path(args.output).expanduser().resolve() if args.output else runtime_dir / "collector-command.json"
     since = args.since or dt.datetime.now().astimezone().isoformat(timespec="seconds")
     dt.datetime.fromisoformat(since[:-1] + "+00:00" if since.endswith("Z") else since)
-    log_path = runtime_dir / "scheduled-task.log"
-    def ps_quote(value: Path | str) -> str:
-        return "'" + str(value).replace("'", "''") + "'"
-
-    powershell = (
-        "$env:HOME=$env:USERPROFILE\n"
-        f"$env:MEMORY_WUXIAN_PYTHON={ps_quote(python_executable)}\n"
-        f"$env:MEMORY_WUXIAN_CODEX={ps_quote(codex_cli)}\n"
-        "while ($true) {\n"
-        f"  & {ps_quote(collector)} --archive-root {ps_quote(archive_root)} "
-        f"--config {ps_quote(config)} --sessions-root {ps_quote(sessions_root)} "
-        f"--since {ps_quote(since)} --debounce-ms {args.debounce_ms} "
-        f"*>> {ps_quote(log_path)}\n"
-        "  Start-Sleep -Seconds 5\n"
-        "}\n"
+    command = collector_command(
+        collector, archive_root, config, sessions_root, python_executable,
+        codex_cli, since, args.debounce_ms,
     )
-    encoded = base64.b64encode(powershell.encode("utf-16le")).decode("ascii")
-    wrapper = (
-        "@echo off\n"
-        "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass "
-        f"-EncodedCommand {encoded}\n"
+    atomic_write_text(
+        output,
+        json.dumps(
+            {"format_version": 1, "command": command, "console_window": False},
+            ensure_ascii=False,
+            indent=2,
+        ) + "\n",
     )
-    atomic_write_text(output, wrapper)
     if args.load:
+        subprocess.run(
+            ["reg.exe", "DELETE", RUN_KEY, "/V", RUN_VALUE, "/F"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            **no_window_kwargs(),
+        )
+        for stale in (
+            runtime_dir / "run-collector.cmd",
+            runtime_dir / "run-collector-hidden.vbs",
+            Path(args.runtime_directory).expanduser().resolve() / "run-collector-hidden.vbs",
+        ):
+            stale.unlink(missing_ok=True)
         task = None
         if args.backend != "run-key":
+            task_command = subprocess.list2cmdline(command)
             task = subprocess.run(
                 [
                     "schtasks.exe", "/Create", "/TN", args.task_name,
-                    "/SC", "ONLOGON", "/RL", "LIMITED", "/TR", str(output), "/F",
+                    "/SC", "ONLOGON", "/RL", "LIMITED", "/TR", task_command, "/F",
                 ],
                 check=False,
                 capture_output=True,
                 text=True,
+                **no_window_kwargs(),
             )
         if task is not None and task.returncode == 0:
-            subprocess.run(["schtasks.exe", "/Run", "/TN", args.task_name], check=True)
+            subprocess.run(
+                ["schtasks.exe", "/Run", "/TN", args.task_name],
+                check=True,
+                **no_window_kwargs(),
+            )
             print(f"task:{args.task_name}")
         else:
             if args.backend == "task":
                 raise SystemExit(task.stderr.strip() or "Task Scheduler registration failed")
-            run_command = (
-                "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass "
-                f"-EncodedCommand {encoded}"
-            )
+            run_command = subprocess.list2cmdline(command)
             subprocess.run(
                 ["reg.exe", "ADD", RUN_KEY, "/V", RUN_VALUE, "/T", "REG_SZ", "/D", run_command, "/F"],
                 check=True,
-            )
-            creation_flags = (
-                subprocess.DETACHED_PROCESS
-                | subprocess.CREATE_NEW_PROCESS_GROUP
-                | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+                **no_window_kwargs(),
             )
             try:
                 subprocess.Popen(
-                    [
-                        "powershell.exe", "-NoProfile", "-WindowStyle", "Hidden",
-                        "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded,
-                    ],
+                    command,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     close_fds=True,
-                    creationflags=creation_flags,
+                    **detached_no_window_kwargs(),
                 )
             except PermissionError:
                 print("immediate-start:deferred-by-process-policy")
             print(f"run-key:{RUN_KEY}\\{RUN_VALUE}")
-    print(f"wrapper:{output}")
+    print(f"command-manifest:{output}")
     return 0
 
 

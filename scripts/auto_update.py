@@ -16,6 +16,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+from platform_process import no_window_kwargs
+
 
 REPOSITORY = "Sundried-calomel/memory-wuxian"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
@@ -99,6 +101,7 @@ def stage_install(package: Path, system: str) -> str:
              "/T", "REG_SZ", "/D", command, "/F"],
             check=True,
             capture_output=True,
+            **no_window_kwargs(),
         )
         return "staged-for-next-login"
     return "downloaded-awaiting-macos-authorization"

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "1.7.11",
+  "reviewed_version": "1.8.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -66,6 +66,14 @@
     {
       "id": "windows-unicode-console",
       "required_tokens": ["PYTHONIOENCODING", "UTF-8"]
+    },
+    {
+      "id": "event-driven-dashboard",
+      "required_tokens": ["/api/events", "project-filter", "source-filter", "device-filter"]
+    },
+    {
+      "id": "auditable-release-rehearsal",
+      "required_tokens": ["run_release_rehearsal.py", "release-rehearsal.md"]
     }
   ]
 }

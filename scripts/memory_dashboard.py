@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import webbrowser
 import zipfile
 from collections import Counter, defaultdict
@@ -29,6 +30,7 @@ from conversation_titles import (
 from memory_cli import MemoryStore, atomic_write_json, load_simple_yaml, read_jsonl
 from memory_cloud_transport import CloudFolderTransport
 from memory_federation import FederationManager
+from platform_process import no_window_kwargs
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -36,14 +38,6 @@ INDEX_HTML = SKILL_ROOT / "dashboard/index.html"
 DASHBOARD_ICON = SKILL_ROOT / "assets/memory-wuxian.ico"
 CLOUD_SCHEDULER_LABEL = "com.openai.codex.memory-wuxian-cloud-sync"
 CLOUD_SCHEDULER_TASK = "MemoryWuxianCloudSync"
-
-
-def background_subprocess_kwargs() -> dict[str, int]:
-    if sys.platform != "win32":
-        return {}
-    return {
-        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-    }
 
 
 def cloud_scheduler_status() -> dict[str, Any]:
@@ -67,6 +61,7 @@ def cloud_scheduler_status() -> dict[str, Any]:
                 check=False,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                **no_window_kwargs(),
             )
             running = result.returncode == 0
         return {
@@ -115,7 +110,7 @@ def set_cloud_scheduler(store: MemoryStore, enabled: bool) -> dict[str, Any]:
         check=True,
         capture_output=True,
         text=True,
-        **background_subprocess_kwargs(),
+        **no_window_kwargs(),
     )
     return {
         "command": "installed" if enabled else "uninstalled",
@@ -338,6 +333,8 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
             ),
             "archived": bool(metadata.get("archived", False)),
             "project": str(metadata.get("project") or default_project),
+            "origin_node": str((items[0].get("source") or {}).get("origin_node") or "local"),
+            "source_kind": source_kind or "codex",
             "message_count": len(items),
             "tool_activity_count": sum(item.get("speaker") == "tool" for item in items),
             "character_count": sum(len(str(item.get("text", ""))) for item in items),
@@ -559,6 +556,43 @@ def make_handler(store: MemoryStore):
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("ETag", etag)
+            elif path == "/api/events":
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Connection", "keep-alive")
+                self.end_headers()
+                event_path = store.root / "dashboard/events.jsonl"
+                last_stamp: tuple[int, int] | None = None
+                last_heartbeat = 0.0
+                try:
+                    while True:
+                        try:
+                            stat = event_path.stat()
+                            stamp = (stat.st_size, stat.st_mtime_ns)
+                        except OSError:
+                            stamp = (0, 0)
+                        if last_stamp is None:
+                            last_stamp = stamp
+                        elif stamp != last_stamp:
+                            last_stamp = stamp
+                            payload = snapshot_cache.get()
+                            event_id = str(int(time.time() * 1000))
+                            frame = (
+                                f"id: {event_id}\n"
+                                "event: status\n"
+                                f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                            )
+                            self.wfile.write(frame.encode("utf-8"))
+                            self.wfile.flush()
+                        if time.monotonic() - last_heartbeat >= 15:
+                            self.wfile.write(b": heartbeat\n\n")
+                            self.wfile.flush()
+                            last_heartbeat = time.monotonic()
+                        time.sleep(1)
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    return
+                return
             elif path == "/api/devices":
                 body = json.dumps(self.cloud_payload(), ensure_ascii=False).encode(
                     "utf-8"

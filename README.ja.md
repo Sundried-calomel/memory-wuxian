@@ -16,6 +16,13 @@
 > デスクトップショートカットを既定で再作成します。Codex Skill の単純コピーには
 > 通常のインストール画面がないため、初回有効化で付属の環境確認とショートカット
 > インストール処理を実行します。
+> Windows v1.8.0 では従来の PowerShell 収集ループも廃止し、コンソールなし
+> の直接起動、イベント駆動更新、プロジェクト・ソース・デバイスのフィルター
+> を追加しました。
+> 実装契約は `/api/events`、`project-filter`、`source-filter`、
+> `device-filter` です。リリース前に `references/release-rehearsal.md`
+> に従って `scripts/run_release_rehearsal.py` を実行し、項目別の証拠を
+> 保存する必要があります。
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 

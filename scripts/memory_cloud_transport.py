@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Protocol
 
+from platform_process import no_window_kwargs
 from platform_lock import exclusive_lock
 from memory_federation import (
     PROTOCOL_VERSION,
@@ -116,6 +117,7 @@ class CommandCrypto:
             capture_output=True,
             check=False,
             timeout=600,
+            **no_window_kwargs(),
         )
         if completed.returncode != 0:
             detail = completed.stderr.strip() or completed.stdout.strip()

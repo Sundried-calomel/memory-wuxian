@@ -15,6 +15,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
+from platform_process import no_window_kwargs
+
 
 THREAD_ID_PATTERN = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
 THREAD_ID_SEARCH_PATTERN = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.IGNORECASE)
@@ -49,7 +51,7 @@ def codex_runtime_titles() -> dict[str, str]:
             stderr=subprocess.DEVNULL,
             text=True,
             encoding="utf-8",
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            **no_window_kwargs(),
         )
         killer = threading.Timer(3, process.terminate)
         killer.start()

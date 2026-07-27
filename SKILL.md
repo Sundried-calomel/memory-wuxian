@@ -147,6 +147,9 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 - Read [implementation.md](references/implementation.md) before changing storage formats, counters, summary hierarchy, retrieval behavior, state recovery, locking, privacy behavior, or client integration.
 - Read [schemas.md](references/schemas.md) when constructing or validating raw records, summary JSON, indexes, state, or retrieval output.
 - Read [decisions.md](references/decisions.md) before changing architectural behavior.
+- Read [release-rehearsal.md](references/release-rehearsal.md) before release
+  claims. Run `scripts/run_release_rehearsal.py`; never describe unrun or
+  evidence-free scenarios as passed.
 - Read [AGENTS.md](AGENTS.md) when integrating this skill into an Agent's persistent operating rules.
 - Use files in `templates/` as output contracts and files in `prompts/` as Agent prompts.
 

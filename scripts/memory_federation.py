@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from platform_process import no_window_kwargs
 
 PROTOCOL_VERSION = 1
 BUNDLE_FORMAT = "memory-wuxian-delta-v1"
@@ -1302,6 +1303,7 @@ class FederationManager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 timeout=SSH_COMMAND_TIMEOUT_SECONDS,
+                **no_window_kwargs(),
             )
         except subprocess.TimeoutExpired as exc:
             self.log_sync(

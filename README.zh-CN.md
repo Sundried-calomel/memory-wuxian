@@ -13,6 +13,11 @@
 > 快照、再后台刷新，并为变化指标播放轻量动画。Windows 安装或升级默认重建
 > 原生桌面状态台快捷方式。直接复制 Codex Skill 没有传统安装向导，首次启用时
 > 会运行随附的环境检查和快捷方式安装流程。
+> Windows v1.8.0 进一步移除遗留的 PowerShell 采集循环，采用无控制台直接
+> 启动，并加入事件驱动刷新及项目、来源、设备筛选。
+> 对应实现契约为 `/api/events`、`project-filter`、`source-filter` 和
+> `device-filter`。发布前必须按 `references/release-rehearsal.md` 运行
+> `scripts/run_release_rehearsal.py` 并保留逐项证据。
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 

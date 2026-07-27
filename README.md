@@ -18,6 +18,9 @@
 > native desktop dashboard shortcut by default. A bare Codex Skill copy has no
 > traditional installer wizard; first activation runs the supplied bootstrap
 > and shortcut installer.
+> Windows v1.8.0 also removes the legacy PowerShell collector loop, uses direct
+> no-console process launches, and adds event-driven dashboard updates with
+> project, source, and origin-device filters.
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
@@ -219,7 +222,16 @@ python scripts/install_codex_autosync_windows.py `
   --load
 ```
 
-The task starts at user logon and is also started immediately by `--load`. If local policy denies Task Scheduler registration, the installer falls back to the current user's `Run` registry key with an encoded hidden restart-on-exit command; no persistent helper script is required. Archive data remains in the selected workspace root. It uses the Windows native filesystem watcher plus the same five-second size/mtime fallback, archive lock, session cursors, summary triggers, semantic worker, and verified desktop snapshots as macOS. Remove either backend with `python scripts/install_codex_autosync_windows.py --archive-root "$PWD\memory" --uninstall`.
+The task starts at user logon and is also started immediately by `--load`. If local policy denies Task Scheduler registration, the installer falls back to a direct native-collector command in the current user's `Run` registry key. It does not create a PowerShell loop, CMD wrapper, or VBS launcher. Archive data remains in the selected workspace root. Remove either backend with `python scripts/install_codex_autosync_windows.py --archive-root "$PWD\memory" --uninstall`.
+
+Successful collector transactions append a lightweight local event. The
+localhost dashboard receives changes over SSE and keeps a two-minute-or-slower
+polling path only as a disconnect fallback.
+
+The implementation contracts are `/api/events`, `project-filter`,
+`source-filter`, and `device-filter`. Before a release claim, run
+`scripts/run_release_rehearsal.py` under the rules in
+`references/release-rehearsal.md`.
 
 The installer also records the selected archive in `~/.codex/memory-wuxian-active-root.txt`. CLI retrieval and maintenance commands use that active archive when `--root` is omitted, preventing an installed Skill's empty template archive from being mistaken for the live archive. `--root` and `MEMORY_WUXIAN_ROOT` remain explicit overrides.
 

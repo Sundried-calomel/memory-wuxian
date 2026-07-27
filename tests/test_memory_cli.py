@@ -2002,14 +2002,14 @@ summaries:
         self.assertEqual(payload["EnvironmentVariables"], {"RUST_BACKTRACE": "1"})
         self.assertNotIn("kickstart", INSTALLER.read_text(encoding="utf-8"))
 
-    def test_windows_installer_writes_persistent_collector_wrapper(self):
+    def test_windows_installer_writes_direct_no_console_command_manifest(self):
         sessions_root = self.base / "sessions"
         sessions_root.mkdir()
         collector = self.base / "memory-wuxian-collector.exe"
         collector.write_bytes(b"test executable\n")
         codex = self.base / "codex.exe"
         codex.write_bytes(b"test executable\n")
-        wrapper = self.base / "run-collector.cmd"
+        wrapper = self.base / "collector-command.json"
         codex_home = self.base / "codex-home"
         completed = subprocess.run(
             [
@@ -2030,14 +2030,14 @@ summaries:
             env={**os.environ, "CODEX_HOME": str(codex_home)},
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        text = wrapper.read_text(encoding="utf-8")
-        self.assertIn("-EncodedCommand", text)
-        encoded = text.strip().split()[-1]
-        command = base64.b64decode(encoded).decode("utf-16le")
-        self.assertIn("MEMORY_WUXIAN_PYTHON", command)
-        self.assertIn("MEMORY_WUXIAN_CODEX", command)
+        manifest = json.loads(wrapper.read_text(encoding="utf-8"))
+        command = manifest["command"]
+        self.assertEqual(command[0], str(collector.resolve()))
+        self.assertIn("--python-executable", command)
+        self.assertIn("--codex-cli", command)
         self.assertIn("--sessions-root", command)
-        self.assertIn("scheduled-task.log", command)
+        self.assertFalse(manifest["console_window"])
+        self.assertNotIn("powershell.exe", " ".join(command).lower())
         self.assertEqual(
             (codex_home / "memory-wuxian-active-root.txt").read_text(encoding="utf-8").strip(),
             str(self.root.resolve()),
