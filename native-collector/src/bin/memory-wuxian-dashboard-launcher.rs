@@ -103,6 +103,5 @@ fn codex_home_from_skill(skill_root: &Path) -> Result<PathBuf> {
 fn canonical_file(path: &Path, label: &str) -> Result<PathBuf> {
     ensure!(path.is_absolute(), "{label} path must be absolute");
     ensure!(path.is_file(), "{label} does not exist");
-    path.canonicalize()
-        .with_context(|| format!("resolve {label} path"))
+    Ok(path.to_path_buf())
 }

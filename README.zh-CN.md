@@ -7,6 +7,8 @@
 > `no command-line arguments`。
 > Windows v1.7.9 还会通过当前 Windows SID 解析真实用户目录，避免隔离安装环境
 > 把启动目标重新写成 `CodexSandboxOffline` 路径。
+> Windows v1.7.10 在调用 Python 时保留已验证的普通 Windows 路径，避免中文路径
+> 被转换为扩展路径后导致 `pythonw.exe` 立即退出。
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 

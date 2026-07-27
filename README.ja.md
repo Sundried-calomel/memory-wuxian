@@ -8,6 +8,8 @@
 > `no command-line arguments`。
 > Windows v1.7.9 では現在の Windows SID から実ユーザープロファイルを解決し、
 > 隔離されたインストーラーが `CodexSandboxOffline` を起動先に書くことも防ぎます。
+> Windows v1.7.10 は Python 起動時に検証済みの通常 Windows パスを維持し、
+> 非 ASCII パスを拡張パスへ変換した際の即時終了を防ぎます。
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 

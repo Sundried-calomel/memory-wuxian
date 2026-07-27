@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.10 - 2026-07-27
+
+- Preserve validated ordinary Windows paths in the native dashboard launcher
+  instead of converting them to `\\?\` extended paths before invoking Python.
+- Prevent `pythonw.exe` from immediately exiting when the installed Skill or
+  archive path contains non-ASCII characters.
+
 ## 1.7.9 - 2026-07-27
 
 - Resolve the real Windows profile from the current user's SID and

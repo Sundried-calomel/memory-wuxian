@@ -10,6 +10,8 @@
 > Windows v1.7.9 additionally resolves the real user profile from the current
 > Windows SID, so isolated installer environments cannot write a
 > `CodexSandboxOffline` launcher target.
+> Windows v1.7.10 keeps validated ordinary Windows paths when invoking Python,
+> avoiding extended-path startup failures with non-ASCII installations.
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
