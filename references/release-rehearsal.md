@@ -7,7 +7,7 @@ and every required scenario has its own evidence log and SHA-256.
 Required scenarios:
 
 1. Python production scripts compile.
-2. The native collector compiles and its tests pass.
+2. The native collector is formatted, compiles, and its tests pass.
 3. The focused Python regression suites pass.
 4. Windows startup definitions contain no PowerShell collector loop and use
    direct no-window process launches.
@@ -18,4 +18,3 @@ Required scenarios:
 An unrun, skipped, interrupted, or evidence-free scenario is not a pass.
 Platform-specific live installation checks must be recorded separately and are
 required before claiming that platform's installer was fully rehearsed.
-

@@ -1947,22 +1947,26 @@ impl Store {
                 .unwrap_or(Path::new("."))
                 .join(worker_path)
         };
-        let python_path = self.python_executable.as_ref().map(|path| {
-            path.to_string_lossy().into_owned()
-        }).or_else(|| std::env::var("MEMORY_WUXIAN_PYTHON").ok()).unwrap_or_else(|| {
-            if cfg!(windows) {
-                self.config
-                    .ai_summary
-                    .python_path_windows
-                    .as_ref()
-                    .unwrap_or(&self.config.ai_summary.python_path)
-                    .clone()
-            } else {
-                self.config.ai_summary.python_path.clone()
-            }
-        });
+        let python_path = self
+            .python_executable
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned())
+            .or_else(|| std::env::var("MEMORY_WUXIAN_PYTHON").ok())
+            .unwrap_or_else(|| {
+                if cfg!(windows) {
+                    self.config
+                        .ai_summary
+                        .python_path_windows
+                        .as_ref()
+                        .unwrap_or(&self.config.ai_summary.python_path)
+                        .clone()
+                } else {
+                    self.config.ai_summary.python_path.clone()
+                }
+            });
         let mut command = Command::new(python_path);
-        command.arg(worker_path)
+        command
+            .arg(worker_path)
             .arg("--root")
             .arg(&self.root)
             .arg("--config")

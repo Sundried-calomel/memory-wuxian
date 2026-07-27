@@ -28,6 +28,10 @@ def main() -> int:
     python = sys.executable
     scenarios = [
         ("python-compile", [python, "-m", "compileall", "-q", "scripts"]),
+        (
+            "native-format",
+            ["cargo", "fmt", "--check", "--manifest-path", "native-collector/Cargo.toml"],
+        ),
         ("native-check", ["cargo", "check", "--manifest-path", "native-collector/Cargo.toml"]),
         ("native-tests", ["cargo", "test", "--manifest-path", "native-collector/Cargo.toml"]),
         (
