@@ -1,5 +1,12 @@
 # Memory無限
 
+> Windows v1.7.8 セキュリティ注記：デスクトップのダッシュボードショートカットは、
+> コマンドライン引数なしで専用のコンソール非表示ネイティブランチャーだけを起動します。
+> 検証済み Python と有効なアーカイブのパスはローカルの `.codex` 設定に保存され、
+> `pythonw.exe` とスクリプトを長い引数で直接起動するショートカットは作成しません。
+> パッケージ入口：`memory-wuxian-dashboard-launcher.exe`；ショートカット方針：
+> `no command-line arguments`。
+
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 Memory無限は、アクティブなコンテキストウィンドウを越えて、永続的・階層的・検証可能な会話記憶を構築するファイルベースのCodex Skillです。

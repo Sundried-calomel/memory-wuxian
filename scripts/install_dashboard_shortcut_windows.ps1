@@ -38,13 +38,33 @@ if (-not (Test-Path -LiteralPath $pythonw)) { $pythonw = $python }
 
 $skill = [IO.Path]::GetFullPath($SkillRoot)
 $archive = [IO.Path]::GetFullPath($ArchiveRoot)
-$dashboard = Join-Path $skill "scripts\memory_dashboard.py"
-$config = Join-Path $skill "config.yaml"
+$launcher = Join-Path $skill "bin\memory-wuxian-dashboard-launcher.exe"
 $icon = Join-Path $skill "assets\memory-wuxian.ico"
-foreach ($required in @($pythonw, $dashboard, $config, $icon)) {
+foreach ($required in @($pythonw, $launcher, $icon)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Dashboard shortcut dependency does not exist: $required"
     }
+}
+
+$skillsRoot = Split-Path -Parent $skill
+$codexHome = Split-Path -Parent $skillsRoot
+if ((Split-Path -Leaf $codexHome) -ne ".codex") {
+    throw "SkillRoot must be installed under .codex\skills."
+}
+$launcherConfig = Join-Path $codexHome "memory-wuxian-dashboard-launcher.json"
+$launcherConfigTemporary = "$launcherConfig.tmp"
+$launcherSettings = [ordered]@{
+    schema_version = 1
+    python_executable = $pythonw
+    archive_root = $archive
+} | ConvertTo-Json
+[IO.File]::WriteAllText($launcherConfigTemporary, $launcherSettings + "`n", [Text.UTF8Encoding]::new($false))
+$launcherConfigBackup = "$launcherConfig.bak"
+if (Test-Path -LiteralPath $launcherConfig) {
+    [IO.File]::Replace($launcherConfigTemporary, $launcherConfig, $launcherConfigBackup)
+    [IO.File]::Delete($launcherConfigBackup)
+} else {
+    [IO.File]::Move($launcherConfigTemporary, $launcherConfig)
 }
 
 New-Item -ItemType Directory -Force -Path $Desktop | Out-Null
@@ -53,11 +73,8 @@ $backupPath = Join-Path $Desktop ("." + [IO.Path]::GetRandomFileName() + ".bak")
 try {
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($temporaryPath)
-    $shortcut.TargetPath = $pythonw
-    $shortcut.Arguments = (
-        '"' + $dashboard + '" --root "' + $archive +
-        '" --config "' + $config + '" --port 8765 --window'
-    )
+    $shortcut.TargetPath = $launcher
+    $shortcut.Arguments = ""
     $shortcut.WorkingDirectory = $skill
     $shortcut.IconLocation = "$icon,0"
     $shortcut.Description = $shortcutDescription
@@ -76,6 +93,8 @@ try {
 [ordered]@{
     status = "installed"
     shortcut = $shortcutPath
-    target = $pythonw
+    target = $launcher
+    arguments = ""
+    launcher_config = $launcherConfig
     archive_root = $archive
 } | ConvertTo-Json

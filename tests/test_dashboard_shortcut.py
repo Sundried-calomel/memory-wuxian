@@ -12,9 +12,12 @@ class DashboardShortcutTest(unittest.TestCase):
         )
         self.assertIn("[char]0x65E0", script)
         self.assertIn("[char]0x72B6", script)
-        self.assertIn("pythonw.exe", script)
-        self.assertIn("memory_dashboard.py", script)
-        self.assertIn("--port 8765 --window", script)
+        self.assertIn("memory-wuxian-dashboard-launcher.exe", script)
+        self.assertIn('$shortcut.Arguments = ""', script)
+        self.assertIn("memory-wuxian-dashboard-launcher.json", script)
+        self.assertIn("[IO.File]::Replace($launcherConfigTemporary", script)
+        self.assertNotIn("$shortcut.TargetPath = $pythonw", script)
+        self.assertNotIn('" --root "', script)
         self.assertIn("[IO.File]::Replace($temporaryPath, $shortcutPath, $backupPath)", script)
         self.assertIn("[IO.File]::Move($temporaryPath, $shortcutPath)", script)
         self.assertIn("[IO.File]::Delete($shortcutPath)", script)
@@ -27,6 +30,18 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn("$installedUserProfile = Split-Path -Parent $codexHome", install)
         self.assertIn("$sessionsRoot = Join-Path $codexHome", install)
         self.assertNotIn('Join-Path $env:USERPROFILE ".codex\\memory-wuxian-active-root.txt"', install)
+
+    def test_native_launcher_is_packaged_for_windows(self):
+        workflow = (SKILL_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        build = (SKILL_ROOT / "scripts/build_native_collector.ps1").read_text(encoding="utf-8")
+        source = (
+            SKILL_ROOT
+            / "native-collector/src/bin/memory-wuxian-dashboard-launcher.rs"
+        ).read_text(encoding="utf-8")
+        self.assertIn("memory-wuxian-dashboard-launcher.exe", workflow)
+        self.assertIn("memory-wuxian-dashboard-launcher.exe", build)
+        self.assertIn('windows_subsystem = "windows"', source)
+        self.assertIn("Command::new(python)", source)
 
 
 if __name__ == "__main__":

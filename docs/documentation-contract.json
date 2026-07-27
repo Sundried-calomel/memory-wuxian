@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "1.7.7",
+  "reviewed_version": "1.7.8",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -38,6 +38,10 @@
     {
       "id": "chatgpt-export-import",
       "required_tokens": ["import-chatgpt", "conversations.json"]
+    },
+    {
+      "id": "windows-native-dashboard-launcher",
+      "required_tokens": ["memory-wuxian-dashboard-launcher.exe", "no command-line arguments"]
     },
     {
       "id": "verified-backup",
