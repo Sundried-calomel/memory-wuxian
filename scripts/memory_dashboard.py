@@ -41,7 +41,9 @@ CLOUD_SCHEDULER_TASK = "MemoryWuxianCloudSync"
 def background_subprocess_kwargs() -> dict[str, int]:
     if sys.platform != "win32":
         return {}
-    return {"creationflags": subprocess.CREATE_NO_WINDOW}
+    return {
+        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+    }
 
 
 def cloud_scheduler_status() -> dict[str, Any]:

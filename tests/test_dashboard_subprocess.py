@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -16,7 +17,11 @@ class DashboardSubprocessTest(unittest.TestCase):
         with patch.object(memory_dashboard.sys, "platform", "win32"):
             self.assertEqual(
                 memory_dashboard.background_subprocess_kwargs(),
-                {"creationflags": subprocess.CREATE_NO_WINDOW},
+                {
+                    "creationflags": getattr(
+                        subprocess, "CREATE_NO_WINDOW", 0x08000000
+                    )
+                },
             )
 
     def test_non_windows_background_calls_keep_default_process_flags(self):
@@ -25,9 +30,13 @@ class DashboardSubprocessTest(unittest.TestCase):
 
     def test_windows_scheduler_status_does_not_spawn_a_process(self):
         fake_key = unittest.mock.MagicMock()
+        fake_winreg = types.SimpleNamespace(
+            HKEY_LOCAL_MACHINE=object(),
+            OpenKey=unittest.mock.MagicMock(return_value=fake_key),
+        )
         with (
             patch.object(memory_dashboard.sys, "platform", "win32"),
-            patch("winreg.OpenKey", return_value=fake_key),
+            patch.dict(sys.modules, {"winreg": fake_winreg}),
             patch.object(memory_dashboard.subprocess, "run") as run,
         ):
             status = memory_dashboard.cloud_scheduler_status()
