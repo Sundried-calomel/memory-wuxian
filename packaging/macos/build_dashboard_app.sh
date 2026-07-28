@@ -72,5 +72,7 @@ cp "$repo_root/assets/memory-wuxian.icns" \
 chmod +x "$output_app/Contents/MacOS/MemoryDashboard"
 codesign --force --deep --sign - "$output_app"
 codesign --verify --deep --strict "$output_app"
-actual_version="$(defaults read "$output_app/Contents/Info" CFBundleShortVersionString)"
+actual_version="$(/usr/libexec/PlistBuddy \
+  -c 'Print :CFBundleShortVersionString' \
+  "$output_app/Contents/Info.plist")"
 [[ "$actual_version" == "$version" ]]

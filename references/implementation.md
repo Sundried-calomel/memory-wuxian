@@ -211,6 +211,16 @@ Hash mismatches, missing historical boundaries, overlapping source ranges, and c
 
 Use the Rust collector as the continuous input adapter for native rollout JSONL on macOS and Windows. Keep Python `sync-codex` as a manual compatibility and recovery path. Both implementations persist one cursor per Codex session under `memory/imports/codex/`, derive stable message IDs from session ID, source line, and speaker, and write the same archive schema. Normalize Windows verbatim path prefixes before persistence so Python and Rust produce identical source records and hashes. Cursor loss may cause a source line to be considered again, but stable IDs must turn that retry into a no-op or an explicit content-conflict error.
 
+Both collectors also persist top-level rollout `token_count` telemetry into a
+separate per-session ledger. Process only lines beyond the ledger cursor during
+normal synchronization. On an explicit historical backfill, scan retained
+rollouts, exclude subagent and exec sessions, and create no ledger when no
+telemetry exists. Sum cumulative counter segments when a reset is observed,
+deduplicate equal snapshots for request counting, and keep the operation
+idempotent. Never infer missing usage from archived text. Telemetry writes may
+invalidate the dashboard cache and trigger the normal verified backup, but may
+not alter raw messages, completed rounds, summaries, or semantic indexes.
+
 Import only top-level Codex sessions. Preserve `event_msg` records representing `user_message` or visible `agent_message` phases `commentary` and `final_answer`, plus lightweight `response_item` tool-call descriptions already visible in the task timeline. The tool record contains its name, nested tool names, and command text when available. Also preserve successful `patch_apply_end` events as `file_change` records containing file paths, change types, moves, exact unified diffs, hunk line ranges, and computed addition/deletion counts. This structured file-change event is the only tool-output exception. Reject a complete native session when `session_meta.payload.source` identifies it as a subagent session. Do not import session/system instructions, internal reasoning, general tool output, token counters, maintenance events, or approval-review context embedded in subagent traffic. Commentary, tool activity, and file changes do not close the pending dialogue round; `final_answer` closes it. A cursor without `file_change_format_version: 1` receives a one-time patch-event-only historical backfill before the marker is written.
 
 Pending-round state is keyed by conversation ID. User messages in different conversations receive different global round numbers even when both are awaiting answers. If a later round finishes first, record it in `completed_rounds_out_of_order`; advance `completed_rounds` only when all preceding round numbers are complete. This preserves fixed-round summary ranges while preventing cross-conversation `reply_to` links.

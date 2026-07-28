@@ -81,6 +81,11 @@ Use Memory無限 to preserve conversation history outside the active context win
     clean commit, tag, documentation contract, full rehearsal directory, passing
     report, and published GitHub Release. Evidence from one version cannot count
     for another.
+52. Persist available top-level Codex `token_count` telemetry as a derived
+    per-conversation ledger. Label it Codex-reported model usage rather than
+    billing usage; exclude subagents, preserve counter-reset segments, and do
+    not add cached-input or reasoning-output subfields to `total_tokens` again.
+    Missing telemetry is unavailable, not zero or an archive-text estimate.
 
 ## Authority order
 

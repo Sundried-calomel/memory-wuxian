@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.13.0 - 2026-07-28
+
+- Added persistent per-conversation ledgers for top-level Codex-reported model
+  usage, with incremental native collection and preview-first historical
+  backfill from retained rollout files.
+- Added reset-safe cumulative accounting, duplicate-snapshot request
+  deduplication, subagent exclusion, and explicit prevention of cached-input or
+  reasoning-output double counting.
+- Added global and per-conversation reported usage to the dashboard, together
+  with reported-Token achievements and clear separation from archive-text
+  estimates and billing usage.
+- Added Python/Rust parity, idempotency, archive-invariant, documentation, and
+  desktop release-gate coverage for the new telemetry layer.
+- Made the macOS dashboard build verify its version directly from `Info.plist`,
+  avoiding false failures for localized application paths.
+
 ## 1.12.0 - 2026-07-28
 
 - Added a versioned native macOS `Memory無限操作台.app` backed by WebKit and a

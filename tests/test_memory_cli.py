@@ -326,6 +326,8 @@ safety:
         )
         self.assertEqual(result["totals"]["storage_bytes"], archive_storage_bytes(store))
         self.assertEqual(result["totals"]["verified_retrievals"], 0)
+        self.assertEqual(result["totals"]["reported_total_tokens"], 0)
+        self.assertEqual(result["totals"]["token_usage_conversations"], 0)
         self.assertEqual(len(result["conversations"]), 1)
         self.assertIn("title", result["conversations"][0])
         self.assertEqual(
@@ -333,6 +335,69 @@ safety:
             result["totals"]["estimated_tokens"],
         )
         self.assertIsNone(result["conversations"][0]["telemetry"])
+
+    def test_dashboard_reports_persisted_codex_token_usage(self):
+        conversation_id = "codex:usage-thread"
+        self.run_cli(
+            "append",
+            "--speaker",
+            "user",
+            "--conversation-id",
+            conversation_id,
+            "--text",
+            "TOKEN USAGE",
+        )
+        ledger = self.root / "imports/codex/token-usage/usage-thread.json"
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        ledger.write_text(
+            json.dumps(
+                {
+                    "format_version": 1,
+                    "measurement": "codex-reported-model-usage",
+                    "conversation_id": conversation_id,
+                    "session_id": "usage-thread",
+                    "reported_usage": {
+                        "input_tokens": 900,
+                        "cached_input_tokens": 400,
+                        "cache_write_input_tokens": 0,
+                        "output_tokens": 100,
+                        "reasoning_output_tokens": 25,
+                        "total_tokens": 1000,
+                    },
+                    "latest_request_usage": {
+                        "input_tokens": 90,
+                        "cached_input_tokens": 40,
+                        "cache_write_input_tokens": 0,
+                        "output_tokens": 10,
+                        "reasoning_output_tokens": 2,
+                        "total_tokens": 100,
+                    },
+                    "model_request_count": 7,
+                    "counter_reset_count": 1,
+                    "model_context_window": 200000,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        result = dashboard_data(MemoryStore(self.root, load_simple_yaml(self.config)))
+        self.assertEqual(result["totals"]["reported_total_tokens"], 1000)
+        self.assertEqual(result["totals"]["reported_input_tokens"], 900)
+        self.assertEqual(result["totals"]["reported_cached_input_tokens"], 400)
+        self.assertEqual(result["totals"]["reported_output_tokens"], 100)
+        self.assertEqual(result["totals"]["reported_reasoning_output_tokens"], 25)
+        self.assertEqual(result["totals"]["token_usage_conversations"], 1)
+        self.assertEqual(result["totals"]["token_usage_model_requests"], 7)
+        self.assertEqual(result["totals"]["token_usage_counter_resets"], 1)
+        telemetry = result["conversations"][0]["telemetry"]
+        self.assertEqual(telemetry["reported_total_tokens"], 1000)
+        self.assertEqual(telemetry["reported_input_tokens"], 900)
+        self.assertEqual(telemetry["reported_cached_input_tokens"], 400)
+        self.assertEqual(telemetry["reported_output_tokens"], 100)
+        self.assertEqual(telemetry["request_tokens"], 100)
+        self.assertEqual(telemetry["model_request_count"], 7)
 
     def test_dashboard_separates_message_tokens_and_counts_verified_retrievals(self):
         self.append_round(1)
@@ -441,6 +506,11 @@ safety:
         self.assertIn("id:`storage-${megabytes}mb`", html)
         self.assertIn("id:`archive-tokens-${tokens}`", html)
         self.assertIn("id:`message-tokens-${tokens}`", html)
+        self.assertIn("id:`reported-tokens-${tokens}`", html)
+        self.assertIn("reported_total_tokens", html)
+        self.assertIn("Codex 报告累计用量", html)
+        self.assertIn("load().then(refreshColdSnapshot)", html)
+        self.assertIn("fetch('/api/status?refresh=1'", html)
         self.assertIn("id:`conversation-rounds-${rounds}`", html)
         self.assertIn("id:`project-conversations-${count}`", html)
         self.assertIn("id:`project-characters-${characters}`", html)
@@ -1647,8 +1717,60 @@ summaries:
                 },
             )
             + event("2026-07-16T10:00:04Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "记录完成。"})
+            + event(
+                "2026-07-16T10:00:04.500Z",
+                "event_msg",
+                {
+                    "type": "token_count",
+                    "info": {
+                        "total_token_usage": {
+                            "input_tokens": 90,
+                            "cached_input_tokens": 40,
+                            "cache_write_input_tokens": 0,
+                            "output_tokens": 10,
+                            "reasoning_output_tokens": 3,
+                            "total_tokens": 100,
+                        },
+                        "last_token_usage": {
+                            "input_tokens": 90,
+                            "cached_input_tokens": 40,
+                            "cache_write_input_tokens": 0,
+                            "output_tokens": 10,
+                            "reasoning_output_tokens": 3,
+                            "total_tokens": 100,
+                        },
+                        "model_context_window": 258400,
+                    },
+                },
+            )
             + event("2026-07-16T10:01:00Z", "event_msg", {"type": "user_message", "message": "第二轮"})
-            + event("2026-07-16T10:01:01Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "第二轮完成。"}),
+            + event("2026-07-16T10:01:01Z", "event_msg", {"type": "agent_message", "phase": "final_answer", "message": "第二轮完成。"})
+            + event(
+                "2026-07-16T10:01:01.500Z",
+                "event_msg",
+                {
+                    "type": "token_count",
+                    "info": {
+                        "total_token_usage": {
+                            "input_tokens": 220,
+                            "cached_input_tokens": 120,
+                            "cache_write_input_tokens": 0,
+                            "output_tokens": 30,
+                            "reasoning_output_tokens": 8,
+                            "total_tokens": 250,
+                        },
+                        "last_token_usage": {
+                            "input_tokens": 130,
+                            "cached_input_tokens": 80,
+                            "cache_write_input_tokens": 0,
+                            "output_tokens": 20,
+                            "reasoning_output_tokens": 5,
+                            "total_tokens": 150,
+                        },
+                        "model_context_window": 258400,
+                    },
+                },
+            ),
             encoding="utf-8",
         )
         worker_marker = self.base / "native-semantic-worker-marker.json"
@@ -1713,6 +1835,21 @@ summaries:
 
         python_records = embedded_records(self.root)
         self.assertEqual(python_records, embedded_records(native_root))
+        python_usage = json.loads(
+            (self.root / "imports/codex/token-usage/native-parity.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        native_usage = json.loads(
+            (
+                native_root
+                / "imports/codex/token-usage/native-parity.json"
+            ).read_text(encoding="utf-8")
+        )
+        for value in (python_usage, native_usage):
+            value.pop("updated_at", None)
+        self.assertEqual(python_usage, native_usage)
+        self.assertEqual(python_usage["reported_usage"]["total_tokens"], 250)
         file_change = next(
             record for record in python_records
             if record.get("source", {}).get("phase") == "file_change"

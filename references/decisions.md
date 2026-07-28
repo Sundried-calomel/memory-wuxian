@@ -217,3 +217,15 @@ matched lineage and cited raw records. Treat unresolved, conflicting,
 uncertain, and proposed events as requiring review. When old summaries contain
 no policy events, search newer matching raw records and disclose that no
 explicit lineage was available.
+
+## D-030: Model usage is persisted as source-reported derived telemetry
+
+Status: Accepted.
+
+Persist top-level Codex rollout `token_count` events in one per-conversation
+ledger. Report the result as Codex-reported model usage, not billing usage or a
+text-derived estimate. Preserve cumulative counter segments across resets and
+do not double-count cached-input or reasoning-output breakdowns. Retained
+rollouts may be backfilled; missing telemetry, ChatGPT web conversations, and
+ChatGPT export files remain unmeasured. Keep these ledgers outside raw dialogue
+and semantic summaries.

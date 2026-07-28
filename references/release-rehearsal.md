@@ -20,6 +20,9 @@ Required scenarios:
 9. Desktop-dashboard contract tests prove that both platform installers
    recreate the current dashboard launcher, preserve the active archive, and
    bind the launcher version to the package version.
+10. Token-ledger tests prove reset-safe aggregation, subagent exclusion,
+    preview-first backfill, idempotency, Python/Rust parity, and dashboard
+    exposure without rewriting archive authority.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

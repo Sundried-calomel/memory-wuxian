@@ -45,6 +45,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - Preview-first state and index recovery
 - Heartbeat validation, maintenance, and repair modes
 - Incremental Codex rollout parsing with stable source IDs and per-session cursors
+- Persistent per-conversation Codex-reported Token usage ledgers with reset-safe historical backfill
 - Event-driven synchronization through a native macOS LaunchAgent or Windows scheduled task
 - One latest verified desktop snapshot with a SHA-256 manifest and an append-only backup log
 - One latest workspace recovery backup for derived-file reconstruction
@@ -67,7 +68,8 @@ persisted, source-validated statistics snapshot. Unchanged archives do not need
 to reread the complete raw history; stale or malformed snapshots rebuild
 automatically from authoritative archive records. Its optional local achievement
 system tracks archive size, archive-context and message-only token estimates,
-dialogue depth, project growth, summary hierarchy, and raw-verified retrieval.
+Codex-reported cumulative usage, dialogue depth, project growth, summary
+hierarchy, and raw-verified retrieval.
 
 Opening that one file installs the Skill under the current user's Codex directory,
 initializes `Documents/MemoryWuxianArchive`, and activates continuous Codex capture.
@@ -118,6 +120,8 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" init
 python3 scripts/memory_cli.py --root "$ARCHIVE" append --speaker user --text "Hello"
 python3 scripts/memory_cli.py --root "$ARCHIVE" append --speaker assistant --text "Hello."
 python3 scripts/memory_cli.py --root "$ARCHIVE" sync-codex --session-file "$HOME/.codex/sessions/.../rollout-....jsonl"
+python3 scripts/memory_cli.py --root "$ARCHIVE" token-usage-backfill
+python3 scripts/memory_cli.py --root "$ARCHIVE" token-usage-backfill --apply
 python3 scripts/memory_cli.py --root "$ARCHIVE" status
 python3 scripts/memory_cli.py --root "$ARCHIVE" backup
 python3 scripts/memory_cli.py --root "$ARCHIVE" heartbeat --check-only
@@ -167,7 +171,7 @@ python scripts/memory_dashboard.py `
   --window
 ```
 
-Run `scripts/bootstrap_windows.ps1 -InstallMissing` once if the environment check reports that the open-source `pywebview` package is missing. The window offers persistent Chinese, English, and Japanese UI modes, refreshes quietly in the background every 30 seconds, and shows the Codex task title for each conversation, messages, completed rounds, summary levels, daily archive volume, pending summaries, archived visible source characters, and an explicitly labeled archive-token estimate. Character totals include stored user and visible assistant dialogue but exclude generated summaries. Estimated archive tokens use a CJK-aware size heuristic; they are neither billing usage nor the tokens consumed by summary generation. Separately, per-conversation Codex telemetry shows the most recent model-request token count against the advertised model context window. That request count can include instructions, tools, reasoning, and outputs, so its ratio may exceed 100 percent and must not be read as a precise current occupancy or remaining-context gauge.
+Run `scripts/bootstrap_windows.ps1 -InstallMissing` once if the environment check reports that the open-source `pywebview` package is missing. The window offers persistent Chinese, English, and Japanese UI modes, refreshes quietly in the background every 30 seconds, and shows the Codex task title for each conversation, messages, completed rounds, summary levels, daily archive volume, pending summaries, archived visible source characters, an explicitly labeled archive-token estimate, and Codex-reported cumulative model usage. Character totals include stored user and visible assistant dialogue but exclude generated summaries. Estimated archive tokens use a CJK-aware size heuristic; they are neither billing usage nor the tokens consumed by summary generation. The cumulative value comes from retained top-level Codex rollout `token_count` telemetry. Counter resets form separate additive segments; duplicate snapshots do not create requests; cached input and reasoning output remain included subfields and are never added to `total_tokens` again. Retained rollout files can be backfilled exactly, while deleted telemetry, ChatGPT web conversations, and official ChatGPT exports cannot be reconstructed as actual model usage. Separately, the latest request count is compared with the advertised context window; that ratio may exceed 100 percent and is not a precise occupancy or remaining-context gauge.
 
 The Windows installer runs
 `scripts/install_dashboard_shortcut_windows.ps1` after every install or upgrade.

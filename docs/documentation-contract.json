@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "1.12.0",
+  "reviewed_version": "1.13.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -90,6 +90,10 @@
     {
       "id": "retrieval-quality-and-local-semantics",
       "required_tokens": ["retrieval-evaluate", "semantic-index-build", "semantic-index-clear", "semantic-retrieve", "local-hash-v1"]
+    },
+    {
+      "id": "codex-reported-token-ledger",
+      "required_tokens": ["token-usage-backfill", "Codex", "Token"]
     }
   ]
 }

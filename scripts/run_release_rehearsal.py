@@ -49,6 +49,12 @@ def main() -> int:
             ],
         ),
         (
+            "token-usage-ledger",
+            [
+                python, "-m", "unittest", "-v", "tests.test_token_usage",
+            ],
+        ),
+        (
             "static-contracts",
             [
                 python, "-c",
@@ -61,7 +67,8 @@ def main() -> int:
                     "assert '-EncodedCommand' not in w+a;"
                     "assert 'powershell.exe' not in w.lower()+a.lower();"
                     "assert '/api/events' in m and \"EventSource('/api/events')\" in d;"
-                    "assert 'project-filter' in d and 'source-filter' in d and 'device-filter' in d"
+                    "assert 'project-filter' in d and 'source-filter' in d and 'device-filter' in d;"
+                    "assert 'reported_total_tokens' in d and 'reported-tokens-' in d"
                 ),
             ],
         ),

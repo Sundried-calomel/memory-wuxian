@@ -24,6 +24,14 @@ from conversation_titles import archive_conversation_title_aliases, resolve_conv
 from memory_cloud_transport import CloudFolderTransport
 from memory_federation import FederationManager
 from memory_guarded_features import GuardedFeatures, atomic_json
+from token_usage import (
+    add_usage,
+    aggregate_ledgers,
+    discover_rollouts,
+    empty_usage,
+    persist_token_usage,
+    token_usage_ledgers,
+)
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -325,6 +333,7 @@ class MemoryStore:
         self.locks_dir = self.root / ".locks"
         self.imports_dir = self.root / "imports"
         self.codex_import_dir = self.imports_dir / "codex"
+        self.codex_token_usage_dir = self.codex_import_dir / "token-usage"
         self.context_refresh_state_path = self.retrieval_dir / "context-refresh-state.json"
 
     @property
@@ -392,6 +401,7 @@ class MemoryStore:
             self.archive_dir,
             self.locks_dir,
             self.codex_import_dir,
+            self.codex_token_usage_dir,
         ]
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
@@ -988,6 +998,7 @@ class MemoryStore:
         cursor = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
         last_line = int(cursor.get("last_line", 0))
         backfill_file_changes = int(cursor.get("file_change_format_version", 0)) < 1
+        backfill_token_usage = int(cursor.get("token_usage_format_version", 0)) < 1
         imported = 0
         duplicates = 0
         repaired_transcripts = 0
@@ -1009,6 +1020,7 @@ class MemoryStore:
                     "source_path": str(source_path),
                     "last_line": total_lines,
                     "file_change_format_version": 1,
+                    "token_usage_format_version": 1,
                     "excluded_reason": excluded_reason,
                     "updated_at": now_iso(),
                 },
@@ -1022,6 +1034,8 @@ class MemoryStore:
                 "duplicate_messages": 0,
                 "repaired_transcripts": 0,
                 "excluded_reason": excluded_reason,
+                "token_usage_changed_events": 0,
+                "reported_total_tokens": None,
             }
 
         with source_path.open("r", encoding="utf-8") as handle:
@@ -1120,6 +1134,12 @@ class MemoryStore:
                 f"Codex session was truncated below its saved cursor: {source_path} "
                 f"({total_lines} < {last_line})"
             )
+        token_usage = persist_token_usage(
+            self.root,
+            source_path,
+            session_id=session_id,
+            start_line=0 if backfill_token_usage else last_line,
+        )
         atomic_write_json(
             cursor_path,
             {
@@ -1128,6 +1148,7 @@ class MemoryStore:
                 "source_path": str(source_path),
                 "last_line": total_lines,
                 "file_change_format_version": 1,
+                "token_usage_format_version": 1,
                 "source_size": source_path.stat().st_size,
                 "source_mtime": dt.datetime.fromtimestamp(
                     source_path.stat().st_mtime,
@@ -1144,6 +1165,9 @@ class MemoryStore:
             "imported_messages": imported,
             "duplicate_messages": duplicates,
             "repaired_transcripts": repaired_transcripts,
+            "token_usage_changed_events": int(token_usage["changed_events"]),
+            "reported_total_tokens": token_usage.get("reported_total_tokens"),
+            "token_usage_ledger": token_usage.get("ledger"),
         }
 
     def sync_codex(
@@ -1172,6 +1196,9 @@ class MemoryStore:
         results = [self.sync_codex_file(path) for path in sorted(candidates)]
         imported = sum(int(item["imported_messages"]) for item in results)
         repaired_transcripts = sum(int(item["repaired_transcripts"]) for item in results)
+        token_usage_changed_events = sum(
+            int(item.get("token_usage_changed_events", 0)) for item in results
+        )
         deterministic_indexes = None
         created_job = None
         if imported:
@@ -1190,8 +1217,65 @@ class MemoryStore:
             "imported_messages": imported,
             "duplicate_messages": sum(int(item["duplicate_messages"]) for item in results),
             "repaired_transcripts": repaired_transcripts,
+            "token_usage_changed_events": token_usage_changed_events,
             "created_summary_job": created_job,
             "deterministic_indexes": deterministic_indexes,
+        }
+
+    def backfill_codex_token_usage(
+        self,
+        session_roots: Sequence[Path],
+        apply: bool,
+    ) -> Dict[str, Any]:
+        if apply:
+            self.init()
+        elif not self.root.exists():
+            raise FileNotFoundError(f"Memory archive does not exist: {self.root}")
+        discovered = discover_rollouts(session_roots)
+        selected_by_session: Dict[str, Path] = {}
+        for path in discovered:
+            session_id = str(self.codex_session_metadata(path)["session_id"])
+            existing = selected_by_session.get(session_id)
+            if existing is None or (
+                path.stat().st_size,
+                path.stat().st_mtime_ns,
+                str(path),
+            ) > (
+                existing.stat().st_size,
+                existing.stat().st_mtime_ns,
+                str(existing),
+            ):
+                selected_by_session[session_id] = path
+        rollouts = sorted(selected_by_session.values())
+        results = [
+            persist_token_usage(self.root, path, write=apply)
+            for path in rollouts
+        ]
+        measured = [item for item in results if item.get("has_measurement")]
+        total_usage = empty_usage()
+        for item in measured:
+            total_usage = add_usage(total_usage, item["reported_usage"])
+        changed_events = sum(int(item.get("changed_events", 0)) for item in results)
+        return {
+            "status": "applied" if apply else "preview",
+            "session_roots": [str(path.expanduser().resolve()) for path in session_roots],
+            "rollout_files": len(discovered),
+            "unique_sessions": len(rollouts),
+            "duplicate_session_files": len(discovered) - len(rollouts),
+            "measured_conversations": len(measured),
+            "excluded_sessions": sum(
+                item.get("status") == "excluded" for item in results
+            ),
+            "changed_token_events": changed_events,
+            "counter_reset_count": sum(
+                int(item.get("counter_reset_count", 0)) for item in measured
+            ),
+            "model_request_count": sum(
+                int(item.get("model_request_count", 0)) for item in measured
+            ),
+            "reported_usage": total_usage,
+            "reported_total_tokens": total_usage["total_tokens"],
+            "would_write": not apply and changed_events > 0,
         }
 
     @staticmethod
@@ -3678,6 +3762,7 @@ class MemoryStore:
             path.stem.removeprefix("level-"): len(read_jsonl(path))
             for path in self.deterministic_index_dir.glob("level-*.jsonl")
         }
+        reported_usage = aggregate_ledgers(token_usage_ledgers(self.root))
         return {
             **state,
             "root": str(self.root),
@@ -3703,6 +3788,7 @@ class MemoryStore:
             "automatic_semantic_jobs": self.automatic_semantic_jobs,
             "ai_summary_enabled": self.ai_summary_enabled,
             "unsummarized_completed_rounds": unsummarized_completed_rounds,
+            "codex_reported_token_usage": reported_usage,
         }
 
     def context_refresh_telemetry(
@@ -4063,6 +4149,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--since",
         help="When scanning --sessions-root, include files modified at or after this ISO-8601 time",
     )
+    token_backfill_parser = subparsers.add_parser(
+        "token-usage-backfill",
+        help="Preview or persist exact Codex-reported token usage from retained rollout files",
+    )
+    token_backfill_parser.add_argument(
+        "--sessions-root",
+        action="append",
+        default=[],
+        help=(
+            "Codex sessions directory to scan; may be repeated. Defaults to both "
+            "~/.codex/sessions and ~/.codex/archived_sessions."
+        ),
+    )
+    token_backfill_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Persist one derived token-usage ledger per top-level Codex conversation",
+    )
     chatgpt_parser = subparsers.add_parser(
         "import-chatgpt",
         help="Import ChatGPT data export ZIP, directory, or conversations.json",
@@ -4333,13 +4437,42 @@ def dispatch_command(
             Path(args.sessions_root) if args.sessions_root else None,
             args.since,
         )
-        if result["imported_messages"] or result["repaired_transcripts"]:
+        if (
+            result["imported_messages"]
+            or result["repaired_transcripts"]
+            or result["token_usage_changed_events"]
+        ):
             backup = store.create_backup_snapshot(
                 "codex-sync",
                 {
                     "imported_messages": result["imported_messages"],
                     "repaired_transcripts": result["repaired_transcripts"],
+                    "token_usage_changed_events": result[
+                        "token_usage_changed_events"
+                    ],
                     "session_ids": [item["session_id"] for item in result["sessions"]],
+                },
+            )
+            result["backup"] = str(backup) if backup else None
+        else:
+            result["backup"] = None
+    elif args.command == "token-usage-backfill":
+        roots = (
+            [Path(path) for path in args.sessions_root]
+            if args.sessions_root
+            else [
+                Path.home() / ".codex" / "sessions",
+                Path.home() / ".codex" / "archived_sessions",
+            ]
+        )
+        result = store.backfill_codex_token_usage(roots, args.apply)
+        if args.apply and result["changed_token_events"]:
+            backup = store.create_backup_snapshot(
+                "codex-token-usage-backfill",
+                {
+                    "rollout_files": result["rollout_files"],
+                    "measured_conversations": result["measured_conversations"],
+                    "changed_token_events": result["changed_token_events"],
                 },
             )
             result["backup"] = str(backup) if backup else None
@@ -4682,6 +4815,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         config = resolve_config(Path(args.config))
         store = MemoryStore(resolve_root(args.root, config), config)
+        if args.command == "token-usage-backfill" and not args.apply:
+            return dispatch_command(args, parser, store)
         if args.command in {
             "retrieve",
             "conversation-tail",

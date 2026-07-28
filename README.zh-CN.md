@@ -42,6 +42,7 @@ Memory無限 是一个基于文件的 Codex Skill，用于在活动上下文窗�
 - 预览优先的状态与索引恢复
 - Heartbeat 验证、维护与修复模式
 - 使用稳定来源 ID 和逐会话游标增量解析 Codex rollout
+- 按对话持久化 Codex 报告 Token 用量，并支持安全处理计数器重置的历史回填
 - 通过 macOS 原生 LaunchAgent 或 Windows 计划任务进行事件驱动同步
 - 一份带 SHA-256 清单和只追加备份日志的最新桌面验证快照
 - 一份用于重建派生文件的最新工作区恢复备份
@@ -59,7 +60,7 @@ Memory無限 是一个基于文件的 Codex Skill，用于在活动上下文窗�
 - macOS：`MemoryWuxian-<version>-macOS-universal.pkg`
 - Windows：`MemoryWuxian-<version>-Windows-x64-Setup.exe`
 
-状态台会先显示浏览器本地保存的最近一次成功响应，再使用经来源验证的持久化统计快照。档案未变化时无需重新扫描全部原始历史；快照过期或损坏时会从权威档案自动重建。可选的本地成就系统记录档案大小、档案上下文和纯消息 Token 估算、对话深度、项目增长、摘要层级及原文验证检索。
+状态台会先显示浏览器本地保存的最近一次成功响应，再使用经来源验证的持久化统计快照。档案未变化时无需重新扫描全部原始历史；快照过期或损坏时会从权威档案自动重建。可选的本地成就系统记录档案大小、档案上下文和纯消息 Token 估算、Codex 报告累计用量、对话深度、项目增长、摘要层级及原文验证检索。
 
 打开安装文件后，Skill 会安装到当前用户的 Codex 目录，初始化 `Documents/MemoryWuxianArchive`，并启用持续 Codex 采集。重新安装或升级会保留现有配置和档案。卸载会移除程序及后台集成，但保留对话历史。公开构建默认没有代码签名，除非发布流程配置了平台签名凭据，因此操作系统可能要求手动确认安全提示。
 
@@ -98,6 +99,8 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" init
 python3 scripts/memory_cli.py --root "$ARCHIVE" append --speaker user --text "Hello"
 python3 scripts/memory_cli.py --root "$ARCHIVE" append --speaker assistant --text "Hello."
 python3 scripts/memory_cli.py --root "$ARCHIVE" sync-codex --session-file "$HOME/.codex/sessions/.../rollout-....jsonl"
+python3 scripts/memory_cli.py --root "$ARCHIVE" token-usage-backfill
+python3 scripts/memory_cli.py --root "$ARCHIVE" token-usage-backfill --apply
 python3 scripts/memory_cli.py --root "$ARCHIVE" status
 python3 scripts/memory_cli.py --root "$ARCHIVE" backup
 python3 scripts/memory_cli.py --root "$ARCHIVE" heartbeat --check-only
@@ -164,7 +167,7 @@ python3 scripts/install_codex_autosync.py \
   --load
 ```
 
-LaunchAgent 保持一个优化后的 Rust 进程，接收操作系统文件变化通知，并使用自适应大小/mtime 检查补充深层目录中遗漏的事件。活跃时每 5 秒补检，空闲 2 分钟后降为 30 秒，空闲 15 分钟后降为 5 分钟；原生事件会立即唤醒。采集器保存用户消息、可见助手 commentary/final，以及顶层 Codex 时间线中可见的轻量工具活动。工具活动在可用时保留工具名、嵌套工具名和命令文本；工具输出、系统指令、隐藏推理和子代理会话不归档。逐会话游标和稳定来源 ID 保证重试幂等。
+LaunchAgent 保持一个优化后的 Rust 进程，接收操作系统文件变化通知，并使用自适应大小/mtime 检查补充深层目录中遗漏的事件。活跃时每 5 秒补检，空闲 2 分钟后降为 30 秒，空闲 15 分钟后降为 5 分钟；原生事件会立即唤醒。采集器保存用户消息、可见助手 commentary/final，以及顶层 Codex 时间线中可见的轻量工具活动。工具活动在可用时保留工具名、嵌套工具名和命令文本；工具输出、系统指令、隐藏推理和子代理会话不归档。顶层 rollout 中可用的 `token_count` 遥测单独写入每个对话的派生账本，标记为“Codex 报告模型用量”而非账单用量。累计计数器重置时封存上一段再累加；重复快照不重复计为请求；缓存输入与推理输出是已包含分项，不能再次加入 `total_tokens`。仍保留的 rollout 可精确回填；已经删除的遥测、ChatGPT 网页对话和官方导出包不能恢复实际模型用量。逐会话游标和稳定来源 ID 保证重试幂等。
 
 原生采集器直接负责事件驱动 JSONL 解析、原文追加、逐对话全文更新、确定性路由索引、游标写入、到期一级摘要任务和桌面快照。成功的 Codex 文件修改会记录路径、变更类型、移动目标、增删行数、hunk 行范围及精确统一 diff。一般工具输出和隐藏推理继续排除。已有安装会对历史 patch 事件执行一次回填。任务到期时，采集器运行一个 Python wrapper，调用一次临时 Codex CLI 摘要进程，导入后退出。Python CLI 继续负责低频维护、检索、重建和摘要导入。
 

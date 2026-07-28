@@ -47,6 +47,7 @@ Memory無限は、アクティブなコンテキストウィンドウを越え�
 - プレビュー優先の状態・インデックス復旧
 - Heartbeatによる検証、保守、修復モード
 - 安定したソースIDとセッション別カーソルによるCodex rolloutの増分解析
+- 会話ごとのCodex報告Token使用量台帳とカウンターリセット対応の履歴バックフィル
 - macOSネイティブLaunchAgentまたはWindowsタスクスケジューラによるイベント駆動同期
 - SHA-256マニフェストと追記専用バックアップログを持つ最新デスクトップ検証スナップショット
 - 派生ファイル再構築用の最新ワークスペース復旧バックアップ
@@ -64,7 +65,7 @@ Memory無限は、アクティブなコンテキストウィンドウを越え�
 - macOS：`MemoryWuxian-<version>-macOS-universal.pkg`
 - Windows：`MemoryWuxian-<version>-Windows-x64-Setup.exe`
 
-ステータスコンソールは、最後に成功したブラウザローカル応答と、ソース検証済みの永続統計スナップショットから起動します。アーカイブが変わっていない場合は原文履歴全体を再読込せず、古い・破損したスナップショットだけを権威ある記録から自動再構築します。任意のローカル実績システムは、アーカイブ容量、アーカイブコンテキストとメッセージのみのToken推定、会話深度、プロジェクト成長、要約階層、原文検証済み検索を記録します。
+ステータスコンソールは、最後に成功したブラウザローカル応答と、ソース検証済みの永続統計スナップショットから起動します。アーカイブが変わっていない場合は原文履歴全体を再読込せず、古い・破損したスナップショットだけを権威ある記録から自動再構築します。任意のローカル実績システムは、アーカイブ容量、アーカイブコンテキストとメッセージのみのToken推定、Codex報告の累計使用量、会話深度、プロジェクト成長、要約階層、原文検証済み検索を記録します。
 
 インストーラーを開くと、現在のユーザーのCodexディレクトリにSkillを配置し、`Documents/MemoryWuxianArchive`を初期化して継続的なCodex収集を有効化します。再インストールやアップグレードでは設定とアーカイブを保持します。アンインストールはプログラムとバックグラウンド統合を削除しますが、会話履歴は残します。公開ビルドは、リリース処理に署名資格情報が設定されていない限り未署名のため、OSが明示的な確認を求める場合があります。
 
@@ -104,6 +105,8 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" init
 python3 scripts/memory_cli.py --root "$ARCHIVE" append --speaker user --text "Hello"
 python3 scripts/memory_cli.py --root "$ARCHIVE" append --speaker assistant --text "Hello."
 python3 scripts/memory_cli.py --root "$ARCHIVE" sync-codex --session-file "$HOME/.codex/sessions/.../rollout-....jsonl"
+python3 scripts/memory_cli.py --root "$ARCHIVE" token-usage-backfill
+python3 scripts/memory_cli.py --root "$ARCHIVE" token-usage-backfill --apply
 python3 scripts/memory_cli.py --root "$ARCHIVE" status
 python3 scripts/memory_cli.py --root "$ARCHIVE" backup
 python3 scripts/memory_cli.py --root "$ARCHIVE" heartbeat --check-only
@@ -174,7 +177,7 @@ python3 scripts/install_codex_autosync.py \
   --load
 ```
 
-LaunchAgentは最適化されたRustプロセスを維持し、OSのファイル変更通知と適応型size/mtime補助確認を使います。活発な時は5秒ごと、2分間アイドル後は30秒、15分間アイドル後は5分に低下し、ネイティブイベントは即時起動します。ユーザーメッセージ、可視assistant commentary/final、トップレベルCodexタイムラインの軽量ツール活動を保存します。利用可能な場合はツール名、ネストしたツール名、コマンド文を保持し、ツール出力、システム指示、隠れた推論、サブエージェント会話は除外します。セッション別カーソルと安定ソースIDにより再試行は冪等です。
+LaunchAgentは最適化されたRustプロセスを維持し、OSのファイル変更通知と適応型size/mtime補助確認を使います。活発な時は5秒ごと、2分間アイドル後は30秒、15分間アイドル後は5分に低下し、ネイティブイベントは即時起動します。ユーザーメッセージ、可視assistant commentary/final、トップレベルCodexタイムラインの軽量ツール活動を保存します。利用可能な場合はツール名、ネストしたツール名、コマンド文を保持し、ツール出力、システム指示、隠れた推論、サブエージェント会話は除外します。トップレベルrolloutの`token_count`テレメトリは、会話ごとの派生台帳へ別途保存し、「Codex報告モデル使用量」と表示します。これは請求使用量ではありません。累積カウンターがリセットされた場合は前の区間を確定して加算し、重複スナップショットは要求数へ重複計上しません。キャッシュ入力と推論出力は内訳であり、`total_tokens`へ再加算しません。保持されたrolloutは正確にバックフィルできますが、削除済みテレメトリ、ChatGPT Web会話、公式ChatGPTエクスポートから実際のモデル使用量は復元できません。セッション別カーソルと安定ソースIDにより再試行は冪等です。
 
 ネイティブコレクターはイベント駆動JSONL解析、原文追記、会話別全文、決定的ルーティングインデックス、カーソル、期限到来レベル1ジョブ、デスクトップスナップショットを直接担当します。成功したCodexファイル編集は、パス、変更種別、移動先、追加・削除数、hunk行範囲、正確なunified diffを記録します。一般ツール出力と隠れた推論は除外します。既存インストールはpatchイベント履歴を一度だけ補完します。ジョブ期限時にはPython wrapperが一時Codex CLI要約プロセスを一度起動し、取込み後に終了します。Python CLIは低頻度の保守、検索、再構築、要約取込みに使います。
 

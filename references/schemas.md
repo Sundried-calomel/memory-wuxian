@@ -48,6 +48,23 @@ Transcripts are derived files. `rebuild-conversations` compares them with author
 
 Each imported session has one cursor under `memory/imports/codex/<session-id>.json`. The native collector and Python recovery adapter use the same cursor schema. It records the source path, last consumed complete JSONL line, source size and modification time. `file_change_format_version: 1` confirms that historical successful patch events were backfilled. Cursor writes occur only after all selected source lines are handled. Stable source-derived message IDs provide a second idempotency boundary if cursor recovery repeats a line.
 
+## Codex-reported Token usage ledger
+
+Each measured top-level Codex session has one derived JSON ledger under
+`memory/imports/codex/token-usage/<session-id>.json`. It records the source
+rollout, scanned line, first and latest Token events, distinct cumulative
+snapshots, counter-reset count, completed segment totals, current segment,
+latest request, context window, and aggregate reported usage. A decrease in
+the cumulative `total_tokens` closes the previous segment; the aggregate is
+the field-wise sum of closed segments and the current segment. Equal
+cumulative snapshots do not increase the model-request count.
+
+`total_tokens` is authoritative for the reported aggregate. Input, cached
+input, cache-write input, output, and reasoning output are retained as
+breakdowns; cached input and reasoning output are not added to the total again.
+The ledger is derived telemetry, not raw dialogue, a semantic summary, or a
+billing record. Missing telemetry remains unmeasured.
+
 An excluded native subagent session receives a terminal cursor with `excluded_reason: subagent-session`. No raw record, transcript, summary job, or conversation index is created for that session.
 
 ## Per-conversation indexes

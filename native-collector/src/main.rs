@@ -28,6 +28,61 @@ use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
 const RAW_MARKER: &str = "<!-- memory-wuxian-record -->";
+const TOKEN_USAGE_FORMAT_VERSION: u64 = 1;
+const TOKEN_USAGE_FIELDS: [&str; 6] = [
+    "input_tokens",
+    "cached_input_tokens",
+    "cache_write_input_tokens",
+    "output_tokens",
+    "reasoning_output_tokens",
+    "total_tokens",
+];
+
+fn empty_usage() -> BTreeMap<String, u64> {
+    TOKEN_USAGE_FIELDS
+        .into_iter()
+        .map(|field| (field.to_owned(), 0))
+        .collect()
+}
+
+fn normalized_usage(value: Option<&Value>) -> Option<BTreeMap<String, u64>> {
+    let value = value?.as_object()?;
+    let mut usage = empty_usage();
+    for field in TOKEN_USAGE_FIELDS {
+        let number = value.get(field).and_then(Value::as_u64).unwrap_or(0);
+        usage.insert(field.to_owned(), number);
+    }
+    Some(usage)
+}
+
+fn usage_value(usage: &BTreeMap<String, u64>) -> Value {
+    Value::Object(
+        usage
+            .iter()
+            .map(|(key, value)| (key.clone(), json!(value)))
+            .collect(),
+    )
+}
+
+fn add_usage(left: &BTreeMap<String, u64>, right: &BTreeMap<String, u64>) -> BTreeMap<String, u64> {
+    TOKEN_USAGE_FIELDS
+        .into_iter()
+        .map(|field| {
+            (
+                field.to_owned(),
+                left.get(field).copied().unwrap_or(0) + right.get(field).copied().unwrap_or(0),
+            )
+        })
+        .collect()
+}
+
+fn usage_total(usage: &BTreeMap<String, u64>) -> u64 {
+    usage.get("total_tokens").copied().unwrap_or(0)
+}
+
+fn usage_signature(usage: &BTreeMap<String, u64>) -> [u64; 6] {
+    TOKEN_USAGE_FIELDS.map(|field| usage.get(field).copied().unwrap_or(0))
+}
 
 fn portable_path(path: &Path) -> String {
     let value = path.to_string_lossy();
@@ -317,7 +372,17 @@ struct FileSyncResult {
     imported_messages: u64,
     duplicate_messages: u64,
     repaired_transcripts: u64,
+    token_usage_changed_events: u64,
+    reported_total_tokens: Option<u64>,
+    token_usage_ledger: Option<PathBuf>,
     excluded_reason: Option<String>,
+}
+
+#[derive(Debug, Default)]
+struct TokenUsageUpdate {
+    changed_events: u64,
+    reported_total_tokens: Option<u64>,
+    ledger_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Default)]
@@ -373,6 +438,7 @@ impl Store {
             "archive",
             ".locks",
             "imports/codex",
+            "imports/codex/token-usage",
             "dashboard",
         ] {
             fs::create_dir_all(self.root.join(relative))?;
@@ -912,7 +978,13 @@ impl Store {
     }
 
     fn cursor_path(&self, session_id: &str) -> PathBuf {
-        let safe: String = session_id
+        self.root
+            .join("imports/codex")
+            .join(format!("{}.json", Self::safe_session_id(session_id)))
+    }
+
+    fn safe_session_id(session_id: &str) -> String {
+        session_id
             .chars()
             .map(|c| {
                 if c.is_ascii_alphanumeric() || "._-".contains(c) {
@@ -921,8 +993,180 @@ impl Store {
                     '_'
                 }
             })
-            .collect();
-        self.root.join("imports/codex").join(format!("{safe}.json"))
+            .collect()
+    }
+
+    fn update_token_usage(
+        &self,
+        session_id: &str,
+        source_path: &Path,
+        lines: &[&str],
+        start_line: u64,
+    ) -> Result<TokenUsageUpdate> {
+        let path = self
+            .root
+            .join("imports/codex/token-usage")
+            .join(format!("{}.json", Self::safe_session_id(session_id)));
+        let mut ledger = if path.exists() {
+            let value = read_json(&path)?;
+            if value.get("format_version").and_then(Value::as_u64)
+                != Some(TOKEN_USAGE_FORMAT_VERSION)
+            {
+                bail!("unsupported token usage ledger format: {}", path.display());
+            }
+            value
+        } else {
+            json!({
+                "format_version": TOKEN_USAGE_FORMAT_VERSION,
+                "measurement": "codex-reported-model-usage",
+                "conversation_id": format!("codex:{session_id}"),
+                "session_id": session_id,
+                "source": {
+                    "kind": "codex-rollout-token-count",
+                    "path": portable_path(source_path),
+                },
+                "scanned_through_line": 0,
+                "first_token_event": null,
+                "last_token_event": null,
+                "token_event_count": 0,
+                "model_request_count": 0,
+                "counter_reset_count": 0,
+                "closed_segments_usage": usage_value(&empty_usage()),
+                "current_segment_usage": usage_value(&empty_usage()),
+                "reported_usage": usage_value(&empty_usage()),
+                "latest_request_usage": usage_value(&empty_usage()),
+                "model_context_window": 0,
+                "updated_at": null,
+            })
+        };
+        let ledger_line = ledger
+            .get("scanned_through_line")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        if (lines.len() as u64) < ledger_line {
+            bail!(
+                "Codex token source was truncated below its ledger cursor: {} ({} < {ledger_line})",
+                source_path.display(),
+                lines.len()
+            );
+        }
+        let effective_start = start_line.max(ledger_line) as usize;
+        let existing_events = ledger
+            .get("token_event_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let mut previous_signature = if existing_events > 0 {
+            normalized_usage(ledger.get("current_segment_usage"))
+                .map(|value| usage_signature(&value))
+        } else {
+            None
+        };
+        let mut changed_events = 0u64;
+        for (zero_index, line) in lines.iter().enumerate().skip(effective_start) {
+            let line_number = zero_index as u64 + 1;
+            let event: Value = serde_json::from_str(line).with_context(|| {
+                format!(
+                    "invalid Codex JSONL {}:{line_number}",
+                    source_path.display()
+                )
+            })?;
+            if event.get("type").and_then(Value::as_str) != Some("event_msg") {
+                continue;
+            }
+            let Some(payload) = event.get("payload") else {
+                continue;
+            };
+            if payload.get("type").and_then(Value::as_str) != Some("token_count") {
+                continue;
+            }
+            let Some(info) = payload.get("info") else {
+                continue;
+            };
+            let Some(cumulative) = normalized_usage(info.get("total_token_usage")) else {
+                continue;
+            };
+            let Some(latest_request) = normalized_usage(info.get("last_token_usage")) else {
+                continue;
+            };
+            let current =
+                normalized_usage(ledger.get("current_segment_usage")).unwrap_or_else(empty_usage);
+            let mut closed =
+                normalized_usage(ledger.get("closed_segments_usage")).unwrap_or_else(empty_usage);
+            if ledger
+                .get("token_event_count")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                > 0
+                && usage_total(&cumulative) < usage_total(&current)
+            {
+                closed = add_usage(&closed, &current);
+                ledger["counter_reset_count"] = json!(
+                    ledger
+                        .get("counter_reset_count")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0)
+                        + 1
+                );
+            }
+            let signature = usage_signature(&cumulative);
+            if previous_signature != Some(signature) {
+                ledger["model_request_count"] = json!(
+                    ledger
+                        .get("model_request_count")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0)
+                        + 1
+                );
+            }
+            previous_signature = Some(signature);
+            let marker = json!({
+                "line": line_number,
+                "timestamp": event.get("timestamp").and_then(Value::as_str).unwrap_or(""),
+            });
+            if ledger.get("first_token_event").map_or(true, Value::is_null) {
+                ledger["first_token_event"] = marker.clone();
+            }
+            ledger["last_token_event"] = marker;
+            ledger["token_event_count"] = json!(
+                ledger
+                    .get("token_event_count")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+                    + 1
+            );
+            ledger["closed_segments_usage"] = usage_value(&closed);
+            ledger["current_segment_usage"] = usage_value(&cumulative);
+            ledger["reported_usage"] = usage_value(&add_usage(&closed, &cumulative));
+            ledger["latest_request_usage"] = usage_value(&latest_request);
+            ledger["model_context_window"] = json!(
+                info.get("model_context_window")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+            );
+            changed_events += 1;
+        }
+        if changed_events == 0 {
+            return Ok(TokenUsageUpdate {
+                changed_events: 0,
+                reported_total_tokens: normalized_usage(ledger.get("reported_usage"))
+                    .map(|value| usage_total(&value))
+                    .filter(|_| path.exists()),
+                ledger_path: path.exists().then_some(path),
+            });
+        }
+        ledger["source"] = json!({
+            "kind": "codex-rollout-token-count",
+            "path": portable_path(source_path),
+        });
+        ledger["scanned_through_line"] = json!(lines.len() as u64);
+        ledger["updated_at"] = json!(now_iso());
+        atomic_write_json(&path, &ledger)?;
+        Ok(TokenUsageUpdate {
+            changed_events,
+            reported_total_tokens: normalized_usage(ledger.get("reported_usage"))
+                .map(|value| usage_total(&value)),
+            ledger_path: Some(path),
+        })
     }
 
     fn changed_rollouts(&self, paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
@@ -1041,6 +1285,11 @@ impl Store {
             .and_then(Value::as_u64)
             .unwrap_or(0)
             < 1;
+        let backfill_token_usage = cursor
+            .get("token_usage_format_version")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            < TOKEN_USAGE_FORMAT_VERSION;
         let total_lines = lines.len() as u64;
         if total_lines < last_line {
             bail!(
@@ -1064,6 +1313,7 @@ impl Store {
                     "source_path": portable_path(&source_path),
                     "last_line": total_lines,
                     "file_change_format_version": 1,
+                    "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
                     "source_size": metadata.len(),
                     "excluded_reason": excluded_reason,
                     "updated_at": now_iso(),
@@ -1187,7 +1437,16 @@ impl Store {
                 result.repaired_transcripts += 1;
             }
         }
-        if total_lines != last_line || backfill_file_changes {
+        let token_usage = self.update_token_usage(
+            &session_id,
+            &source_path,
+            &lines,
+            if backfill_token_usage { 0 } else { last_line },
+        )?;
+        result.token_usage_changed_events = token_usage.changed_events;
+        result.reported_total_tokens = token_usage.reported_total_tokens;
+        result.token_usage_ledger = token_usage.ledger_path;
+        if total_lines != last_line || backfill_file_changes || backfill_token_usage {
             let metadata = fs::metadata(&source_path)?;
             let modified: DateTime<Utc> = metadata.modified().unwrap_or(SystemTime::now()).into();
             atomic_write_json(
@@ -1198,6 +1457,7 @@ impl Store {
                     "source_path": portable_path(&source_path),
                     "last_line": total_lines,
                     "file_change_format_version": 1,
+                    "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
                     "source_size": metadata.len(),
                     "source_mtime": modified.to_rfc3339(),
                     "updated_at": now_iso(),
@@ -1932,6 +2192,10 @@ impl Store {
                 "kind": "archive-updated",
                 "imported_messages": result.get("imported_messages").cloned().unwrap_or(json!(0)),
                 "duplicate_messages": result.get("duplicate_messages").cloned().unwrap_or(json!(0)),
+                "token_usage_changed_events": result
+                    .get("token_usage_changed_events")
+                    .cloned()
+                    .unwrap_or(json!(0)),
             }),
         )?;
         Ok(result)
@@ -2005,11 +2269,13 @@ impl Store {
         let mut imported = 0;
         let mut duplicates = 0;
         let mut repaired = 0;
+        let mut token_usage_changed_events = 0;
         for path in paths {
             let result = self.sync_file(&path)?;
             imported += result.imported_messages;
             duplicates += result.duplicate_messages;
             repaired += result.repaired_transcripts;
+            token_usage_changed_events += result.token_usage_changed_events;
             files.push(json!({
                 "session_id": result.session_id,
                 "source_path": portable_path(&result.source_path),
@@ -2018,6 +2284,12 @@ impl Store {
                 "imported_messages": result.imported_messages,
                 "duplicate_messages": result.duplicate_messages,
                 "repaired_transcripts": result.repaired_transcripts,
+                "token_usage_changed_events": result.token_usage_changed_events,
+                "reported_total_tokens": result.reported_total_tokens,
+                "token_usage_ledger": result
+                    .token_usage_ledger
+                    .as_ref()
+                    .map(|path| portable_path(path)),
                 "excluded_reason": result.excluded_reason,
             }));
         }
@@ -2035,10 +2307,11 @@ impl Store {
         } else {
             None
         };
-        let mutation = imported > 0 || repaired > 0;
+        let mutation = imported > 0 || repaired > 0 || token_usage_changed_events > 0;
         let metadata = json!({
             "session_count": files.len(), "imported_messages": imported,
             "duplicate_messages": duplicates, "repaired_transcripts": repaired,
+            "token_usage_changed_events": token_usage_changed_events,
             "created_summary_job": created_job.as_ref().map(|path| path.to_string_lossy()),
             "deterministic_indexes": deterministic_indexes,
         });
@@ -2051,6 +2324,7 @@ impl Store {
             "status": "synced", "sessions": files, "session_count": files.len(),
             "imported_messages": imported, "duplicate_messages": duplicates,
             "repaired_transcripts": repaired,
+            "token_usage_changed_events": token_usage_changed_events,
             "created_summary_job": created_job.map(|path| path.to_string_lossy().into_owned()),
             "deterministic_indexes": deterministic_indexes,
             "backup": backup.map(|path| path.to_string_lossy().into_owned()),
@@ -2312,6 +2586,11 @@ fn sync_and_emit(store: &Store, paths: Vec<PathBuf>) -> bool {
                 > 0
                 || result
                     .get("repaired_transcripts")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+                    > 0
+                || result
+                    .get("token_usage_changed_events")
                     .and_then(Value::as_u64)
                     .unwrap_or(0)
                     > 0;

@@ -49,6 +49,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     bind the launcher version to the package version, and pass a live
     post-install self-check before the release is considered complete.
 36. Rebuild the Windows native-dashboard shortcut after every installer upgrade, using the preserved active archive root and the Python runtime validated by the current bootstrap.
+37. Persist top-level Codex `token_count` telemetry in a separate derived
+    per-conversation ledger. Call it Codex-reported model usage, not billing
+    usage. Treat cached input and reasoning output as included subfields, detect
+    cumulative-counter resets, exclude subagents, and never place telemetry in
+    raw dialogue or semantic summaries.
 
 ## Operating workflow
 
@@ -82,6 +87,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     configuration from the current Python, Skill, and active archive paths,
     then verify its version, code signature, executable hash, and self-check.
 27. On Windows installation or upgrade, preserve the active archive pointer and recreate `Memory无限状态台.lnk` by default; never retain an absolute Python path from an older Codex runtime. A bare Skill copy has no traditional installer UI, so first activation must run the supplied bootstrap and shortcut installer.
+28. Let the native collector update each conversation's Token ledger
+    incrementally. Use `token-usage-backfill` in preview mode before `--apply`
+    when retained historical Codex rollout files need to be measured. Do not
+    infer missing usage from archived text or claim that ChatGPT exports expose
+    model-consumption telemetry.
 
 ## Commands
 
@@ -90,6 +100,8 @@ python3 scripts/memory_cli.py init
 python3 scripts/memory_cli.py append --speaker user --text "..."
 python3 scripts/memory_cli.py append --speaker assistant --text "..."
 python3 scripts/memory_cli.py sync-codex --session-file ~/.codex/sessions/YYYY/MM/DD/rollout-....jsonl
+python3 scripts/memory_cli.py token-usage-backfill
+python3 scripts/memory_cli.py token-usage-backfill --apply
 python3 scripts/memory_cli.py import-chatgpt --export /path/to/chatgpt-export.zip
 python3 scripts/memory_cli.py status
 python3 scripts/memory_cli.py context-refresh-status

@@ -31,6 +31,7 @@ from memory_cli import MemoryStore, atomic_write_json, load_simple_yaml, read_js
 from memory_cloud_transport import CloudFolderTransport
 from memory_federation import FederationManager
 from platform_process import no_window_kwargs
+from token_usage import aggregate_ledgers, normalize_usage, token_usage_ledgers
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -210,6 +211,41 @@ def session_telemetry(path: Path) -> dict[str, int] | None:
     return latest
 
 
+def persisted_session_telemetry(ledger: dict[str, Any]) -> dict[str, Any] | None:
+    reported = normalize_usage(ledger.get("reported_usage"))
+    latest = normalize_usage(ledger.get("latest_request_usage"))
+    if reported is None or latest is None:
+        return None
+    window = int(ledger.get("model_context_window") or 0)
+    request_tokens = int(latest["total_tokens"])
+    return {
+        "measurement": "codex-reported-model-usage",
+        "request_tokens": request_tokens,
+        "input_tokens": int(latest["input_tokens"]),
+        "cached_input_tokens": int(latest["cached_input_tokens"]),
+        "cache_write_input_tokens": int(latest["cache_write_input_tokens"]),
+        "output_tokens": int(latest["output_tokens"]),
+        "reasoning_output_tokens": int(latest["reasoning_output_tokens"]),
+        "context_window": window,
+        "window_ratio_percent": round(request_tokens * 100 / window, 2) if window else None,
+        "reported_usage": reported,
+        "reported_total_tokens": int(reported["total_tokens"]),
+        "reported_input_tokens": int(reported["input_tokens"]),
+        "reported_cached_input_tokens": int(reported["cached_input_tokens"]),
+        "reported_cache_write_input_tokens": int(
+            reported["cache_write_input_tokens"]
+        ),
+        "reported_output_tokens": int(reported["output_tokens"]),
+        "reported_reasoning_output_tokens": int(
+            reported["reasoning_output_tokens"]
+        ),
+        "model_request_count": int(ledger.get("model_request_count") or 0),
+        "counter_reset_count": int(ledger.get("counter_reset_count") or 0),
+        "last_token_event": ledger.get("last_token_event"),
+        "updated_at": ledger.get("updated_at"),
+    }
+
+
 def collector_telemetry(root: Path) -> dict[str, Any] | None:
     path = root / "imports/codex/collector-telemetry.json"
     try:
@@ -311,6 +347,13 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         daily_characters[day] += len(str(record.get("text", "")))
 
     summary_counts: dict[str, Counter[int]] = defaultdict(Counter)
+    usage_ledgers = token_usage_ledgers(store.root)
+    usage_by_conversation = {
+        str(ledger.get("conversation_id")): ledger
+        for ledger in usage_ledgers
+        if ledger.get("conversation_id")
+    }
+    reported_usage = aggregate_ledgers(usage_ledgers)
     titles = codex_thread_titles()
     thread_metadata = codex_thread_metadata()
     archive_titles = archive_conversation_titles(records)
@@ -322,7 +365,11 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         items.sort(key=lambda item: int(item.get("sequence", 0)))
         first_user = next((str(item.get("text", "")).strip() for item in items if item.get("speaker") == "user"), conversation_id)
         source_path = next((item.get("source", {}).get("path") for item in reversed(items) if item.get("source", {}).get("path")), None)
-        telemetry = session_telemetry(Path(source_path)) if source_path else None
+        telemetry = (
+            persisted_session_telemetry(usage_by_conversation[conversation_id])
+            if conversation_id in usage_by_conversation
+            else (session_telemetry(Path(source_path)) if source_path else None)
+        )
         conversation_text = "".join(str(item.get("text", "")) for item in items)
         native_id = conversation_id.removeprefix("codex:")
         metadata = thread_metadata.get(native_id, {})
@@ -370,6 +417,14 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
     )
     archived_characters = len(archived_text)
     retrieval_stats = verified_retrieval_stats(store)
+    codex_conversation_ids = {
+        conversation_id
+        for conversation_id in by_conversation
+        if conversation_id.startswith("codex:")
+    }
+    measured_codex_conversations = len(
+        codex_conversation_ids.intersection(usage_by_conversation)
+    )
     return {
         "generated_at": now.isoformat(),
         "archive_root": str(store.root),
@@ -384,6 +439,34 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
             "characters": archived_characters,
             "estimated_tokens": estimate_context_tokens(archived_text),
             "message_estimated_tokens": estimate_context_tokens(message_text),
+            "reported_total_tokens": int(
+                reported_usage["reported_usage"]["total_tokens"]
+            ),
+            "reported_input_tokens": int(
+                reported_usage["reported_usage"]["input_tokens"]
+            ),
+            "reported_cached_input_tokens": int(
+                reported_usage["reported_usage"]["cached_input_tokens"]
+            ),
+            "reported_output_tokens": int(
+                reported_usage["reported_usage"]["output_tokens"]
+            ),
+            "reported_reasoning_output_tokens": int(
+                reported_usage["reported_usage"]["reasoning_output_tokens"]
+            ),
+            "token_usage_conversations": int(
+                reported_usage["measured_conversations"]
+            ),
+            "token_usage_model_requests": int(
+                reported_usage["model_request_count"]
+            ),
+            "token_usage_counter_resets": int(
+                reported_usage["counter_reset_count"]
+            ),
+            "measured_archived_codex_conversations": measured_codex_conversations,
+            "unmeasured_archived_codex_conversations": (
+                len(codex_conversation_ids) - measured_codex_conversations
+            ),
             "storage_bytes": archive_storage_bytes(store),
             **retrieval_stats,
             "summary_counts": status.get("summary_counts", {}),
@@ -404,14 +487,14 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         "active_conversations": active_conversations,
         "archived_conversations": archived_conversations,
         "character_note": "Visible user and assistant source text stored in the append-only raw archive; summaries are excluded.",
-        "estimation_note": "The archive estimate covers visible stored dialogue only. Codex request telemetry has a different scope and can include instructions, tools, reasoning, and outputs; its ratio to the advertised model window is not a precise remaining-context gauge.",
+        "estimation_note": "The archive estimate covers visible stored dialogue only. Codex-reported usage is persisted separately from rollout token_count telemetry and can include instructions, tools, reasoning, cached input, and outputs. Cached input and reasoning are reported subfields and are not added to total_tokens a second time.",
     }
 
 
 class DashboardSnapshotCache:
     """Persist expensive archive statistics and invalidate them by file metadata."""
 
-    FORMAT_VERSION = 2
+    FORMAT_VERSION = 3
 
     def __init__(self, store: MemoryStore):
         self.store = store
@@ -439,6 +522,14 @@ class DashboardSnapshotCache:
         paths.extend(path for path in self.store.summaries_dir.rglob("*") if path.is_file())
         paths.extend(path for path in self.store.index_dir.rglob("*") if path.is_file())
         paths.extend(self.store.pending_dir.glob("job-*.json"))
+        token_usage_dir = getattr(
+            self.store,
+            "codex_token_usage_dir",
+            self.store.root / "imports" / "codex" / "token-usage",
+        )
+        paths.extend(
+            path for path in token_usage_dir.glob("*.json") if path.is_file()
+        )
         stamps = []
         for path in sorted(set(paths), key=str):
             try:
@@ -528,6 +619,12 @@ def make_handler(store: MemoryStore):
     snapshot_cache = DashboardSnapshotCache(store)
 
     class Handler(BaseHTTPRequestHandler):
+        def handle(self) -> None:
+            try:
+                super().handle()
+            except (BrokenPipeError, ConnectionResetError):
+                return
+
         def send_json(self, status: int, payload: dict[str, Any]) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
