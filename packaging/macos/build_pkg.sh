@@ -35,6 +35,18 @@ rsync -a \
   --exclude '*.pyc' \
   "$repo_root/" "$payload_skill/"
 
+dashboard_app="$payload_skill/assets/macos/Memory無限操作台.app"
+"$repo_root/packaging/macos/build_dashboard_app.sh" \
+  "$version" "$dashboard_app" universal
+"$repo_root/scripts/install_dashboard_app_macos.py" --help >/dev/null
+dashboard_version="$(/usr/libexec/PlistBuddy \
+  -c 'Print :CFBundleShortVersionString' \
+  "$dashboard_app/Contents/Info.plist")"
+if [[ "$dashboard_version" != "$version" ]]; then
+  echo "macOS dashboard version does not match package version." >&2
+  exit 1
+fi
+
 pkgbuild \
   --root "$work_dir/root" \
   --scripts "$repo_root/packaging/macos/scripts" \

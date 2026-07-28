@@ -149,6 +149,15 @@ instead of silently treating an early statement as current.
 
 ## Local status dashboard
 
+On macOS, every PKG install or upgrade rebuilds
+`~/Desktop/Memory無限操作台.app`. The native WebKit launcher reads
+`memory-wuxian-dashboard-launcher.json`, so it follows the current Python,
+Skill, and preserved active archive paths instead of embedding machine-specific
+paths. `install_dashboard_app_macos.py` verifies the application version,
+signature, executable hash, configured paths, and launcher self-check. A release
+that changes dashboard behavior is incomplete until this desktop application
+has been replaced and opened successfully.
+
 On Windows, start the local dashboard as a native application window. It uses the installed Microsoft Edge WebView2 runtime, the bundled Memory Wuxian archive/infinity application icon, and preserves the complete dashboard UI without browser chrome:
 
 ```powershell

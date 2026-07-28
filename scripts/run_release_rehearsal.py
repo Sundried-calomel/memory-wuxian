@@ -69,6 +69,13 @@ def main() -> int:
             "documentation-contract",
             [python, "scripts/check_documentation_contract.py"],
         ),
+        (
+            "desktop-dashboard-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_dashboard_shortcut",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     results = []

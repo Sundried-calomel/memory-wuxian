@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "1.11.0",
+  "reviewed_version": "1.12.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -42,6 +42,10 @@
     {
       "id": "windows-native-dashboard-launcher",
       "required_tokens": ["memory-wuxian-dashboard-launcher.exe", "no command-line arguments"]
+    },
+    {
+      "id": "macos-versioned-dashboard-installer",
+      "required_tokens": ["Memory無限操作台.app", "install_dashboard_app_macos.py", "memory-wuxian-dashboard-launcher.json"]
     },
     {
       "id": "verified-backup",

@@ -43,7 +43,12 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 32. Keep `README.md`, `README.zh-CN.md`, and `README.ja.md` semantically synchronized whenever documented features, installation, commands, limitations, privacy boundaries, or release behavior change.
 33. Record explicit operational-rule changes as append-only Level-1 policy events. Require exact prior-statement linkage before a revision, withdrawal, or reaffirmation changes current validity.
 34. Use current-policy retrieval for rules or strategies that may have changed. Recency alone must never supersede an earlier policy.
-35. Rebuild the Windows native-dashboard shortcut after every installer upgrade, using the preserved active archive root and the Python runtime validated by the current bootstrap.
+35. Treat the desktop dashboard as a required release artifact. Every installer
+    or update that changes dashboard code, runtime paths, or installation
+    behavior must replace the platform launcher, preserve the active archive,
+    bind the launcher version to the package version, and pass a live
+    post-install self-check before the release is considered complete.
+36. Rebuild the Windows native-dashboard shortcut after every installer upgrade, using the preserved active archive root and the Python runtime validated by the current bootstrap.
 
 ## Operating workflow
 
@@ -72,7 +77,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 23. Let users manage routine cloud synchronization from Dashboard > Settings. The cloud switch must enable or disable both transport configuration and its background scheduler, the status view must expose the configured directory and scheduler state, and the manual sync command must run one encrypted exchange pass without requiring an AI conversation.
 24. Keep `cloud-enable`, `cloud-disable`, and `cloud-sync` as equivalent CLI and recovery controls. The scheduled task wakes every five minutes, while ordinary exports are coalesced and empty checks create no files.
 25. Treat all three localized README files as one documentation contract. Update and verify English, Simplified Chinese, and Japanese in the same change.
-26. On Windows installation or upgrade, preserve the active archive pointer and recreate `Memory无限状态台.lnk` by default; never retain an absolute Python path from an older Codex runtime. A bare Skill copy has no traditional installer UI, so first activation must run the supplied bootstrap and shortcut installer.
+26. On macOS, let the package installer rebuild
+    `~/Desktop/Memory無限操作台.app` from the packaged application, refresh its
+    configuration from the current Python, Skill, and active archive paths,
+    then verify its version, code signature, executable hash, and self-check.
+27. On Windows installation or upgrade, preserve the active archive pointer and recreate `Memory无限状态台.lnk` by default; never retain an absolute Python path from an older Codex runtime. A bare Skill copy has no traditional installer UI, so first activation must run the supplied bootstrap and shortcut installer.
 
 ## Commands
 

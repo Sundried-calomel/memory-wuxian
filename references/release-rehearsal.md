@@ -17,11 +17,16 @@ Required scenarios:
 8. Guarded feature tests prove that migration preserves the source, project
    imports do not enter local raw history, historical views are read-only, and
    semantic-index deletion leaves authoritative files byte-identical.
+9. Desktop-dashboard contract tests prove that both platform installers
+   recreate the current dashboard launcher, preserve the active archive, and
+   bind the launcher version to the package version.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid
 release evidence.
 
 An unrun, skipped, interrupted, or evidence-free scenario is not a pass.
-Platform-specific live installation checks must be recorded separately and are
-required before claiming that platform's installer was fully rehearsed.
+Platform-specific live installation checks must be recorded separately. A
+desktop-affecting release is not complete until the installed dashboard has
+been replaced, its version and launcher configuration have been verified, and
+the dashboard has successfully opened against the preserved active archive.

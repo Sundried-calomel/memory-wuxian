@@ -39,7 +39,13 @@ jobs:
               "native-collector/target/x86_64-apple-darwin/release/$binary" \
               -output "bin/$binary"
           done
-          chmod +x bin/memory-wuxian-collector bin/memory-wuxian-envelope packaging/macos/build_pkg.sh packaging/macos/scripts/postinstall
+          chmod +x \
+            bin/memory-wuxian-collector \
+            bin/memory-wuxian-envelope \
+            packaging/macos/build_pkg.sh \
+            packaging/macos/build_dashboard_app.sh \
+            packaging/macos/scripts/postinstall \
+            scripts/install_dashboard_app_macos.py
       - name: Build PKG
         shell: bash
         run: |
@@ -49,6 +55,11 @@ jobs:
             exit 1
           fi
           packaging/macos/build_pkg.sh "$version" dist
+          if ! pkgutil --payload-files "dist/MemoryWuxian-$version-macOS-universal.pkg" \
+            | grep -q "Memory無限操作台.app/Contents/MacOS/MemoryDashboard"; then
+            echo "macOS package does not contain the versioned dashboard application." >&2
+            exit 1
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: macos-installer

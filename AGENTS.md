@@ -52,25 +52,32 @@ Use Memory無限 to preserve conversation history outside the active context win
     scenario matrix has actually run and produced a passing report with one
     hashed evidence log per scenario. Skipped, interrupted, inferred, or
     manually described scenarios are not passes.
-44. Treat `raw/`, persisted summaries, and their source hashes as authoritative,
+44. Treat the desktop dashboard as a release hard gate. Every install or
+    upgrade that changes dashboard code, runtime paths, packaging, or launcher
+    behavior must replace the installed platform dashboard, preserve the active
+    archive, verify package and dashboard versions match, validate the current
+    launcher paths and executable hash, and complete a live open against the
+    preserved archive. Updating the Skill without refreshing the desktop
+    dashboard is incomplete.
+45. Treat `raw/`, persisted summaries, and their source hashes as authoritative,
     human-readable records. Never rewrite, normalize in place, delete, or hide
     them behind a binary database or vector index.
-45. An archive migration is a verified copy operation. Keep the source intact;
+46. An archive migration is a verified copy operation. Keep the source intact;
     compare source-before, source-after, and destination SHA-256 manifests; and
     switch the active-root pointer only after all three agree and the caller
     explicitly requests the switch.
-46. Import project memory packages only as read-only replicas outside local raw
+47. Import project memory packages only as read-only replicas outside local raw
     history. Never merge package records into local counters or authority.
-47. Time-travel views and decision graphs are derived read-only views. Every
+48. Time-travel views and decision graphs are derived read-only views. Every
     decision node must retain source message IDs and raw-file backlinks.
-48. Semantic indexes are optional and disposable. The default implementation
+49. Semantic indexes are optional and disposable. The default implementation
     must work offline, every hit must be verified against the current raw-record
     hash, and deleting the index must leave raw history and keyword retrieval
     functional.
-49. Do not download a model or enable networked embeddings implicitly. A future
+50. Do not download a model or enable networked embeddings implicitly. A future
     model adapter requires a pinned source, explicit authorization, and the
     third-party audit gate.
-50. Release v1.9, v1.10, and v1.11 sequentially. Each version requires its own
+51. Release v1.9, v1.10, and v1.11 sequentially. Each version requires its own
     clean commit, tag, documentation contract, full rehearsal directory, passing
     report, and published GitHub Release. Evidence from one version cannot count
     for another.

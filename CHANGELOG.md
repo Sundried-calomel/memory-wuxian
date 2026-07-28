@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.12.0 - 2026-07-28
+
+- Added a versioned native macOS `Memory無限操作台.app` backed by WebKit and a
+  configuration file containing the current Python, Skill, and active archive
+  paths instead of machine-specific paths compiled into the application.
+- Made every macOS PKG install or upgrade preserve the active archive and
+  atomically replace and verify the desktop dashboard application.
+- Added dashboard version, signature, executable-hash, path, and self-check
+  validation to the release contract so dashboard-affecting updates cannot
+  complete without refreshing the desktop launcher.
+- Suppressed harmless localhost broken-pipe tracebacks when a dashboard client
+  disconnects before a response finishes.
+
 ## 1.11.0 - 2026-07-28
 
 - Added human-readable JSONL retrieval evaluation with recall-at-k, wrong

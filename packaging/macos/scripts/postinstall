@@ -12,6 +12,13 @@ source_root="/Library/Application Support/MemoryWuxian/skill"
 skill_root="$user_home/.codex/skills/memory-wuxian"
 archive_root="$user_home/Documents/MemoryWuxianArchive"
 sessions_root="$user_home/.codex/sessions"
+active_root_pointer="$user_home/.codex/memory-wuxian-active-root.txt"
+if [[ -f "$active_root_pointer" ]]; then
+  preserved_archive_root="$(/usr/bin/head -n 1 "$active_root_pointer")"
+  if [[ -n "$preserved_archive_root" && "$preserved_archive_root" = /* ]]; then
+    archive_root="$preserved_archive_root"
+  fi
+fi
 
 find_python() {
   local candidate
@@ -59,6 +66,7 @@ fi
 /bin/chmod +x \
   "$skill_root/bin/memory-wuxian-collector" \
   "$skill_root/bin/memory-wuxian-envelope" \
+  "$skill_root/scripts/install_dashboard_app_macos.py" \
   "$skill_root/scripts/"*.py
 /usr/sbin/chown -R "$console_user":staff "$skill_root" "$archive_root" "$sessions_root"
 
@@ -86,6 +94,12 @@ node_display_name="$(/usr/sbin/scutil --get ComputerName 2>/dev/null || /bin/hos
   --skill-root "$skill_root" \
   --python-executable "$python_executable" >/dev/null
 
-printf '%s\n' "$archive_root" > "$user_home/.codex/memory-wuxian-active-root.txt"
-/usr/sbin/chown "$console_user":staff "$user_home/.codex/memory-wuxian-active-root.txt"
+printf '%s\n' "$archive_root" > "$active_root_pointer"
+/usr/sbin/chown "$console_user":staff "$active_root_pointer"
+
+/usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
+  "$python_executable" "$skill_root/scripts/install_dashboard_app_macos.py" \
+  --skill-root "$skill_root" \
+  --archive-root "$archive_root" \
+  --python-executable "$python_executable" >/dev/null
 exit 0

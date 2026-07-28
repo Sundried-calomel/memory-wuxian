@@ -127,6 +127,14 @@ Memory無限 可在不新建替代任务的情况下，定期把压缩后的历�
 
 ## 本地状态台
 
+在 macOS 上，每次安装或升级 PKG 都会重新生成并覆盖
+`~/Desktop/Memory無限操作台.app`。原生 WebKit 启动器读取
+`memory-wuxian-dashboard-launcher.json`，因此会使用当前 Python、Skill
+和已保留的活动档案路径，不在程序中写死某一台电脑的路径。
+`install_dashboard_app_macos.py` 会验证应用版本、签名、可执行文件哈希、
+配置路径和启动器自检。凡是影响状态台的发布，只有在桌面应用已经被覆盖并
+成功打开后才算完成。
+
 Windows 可用原生应用窗口启动本地状态台。它使用已安装的 Microsoft Edge WebView2、随包提供的 Memory Wuxian 图标，并在没有浏览器边框的窗口中保留完整界面：
 
 ```powershell

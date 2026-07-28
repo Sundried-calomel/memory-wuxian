@@ -1,5 +1,8 @@
 import unittest
+import tempfile
 from pathlib import Path
+
+from scripts.install_dashboard_app_macos import launcher_payload
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -44,6 +47,57 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn("memory-wuxian-dashboard-launcher.exe", build)
         self.assertIn('windows_subsystem = "windows"', source)
         self.assertIn("Command::new(python)", source)
+
+    def test_macos_installer_rebuilds_versioned_dashboard(self):
+        postinstall = (
+            SKILL_ROOT / "packaging/macos/scripts/postinstall"
+        ).read_text(encoding="utf-8")
+        package = (
+            SKILL_ROOT / "packaging/macos/build_pkg.sh"
+        ).read_text(encoding="utf-8")
+        workflow = (
+            SKILL_ROOT / ".github/workflows/release.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("memory-wuxian-active-root.txt", postinstall)
+        self.assertIn("preserved_archive_root", postinstall)
+        self.assertIn("install_dashboard_app_macos.py", postinstall)
+        self.assertIn("build_dashboard_app.sh", package)
+        self.assertIn("CFBundleShortVersionString", package)
+        self.assertIn("Memory無限操作台.app/Contents/MacOS/MemoryDashboard", workflow)
+
+    def test_macos_dashboard_is_config_driven_and_self_checkable(self):
+        source = (
+            SKILL_ROOT / "packaging/macos/MemoryDashboard.swift"
+        ).read_text(encoding="utf-8")
+        installer = (
+            SKILL_ROOT / "scripts/install_dashboard_app_macos.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("memory-wuxian-dashboard-launcher.json", source)
+        self.assertIn("MEMORY_WUXIAN_DASHBOARD_CONFIG", source)
+        self.assertIn("--self-check", source)
+        self.assertIn("--no-browser", source)
+        self.assertNotIn("/opt/homebrew/bin/python3", source)
+        self.assertNotIn("/Users/mayanyi", source)
+        self.assertIn("replace_app", installer)
+        self.assertIn("dashboard version mismatch", installer)
+        self.assertIn("executable_sha256", installer)
+
+    def test_macos_launcher_payload_uses_current_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            python = root / "python3"
+            skill = root / "skill"
+            archive = root / "archive"
+            payload = launcher_payload(python, skill, archive)
+        self.assertEqual(
+            payload,
+            {
+                "schema_version": 1,
+                "python_executable": str(python),
+                "skill_root": str(skill),
+                "archive_root": str(archive),
+            },
+        )
 
 
 if __name__ == "__main__":
