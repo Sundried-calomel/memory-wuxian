@@ -497,3 +497,12 @@ it into a read-only replica outside local raw history.
 `decision-graph` derives rule and decision lineage from explicit policy events.
 Its `raw_sources` retain message IDs, raw paths, and record hashes; the graph is
 never an authority that can overwrite history.
+## v1.11 retrieval quality and optional local semantics
+
+`retrieval-evaluate` measures a readable JSONL test set with recall-at-k,
+wrong-citation counts, and latency. `semantic-index-build` uses the default
+offline `local-hash-v1` provider: it downloads no model and calls no service.
+`semantic-retrieve` verifies each hit against raw SHA-256 and returns the
+conversation/message ID, raw path, and exact line range.
+`semantic-index-clear` removes only disposable vectors; raw history and keyword
+retrieval continue to work.

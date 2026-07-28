@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "1.10.0",
+  "reviewed_version": "1.11.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -82,6 +82,10 @@
     {
       "id": "historical-derived-views",
       "required_tokens": ["as-of", "decision-graph", "raw_sources"]
+    },
+    {
+      "id": "retrieval-quality-and-local-semantics",
+      "required_tokens": ["retrieval-evaluate", "semantic-index-build", "semantic-index-clear", "semantic-retrieve", "local-hash-v1"]
     }
   ]
 }

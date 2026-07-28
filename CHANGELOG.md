@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.11.0 - 2026-07-28
+
+- Added human-readable JSONL retrieval evaluation with recall-at-k, wrong
+  citation counts, and per-case latency.
+- Added an optional offline `local-hash-v1` semantic index with no model
+  download, network call, or external service.
+- Added verified backlinks from every semantic hit to conversation/message ID,
+  raw path, exact raw line range, and raw-record SHA-256.
+- Added a semantic-index clear operation that leaves raw history and keyword
+  retrieval intact.
+
 ## 1.10.0 - 2026-07-28
 
 - Added timezone-strict, read-only `as-of` historical views.

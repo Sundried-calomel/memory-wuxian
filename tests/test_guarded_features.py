@@ -72,8 +72,11 @@ class GuardedFeaturesTest(unittest.TestCase):
         result = self.features.semantic_retrieve("语义 索引", 2)
         self.assertTrue(result["verified_against_raw"])
         self.assertTrue(all(item["raw_path"] and item["record_sha256"] for item in result["matches"]))
+        self.assertTrue(all(item["raw_line_start"] and item["raw_line_end"] for item in result["matches"]))
         cleared = self.features.semantic_clear()
         self.assertTrue(cleared["keyword_retrieval_available"])
+        _, keyword_metadata = self.store.retrieve("迁移语义索引红线")
+        self.assertTrue(keyword_metadata["raw_matches"])
         raw_after = {
             item["path"]: item["sha256"]
             for item in archive_manifest(self.store.root)["files"]

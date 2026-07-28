@@ -428,3 +428,11 @@ Memory無限は[MIT License](LICENSE.txt)で公開されています。
 `decision-graph` は明示的なポリシーイベントから規則・決定系譜を派生し、
 `raw_sources` にメッセージ ID、raw パス、レコードハッシュを保持します。
 グラフが履歴を上書きすることはありません。
+## v1.11 検索品質と任意のローカル意味索引
+
+`retrieval-evaluate` は可読 JSONL テストセットで recall-at-k、誤引用数、
+レイテンシを測定します。`semantic-index-build` の既定
+`local-hash-v1` は完全オフラインで、モデルをダウンロードせず外部サービスも
+利用しません。`semantic-retrieve` は raw SHA-256 を再検証し、会話・
+メッセージ ID、raw パス、正確な行範囲を返します。
+`semantic-index-clear` は再構築可能なベクトルだけを削除します。

@@ -257,10 +257,12 @@ class GuardedFeatures:
             sources = []
             for message_id in item.get("source_message_ids", []):
                 record = raw.get(str(message_id))
+                pointer = self.raw_pointer(record) if record else {}
                 sources.append({
                     "message_id": message_id,
                     "raw_path": record.get("_path") if record else None,
                     "record_sha256": record.get("content_sha256") if record else None,
+                    **pointer,
                 })
             nodes.append({**item, "raw_sources": sources})
             if item.get("supersedes_policy_event_id"):
@@ -276,6 +278,23 @@ class GuardedFeatures:
             "derived": True,
             "authoritative_source": "raw messages",
         }
+
+    def raw_pointer(self, record: Dict[str, Any]) -> Dict[str, Any]:
+        relative = str(record.get("_path", ""))
+        path = self.root / relative
+        if not relative or not path.exists():
+            return {"raw_line_start": None, "raw_line_end": None}
+        message_id = str(record.get("message_id", ""))
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(lines):
+            if line == "<!-- memory-wuxian-record -->" and index + 2 < len(lines):
+                try:
+                    candidate = json.loads(lines[index + 2])
+                except json.JSONDecodeError:
+                    continue
+                if str(candidate.get("message_id")) == message_id:
+                    return {"raw_line_start": index + 1, "raw_line_end": index + 4}
+        return {"raw_line_start": None, "raw_line_end": None}
 
     def retrieval_evaluate(self, dataset: Path, top_k: int) -> Dict[str, Any]:
         cases = [
@@ -329,6 +348,7 @@ class GuardedFeatures:
                 "conversation_id": record["conversation_id"],
                 "raw_path": record["_path"],
                 "record_sha256": record["content_sha256"],
+                **self.raw_pointer(record),
                 "provider": provider,
                 "vector": self._hash_embedding(str(record.get("text", ""))),
             })
@@ -375,6 +395,8 @@ class GuardedFeatures:
                 "conversation_id": item["conversation_id"],
                 "score": round(score, 8),
                 "raw_path": item["raw_path"],
+                "raw_line_start": item.get("raw_line_start"),
+                "raw_line_end": item.get("raw_line_end"),
                 "record_sha256": item["record_sha256"],
             })
         matches.sort(key=lambda item: item["score"], reverse=True)

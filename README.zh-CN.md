@@ -415,3 +415,10 @@ raw 历史之外的只读副本区。
 `as-of` 按带时区时间戳重建只读历史切片。`decision-graph` 只根据显式策略事件
 派生规则和决定谱系；其中 `raw_sources` 保留消息 ID、原始路径和记录哈希。
 图谱不是权威来源，不能覆盖历史。
+## v1.11 检索质量与可选本地语义索引
+
+`retrieval-evaluate` 用人类可读 JSONL 测试集统计 recall-at-k、错误引用数和
+延迟。`semantic-index-build` 默认使用完全离线的 `local-hash-v1`，不下载模型，
+不调用外部服务。`semantic-retrieve` 会以 raw SHA-256 复核每条命中，并返回
+对话/消息 ID、原始路径和准确行范围。`semantic-index-clear` 只删除可重建向量，
+原始历史和关键词检索仍然可用。

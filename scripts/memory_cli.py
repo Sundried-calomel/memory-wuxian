@@ -4277,6 +4277,24 @@ def build_parser() -> argparse.ArgumentParser:
         "decision-graph", help="Render the derived decision and rule lineage graph"
     )
     graph.add_argument("--output")
+    evaluation = subparsers.add_parser(
+        "retrieval-evaluate", help="Evaluate retrieval against a human-readable JSONL dataset"
+    )
+    evaluation.add_argument("--dataset", required=True)
+    evaluation.add_argument("--top-k", type=int, default=10)
+    evaluation.add_argument("--output")
+    semantic_build = subparsers.add_parser(
+        "semantic-index-build", help="Build an optional disposable local semantic index"
+    )
+    semantic_build.add_argument("--provider", default="local-hash-v1")
+    subparsers.add_parser(
+        "semantic-index-clear", help="Delete only the disposable semantic index"
+    )
+    semantic_retrieve = subparsers.add_parser(
+        "semantic-retrieve", help="Search the local semantic index and verify raw backlinks"
+    )
+    semantic_retrieve.add_argument("--query", required=True)
+    semantic_retrieve.add_argument("--top-k", type=int, default=10)
     return parser
 
 
@@ -4638,6 +4656,18 @@ def dispatch_command(
         result = GuardedFeatures(store).decision_graph()
         if args.output:
             atomic_json(Path(args.output), result)
+    elif args.command == "retrieval-evaluate":
+        result = GuardedFeatures(store).retrieval_evaluate(
+            Path(args.dataset), args.top_k
+        )
+        if args.output:
+            atomic_json(Path(args.output), result)
+    elif args.command == "semantic-index-build":
+        result = GuardedFeatures(store).semantic_build(args.provider)
+    elif args.command == "semantic-index-clear":
+        result = GuardedFeatures(store).semantic_clear()
+    elif args.command == "semantic-retrieve":
+        result = GuardedFeatures(store).semantic_retrieve(args.query, args.top_k)
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2
@@ -4665,6 +4695,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "migration-preview",
             "as-of",
             "decision-graph",
+            "semantic-retrieve",
         }:
             return dispatch_command(args, parser, store)
         if args.command in {
