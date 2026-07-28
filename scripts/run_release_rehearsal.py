@@ -8,6 +8,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +27,7 @@ def main() -> int:
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     python = sys.executable
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     scenarios = [
         ("python-compile", [python, "-m", "compileall", "-q", "scripts"]),
         (
@@ -38,6 +40,12 @@ def main() -> int:
             "python-regressions",
             [
                 python, "-m", "unittest", "discover", "-s", "tests", "-v",
+            ],
+        ),
+        (
+            "archive-red-lines",
+            [
+                python, "-m", "unittest", "-v", "tests.test_guarded_features",
             ],
         ),
         (
@@ -90,6 +98,7 @@ def main() -> int:
         })
     report = {
         "format_version": 1,
+        "release_version": version,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "status": "passed" if all(item["status"] == "passed" for item in results) else "failed",
         "required_scenarios": len(scenarios),

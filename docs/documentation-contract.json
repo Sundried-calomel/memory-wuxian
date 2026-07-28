@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "1.8.0",
+  "reviewed_version": "1.9.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -74,6 +74,10 @@
     {
       "id": "auditable-release-rehearsal",
       "required_tokens": ["run_release_rehearsal.py", "release-rehearsal.md"]
+    },
+    {
+      "id": "guarded-portability",
+      "required_tokens": ["migration-preview", "migration-apply", "project-package-export", "project-package-import"]
     }
   ]
 }

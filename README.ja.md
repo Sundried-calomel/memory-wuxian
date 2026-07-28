@@ -414,3 +414,11 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ## ライセンス
 
 Memory無限は[MIT License](LICENSE.txt)で公開されています。
+## v1.9 の保護された移行機能
+
+`migration-preview` は保存先容量と不変のソースマニフェストだけを確認します。
+`migration-apply` は検証済みコピーのみを行い、元アーカイブを削除しません。
+3 つのマニフェストが一致し、`--switch-active` が明示された場合だけ
+アクティブルートを切り替えます。`project-package-export` は会話 ID ごとの
+可読パッケージを作成し、`project-package-import` はローカル raw 履歴の外に
+読み取り専用レプリカとして検証・保存します。

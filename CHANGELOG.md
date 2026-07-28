@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.0 - 2026-07-28
+
+- Added a preview-first archive migration wizard. Migration copies into a
+  temporary destination, compares source-before, source-after, and destination
+  SHA-256 manifests, never deletes the source, and switches the active pointer
+  only with an explicit request after verification.
+- Added human-readable project memory package export and verified read-only
+  package import outside local raw authority.
+- Added executable archive red-line tests and version-bound rehearsal reports.
+
 ## 1.8.0 - 2026-07-28
 
 - Remove the legacy encoded PowerShell collector loop and register the native

@@ -403,3 +403,10 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ## 许可证
 
 Memory無限 使用 [MIT License](LICENSE.txt) 发布。
+## v1.9 受保护的可迁移能力
+
+`migration-preview` 只报告目标空间和不可变源清单，不执行写入。
+`migration-apply` 只做逐文件校验的复制，绝不删除源归档；只有三份清单一致且
+显式给出 `--switch-active` 才切换活动根目录指针。`project-package-export`
+按对话 ID 导出人类可读项目包，`project-package-import` 校验后只放入本地
+raw 历史之外的只读副本区。

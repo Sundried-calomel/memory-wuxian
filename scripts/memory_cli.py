@@ -23,6 +23,7 @@ from platform_lock import exclusive_lock
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
 from memory_cloud_transport import CloudFolderTransport
 from memory_federation import FederationManager
+from memory_guarded_features import GuardedFeatures, atomic_json
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -4248,6 +4249,24 @@ def build_parser() -> argparse.ArgumentParser:
         "cloud-disable",
         help="Disable cloud-folder synchronization without deleting data or keys",
     )
+    migration_preview = subparsers.add_parser(
+        "migration-preview", help="Preview a verified copy-only archive migration"
+    )
+    migration_preview.add_argument("--destination", required=True)
+    migration_apply = subparsers.add_parser(
+        "migration-apply", help="Copy and verify an archive without deleting its source"
+    )
+    migration_apply.add_argument("--destination", required=True)
+    migration_apply.add_argument("--switch-active", action="store_true")
+    project_export = subparsers.add_parser(
+        "project-package-export", help="Export selected conversations as a readable project package"
+    )
+    project_export.add_argument("--output", required=True)
+    project_export.add_argument("--conversation-id", action="append", required=True)
+    project_import = subparsers.add_parser(
+        "project-package-import", help="Verify a project package into a read-only replica"
+    )
+    project_import.add_argument("--package", required=True)
     return parser
 
 
@@ -4589,6 +4608,18 @@ def dispatch_command(
         result = CloudFolderTransport(FederationManager(store)).set_enabled(True)
     elif args.command == "cloud-disable":
         result = CloudFolderTransport(FederationManager(store)).set_enabled(False)
+    elif args.command == "migration-preview":
+        result = GuardedFeatures(store).migration_preview(Path(args.destination))
+    elif args.command == "migration-apply":
+        result = GuardedFeatures(store).migration_apply(
+            Path(args.destination), args.switch_active
+        )
+    elif args.command == "project-package-export":
+        result = GuardedFeatures(store).project_export(
+            Path(args.output), args.conversation_id
+        )
+    elif args.command == "project-package-import":
+        result = GuardedFeatures(store).project_import(Path(args.package))
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2
@@ -4613,6 +4644,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "federation-status",
             "cloud-pair-export",
             "cloud-status",
+            "migration-preview",
         }:
             return dispatch_command(args, parser, store)
         if args.command in {

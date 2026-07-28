@@ -483,3 +483,11 @@ Architecture decisions and implementation contracts are documented in [`PROJECT.
 ## License
 
 Memory無限 is released under the [MIT License](LICENSE.txt).
+## v1.9 guarded portability
+
+`migration-preview` reports destination space and the immutable source
+manifest without writing. `migration-apply` performs a verified copy and never
+deletes the source; `--switch-active` is required to change the active-root
+pointer after all manifests agree. `project-package-export` creates a readable
+package for selected conversation IDs, while `project-package-import` verifies
+it into a read-only replica outside local raw history.
