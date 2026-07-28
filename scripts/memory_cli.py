@@ -22,6 +22,7 @@ from console_encoding import configure_unicode_stdio
 from platform_lock import exclusive_lock
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
 from memory_cloud_transport import CloudFolderTransport
+from memory_environment import EnvironmentRegistry
 from memory_federation import FederationManager
 from memory_guarded_features import GuardedFeatures, atomic_json
 from token_usage import (
@@ -4399,6 +4400,57 @@ def build_parser() -> argparse.ArgumentParser:
     )
     semantic_retrieve.add_argument("--query", required=True)
     semantic_retrieve.add_argument("--top-k", type=int, default=10)
+
+    subparsers.add_parser(
+        "environment-init",
+        help="Initialize the independent Memory Wuxian 2.0 Environment Registry",
+    )
+    environment_scan = subparsers.add_parser(
+        "environment-scan",
+        help="Preview only explicitly supplied environment manifests",
+    )
+    environment_scan.add_argument("--manifest", action="append", default=[])
+    environment_scan.add_argument("--scan-root", action="append", default=[])
+    subparsers.add_parser(
+        "environment-status",
+        help="Show Environment Registry counters without changing archive state",
+    )
+    environment_list = subparsers.add_parser(
+        "environment-list",
+        help="List current registered environment artifacts",
+    )
+    environment_list.add_argument(
+        "--object-class",
+        choices=("global-rule", "project-rule", "global-skill", "project-skill"),
+    )
+    subparsers.add_parser(
+        "environment-projects",
+        help="List current registered project bindings",
+    )
+    environment_show = subparsers.add_parser(
+        "environment-show",
+        help="Show one environment artifact and its current immutable revision",
+    )
+    environment_show.add_argument("--artifact-id", required=True)
+    environment_diff = subparsers.add_parser(
+        "environment-diff",
+        help="Preview changes from one explicit environment manifest",
+    )
+    environment_diff.add_argument("--manifest", required=True)
+    environment_register = subparsers.add_parser(
+        "environment-register",
+        help="Preview or register one explicit environment manifest",
+    )
+    environment_register.add_argument("--manifest", required=True)
+    environment_register.add_argument(
+        "--apply",
+        action="store_true",
+        help="Commit the validated plan using the independent environment lock",
+    )
+    subparsers.add_parser(
+        "environment-validate",
+        help="Verify environment registry, revisions, objects, and project bindings",
+    )
     return parser
 
 
@@ -4801,6 +4853,42 @@ def dispatch_command(
         result = GuardedFeatures(store).semantic_clear()
     elif args.command == "semantic-retrieve":
         result = GuardedFeatures(store).semantic_retrieve(args.query, args.top_k)
+    elif args.command == "environment-init":
+        result = EnvironmentRegistry(store.root).init()
+    elif args.command == "environment-scan":
+        if not args.manifest and not args.scan_root:
+            raise ValueError("Provide --manifest or --scan-root")
+        result = EnvironmentRegistry(store.root).scan(
+            manifests=args.manifest,
+            roots=args.scan_root,
+        )
+    elif args.command == "environment-status":
+        result = EnvironmentRegistry(store.root).status()
+    elif args.command == "environment-list":
+        result = {
+            "status": "ok",
+            "artifacts": EnvironmentRegistry(store.root).list(
+                object_class=args.object_class
+            ),
+        }
+    elif args.command == "environment-projects":
+        result = {
+            "status": "ok",
+            "projects": EnvironmentRegistry(store.root).projects(),
+        }
+    elif args.command == "environment-show":
+        result = EnvironmentRegistry(store.root).show(args.artifact_id)
+    elif args.command == "environment-diff":
+        result = EnvironmentRegistry(store.root).diff(
+            read_json(Path(args.manifest).expanduser().resolve())
+        )
+    elif args.command == "environment-register":
+        result = EnvironmentRegistry(store.root).register(
+            read_json(Path(args.manifest).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-validate":
+        result = EnvironmentRegistry(store.root).validate()
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2
@@ -4831,7 +4919,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "as-of",
             "decision-graph",
             "semantic-retrieve",
+            "environment-scan",
+            "environment-status",
+            "environment-list",
+            "environment-projects",
+            "environment-show",
+            "environment-diff",
+            "environment-validate",
         }:
+            return dispatch_command(args, parser, store)
+        if args.command in {"environment-init", "environment-register"}:
             return dispatch_command(args, parser, store)
         if args.command in {
             "init-node",

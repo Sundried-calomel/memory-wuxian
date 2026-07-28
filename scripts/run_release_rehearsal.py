@@ -83,6 +83,27 @@ def main() -> int:
                 "tests.test_dashboard_shortcut",
             ],
         ),
+        (
+            "environment-schema-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_environment_schema_contract",
+            ],
+        ),
+        (
+            "environment-registry-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_environment",
+            ],
+        ),
+        (
+            "environment-dashboard-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_dashboard_environment",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     results = []
