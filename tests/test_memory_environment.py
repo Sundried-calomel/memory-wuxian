@@ -143,6 +143,7 @@ class EnvironmentRegistryTest(unittest.TestCase):
     def test_init_preview_and_apply_preserve_1x_authority(self):
         before = authority_hashes(self.archive)
         self.registry.init()
+        self.assertTrue(self.registry.receipts_dir.is_dir())
         self.assertEqual(self.registry.register(self.manifest())["status"], "preview")
         self.registry.register(self.manifest(), apply=True)
         self.assertEqual(authority_hashes(self.archive), before)

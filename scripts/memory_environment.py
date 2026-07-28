@@ -147,6 +147,7 @@ class EnvironmentRegistry:
         self.staging_dir = self.root / "staging"
         self.transactions_dir = self.root / "transactions"
         self.conflicts_dir = self.root / "conflicts"
+        self.receipts_dir = self.root / "receipts"
         self.promotions_dir = self.root / "promotions"
         self.derived_dir = self.root / "derived"
 
@@ -168,6 +169,7 @@ class EnvironmentRegistry:
             self.staging_dir / "validated",
             self.transactions_dir,
             self.conflicts_dir,
+            self.receipts_dir,
             self.promotions_dir,
             self.derived_dir,
         ):

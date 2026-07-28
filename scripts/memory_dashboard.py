@@ -29,6 +29,7 @@ from conversation_titles import (
 )
 from memory_cli import MemoryStore, atomic_write_json, load_simple_yaml, read_jsonl
 from memory_cloud_transport import CloudFolderTransport
+from memory_environment import EnvironmentRegistry
 from memory_federation import FederationManager
 from platform_process import no_window_kwargs
 from token_usage import aggregate_ledgers, normalize_usage, token_usage_ledgers
@@ -615,8 +616,251 @@ class DashboardSnapshotCache:
         return self.get()
 
 
+class EnvironmentDashboardCache:
+    """Cache a read-only Environment inventory independently from archive data."""
+
+    FORMAT_VERSION = 1
+    OBJECT_CLASSES = (
+        "global-rule",
+        "project-rule",
+        "global-skill",
+        "project-skill",
+    )
+    ACTIVITY_DIRECTORIES = ("conflicts", "promotions", "receipts")
+
+    def __init__(self, archive_root: Path):
+        self.registry = EnvironmentRegistry(archive_root)
+        self.root = self.registry.root
+        self._lock = threading.Lock()
+        self._signature = ""
+        self._payload: dict[str, Any] | None = None
+
+    @staticmethod
+    def _file_stamp(path: Path) -> tuple[str, int, int]:
+        stat = path.stat()
+        return str(path), stat.st_size, stat.st_mtime_ns
+
+    def source_signature(self) -> str:
+        if not self.root.is_dir():
+            return "uninitialized"
+        paths = [self.registry.registry_path, self.registry.state_path]
+        directory_stamps = []
+        for name in self.ACTIVITY_DIRECTORIES:
+            directory = self.root / name
+            if directory.is_dir():
+                try:
+                    stat = directory.stat()
+                    directory_stamps.append((str(directory), stat.st_mtime_ns))
+                except OSError:
+                    pass
+                paths.extend(path for path in directory.glob("*.json") if path.is_file())
+        stamps = []
+        for path in sorted(set(paths), key=str):
+            try:
+                stamps.append(self._file_stamp(path))
+            except OSError:
+                continue
+        encoded = json.dumps(
+            [stamps, directory_stamps],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _read_json_object(path: Path) -> dict[str, Any] | None:
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return value if isinstance(value, dict) else None
+
+    def _read_json_objects(self, directory_name: str) -> list[dict[str, Any]]:
+        directory = self.root / directory_name
+        if not directory.is_dir():
+            return []
+        values = []
+        for path in sorted(directory.glob("*.json"), key=str):
+            value = self._read_json_object(path)
+            if value is not None:
+                values.append(value)
+        return values
+
+    @staticmethod
+    def _latest_by(
+        values: list[dict[str, Any]], key: str
+    ) -> dict[str, dict[str, Any]]:
+        latest: dict[str, dict[str, Any]] = {}
+        for value in values:
+            identifier = value.get(key)
+            if isinstance(identifier, str) and identifier:
+                latest[identifier] = value
+        return latest
+
+    def build(self) -> dict[str, Any]:
+        generated_at = datetime.now(timezone.utc).isoformat()
+        if not self.root.is_dir():
+            return {
+                "format_version": self.FORMAT_VERSION,
+                "initialized": False,
+                "validation_status": "not-initialized",
+                "validation_error": None,
+                "generated_at": generated_at,
+                "object_classes": {
+                    name: {"count": 0} for name in self.OBJECT_CLASSES
+                },
+                "projects": [],
+                "artifacts": [],
+                "conflicts": [],
+                "promotions": [],
+                "installations": [],
+            }
+
+        try:
+            status = self.registry.status()
+            records = self.registry.list()
+            projects = self.registry.projects()
+            shown_records = [
+                self.registry.show(record["artifact_id"]) for record in records
+            ]
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+            return {
+                "format_version": self.FORMAT_VERSION,
+                "initialized": True,
+                "validation_status": "needs-attention",
+                "validation_error": str(error),
+                "generated_at": generated_at,
+                "object_classes": {
+                    name: {"count": 0} for name in self.OBJECT_CLASSES
+                },
+                "projects": [],
+                "artifacts": [],
+                "conflicts": [],
+                "promotions": [],
+                "installations": [],
+            }
+        conflicts = self._read_json_objects("conflicts")
+        promotions = self._read_json_objects("promotions")
+        receipts = [
+            value
+            for value in self._read_json_objects("receipts")
+            if value.get("artifact_id") and value.get("revision_id")
+        ]
+        latest_conflicts = self._latest_by(conflicts, "artifact_id")
+        latest_installations = self._latest_by(receipts, "artifact_id")
+        class_counts: Counter[str] = Counter()
+        artifacts = []
+        for shown in shown_records:
+            artifact = shown["artifact"]
+            revision = shown["revision"]
+            artifact_id = artifact["artifact_id"]
+            object_class = artifact["object_class"]
+            class_counts[object_class] += 1
+            installation = latest_installations.get(artifact_id, {})
+            conflict = latest_conflicts.get(artifact_id, {})
+            artifacts.append(
+                {
+                    "artifact_id": artifact_id,
+                    "object_class": object_class,
+                    "display_name": artifact.get("display_name"),
+                    "scope": artifact["scope"],
+                    "project_id": artifact.get("project_id"),
+                    "revision_id": revision["revision_id"],
+                    "version": revision["version"],
+                    "base_revision_id": revision["base_revision_id"],
+                    "lifecycle_state": revision["lifecycle_state"],
+                    "installation_status": installation.get("result"),
+                    "conflict_status": conflict.get("status")
+                    or conflict.get("resolution_state"),
+                    "promotion_status": None,
+                }
+            )
+        return {
+            "format_version": self.FORMAT_VERSION,
+            "initialized": bool(status["initialized"]),
+            "validation_status": "valid",
+            "validation_error": None,
+            "generated_at": generated_at,
+            "object_classes": {
+                name: {"count": class_counts[name]}
+                for name in self.OBJECT_CLASSES
+            },
+            "projects": [
+                {
+                    key: value.get(key)
+                    for key in (
+                        "project_id",
+                        "display_name",
+                        "active",
+                        "local_root",
+                    )
+                    if key in value
+                }
+                for value in projects
+            ],
+            "artifacts": artifacts,
+            "conflicts": [
+                {
+                    key: value.get(key)
+                    for key in (
+                        "conflict_id",
+                        "artifact_id",
+                        "status",
+                        "resolution_state",
+                        "created_at",
+                    )
+                    if key in value
+                }
+                for value in conflicts
+            ],
+            "promotions": [
+                {
+                    key: value.get(key)
+                    for key in (
+                        "promotion_id",
+                        "source_project_id",
+                        "source_skill_id",
+                        "classification",
+                        "review_state",
+                    )
+                    if key in value
+                }
+                for value in promotions
+            ],
+            "installations": [
+                {
+                    key: value.get(key)
+                    for key in (
+                        "receipt_id",
+                        "artifact_id",
+                        "revision_id",
+                        "result",
+                        "created_at",
+                    )
+                    if key in value
+                }
+                for value in receipts
+            ],
+        }
+
+    def get(self) -> dict[str, Any]:
+        signature = self.source_signature()
+        with self._lock:
+            if self._payload is None or self._signature != signature:
+                self._payload = self.build()
+                self._signature = signature
+            payload = dict(self._payload)
+        payload["served_at"] = datetime.now(timezone.utc).isoformat()
+        payload["snapshot"] = {
+            "source_signature": signature,
+            "persisted": False,
+        }
+        return payload
+
+
 def make_handler(store: MemoryStore):
     snapshot_cache = DashboardSnapshotCache(store)
+    environment_cache = EnvironmentDashboardCache(store.root)
 
     class Handler(BaseHTTPRequestHandler):
         def handle(self) -> None:
@@ -706,6 +950,13 @@ def make_handler(store: MemoryStore):
                 body = json.dumps(self.cloud_payload(), ensure_ascii=False).encode(
                     "utf-8"
                 )
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+            elif path == "/api/environment":
+                body = json.dumps(
+                    environment_cache.get(), ensure_ascii=False
+                ).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
