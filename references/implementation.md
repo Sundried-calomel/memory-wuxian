@@ -448,3 +448,115 @@ round closes or a summary/title artifact for closed history changes. Coalesce
 for 900 seconds, permit an estimated 1,048,576-byte early flush, and attempt
 delivery after 3,600 seconds. A forced pass bypasses the merge window. Provider
 upload completion is outside this contract.
+
+## 17. Environment synchronization
+
+### 17.1 Authority and layout
+
+Environment synchronization is independent from conversation memory authority.
+Each device writes only its local formal rules, installed Skills, environment
+registry, and installation state.
+
+```text
+<archive>/environment/
+├── registry.jsonl
+├── state.json
+├── projects/
+├── manifests/
+├── revisions/
+├── objects/sha256/
+├── staging/
+├── transactions/
+├── conflicts/
+├── receipts/
+└── promotions/
+```
+
+The content-addressed object store keeps one copy of identical bytes.
+Conversation raw files, semantic summaries, token ledgers, and federation
+memory replicas remain outside this domain. Authoritative revisions and
+promotion decisions are immutable; manifests, state, and dashboard snapshots
+are reconstructible.
+
+### 17.2 Stable identities and project bindings
+
+An environment artifact has a stable ASCII `artifact_id`. Every content change
+creates a new immutable revision with its own `revision_id`, version, base
+SHA-256, and content SHA-256. The revision records one of four object classes,
+origin node, scope, optional project ID, supported platforms, runtime
+requirements, and provenance.
+
+Paths are local bindings rather than global identity. A project registration
+maps one stable `project_id` to zero or one root on the current device. A
+missing local binding leaves received project artifacts in staging. Similar
+directory names do not establish identity.
+
+### 17.3 Read-only inventory
+
+The first implementation phase scans only explicitly configured roots and
+registered paths. It emits a preview inventory and proposed classifications
+without modifying formal rules, Skills, projects, cloud files, or installation
+state. Ambiguous objects remain unclassified and require a persisted user
+decision.
+
+### 17.4 Managed rule installation
+
+Mixed-ownership documents use one named managed block. The installer requires a
+recorded base hash, writes a temporary candidate, validates marker uniqueness
+and document structure, preserves mode bits, and atomically replaces the
+target. It writes a receipt only after the final file hash matches the
+candidate. Every byte outside the managed block must remain unchanged.
+
+Whole-file installation is permitted only for explicitly registered canonical
+files whose owner is Memory無限. Project-local, generated, and excluded files
+are never installed from a peer.
+
+### 17.5 Skill package installation
+
+A Skill package contains only manifest-declared relative paths. Reject absolute
+paths, parent traversal, escaping symlinks, undeclared files, hash mismatches,
+unsupported platforms, missing runtimes, undeclared network or persistence
+expansion, and invalid Skill metadata.
+
+Extract to staging, run declared no-side-effect checks, preserve one verified
+rollback version, atomically switch the installation directory, validate Codex
+discovery, and write an installation receipt. A project Skill additionally
+requires a matching active project binding.
+
+### 17.6 Capability promotion
+
+Candidate discovery records evidence without changing ownership. Classify each
+candidate as `duplicate`, `extension`, `new-global-capability`, `mixed`,
+`project-only`, or `conflict`. A promotion contract names the global owner,
+source capability, proposed interface, retained project adapter, removed
+duplication, affected projects, and validations.
+
+Accepted promotion requires the original project regression suite, at least one
+unrelated project or generic fixture, macOS and Windows compatibility, missing
+adapter and invalid-input failures, and a scan for project-specific paths,
+identifiers, credentials, scientific policy, or private data. Replace the
+project core only after those checks pass.
+
+### 17.7 Conflicts and installation scheduling
+
+Use base/local/remote hashes for three-way decisions. Only verified,
+nonconflicting, compatible ordinary updates may auto-install. Core rules,
+permission expansion, network expansion, project identity ambiguity, and
+promotion acceptance require explicit review.
+
+The short-lived scheduler performs:
+
+```text
+receive -> authenticate -> decrypt -> verify -> stage -> compatibility check
+-> conflict check -> rehearsal -> atomic install -> self-check -> acknowledge
+```
+
+No-change checks create no object, bundle, receipt, backup, or AI request.
+
+### 17.8 Independent exchange streams
+
+Reuse the federation and encrypted envelope framework but keep `archive-v1` and
+`environment-v1` as separate streams. Each stream owns its event ledger,
+sequence, predecessor bundle chain, replica state, ACK, and outstanding
+envelope. Legacy peers exchange only `archive-v1`; both peers must advertise
+the environment capability before an `environment-v1` envelope is published.

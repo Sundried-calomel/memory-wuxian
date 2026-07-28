@@ -1,0 +1,61 @@
+# Memory無限 Environment Synchronization
+
+## Purpose
+
+Memory無限 2.0 synchronizes global rules, project rules, global Skills, and
+project Skills. It also provides a reviewed path for promoting
+project-independent capability cores into global Skills while retaining
+project-specific adapters.
+
+## Non-goals
+
+- A shared writable cloud archive
+- Project discovery from similar folder names
+- Complete-file overwrite of mixed-ownership rules
+- Automatic capability promotion
+- New OpenAI account or device authorization
+- Replacing conversation memory, summaries, or token telemetry
+
+## Ownership
+
+| Object | Logical owner | Local binding | Default install policy |
+| --- | --- | --- | --- |
+| Global rule | user environment | managed block or owned file | review core rules |
+| Project rule | registered project | project-relative path | safe update by class |
+| Global Skill | global Skill owner | Codex Skill directory | verified no-conflict |
+| Project Skill | project Skill owner | Skill directory + project binding | require project |
+
+## Promotion lifecycle
+
+```text
+discovered -> review -> classified -> deprojectized -> validating
+-> promotable -> accepted -> installed -> project migration verified
+```
+
+Rejected, project-only, and conflicting candidates remain durable records. They
+are not repeatedly proposed unless their source evidence changes.
+
+## Defaults
+
+- automatic download: enabled
+- ordinary verified nonconflicting auto-install: enabled
+- automatic core-rule overwrite: disabled
+- automatic conflict resolution: disabled
+- automatic unknown-project creation: disabled
+- automatic capability promotion: disabled
+- promotion candidate suggestions: enabled
+
+## Release sequence
+
+1. Contract and schema freeze
+2. Read-only Environment Registry and dashboard inventory
+3. Content-addressed objects and version/base tracking
+4. Global and project rule installers
+5. Skill package installer and rollback
+6. Capability discovery and promotion
+7. Three-way conflict handling
+8. Signed encrypted cross-device exchange
+9. Model-free installation scheduling
+10. Complete dashboard controls
+11. macOS and Windows bidirectional rehearsal
+12. 2.0 installers, migration guidance, and verified release

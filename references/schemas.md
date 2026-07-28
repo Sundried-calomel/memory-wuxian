@@ -228,3 +228,46 @@ event sequence, last accepted bundle ID, and last accepted bundle SHA-256.
 Receipts make repeated import idempotent. A later bundle is rejected when it
 creates a gap or overlap or names a predecessor different from the recorded
 bundle SHA-256.
+
+## Environment artifact and revision
+
+`environment/registry.jsonl` and immutable revision files conform to
+`schemas/environment-artifact.schema.json` and
+`schemas/environment-revision.schema.json`. Stable artifact identity is
+separate from immutable revision identity. Revisions record the object class,
+origin, scope, optional project, version, base and content hashes,
+content-addressed object path, platform/runtime declarations, provenance, and
+lifecycle state. Absolute installation paths are local bindings and never
+define global identity.
+
+## Project registration
+
+Files under `environment/projects/` conform to
+`schemas/environment-project.schema.json`. A registration contains a stable
+project ID, display name, optional local root, active state, and explicitly
+registered rule and Skill bindings. Rule bindings are classified as
+`canonical`, `project-local`, `generated`, or `excluded`.
+
+## Skill package manifest
+
+Every synchronized Skill version contains `skill-manifest.json` conforming to
+`schemas/skill-package-manifest.schema.json`. It declares the Skill ID, version,
+scope, optional project ID, source revision, complete relative-file inventory
+with size and SHA-256, supported platforms, runtime requirements, network and
+persistence behavior, checks, and rollback contract.
+
+## Capability promotion
+
+Records under `environment/promotions/` conform to
+`schemas/environment-promotion.schema.json`. They preserve the source project
+and Skill, source capability, owner classification, proposed global owner and
+interface, retained project adapter, provenance, validation matrix, review
+state, and explicit approval evidence.
+
+## Environment installation receipt
+
+Receipts conform to `schemas/environment-receipt.schema.json`. A successful
+receipt binds an artifact revision and content hash to one target node and
+binding, previous and final installed hashes, rehearsal evidence, timestamp,
+and result. A failed installation records its error and rollback result without
+claiming the new revision as installed.

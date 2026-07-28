@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/environment-project.schema.json",
+  "title": "Memory Wuxian project registration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project_id",
+    "display_name",
+    "active",
+    "rule_bindings",
+    "skill_bindings"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 256},
+    "local_root": {"type": ["string", "null"]},
+    "active": {"type": "boolean"},
+    "rule_bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["binding_id", "relative_path", "classification"],
+        "properties": {
+          "binding_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+          },
+          "relative_path": {"type": "string", "minLength": 1},
+          "classification": {
+            "enum": ["canonical", "project-local", "generated", "excluded"]
+          },
+          "install_strategy": {
+            "enum": ["managed-block", "whole-file", "none"]
+          },
+          "managed_block_id": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "skill_bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["skill_id", "enabled"],
+        "properties": {
+          "skill_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"
+          },
+          "enabled": {"type": "boolean"},
+          "pinned_version": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

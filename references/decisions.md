@@ -229,3 +229,83 @@ do not double-count cached-input or reasoning-output breakdowns. Retained
 rollouts may be backfilled; missing telemetry, ChatGPT web conversations, and
 ChatGPT export files remain unmeasured. Keep these ledgers outside raw dialogue
 and semantic summaries.
+
+## D-031: Environment synchronization is a separate authority domain
+
+Status: Accepted.
+
+Keep synchronized rules, Skills, project bindings, installation receipts, and
+promotion records under `environment/`. Do not write them into conversation
+raw history, semantic summaries, token-usage ledgers, or peer memory replicas.
+Each device remains the sole writer of its local formal files and installed
+Skills. A received environment artifact is staged until local validation and
+installation complete.
+
+## D-032: Four object classes use stable logical identities
+
+Status: Accepted.
+
+Synchronize global rules, project rules, global Skills, and project Skills.
+Identify them by stable artifact and project IDs rather than absolute paths.
+Store device-specific project paths as bindings. Do not infer project identity
+from a similar directory name, and do not create an absent project
+automatically. Keep stable logical identity separate from each immutable
+revision identity.
+
+## D-033: Rules use managed ownership boundaries
+
+Status: Accepted.
+
+For mixed-ownership files such as a global `AGENTS.md`, synchronize only an
+explicit Memory無限 managed block and preserve every byte outside that block.
+Classify registered project documents as `canonical`, `project-local`,
+`generated`, or `excluded`. Back up, preview, install atomically, restore
+permissions, and record before/after hashes. Never silently replace a locally
+diverged rule.
+
+## D-034: Skill versions are immutable verified packages
+
+Status: Accepted.
+
+Package one complete Skill version with its manifest, `SKILL.md`, optional
+agent metadata, scripts, references, templates, tests, file hashes, platform
+requirements, runtime requirements, network and persistence declarations, and
+source revision. Validate in staging, preserve the prior installed version,
+switch atomically, verify Codex discovery, and roll back on failure. Project
+Skills require an explicit local project binding before activation.
+
+## D-035: Project capability promotion is reviewed evolution
+
+Status: Accepted.
+
+Treat project-to-global promotion as a workflow between the four object
+classes, not as a fifth synchronized class. Scripts may detect candidates, but
+promotion always requires an explicit owner classification and review. Prefer
+extending an existing global Skill. For mixed capabilities, move only the
+project-independent core to the global owner and retain paths, scientific or
+statistical policy, permissions, and output contracts in a project adapter.
+Require source-project regression evidence and an unrelated project or generic
+fixture before promotion is accepted.
+
+## D-036: Environment conflicts use a common base
+
+Status: Accepted.
+
+Compare the common base, local version, and remote version. Automatically
+converge only one-sided changes, identical changes, or structurally disjoint
+managed-block edits. Same-block edits, delete/modify races, divergent Skill
+code, unregistered local changes, uncertain project identity, incompatible
+platform contracts, and expanded permissions or network access enter a
+conflict queue. Modification time alone never grants authority.
+
+## D-037: Environment exchange uses an independent trusted stream
+
+Status: Accepted.
+
+Reuse the existing federation and signed encrypted cloud transport, but keep
+`archive-v1` and `environment-v1` as independent event streams with separate
+ledgers, sequence chains, acknowledgements, and outstanding bundles. A fault or
+conflict in one stream must not advance or block the other stream. Preserve
+target-specific encryption, origin signatures, explicit peer trust, and the
+prohibition on replica recirculation. Core-rule overwrite and capability
+promotion are never automatic by default.

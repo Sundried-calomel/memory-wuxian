@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/environment-promotion.schema.json",
+  "title": "Memory Wuxian capability promotion",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "promotion_id",
+    "source_project_id",
+    "source_skill_id",
+    "source_capability",
+    "classification",
+    "proposed_global_owner",
+    "interface_contract",
+    "retained_project_adapter",
+    "provenance",
+    "validation_matrix",
+    "review_state",
+    "approval"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "promotion_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,191}$"
+    },
+    "source_project_id": {"type": "string", "minLength": 3},
+    "source_skill_id": {"type": "string", "minLength": 2},
+    "source_capability": {"type": "string", "minLength": 1},
+    "classification": {
+      "enum": [
+        "duplicate",
+        "extension",
+        "new-global-capability",
+        "mixed",
+        "project-only",
+        "conflict"
+      ]
+    },
+    "proposed_global_owner": {"type": ["string", "null"]},
+    "interface_contract": {"type": "object"},
+    "retained_project_adapter": {"type": "object"},
+    "provenance": {"type": "object"},
+    "validation_matrix": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "object"}
+    },
+    "review_state": {
+      "enum": [
+        "discovered",
+        "pending-review",
+        "deprojectizing",
+        "validating",
+        "promotable",
+        "accepted",
+        "project-only",
+        "rejected",
+        "conflict"
+      ]
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "approved"],
+      "properties": {
+        "required": {"const": true},
+        "approved": {"type": "boolean"},
+        "approved_at": {"type": ["string", "null"], "format": "date-time"},
+        "evidence": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

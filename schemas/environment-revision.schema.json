@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/environment-revision.schema.json",
+  "title": "Memory Wuxian immutable environment revision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revision_id",
+    "artifact_id",
+    "origin_node_id",
+    "version",
+    "base_revision_id",
+    "content_sha256",
+    "object_path",
+    "supported_platforms",
+    "runtime_requirements",
+    "provenance",
+    "lifecycle_state",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "revision_id": {
+      "type": "string",
+      "pattern": "^rev:[0-9a-f]{64}$"
+    },
+    "artifact_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9:._-]{2,191}$"
+    },
+    "origin_node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"
+    },
+    "version": {"type": "integer", "minimum": 1},
+    "base_revision_id": {
+      "type": ["string", "null"],
+      "pattern": "^rev:[0-9a-f]{64}$"
+    },
+    "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "object_path": {
+      "type": "string",
+      "pattern": "^objects/sha256/[0-9a-f]{2}/[0-9a-f]{62}$"
+    },
+    "supported_platforms": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["macos", "windows", "linux"]}
+    },
+    "runtime_requirements": {"type": "object"},
+    "provenance": {"type": "object"},
+    "lifecycle_state": {
+      "enum": [
+        "discovered",
+        "staged",
+        "installed",
+        "superseded",
+        "conflict",
+        "withdrawn"
+      ]
+    },
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}
