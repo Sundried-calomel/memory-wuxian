@@ -271,3 +271,5 @@ receipt binds an artifact revision and content hash to one target node and
 binding, previous and final installed hashes, rehearsal evidence, timestamp,
 and result. A failed installation records its error and rollback result without
 claiming the new revision as installed.
+
+Node-local bindings conform to `schemas/environment-binding.schema.json`.

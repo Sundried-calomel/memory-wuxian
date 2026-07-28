@@ -150,6 +150,7 @@ class EnvironmentCliTest(unittest.TestCase):
         result = self.run_cli("environment-init")
         self.assertEqual(result["status"], "initialized")
         self.assertTrue((locks / "archive.lock").exists())
+        self.assertTrue((locks / "environment.lock").exists())
 
 
 if __name__ == "__main__":

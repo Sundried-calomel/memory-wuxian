@@ -11,13 +11,13 @@ import json
 import os
 import re
 import tempfile
-import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from platform_lock import exclusive_lock
 
 SCHEMA_VERSION = 1
 OBJECT_CLASSES = {"global-rule", "project-rule", "global-skill", "project-skill"}
@@ -984,26 +984,6 @@ class EnvironmentRegistry:
         return value
 
     @contextmanager
-    def _write_lock(self, timeout_seconds: float = 10.0):
-        self.locks_dir.mkdir(parents=True, exist_ok=True)
-        deadline = time.monotonic() + timeout_seconds
-        descriptor: Optional[int] = None
-        while descriptor is None:
-            try:
-                descriptor = os.open(
-                    self.lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
-                )
-            except FileExistsError:
-                if time.monotonic() >= deadline:
-                    raise TimeoutError(f"Environment registry lock is busy: {self.lock_path}")
-                time.sleep(0.05)
-        try:
-            os.write(descriptor, f"{os.getpid()}\n".encode("ascii"))
-            os.fsync(descriptor)
+    def _write_lock(self):
+        with exclusive_lock(self.lock_path):
             yield
-        finally:
-            os.close(descriptor)
-            try:
-                self.lock_path.unlink()
-            except FileNotFoundError:
-                pass

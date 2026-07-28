@@ -305,7 +305,11 @@ class EnvironmentRegistryTest(unittest.TestCase):
         (locks / "archive.lock").write_text("collector\n", encoding="utf-8")
         self.registry.register(self.manifest(), apply=True)
         self.assertTrue((locks / "archive.lock").exists())
-        self.assertFalse((locks / "environment.lock").exists())
+        self.assertTrue((locks / "environment.lock").exists())
+        self.assertEqual(
+            self.registry.register(self.manifest(), apply=True)["status"],
+            "no-change",
+        )
 
     def test_unknown_schema_and_explicit_nonrecursive_scan(self):
         manifest = self.manifest()

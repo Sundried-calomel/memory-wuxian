@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/environment-binding.schema.json",
+  "title": "Memory Wuxian node-local environment bindings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "node_id",
+    "platform",
+    "generation",
+    "roots",
+    "projects",
+    "rule_bindings",
+    "skill_bindings"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "platform": {"enum": ["macos", "windows", "linux"]},
+    "generation": {"type": "integer", "minimum": 0},
+    "roots": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/root"}
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["project_id"],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+          }
+        }
+      }
+    },
+    "rule_bindings": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/globalRuleBinding"},
+          {"$ref": "#/$defs/projectRuleBinding"}
+        ]
+      }
+    },
+    "skill_bindings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/skillBinding"}
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "revisionId": {
+      "type": ["string", "null"],
+      "pattern": "^rev:[0-9a-f]{64}$"
+    },
+    "root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root_id", "role", "owner", "root", "platform"],
+      "properties": {
+        "root_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "role": {"enum": ["global-rules", "global-skills"]},
+        "owner": {"type": "string", "minLength": 1, "maxLength": 256},
+        "root": {"type": "string", "minLength": 1},
+        "platform": {"enum": ["macos", "windows", "linux"]}
+      }
+    },
+    "globalRuleBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_id",
+        "scope",
+        "owner",
+        "root_id",
+        "root",
+        "relative_path",
+        "classification",
+        "install_strategy",
+        "managed_block_id",
+        "platform",
+        "installed_revision_id",
+        "installed_content_sha256",
+        "base_revision_id",
+        "base_content_sha256"
+      ],
+      "properties": {
+        "binding_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "scope": {"const": "global"},
+        "owner": {"type": "string", "minLength": 1, "maxLength": 256},
+        "root_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "root": {"type": "string", "minLength": 1},
+        "relative_path": {"type": "string", "minLength": 1},
+        "classification": {
+          "enum": ["canonical", "project-local", "generated", "excluded"]
+        },
+        "install_strategy": {"enum": ["managed-block", "whole-file", "none"]},
+        "managed_block_id": {"type": ["string", "null"]},
+        "platform": {"enum": ["macos", "windows", "linux"]},
+        "installed_revision_id": {"$ref": "#/$defs/revisionId"},
+        "installed_content_sha256": {"$ref": "#/$defs/sha256"},
+        "base_revision_id": {"$ref": "#/$defs/revisionId"},
+        "base_content_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "projectRuleBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_id",
+        "scope",
+        "owner",
+        "project_id",
+        "project_binding_id",
+        "platform",
+        "installed_revision_id",
+        "installed_content_sha256",
+        "base_revision_id",
+        "base_content_sha256"
+      ],
+      "properties": {
+        "binding_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "scope": {"const": "project"},
+        "owner": {"type": "string", "minLength": 1, "maxLength": 256},
+        "project_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "project_binding_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "platform": {"enum": ["macos", "windows", "linux"]},
+        "installed_revision_id": {"$ref": "#/$defs/revisionId"},
+        "installed_content_sha256": {"$ref": "#/$defs/sha256"},
+        "base_revision_id": {"$ref": "#/$defs/revisionId"},
+        "base_content_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "skillBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_id",
+        "scope",
+        "owner",
+        "skill_id",
+        "target_root_id",
+        "target_root",
+        "platform",
+        "installed_revision_id",
+        "installed_content_sha256",
+        "base_revision_id",
+        "base_content_sha256"
+      ],
+      "properties": {
+        "binding_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "scope": {"const": "global"},
+        "owner": {"type": "string", "minLength": 1, "maxLength": 256},
+        "skill_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"
+        },
+        "target_root_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "target_root": {"type": "string", "minLength": 1},
+        "platform": {"enum": ["macos", "windows", "linux"]},
+        "installed_revision_id": {"$ref": "#/$defs/revisionId"},
+        "installed_content_sha256": {"$ref": "#/$defs/sha256"},
+        "base_revision_id": {"$ref": "#/$defs/revisionId"},
+        "base_content_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}
