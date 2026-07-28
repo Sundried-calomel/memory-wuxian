@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.0 - 2026-07-28
+
+- Added timezone-strict, read-only `as-of` historical views.
+- Added a derived decision and rule graph from explicit policy events, including
+  source message IDs, raw paths, record hashes, and supersession edges.
+
 ## 1.9.0 - 2026-07-28
 
 - Added a preview-first archive migration wizard. Migration copies into a

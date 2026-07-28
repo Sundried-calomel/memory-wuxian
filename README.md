@@ -491,3 +491,9 @@ deletes the source; `--switch-active` is required to change the active-root
 pointer after all manifests agree. `project-package-export` creates a readable
 package for selected conversation IDs, while `project-package-import` verifies
 it into a read-only replica outside local raw history.
+## v1.10 historical views
+
+`as-of` reconstructs a read-only view at a timezone-qualified timestamp.
+`decision-graph` derives rule and decision lineage from explicit policy events.
+Its `raw_sources` retain message IDs, raw paths, and record hashes; the graph is
+never an authority that can overwrite history.

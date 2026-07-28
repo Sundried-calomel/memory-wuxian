@@ -4267,6 +4267,16 @@ def build_parser() -> argparse.ArgumentParser:
         "project-package-import", help="Verify a project package into a read-only replica"
     )
     project_import.add_argument("--package", required=True)
+    as_of = subparsers.add_parser(
+        "as-of", help="Render a read-only historical view at an exact timestamp"
+    )
+    as_of.add_argument("--timestamp", required=True)
+    as_of.add_argument("--conversation-id")
+    as_of.add_argument("--output")
+    graph = subparsers.add_parser(
+        "decision-graph", help="Render the derived decision and rule lineage graph"
+    )
+    graph.add_argument("--output")
     return parser
 
 
@@ -4620,6 +4630,14 @@ def dispatch_command(
         )
     elif args.command == "project-package-import":
         result = GuardedFeatures(store).project_import(Path(args.package))
+    elif args.command == "as-of":
+        result = GuardedFeatures(store).as_of(args.timestamp, args.conversation_id)
+        if args.output:
+            atomic_json(Path(args.output), result)
+    elif args.command == "decision-graph":
+        result = GuardedFeatures(store).decision_graph()
+        if args.output:
+            atomic_json(Path(args.output), result)
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2
@@ -4645,6 +4663,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "cloud-pair-export",
             "cloud-status",
             "migration-preview",
+            "as-of",
+            "decision-graph",
         }:
             return dispatch_command(args, parser, store)
         if args.command in {

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "1.9.0",
+  "reviewed_version": "1.10.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -78,6 +78,10 @@
     {
       "id": "guarded-portability",
       "required_tokens": ["migration-preview", "migration-apply", "project-package-export", "project-package-import"]
+    },
+    {
+      "id": "historical-derived-views",
+      "required_tokens": ["as-of", "decision-graph", "raw_sources"]
     }
   ]
 }

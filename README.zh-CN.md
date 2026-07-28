@@ -410,3 +410,8 @@ Memory無限 使用 [MIT License](LICENSE.txt) 发布。
 显式给出 `--switch-active` 才切换活动根目录指针。`project-package-export`
 按对话 ID 导出人类可读项目包，`project-package-import` 校验后只放入本地
 raw 历史之外的只读副本区。
+## v1.10 历史视图
+
+`as-of` 按带时区时间戳重建只读历史切片。`decision-graph` 只根据显式策略事件
+派生规则和决定谱系；其中 `raw_sources` 保留消息 ID、原始路径和记录哈希。
+图谱不是权威来源，不能覆盖历史。

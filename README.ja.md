@@ -422,3 +422,9 @@ Memory無限は[MIT License](LICENSE.txt)で公開されています。
 アクティブルートを切り替えます。`project-package-export` は会話 ID ごとの
 可読パッケージを作成し、`project-package-import` はローカル raw 履歴の外に
 読み取り専用レプリカとして検証・保存します。
+## v1.10 履歴ビュー
+
+`as-of` はタイムゾーン付き時刻における読み取り専用履歴を再構成します。
+`decision-graph` は明示的なポリシーイベントから規則・決定系譜を派生し、
+`raw_sources` にメッセージ ID、raw パス、レコードハッシュを保持します。
+グラフが履歴を上書きすることはありません。
