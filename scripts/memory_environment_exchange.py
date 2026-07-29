@@ -149,13 +149,43 @@ class EnvironmentExchangeManager:
         state = read_json(self.export_state_path)
         known = dict(state.get("source_events") or {})
         ledger = read_jsonl(self.export_ledger_path)
+        exported_revisions = {
+            (item.get("artifact_id"), item.get("revision_id"))
+            for item in ledger
+            if item.get("event_kind") in (None, "artifact-revision")
+        }
+        exported_projects = {
+            (
+                item.get("project_id"),
+                canonical_sha256((item.get("payload") or {}).get("project")),
+            )
+            for item in ledger
+            if item.get("event_kind") == "project-registration"
+        }
+        for item in ledger:
+            identity = self._ledger_source_identity(item)
+            if identity:
+                known.setdefault(identity, int(item["event_sequence"]))
         next_sequence = int(state.get("next_event_sequence", 1))
         registry = self.registry._read_registry()
         for event in registry["events"]:
             if event.get("operation") != "artifact-revision":
                 continue
-            source_event_id = str(event["event_id"])
-            if source_event_id in known:
+            source_event_id = self._registry_source_identity(event)
+            revision_identity = (event["artifact_id"], event["revision_id"])
+            if source_event_id in known or revision_identity in exported_revisions:
+                known.setdefault(
+                    source_event_id,
+                    next(
+                        int(item["event_sequence"])
+                        for item in ledger
+                        if (
+                            item.get("artifact_id"),
+                            item.get("revision_id"),
+                        )
+                        == revision_identity
+                    ),
+                )
                 continue
             artifact = self.registry._read_relative_json(
                 event["artifact_path"], "artifact_path"
@@ -190,6 +220,34 @@ class EnvironmentExchangeManager:
                     "event_kind": "artifact-revision",
                     "artifact_id": artifact["artifact_id"],
                     "revision_id": revision["revision_id"],
+                    "payload_sha256": canonical_sha256(payload),
+                    "payload": payload,
+                }
+            )
+            known[source_event_id] = next_sequence
+            next_sequence += 1
+        for event in registry["events"]:
+            if event.get("operation") != "project-registration":
+                continue
+            source_event_id = self._registry_source_identity(event)
+            if source_event_id in known:
+                continue
+            project = self.registry._read_relative_json(
+                event["project_path"], "project_path"
+            )
+            project_identity = (
+                project["project_id"],
+                canonical_sha256(project),
+            )
+            if project_identity in exported_projects:
+                continue
+            payload = {"project": project}
+            ledger.append(
+                {
+                    "event_sequence": next_sequence,
+                    "source_event_id": source_event_id,
+                    "event_kind": "project-registration",
+                    "project_id": project["project_id"],
                     "payload_sha256": canonical_sha256(payload),
                     "payload": payload,
                 }
@@ -240,6 +298,45 @@ class EnvironmentExchangeManager:
             },
         )
         return ledger
+
+    @staticmethod
+    def _registry_source_identity(event: Dict[str, Any]) -> str:
+        event_id = str(event["event_id"])
+        if event["operation"] == "artifact-revision":
+            return (
+                f"{event_id}:artifact-revision:"
+                f"{event['artifact_id']}:{event['revision_id']}"
+            )
+        if event["operation"] == "project-registration":
+            return (
+                f"{event_id}:project-registration:"
+                f"{event['project_id']}:{event['project_path']}"
+            )
+        raise ValueError("unsupported Environment Registry event")
+
+    @staticmethod
+    def _ledger_source_identity(item: Dict[str, Any]) -> Optional[str]:
+        source = item.get("source_event_id")
+        if not isinstance(source, str) or not source:
+            return None
+        if ":" in source.removeprefix("evt-"):
+            return source
+        if item.get("event_kind") in (None, "artifact-revision"):
+            artifact_id = item.get("artifact_id")
+            revision_id = item.get("revision_id")
+            if isinstance(artifact_id, str) and isinstance(revision_id, str):
+                return (
+                    f"{source}:artifact-revision:{artifact_id}:{revision_id}"
+                )
+        if item.get("event_kind") == "project-registration":
+            project = (item.get("payload") or {}).get("project") or {}
+            project_id = item.get("project_id")
+            project_path = project.get("local_root")
+            if isinstance(project_id, str) and isinstance(project_path, str):
+                return (
+                    f"{source}:project-registration:{project_id}:{project_path}"
+                )
+        return None
 
     def _superseded_skill_without_package(
         self,
@@ -483,7 +580,9 @@ class EnvironmentExchangeManager:
             self._peer_root(origin) / "governance-proposals"
         )
         evolution_replica_root = self._peer_root(origin) / "product-evolution"
+        project_replica_root = self._peer_root(origin) / "projects"
         staged_artifacts = 0
+        staged_projects = 0
         staged_governance_proposals = 0
         staged_product_evolution_records = 0
         for item in records:
@@ -554,6 +653,33 @@ class EnvironmentExchangeManager:
                     )
                 staged_product_evolution_records += 1
                 continue
+            if item.get("event_kind") == "project-registration":
+                project = self.registry._validate_project(item["payload"]["project"])
+                project_replica_root.mkdir(parents=True, exist_ok=True)
+                project_record = {
+                    "schema_version": 1,
+                    "stream_id": "environment-v1",
+                    "origin_node_id": origin,
+                    "event_sequence": item["event_sequence"],
+                    "project": project,
+                    "received_bundle_id": manifest["bundle_id"],
+                    "automatic_registration": False,
+                }
+                project_path = project_replica_root / (
+                    f"{project['project_id']}-{canonical_sha256(project)}.json"
+                )
+                conflicts = sorted(
+                    project_replica_root.glob(f"{project['project_id']}-*.json")
+                )
+                if conflicts:
+                    if len(conflicts) != 1 or read_json(conflicts[0]) != project_record:
+                        raise ValueError(
+                            "peer project registration conflicts with existing content"
+                        )
+                else:
+                    atomic_write_json(project_path, project_record)
+                staged_projects += 1
+                continue
             payload = item["payload"]
             content = base64.b64decode(payload["content_base64"], validate=True)
             revision = payload["revision"]
@@ -606,6 +732,7 @@ class EnvironmentExchangeManager:
             "origin_node_id": origin,
             "to_event_sequence": manifest["to_event_sequence"],
             "staged_artifacts": staged_artifacts,
+            "staged_projects": staged_projects,
             "staged_governance_proposals": staged_governance_proposals,
             "staged_product_evolution_records": staged_product_evolution_records,
         }
@@ -654,6 +781,26 @@ class EnvironmentExchangeManager:
                 raise ValueError("product evolution event identity mismatch")
             if item["payload_sha256"] != canonical_sha256(payload):
                 raise ValueError("product evolution event hash mismatch")
+            return
+        if event_kind == "project-registration":
+            required = {
+                "event_sequence",
+                "source_event_id",
+                "event_kind",
+                "project_id",
+                "payload_sha256",
+                "payload",
+            }
+            if set(item) != required:
+                raise ValueError("project registration event fields are invalid")
+            payload = item["payload"]
+            if not isinstance(payload, dict) or set(payload) != {"project"}:
+                raise ValueError("project registration payload is invalid")
+            project = self.registry._validate_project(payload["project"])
+            if item["project_id"] != project["project_id"]:
+                raise ValueError("project registration identity mismatch")
+            if item["payload_sha256"] != canonical_sha256(payload):
+                raise ValueError("project registration event hash mismatch")
             return
         if event_kind == "artifact-revision":
             required = legacy_required | {"event_kind"}

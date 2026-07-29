@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
+import yaml
+
 from memory_environment import EnvironmentRegistry
 from platform_lock import exclusive_lock
 
@@ -37,6 +39,26 @@ WINDOWS_RESERVED = {
     *(f"com{number}" for number in range(1, 10)),
     *(f"lpt{number}" for number in range(1, 10)),
 }
+
+
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    pass
+
+
+def _construct_unique_mapping(loader, node, deep=False):
+    result = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in result:
+            raise ValueError(f"YAML contains duplicate key: {key}")
+        result[key] = loader.construct_object(value_node, deep=deep)
+    return result
+
+
+_UniqueKeySafeLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
 
 
 def _now_iso() -> str:
@@ -917,45 +939,47 @@ class EnvironmentSkillInstaller:
                 raise ValueError("agents/openai.yaml must be UTF-8") from error
             if not values.get("display_name") or not values.get("short_description"):
                 raise ValueError("agents/openai.yaml requires display_name and short_description")
-            if f"${manifest['skill_id']}" not in values.get("default_prompt", ""):
-                raise ValueError("agents/openai.yaml default_prompt must reference the Skill")
+            default_prompt = values.get("default_prompt")
+            if default_prompt is not None and not isinstance(default_prompt, str):
+                raise ValueError("agents/openai.yaml default_prompt must be text")
 
     @staticmethod
-    def _parse_frontmatter(text: str) -> Dict[str, str]:
+    def _parse_frontmatter(text: str) -> Dict[str, Any]:
         lines = text.splitlines()
         if not lines or lines[0].strip() != "---":
             raise ValueError("SKILL.md is missing YAML frontmatter")
-        result: Dict[str, str] = {}
-        for line in lines[1:]:
+        end = None
+        for index, line in enumerate(lines[1:], start=1):
             if line.strip() == "---":
-                return result
-            if not line or line.startswith((" ", "\t")) or ":" not in line:
-                raise ValueError("SKILL.md frontmatter must use simple scalar fields")
-            key, value = line.split(":", 1)
-            key, value = key.strip(), value.strip().strip("\"'")
-            if key in result:
-                raise ValueError("SKILL.md frontmatter contains duplicate keys")
-            result[key] = value
-        raise ValueError("SKILL.md frontmatter is not terminated")
+                end = index
+                break
+        if end is None:
+            raise ValueError("SKILL.md frontmatter is not terminated")
+        return EnvironmentSkillInstaller._load_yaml_mapping(
+            "\n".join(lines[1:end]), "SKILL.md frontmatter"
+        )
 
     @staticmethod
-    def _parse_openai_yaml(text: str) -> Dict[str, str]:
-        result: Dict[str, str] = {}
-        interface_seen = False
-        for line in text.splitlines():
-            if not line.strip() or line.lstrip().startswith("#"):
-                continue
-            if line == "interface:":
-                interface_seen = True
-                continue
-            if not interface_seen or not line.startswith("  ") or ":" not in line:
-                raise ValueError("agents/openai.yaml must contain a simple interface mapping")
-            key, value = line.strip().split(":", 1)
-            value = value.strip().strip("\"'")
-            if key in result:
-                raise ValueError("agents/openai.yaml contains duplicate fields")
-            result[key] = value
-        return result
+    def _parse_openai_yaml(text: str) -> Dict[str, Any]:
+        document = EnvironmentSkillInstaller._load_yaml_mapping(
+            text, "agents/openai.yaml"
+        )
+        interface = document.get("interface")
+        if not isinstance(interface, dict):
+            raise ValueError("agents/openai.yaml must contain an interface mapping")
+        return interface
+
+    @staticmethod
+    def _load_yaml_mapping(text: str, label: str) -> Dict[str, Any]:
+        try:
+            value = yaml.load(text, Loader=_UniqueKeySafeLoader)
+        except (yaml.YAMLError, ValueError, TypeError) as error:
+            raise ValueError(f"{label} contains invalid safe YAML") from error
+        if not isinstance(value, dict):
+            raise ValueError(f"{label} must be a YAML mapping")
+        if not all(isinstance(key, str) for key in value):
+            raise ValueError(f"{label} keys must be text")
+        return value
 
     def _inspect_current(
         self, target: Path, manifest: Dict[str, Any]

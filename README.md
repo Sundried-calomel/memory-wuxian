@@ -433,6 +433,11 @@ target-encrypted `environment-v1` stream with independent event sequences,
 predecessor chains, cursors, acknowledgements, staging, and verified Skill
 packages. The five-minute task validates incoming data without AI. Transfer
 only stages an update; it never installs a Skill or rewrites a Rule by itself.
+Since 2.4.1, each batch member has its own stable export identity, including
+project registrations. Received projects remain read-only peer metadata and
+are never created or activated locally. Skill packages use a safe full YAML
+parser: legal nested metadata is supported, while duplicate keys and unsafe
+tags are rejected. Installers provide the required PyYAML 6.x dependency.
 
 Compatible global Rule fast-forwards may be registered only when that policy is
 explicitly enabled. Project artifacts, Skills, divergence, identity changes,

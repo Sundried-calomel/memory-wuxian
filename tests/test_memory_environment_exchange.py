@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import sys
@@ -19,7 +20,7 @@ from memory_environment_skills import (
     EnvironmentSkillInstaller,
     skill_package_contract_bytes,
 )
-from memory_federation import FederationManager
+from memory_federation import FederationManager, canonical_sha256
 from tests.test_memory_cloud_transport import FakeCrypto
 
 
@@ -87,6 +88,40 @@ class EnvironmentExchangeTests(unittest.TestCase):
             },
             apply=True,
         )
+
+    def rule_item(self, name):
+        content = f"{name} rule\n"
+        digest = hashlib.sha256(content.encode()).hexdigest()
+        artifact_id = f"global-rule:{name}"
+        revision = {
+            "schema_version": 1,
+            "revision_id": "rev:" + "0" * 64,
+            "artifact_id": artifact_id,
+            "origin_node_id": "node-a",
+            "version": 1,
+            "base_revision_id": None,
+            "content_sha256": digest,
+            "object_path": f"objects/sha256/{digest[:2]}/{digest[2:]}",
+            "supported_platforms": ["macos", "windows"],
+            "runtime_requirements": {},
+            "provenance": {"source": "test"},
+            "lifecycle_state": "staged",
+            "created_at": "2026-07-28T12:00:00+00:00",
+        }
+        revision["revision_id"] = revision_id_for(revision)
+        return {
+            "artifact": {
+                "schema_version": 1,
+                "artifact_id": artifact_id,
+                "object_class": "global-rule",
+                "scope": "global",
+                "project_id": None,
+                "display_name": name,
+                "created_at": "2026-07-28T12:00:00+00:00",
+            },
+            "revision": revision,
+            "content": content,
+        }
 
     def register_and_cache_skill(
         self,
@@ -263,6 +298,120 @@ class EnvironmentExchangeTests(unittest.TestCase):
         self.assertEqual(
             json.loads(staged[0].read_text())["stream_id"], "environment-v1"
         )
+
+    def test_batch_registration_exports_every_artifact_with_unique_identity(self):
+        self.a.registry.register(
+            {
+                "schema_version": 1,
+                "artifacts": [self.rule_item("one"), self.rule_item("two")],
+                "projects": [],
+            },
+            apply=True,
+        )
+        bundle = self.base / "batch.mwxb"
+        exported = self.a.export_delta(bundle, target_node_id="node-b")
+        self.assertEqual(exported["artifact_count"], 2)
+        _, records = self.a.read_bundle(bundle)
+        self.assertEqual(len({item["source_event_id"] for item in records}), 2)
+        self.assertEqual(
+            {item["artifact_id"] for item in records},
+            {"global-rule:one", "global-rule:two"},
+        )
+        self.assertEqual(
+            self.a.export_delta(
+                self.base / "empty.mwxb",
+                after_event_sequence=2,
+                previous_bundle_sha256=exported["sha256"],
+                target_node_id="node-b",
+            )["status"],
+            "no-change",
+        )
+
+    def test_legacy_transaction_key_exports_only_missing_batch_items(self):
+        self.a.registry.register(
+            {
+                "schema_version": 1,
+                "artifacts": [self.rule_item("legacy-one"), self.rule_item("legacy-two")],
+                "projects": [],
+            },
+            apply=True,
+        )
+        registry = self.a.registry._read_registry()
+        first = registry["events"][0]
+        self.a.init_layout()
+        artifact = self.a.registry._read_relative_json(
+            first["artifact_path"], "artifact_path"
+        )
+        revision = self.a.registry._read_relative_json(
+            first["revision_path"], "revision_path"
+        )
+        content = self.a.registry._resolve_relative(
+            revision["object_path"], "object_path"
+        ).read_bytes()
+        payload = {
+            "artifact": artifact,
+            "revision": revision,
+            "content_base64": base64.b64encode(content).decode("ascii"),
+            "package_attachment": None,
+        }
+        legacy = {
+            "event_sequence": 1,
+            "source_event_id": "recovered-artifact-revision-0001",
+            "event_kind": "artifact-revision",
+            "artifact_id": artifact["artifact_id"],
+            "revision_id": revision["revision_id"],
+            "payload_sha256": canonical_sha256(payload),
+            "payload": payload,
+        }
+        self.a.export_ledger_path.write_text(
+            json.dumps(legacy, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        self.a.export_state_path.write_text(
+            json.dumps(
+                {
+                    "format_version": 1,
+                    "next_event_sequence": 2,
+                    "source_events": {first["event_id"]: 1},
+                }
+            ),
+            encoding="utf-8",
+        )
+        ledger = self.a.refresh_export_ledger()
+        self.assertEqual(len(ledger), 2)
+        self.assertEqual(ledger[1]["artifact_id"], "global-rule:legacy-two")
+
+    def test_project_registration_is_replicated_read_only(self):
+        project = {
+            "schema_version": 1,
+            "project_id": "project-one",
+            "display_name": "Project One",
+            "local_root": "C:/source/project-one",
+            "active": True,
+            "rule_bindings": [],
+            "skill_bindings": [],
+        }
+        self.a.registry.register(
+            {
+                "schema_version": 1,
+                "artifacts": [],
+                "projects": [project],
+            },
+            apply=True,
+        )
+        bundle = self.base / "project.mwxb"
+        exported = self.a.export_delta(bundle, target_node_id="node-b")
+        self.assertEqual(exported["artifact_count"], 1)
+        imported = self.b.import_delta(bundle, expected_node_id="node-a")
+        self.assertEqual(imported["staged_projects"], 1)
+        self.assertEqual(self.b.registry.list(), [])
+        replica = next(
+            (self.b.registry.root / "replicas" / "peers" / "node-a" / "projects").glob(
+                "*.json"
+            )
+        )
+        value = json.loads(replica.read_text(encoding="utf-8"))
+        self.assertFalse(value["automatic_registration"])
+        self.assertEqual(value["project"], project)
 
     def test_environment_cursor_is_independent_from_archive_cursor(self):
         self.register_rule()

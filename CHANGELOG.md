@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.4.1 - 2026-07-30
+
+- Fixed batch Environment export so every artifact has a stable per-item
+  source identity instead of collapsing on a shared transaction event ID.
+  Existing 2.4 ledgers migrate without rewriting Registry history.
+- Added read-only transport for project registrations. Peer project metadata
+  never creates, binds, or activates a local project automatically.
+- Replaced scalar-only Skill metadata parsing with PyYAML's safe loader.
+  Nested mappings, lists, and block scalars are accepted; unsafe tags and
+  duplicate keys fail closed. `default_prompt` is optional.
+- Added PyYAML 6.x dependency checks and regression coverage for batch export,
+  old-ledger migration, project replication, and safe nested YAML.
+
 ## 2.4.0 - 2026-07-29
 
 - Added the optional offline `intfloat/multilingual-e5-small` semantic provider
