@@ -404,7 +404,24 @@ environment-governance-propose
 environment-governance-proposals
 environment-product-evolution-record
 environment-product-evolution-records
+environment-governance-ai-discover
+environment-governance-ai-status
+environment-governance-ai-enqueue
+environment-governance-ai-configure
+environment-governance-ai-tick
 ```
+
+### 有界治理 AI
+
+Memory無限可以在不维持活动 AI 对话的前提下排队语义任务。脚本每五分钟执行
+一次无模型发现和到期检查；只有兼容的微批次到期时，才启动一次临时 Codex
+worker。产品批次按 3 项或 6 小时触发（最多 5 项），治理分类按同一 owner
+5 项或 24 小时触发（最多 10 项），单批证据上限为 80,000 字符，每日本机最多
+运行 6 次。紧急项目可以跳过数量和时龄阈值。
+
+该功能默认关闭。产品任务只在来源设备执行，全局分类必须由一个明确配置的
+协调设备执行。所有结果都是通过严格 schema 校验、等待人工审批的草案。
+worker 无权接受规则、安装 Skill、修复产品或改写历史档案。
 
 ## 隐私与集成边界
 

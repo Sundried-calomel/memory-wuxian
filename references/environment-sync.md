@@ -58,6 +58,22 @@ candidates. Receiving a record does not remediate the source product or promote
 any lesson into global governance. Full raw logs and project data remain local
 unless a separate transport allowlist explicitly includes them.
 
+## Governance-AI scheduler
+
+The governance-AI scheduler is independent from cloud synchronization and is
+disabled by default. It performs model-free discovery and due checks every five
+minutes. Product retrospectives trigger at 3 items or 6 hours (maximum 5);
+governance classification triggers at 5 same-owner items or 24 hours (maximum
+10). Urgent items may bypass count and age thresholds. One batch is limited to
+80,000 evidence characters and one device may run no more than 6 AI batches per
+local day.
+
+Product-specific work executes only on the source device. Cross-device
+classification executes only on the configured coordinator. The worker is a
+one-shot ephemeral Codex process with read-only sandboxing and a strict output
+schema. Results remain drafts for human review and cannot accept, install,
+remediate, or rewrite anything.
+
 ## Defaults
 
 - automatic download: enabled

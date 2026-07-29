@@ -27,6 +27,7 @@ from memory_environment_bindings import EnvironmentBindingRegistry
 from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_evolution import ProductEvolutionStore
 from memory_environment_governance import GovernanceProposalStore
+from memory_governance_ai import GovernanceAIQueue
 from memory_environment_exchange import EnvironmentExchangeManager
 from memory_environment_incoming import EnvironmentIncomingProcessor
 from memory_environment_promotions import PromotionStore
@@ -4705,6 +4706,33 @@ def build_parser() -> argparse.ArgumentParser:
         "environment-product-evolution-records",
         help="List local and imported product evolution reports without remediation",
     )
+    governance_ai_enqueue = subparsers.add_parser(
+        "environment-governance-ai-enqueue",
+        help="Preview or enqueue one source-hashed governance AI work item",
+    )
+    governance_ai_enqueue.add_argument("--item-json", required=True)
+    governance_ai_enqueue.add_argument("--apply", action="store_true")
+    governance_ai_configure = subparsers.add_parser(
+        "environment-governance-ai-configure",
+        help="Preview or persist the local governance AI scheduler policy",
+    )
+    governance_ai_configure.add_argument("--policy-json", required=True)
+    governance_ai_configure.add_argument("--apply", action="store_true")
+    governance_ai_tick = subparsers.add_parser(
+        "environment-governance-ai-tick",
+        help="Check due micro-batches and optionally run ephemeral AI drafts",
+    )
+    governance_ai_tick.add_argument("--run-ai", action="store_true")
+    governance_ai_tick.add_argument("--maximum-batches", type=int, default=1)
+    governance_ai_discover = subparsers.add_parser(
+        "environment-governance-ai-discover",
+        help="Preview or create model-free tasks from registered Environment evidence",
+    )
+    governance_ai_discover.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "environment-governance-ai-status",
+        help="Show governance AI queue, coordinator, limits, and draft counters",
+    )
     return parser
 
 
@@ -5353,6 +5381,25 @@ def dispatch_command(
         )
     elif args.command == "environment-product-evolution-records":
         result = ProductEvolutionStore(store).list()
+    elif args.command == "environment-governance-ai-enqueue":
+        result = GovernanceAIQueue(store).enqueue(
+            read_json(Path(args.item_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-governance-ai-configure":
+        result = GovernanceAIQueue(store).configure(
+            read_json(Path(args.policy_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-governance-ai-tick":
+        result = GovernanceAIQueue(store).tick(
+            run_ai=args.run_ai,
+            maximum_batches=args.maximum_batches,
+        )
+    elif args.command == "environment-governance-ai-discover":
+        result = GovernanceAIQueue(store).discover(apply=args.apply)
+    elif args.command == "environment-governance-ai-status":
+        result = GovernanceAIQueue(store).status()
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2

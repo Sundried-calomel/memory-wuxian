@@ -126,6 +126,14 @@ def main() -> int:
             ],
         ),
         (
+            "environment-governance-ai-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_governance_ai",
+                "tests.test_governance_ai_scheduler",
+            ],
+        ),
+        (
             "environment-incoming-contract",
             [
                 python, "-m", "unittest", "-v",

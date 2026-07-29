@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.0 - 2026-07-29
+
+- Added deterministic governance-AI discovery, micro-batching, and a one-shot
+  ephemeral Codex worker for product retrospectives, reusable-lesson
+  extraction, governance classification, and supersession review.
+- Added count/age/size limits, urgent bypass, daily run limits, evidence
+  hashes, source-device ownership, and an explicit cross-device coordinator.
+- Kept all AI outputs as schema-validated drafts requiring human review; the
+  worker cannot accept rules, install Skills, remediate products, or rewrite
+  archives.
+- Added CLI, separate scheduler, dashboard controls, retry isolation, tests,
+  and release-gate coverage. The feature remains disabled by default.
+
 ## 2.2.0 - 2026-07-29
 
 - Added immutable product evolution records for bounded development history,

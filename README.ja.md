@@ -421,7 +421,26 @@ environment-governance-propose
 environment-governance-proposals
 environment-product-evolution-record
 environment-product-evolution-records
+environment-governance-ai-discover
+environment-governance-ai-status
+environment-governance-ai-enqueue
+environment-governance-ai-configure
+environment-governance-ai-tick
 ```
+
+### 制限付きガバナンス AI
+
+Memory無限は、AI会話を常時起動せずに意味処理タスクをキューできます。
+スクリプトが5分ごとにモデルを使わず発見と期限判定を行い、互換性のある
+マイクロバッチが期限に達した場合だけ一回限りのCodex workerを起動します。
+製品バッチは3件または6時間（最大5件）、ガバナンス分類は同一ownerの5件
+または24時間（最大10件）で起動し、1バッチ80,000文字、1日6回を上限と
+します。緊急項目は件数と経過時間のしきい値を迂回できます。
+
+この機能は既定で無効です。製品タスクは発生元デバイスだけで実行し、
+グローバル分類には明示的な調整デバイスが必要です。すべての結果は厳密な
+schema検証を通した人間レビュー待ちの草案です。workerは規則の承認、
+Skillのインストール、製品修復、履歴書換えを実行できません。
 
 ## プライバシーと統合境界
 

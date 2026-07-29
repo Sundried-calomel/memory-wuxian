@@ -493,7 +493,26 @@ environment-governance-propose
 environment-governance-proposals
 environment-product-evolution-record
 environment-product-evolution-records
+environment-governance-ai-discover
+environment-governance-ai-status
+environment-governance-ai-enqueue
+environment-governance-ai-configure
+environment-governance-ai-tick
 ```
+
+### Bounded governance AI
+
+Memory無限 can queue semantic work without keeping an AI conversation active.
+Scripts perform five-minute model-free discovery and due checks; an ephemeral
+Codex worker runs only when a compatible micro-batch is due. Product batches
+trigger at 3 items or 6 hours (maximum 5), classification batches at 5
+same-owner items or 24 hours (maximum 10), with an 80,000-character cap and
+6 runs per local day. Urgent items may bypass count and age thresholds.
+
+The feature is disabled by default. Product work remains on its source device,
+while global classification requires one explicit coordinator. Every result is
+a schema-validated draft requiring human review. The worker cannot accept
+rules, install Skills, remediate products, or rewrite archives.
 
 ## Privacy and integration boundary
 

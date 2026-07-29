@@ -81,6 +81,16 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     evidence. Keep imported proposals in read-only peer replicas; transfer,
     repetition, or arrival from another device never constitutes semantic
     review, acceptance, Rule registration, or Skill installation.
+46. Keep governance-AI orchestration disabled until explicitly enabled.
+    Five-minute checks are model-free; invoke at most one ephemeral Codex
+    worker only when a bounded compatible batch is due.
+47. Keep product work on its source device and run cross-device governance
+    classification only on the explicitly configured coordinator.
+48. Treat every AI result as a schema-validated, reviewable draft. It must
+    never accept a Rule, install a Skill, remediate a product, rewrite history,
+    or mark itself human-reviewed.
+49. Validate evidence hashes before invocation. Retry a failed item at most
+    twice, then isolate it without blocking unrelated queue work.
 
 ## Operating workflow
 
@@ -138,6 +148,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     `environment-product-evolution-record` to preserve and exchange the
     immutable evidence record. Peer records stay read-only and never trigger
     product remediation or governance acceptance.
+34. Use `environment-governance-ai-discover` for model-free discovery,
+    `environment-governance-ai-status` for inspection, and
+    `environment-governance-ai-tick` for a bounded one-shot review. Configure
+    or enqueue only through preview-first CLI commands. Human review remains
+    mandatory before any downstream acceptance or installation.
 
 ## Commands
 
@@ -201,6 +216,12 @@ python3 scripts/memory_cli.py environment-governance-propose --proposal-json /pa
 python3 scripts/memory_cli.py environment-governance-proposals
 python3 scripts/memory_cli.py environment-product-evolution-record --record-json /path/to/product-evolution.json
 python3 scripts/memory_cli.py environment-product-evolution-records
+python3 scripts/memory_cli.py environment-governance-ai-discover
+python3 scripts/memory_cli.py environment-governance-ai-status
+python3 scripts/memory_cli.py environment-governance-ai-enqueue --item-json /path/to/item.json
+python3 scripts/memory_cli.py environment-governance-ai-configure --policy-json /path/to/policy.json
+python3 scripts/memory_cli.py environment-governance-ai-tick --run-ai --maximum-batches 1
+python3 scripts/install_governance_ai.py --archive-root /path/to/memory --skill-root /path/to/memory-wuxian --python-executable /path/to/python --load
 scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
 powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1

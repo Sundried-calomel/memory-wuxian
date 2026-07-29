@@ -42,6 +42,7 @@ from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_incoming import EnvironmentIncomingProcessor
 from memory_environment_promotions import PromotionStore
 from memory_federation import FederationManager
+from memory_governance_ai import GovernanceAIQueue
 from platform_process import no_window_kwargs
 from token_usage import aggregate_ledgers, normalize_usage, token_usage_ledgers
 
@@ -51,6 +52,8 @@ INDEX_HTML = SKILL_ROOT / "dashboard/index.html"
 DASHBOARD_ICON = SKILL_ROOT / "assets/memory-wuxian.ico"
 CLOUD_SCHEDULER_LABEL = "com.openai.codex.memory-wuxian-cloud-sync"
 CLOUD_SCHEDULER_TASK = "MemoryWuxianCloudSync"
+GOVERNANCE_AI_SCHEDULER_LABEL = "com.openai.codex.memory-wuxian-governance-ai"
+GOVERNANCE_AI_SCHEDULER_TASK = "MemoryWuxianGovernanceAI"
 
 
 def background_subprocess_kwargs() -> dict[str, Any]:
@@ -113,6 +116,68 @@ def cloud_scheduler_status() -> dict[str, Any]:
         "installed": False,
         "running": False,
     }
+
+
+def governance_ai_scheduler_status() -> dict[str, Any]:
+    if sys.platform == "darwin":
+        plist = (
+            Path.home()
+            / "Library"
+            / "LaunchAgents"
+            / f"{GOVERNANCE_AI_SCHEDULER_LABEL}.plist"
+        )
+        installed = plist.is_file()
+        running = False
+        if installed:
+            result = subprocess.run(
+                [
+                    "/bin/launchctl",
+                    "print",
+                    f"gui/{os.getuid()}/{GOVERNANCE_AI_SCHEDULER_LABEL}",
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                **no_window_kwargs(),
+            )
+            running = result.returncode == 0
+        return {"platform": "macos", "installed": installed, "running": running}
+    if sys.platform == "win32":
+        import winreg
+
+        key = (
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule"
+            rf"\TaskCache\Tree\{GOVERNANCE_AI_SCHEDULER_TASK}"
+        )
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key):
+                installed = True
+        except OSError:
+            installed = False
+        return {"platform": "windows", "installed": installed, "running": installed}
+    return {"platform": sys.platform, "installed": False, "running": False}
+
+
+def set_governance_ai_scheduler(store: MemoryStore, enabled: bool) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        str(SKILL_ROOT / "scripts" / "install_governance_ai.py"),
+        "--archive-root",
+        str(store.root),
+        "--skill-root",
+        str(SKILL_ROOT),
+        "--python-executable",
+        sys.executable,
+        "--load" if enabled else "--uninstall",
+    ]
+    subprocess.run(
+        command,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        **background_subprocess_kwargs(),
+    )
+    return governance_ai_scheduler_status()
 
 
 def set_cloud_scheduler(store: MemoryStore, enabled: bool) -> dict[str, Any]:
@@ -637,7 +702,13 @@ class EnvironmentDashboardCache:
         "global-skill",
         "project-skill",
     )
-    ACTIVITY_DIRECTORIES = ("conflicts", "promotions", "receipts", "staging")
+    ACTIVITY_DIRECTORIES = (
+        "conflicts",
+        "promotions",
+        "receipts",
+        "staging",
+        "governance-ai",
+    )
 
     def __init__(self, archive_root: Path):
         self.registry = EnvironmentRegistry(archive_root)
@@ -731,6 +802,9 @@ class EnvironmentDashboardCache:
                     "decision_counts": {},
                     "pending_conflicts": 0,
                 },
+                "governance_ai": GovernanceAIQueue(
+                    self.registry.archive_root
+                ).status(),
             }
 
         try:
@@ -760,6 +834,10 @@ class EnvironmentDashboardCache:
                     "processed_events": 0,
                     "decision_counts": {},
                     "pending_conflicts": 0,
+                },
+                "governance_ai": {
+                    **GovernanceAIQueue(self.registry.archive_root).status(),
+                    "scheduler": governance_ai_scheduler_status(),
                 },
             }
         conflicts = EnvironmentConflictStore(self.registry.archive_root).list()
@@ -877,6 +955,10 @@ class EnvironmentDashboardCache:
                 platform=local_platform_name(),
                 runtime_versions=local_runtime_versions([]),
             ).status(),
+            "governance_ai": {
+                **GovernanceAIQueue(self.registry.archive_root).status(),
+                "scheduler": governance_ai_scheduler_status(),
+            },
         }
 
     def get(self) -> dict[str, Any]:
@@ -1044,17 +1126,58 @@ def make_handler(store: MemoryStore):
                 request = json.loads(self.rfile.read(length))
                 action = request.get("action")
                 if path == "/api/environment":
-                    if action != "process-incoming":
+                    if action == "process-incoming":
+                        result = EnvironmentIncomingProcessor(
+                            store.root,
+                            platform=local_platform_name(),
+                            runtime_versions=local_runtime_versions([]),
+                        ).process(
+                            apply=True,
+                            auto_register_compatible_rules=False,
+                            maximum_events=100,
+                        )
+                    elif action == "governance-ai-enable":
+                        queue = GovernanceAIQueue(store)
+                        policy = queue.policy()
+                        coordinator = (
+                            policy["coordinator_node_id"]
+                            or queue.local_node_id()
+                        )
+                        configured = queue.configure(
+                            {
+                                "enabled": True,
+                                "mode": "automatic-drafts",
+                                "coordinator_node_id": coordinator,
+                            },
+                            apply=True,
+                        )
+                        try:
+                            scheduler = set_governance_ai_scheduler(store, True)
+                        except Exception:
+                            queue.configure({"enabled": False}, apply=True)
+                            raise
+                        result = {
+                            "status": "enabled",
+                            "policy": configured["policy"],
+                            "scheduler": scheduler,
+                        }
+                    elif action == "governance-ai-disable":
+                        queue = GovernanceAIQueue(store)
+                        configured = queue.configure(
+                            {"enabled": False}, apply=True
+                        )
+                        result = {
+                            "status": "disabled",
+                            "policy": configured["policy"],
+                            "scheduler": set_governance_ai_scheduler(store, False),
+                        }
+                    elif action == "governance-ai-run":
+                        result = GovernanceAIQueue(store).tick(
+                            run_ai=True,
+                            maximum_batches=1,
+                        )
+                    else:
                         raise ValueError("unsupported Environment action")
-                    result = EnvironmentIncomingProcessor(
-                        store.root,
-                        platform=local_platform_name(),
-                        runtime_versions=local_runtime_versions([]),
-                    ).process(
-                        apply=True,
-                        auto_register_compatible_rules=False,
-                        maximum_events=100,
-                    )
                     self.send_json(
                         200,
                         {

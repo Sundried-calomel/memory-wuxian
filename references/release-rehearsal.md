@@ -57,6 +57,12 @@ Required scenarios:
 14. Dashboard tests and live viewport checks cover Environment inventory,
     incoming status, manual update checks, effective conflict and promotion
     states, desktop layout, and narrow mobile layout.
+15. Governance-AI tests prove disabled and no-due checks invoke no model;
+    compatible batching, age triggers, urgent bypass, coordinator ownership,
+    character and daily limits are deterministic; evidence tampering fails
+    before invocation; malformed results retry twice then isolate; valid
+    results remain unreviewed drafts; and macOS/Windows schedulers remain
+    independent from cloud synchronization.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid
