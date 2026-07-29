@@ -423,8 +423,9 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
             )
 
     def test_platform_runtime_and_unsafe_check_are_rejected(self):
+        unsupported_platform = "macos" if os.name == "nt" else "windows"
         manifest = self.manifest(
-            self.revision["revision_id"], platforms=["windows"]
+            self.revision["revision_id"], platforms=[unsupported_platform]
         )
         package = self.package("platform.zip", manifest)
         with self.assertRaisesRegex(ValueError, "does not support platform"):

@@ -578,10 +578,18 @@ class EnvironmentBindingRegistryTest(unittest.TestCase):
             apply=True,
         )
         persisted = json.loads(windows.path.read_text(encoding="utf-8"))
-        self.assertEqual(persisted["roots"][0]["root"], r"C:\Users\User\.codex")
+        expected_rules_root = (
+            str(first_root.resolve()) if os.name == "nt" else r"C:\Users\User\.codex"
+        )
+        expected_skills_root = (
+            str(skills_root.resolve())
+            if os.name == "nt"
+            else r"C:\Users\User\.codex\skills"
+        )
+        self.assertEqual(persisted["roots"][0]["root"], expected_rules_root)
         self.assertEqual(
             persisted["skill_bindings"][0]["target_root"],
-            r"C:\Users\User\.codex\skills",
+            expected_skills_root,
         )
         with self.assertRaisesRegex(ValueError, "inactive"):
             windows.get_skill_bindings()

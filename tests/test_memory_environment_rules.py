@@ -282,7 +282,7 @@ class EnvironmentRuleInstallerTest(unittest.TestCase):
     def test_managed_block_preview_apply_preserves_external_bytes_and_mode(self):
         base = managed("shared-rules", "\nold\n")
         remote = managed("shared-rules", "\nnew\n")
-        self.target.write_text(f"prefix\r\n{base}\r\nsuffix Ω\n", encoding="utf-8")
+        self.target.write_bytes(f"prefix\r\n{base}\r\nsuffix Ω\n".encode("utf-8"))
         os.chmod(self.target, 0o640)
         original_mode = stat.S_IMODE(self.target.stat().st_mode)
         original = self.target.read_bytes()
@@ -390,7 +390,7 @@ class EnvironmentRuleInstallerTest(unittest.TestCase):
     def test_rollback_restores_exact_bytes_and_mode(self):
         base = managed("shared-rules", "\nold\n")
         remote = managed("shared-rules", "\nnew\n")
-        self.target.write_text(f"prefix\n{base}\nsuffix\n", encoding="utf-8")
+        self.target.write_bytes(f"prefix\n{base}\nsuffix\n".encode("utf-8"))
         os.chmod(self.target, 0o604)
         original_mode = stat.S_IMODE(self.target.stat().st_mode)
         before = self.target.read_bytes()
@@ -414,7 +414,7 @@ class EnvironmentRuleInstallerTest(unittest.TestCase):
     def test_system_exit_before_replace_recovers_prepared_as_aborted(self):
         base = managed("shared-rules", "\nold\n")
         remote = managed("shared-rules", "\nnew\n")
-        self.target.write_text(f"prefix\n{base}\nsuffix\n", encoding="utf-8")
+        self.target.write_bytes(f"prefix\n{base}\nsuffix\n".encode("utf-8"))
         before = self.target.read_bytes()
         base_revision, remote_revision = self.register_pair(
             base_content=base, remote_content=remote
@@ -461,7 +461,7 @@ class EnvironmentRuleInstallerTest(unittest.TestCase):
     def test_prepared_marker_with_candidate_target_is_recovered_as_replaced(self):
         base = managed("shared-rules", "\nold\n")
         remote = managed("shared-rules", "\nnew\n")
-        self.target.write_text(base, encoding="utf-8")
+        self.target.write_bytes(base.encode("utf-8"))
         before = self.target.read_bytes()
         base_revision, remote_revision = self.register_pair(
             base_content=base, remote_content=remote
@@ -484,7 +484,7 @@ class EnvironmentRuleInstallerTest(unittest.TestCase):
 
         # Simulate a process dying after os.replace but before persisting the
         # replaced marker.
-        self.target.write_text(remote, encoding="utf-8")
+        self.target.write_bytes(remote.encode("utf-8"))
         recovered = self.installer(binding).recover_pending()
         self.assertEqual(recovered["rolled_back"], 1)
         self.assertEqual(self.target.read_bytes(), before)
@@ -543,7 +543,7 @@ class EnvironmentRuleInstallerTest(unittest.TestCase):
     def test_installed_receipt_is_commit_point_across_crash(self):
         base = managed("shared-rules", "\nold\n")
         remote = managed("shared-rules", "\nnew\n")
-        self.target.write_text(base, encoding="utf-8")
+        self.target.write_bytes(base.encode("utf-8"))
         base_revision, remote_revision = self.register_pair(
             base_content=base, remote_content=remote
         )
@@ -577,7 +577,7 @@ class EnvironmentRuleInstallerTest(unittest.TestCase):
     def test_terminal_recovery_removes_committed_rollback_object(self):
         base = managed("shared-rules", "\nold\n")
         remote = managed("shared-rules", "\nnew\n")
-        self.target.write_text(base, encoding="utf-8")
+        self.target.write_bytes(base.encode("utf-8"))
         base_revision, remote_revision = self.register_pair(
             base_content=base, remote_content=remote
         )
@@ -835,7 +835,7 @@ class EnvironmentRuleInstallerTest(unittest.TestCase):
     def test_whole_file_requires_canonical_memory_wuxian_owner(self):
         base = "old whole file\n"
         remote = "new whole file\n"
-        self.target.write_text(base, encoding="utf-8")
+        self.target.write_bytes(base.encode("utf-8"))
         os.chmod(self.target, 0o640)
         original_mode = stat.S_IMODE(self.target.stat().st_mode)
         base_revision, remote_revision = self.register_pair(
@@ -864,7 +864,7 @@ class EnvironmentRuleInstallerTest(unittest.TestCase):
         ]:
             with self.subTest(classification=classification, owner=owner):
                 os.chmod(self.target, 0o644)
-                self.target.write_text(base, encoding="utf-8")
+                self.target.write_bytes(base.encode("utf-8"))
                 binding = self.global_binding(
                     base_revision,
                     classification=classification,

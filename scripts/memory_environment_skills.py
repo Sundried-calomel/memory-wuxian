@@ -1103,7 +1103,11 @@ class EnvironmentSkillInstaller:
 
     def _actual_tree_hash(self, root: Path) -> str:
         records = []
-        for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        files = sorted(
+            (item for item in root.rglob("*") if item.is_file()),
+            key=lambda item: item.relative_to(root).as_posix(),
+        )
+        for path in files:
             records.append(
                 {
                     "path": path.relative_to(root).as_posix(),
