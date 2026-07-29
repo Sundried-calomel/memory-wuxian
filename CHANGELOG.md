@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.5 - 2026-07-29
+
+- Correct the macOS release gate to expand the built package into a
+  not-yet-created destination before checking its relocation metadata.
+
 ## 2.0.4 - 2026-07-29
 
 - Mark the packaged macOS dashboard bundle as non-relocatable so Installer

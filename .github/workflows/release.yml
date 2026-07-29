@@ -103,7 +103,7 @@ jobs:
             echo "macOS package does not contain the versioned dashboard application." >&2
             exit 1
           fi
-          expanded_pkg="$(mktemp -d)"
+          expanded_pkg="$(mktemp -d)/expanded"
           pkgutil --expand "dist/MemoryWuxian-$version-macOS-universal.pkg" "$expanded_pkg"
           if grep -q '<relocate>' "$expanded_pkg/PackageInfo"; then
             echo "macOS package still allows bundle relocation." >&2
