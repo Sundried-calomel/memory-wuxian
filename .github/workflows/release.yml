@@ -114,6 +114,18 @@ jobs:
             echo "macOS package does not contain the versioned dashboard application." >&2
             exit 1
           fi
+          payload="$(pkgutil --payload-files "dist/MemoryWuxian-$version-macOS-universal.pkg")"
+          for required in \
+            "skill/SKILL.md" \
+            "skill/AGENTS.md" \
+            "skill/PRODUCT_ARCHITECTURE.md" \
+            "skill/docs/module-architecture.json" \
+            "skill/scripts/check_architecture_contract.py"; do
+            if ! grep -q "$required" <<<"$payload"; then
+              echo "macOS package is missing architecture gate file: $required" >&2
+              exit 1
+            fi
+          done
           expanded_pkg="$(mktemp -d)/expanded"
           pkgutil --expand "dist/MemoryWuxian-$version-macOS-universal.pkg" "$expanded_pkg"
           if grep -q '<relocate>' "$expanded_pkg/PackageInfo"; then
@@ -152,6 +164,18 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DSourceRoot=$PWD" "/DAppVersion=$version" packaging/windows/MemoryWuxian.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
           $installer = Get-Item "dist\MemoryWuxian-$version-Windows-x64-Setup.exe"
+          $listing = (& 7z l $installer.FullName) -join "`n"
+          foreach ($required in @(
+            "SKILL.md",
+            "AGENTS.md",
+            "PRODUCT_ARCHITECTURE.md",
+            "docs\module-architecture.json",
+            "scripts\check_architecture_contract.py"
+          )) {
+            if (-not $listing.Contains($required)) {
+              throw "Windows package is missing architecture gate file: $required"
+            }
+          }
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           [IO.File]::WriteAllText(
             "$($installer.FullName).sha256",

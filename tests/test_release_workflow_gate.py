@@ -77,6 +77,19 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn("sha256", job_block(self.source, "windows-installer"))
         self.assertIn("dist/*", job_block(self.source, "publish"))
 
+    def test_both_installers_retain_the_architecture_hard_gate(self) -> None:
+        required = [
+            "SKILL.md",
+            "AGENTS.md",
+            "PRODUCT_ARCHITECTURE.md",
+            "module-architecture.json",
+            "check_architecture_contract.py",
+        ]
+        for installer in ("macos-installer", "windows-installer"):
+            block = job_block(self.source, installer)
+            for filename in required:
+                self.assertIn(filename, block)
+
 
 if __name__ == "__main__":
     unittest.main()
