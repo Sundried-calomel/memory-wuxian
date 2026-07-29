@@ -533,17 +533,26 @@ class EnvironmentBindingRegistryTest(unittest.TestCase):
             self.registry, node_id="windows-lab", platform_name="windows"
         )
         artifact_id = self.artifact()["artifact_id"]
+        if os.name == "nt":
+            first_root = self.rules_root
+            second_root = self.base / "other-rules"
+            second_root.mkdir()
+            skills_root = self.skills_root
+        else:
+            first_root = Path(r"C:\Users\User\.codex")
+            second_root = Path(r"D:\Codex")
+            skills_root = Path(r"C:\Users\User\.codex\skills")
         preview_a = windows.register_root(
             root_id="codex-rules",
             role="global-rules",
             owner="user",
-            root=r"C:\Users\User\.codex",
+            root=first_root,
         )
         preview_b = windows.register_root(
             root_id="codex-rules",
             role="global-rules",
             owner="user",
-            root=r"D:\Codex",
+            root=second_root,
         )
         self.assertEqual(preview_a["root_id"], preview_b["root_id"])
         self.assertEqual(artifact_id, self.artifact()["artifact_id"])
@@ -551,14 +560,14 @@ class EnvironmentBindingRegistryTest(unittest.TestCase):
             root_id="codex-rules",
             role="global-rules",
             owner="user",
-            root=r"C:\Users\User\.codex",
+            root=first_root,
             apply=True,
         )
         windows.register_root(
             root_id="codex-skills",
             role="global-skills",
             owner="user",
-            root=r"C:\Users\User\.codex\skills",
+            root=skills_root,
             apply=True,
         )
         windows.register_skill_binding(

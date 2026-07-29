@@ -186,7 +186,7 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
     def installer(self, cls=EnvironmentSkillInstaller, **updates):
         options = {
             "target_node_id": "mac-test-node",
-            "platform": "macos",
+            "platform": "windows" if os.name == "nt" else "macos",
             "runtime_versions": {"python": "3.12.4"},
             "global_skill_bindings": {
                 "global-demo": {

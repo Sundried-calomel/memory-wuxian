@@ -478,9 +478,15 @@ class EnvironmentRuleInstaller:
         if strategy == "managed-block":
             if not isinstance(block_id, str) or not BLOCK_ID_RE.fullmatch(block_id):
                 raise ValueError("managed-block requires a stable managed_block_id")
-            local_view = self._extract_block(local_bytes, block_id)[0]
-            base_view = self._extract_block(base_bytes, block_id)[0]
-            remote_view = self._extract_block(remote_bytes, block_id)[0]
+            local_view = self._comparison_view(
+                self._extract_block(local_bytes, block_id)[0]
+            )
+            base_view = self._comparison_view(
+                self._extract_block(base_bytes, block_id)[0]
+            )
+            remote_view = self._comparison_view(
+                self._extract_block(remote_bytes, block_id)[0]
+            )
         else:
             local_view, base_view, remote_view = local_bytes, base_bytes, remote_bytes
 
@@ -529,6 +535,12 @@ class EnvironmentRuleInstaller:
                 "mode_preserved": True,
             },
         }
+
+    @staticmethod
+    def _comparison_view(payload: bytes) -> bytes:
+        """Normalize text line endings only for managed-block comparison."""
+
+        return payload.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
 
     def _validate_registered_binding(
         self, binding_id: str, source: Mapping[str, Any]
