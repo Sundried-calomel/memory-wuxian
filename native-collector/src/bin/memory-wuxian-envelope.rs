@@ -81,6 +81,12 @@ enum Command {
 enum EnvelopeKind {
     Bundle,
     Ack,
+    #[value(name = "environment-v1-bundle")]
+    #[serde(rename = "environment-v1-bundle")]
+    EnvironmentV1Bundle,
+    #[value(name = "environment-v1-ack")]
+    #[serde(rename = "environment-v1-ack")]
+    EnvironmentV1Ack,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -685,6 +691,52 @@ mod tests {
         assert_eq!(fs::read(recipient_output)?, fs::read(&fixture.payload)?);
         assert!(!decrypt(&encrypted, &sender.age_identity()?)?.is_empty());
         assert!(!decrypt(&encrypted, &recipient.age_identity()?)?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn environment_kind_round_trips_and_cannot_open_as_archive() -> Result<()> {
+        let fixture = Fixture::new()?;
+        let sender = load_identity(&fixture.sender_identity)?;
+        let recipient = load_identity(&fixture.recipient_identity)?;
+        seal_file(
+            &fixture.sender_identity,
+            &[
+                sender.encryption_public_key,
+                recipient.encryption_public_key,
+            ],
+            &fixture.payload,
+            &fixture.envelope,
+            EnvelopeKind::EnvironmentV1Bundle,
+            "sender",
+            "recipient",
+        )?;
+        let output = fixture.directory.path().join("environment-opened.mwxb");
+        open_file(
+            &fixture.recipient_identity,
+            &sender.signing_public_key,
+            &fixture.envelope,
+            &output,
+            EnvelopeKind::EnvironmentV1Bundle,
+            "sender",
+            "recipient",
+        )?;
+        assert_eq!(fs::read(&output)?, fs::read(&fixture.payload)?);
+
+        let wrong_output = fixture.directory.path().join("archive-opened.mwxb");
+        assert!(
+            open_file(
+                &fixture.recipient_identity,
+                &sender.signing_public_key,
+                &fixture.envelope,
+                &wrong_output,
+                EnvelopeKind::Bundle,
+                "sender",
+                "recipient",
+            )
+            .is_err()
+        );
+        assert!(!wrong_output.exists());
         Ok(())
     }
 

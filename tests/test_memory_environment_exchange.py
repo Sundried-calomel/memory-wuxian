@@ -88,10 +88,17 @@ class EnvironmentExchangeTests(unittest.TestCase):
             apply=True,
         )
 
-    def register_and_cache_skill(self):
+    def register_and_cache_skill(
+        self,
+        *,
+        version=1,
+        base_revision_id=None,
+        marker="v1",
+    ):
         files = {
             "SKILL.md": (
-                "---\nname: demo-sync\ndescription: Synced test Skill\n---\n"
+                "---\nname: demo-sync\n"
+                f"description: Synced test Skill {marker}\n---\n"
             ).encode(),
             "agents/openai.yaml": (
                 "interface:\n"
@@ -103,7 +110,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         manifest = {
             "schema_version": 1,
             "skill_id": "demo-sync",
-            "version": "1.0.0",
+            "version": f"{version}.0.0",
             "scope": "global",
             "project_id": None,
             "source_revision": "rev:" + "0" * 64,
@@ -139,8 +146,8 @@ class EnvironmentExchangeTests(unittest.TestCase):
             "revision_id": "rev:" + "0" * 64,
             "artifact_id": artifact["artifact_id"],
             "origin_node_id": "node-a",
-            "version": 1,
-            "base_revision_id": None,
+            "version": version,
+            "base_revision_id": base_revision_id,
             "content_sha256": digest,
             "object_path": f"objects/sha256/{digest[:2]}/{digest[2:]}",
             "supported_platforms": ["macos", "windows"],
@@ -165,7 +172,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
             },
             apply=True,
         )
-        package = self.base / "demo-sync.zip"
+        package = self.base / f"demo-sync-{version}.zip"
         with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(
                 "skill-package-manifest.json",
@@ -174,7 +181,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
             for path, payload in files.items():
                 archive.writestr(path, payload)
         target_root = self.base / "global-skills"
-        target_root.mkdir()
+        target_root.mkdir(exist_ok=True)
         EnvironmentSkillInstaller(
             self.a.registry,
             target_node_id="node-a",
@@ -197,6 +204,48 @@ class EnvironmentExchangeTests(unittest.TestCase):
             apply=True,
         )
         return revision
+
+    def test_superseded_uncached_skill_does_not_block_current_package(self):
+        old_revision = self.register_and_cache_skill(version=1, marker="old")
+        old_reference = (
+            self.a.registry.root
+            / "packages"
+            / "by-revision"
+            / f"{old_revision['revision_id'].split(':', 1)[1]}.json"
+        )
+        old_reference.unlink()
+        current_revision = self.register_and_cache_skill(
+            version=2,
+            base_revision_id=old_revision["revision_id"],
+            marker="current",
+        )
+        bundle = self.base / "superseded-skill.mwxb"
+        exported = self.a.export_delta(bundle, target_node_id="node-b")
+        self.assertEqual(exported["artifact_count"], 1)
+        self.assertEqual(exported["from_event_sequence"], 1)
+        self.assertEqual(exported["to_event_sequence"], 1)
+        _, records = self.a.read_bundle(bundle)
+        self.assertEqual(
+            records[0]["payload"]["revision"]["revision_id"],
+            current_revision["revision_id"],
+        )
+
+    def test_current_uncached_skill_still_fails_closed(self):
+        revision = self.register_and_cache_skill()
+        reference = (
+            self.a.registry.root
+            / "packages"
+            / "by-revision"
+            / f"{revision['revision_id'].split(':', 1)[1]}.json"
+        )
+        reference.unlink()
+        with self.assertRaisesRegex(
+            ValueError, "no verified package attachment"
+        ):
+            self.a.export_delta(
+                self.base / "current-uncached.mwxb",
+                target_node_id="node-b",
+            )
 
     def test_independent_delta_stages_remote_without_installing(self):
         self.register_rule()

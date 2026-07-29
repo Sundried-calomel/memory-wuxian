@@ -155,6 +155,10 @@ class EnvironmentExchangeManager:
             )
             if revision["origin_node_id"] != local_node_id:
                 continue
+            if self._superseded_skill_without_package(
+                registry, artifact, revision
+            ):
+                continue
             self.registry._verify_object(revision)
             object_path = self.registry._resolve_relative(
                 revision["object_path"], "object_path"
@@ -191,6 +195,30 @@ class EnvironmentExchangeManager:
             },
         )
         return ledger
+
+    def _superseded_skill_without_package(
+        self,
+        registry: Dict[str, Any],
+        artifact: Dict[str, Any],
+        revision: Dict[str, Any],
+    ) -> bool:
+        """Skip only replaced local Skill candidates that never passed package verification."""
+
+        if not artifact["object_class"].endswith("-skill"):
+            return False
+        current = registry["current_artifacts"].get(artifact["artifact_id"])
+        if (
+            not isinstance(current, dict)
+            or current.get("revision_id") == revision["revision_id"]
+        ):
+            return False
+        reference_path = (
+            self.registry.root
+            / "packages"
+            / "by-revision"
+            / f"{revision['revision_id'].split(':', 1)[1]}.json"
+        )
+        return not reference_path.is_file() or reference_path.is_symlink()
 
     def export_delta(
         self,
