@@ -306,6 +306,77 @@ safety:
             / target_id
         )
 
+    def test_exchange_directory_selection_normalizes_to_provider_root(self):
+        queue_directory = self.exchange / "MemoryWuxianExchange"
+        queue_directory.mkdir(exist_ok=True)
+        transport = CloudFolderTransport(self.manager_a, crypto=self.crypto)
+        result = transport.configure(queue_directory, self.key_a, enabled=True)
+
+        self.assertEqual(result["status"], "configured")
+        self.assertEqual(
+            Path(transport.status()["exchange_root"]),
+            self.exchange.resolve(),
+        )
+        self.assertEqual(
+            transport._exchange_root(),
+            self.exchange.resolve() / "MemoryWuxianExchange" / "v1",
+        )
+
+    def test_existing_queue_directory_config_is_normalized_when_read(self):
+        queue_directory = self.exchange / "MemoryWuxianExchange"
+        queue_directory.mkdir(exist_ok=True)
+        transport = CloudFolderTransport(self.manager_a, crypto=self.crypto)
+        transport.configure(self.exchange, self.key_a, enabled=True)
+        transport.config["exchange_root"] = str(queue_directory.resolve())
+        transport.save_config()
+
+        reloaded = CloudFolderTransport(self.manager_a, crypto=self.crypto)
+        self.assertEqual(
+            reloaded._exchange_root(),
+            self.exchange.resolve() / "MemoryWuxianExchange" / "v1",
+        )
+
+    def test_existing_outstanding_envelope_migrates_to_canonical_outbox(self):
+        self.append_round(self.node_a, "MIGRATE")
+        first = self.transport_a.sync(force=True, now=1000)
+        canonical = Path(first["published"][0]["path"])
+        legacy = (
+            self.exchange
+            / "MemoryWuxianExchange"
+            / "MemoryWuxianExchange"
+            / "v1"
+            / "nodes"
+            / "node-alpha"
+            / "outbox"
+            / "node-beta"
+            / canonical.name
+        )
+        legacy.parent.mkdir(parents=True)
+        canonical.replace(legacy)
+        config = read_json(self.node_a / "federation/cloud.json")
+        config["exchange_root"] = str(
+            (self.exchange / "MemoryWuxianExchange").resolve()
+        )
+        config["outbound"]["node-beta"]["outstanding"]["path"] = str(legacy)
+        (self.node_a / "federation/cloud.json").write_text(
+            json.dumps(config, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        restarted = CloudFolderTransport(self.manager_a, crypto=self.crypto)
+        migrated = restarted.sync(force=False, now=1010)
+
+        self.assertEqual(len(migrated["migrated"]), 1)
+        restored = self.own_outbox("node-alpha", "node-beta") / legacy.name
+        self.assertTrue(restored.is_file())
+        self.assertTrue(legacy.is_file())
+        self.assertEqual(restored.read_bytes(), legacy.read_bytes())
+        state = read_json(self.node_a / "federation/cloud.json")
+        self.assertEqual(
+            Path(state["outbound"]["node-beta"]["outstanding"]["path"]),
+            restored.resolve(),
+        )
+
     def test_bidirectional_exchange_ack_idempotency_and_ssh_preservation(self):
         peer_before = read_json(self.manager_a.peer_path("node-beta"))
         self.append_round(self.node_a, "ALPHA")

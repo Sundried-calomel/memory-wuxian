@@ -381,7 +381,10 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-enable
 
 The selected directory must already exist so a mistyped path cannot silently
 become an unsynchronized local folder. On Windows, select the local OneDrive or
-iCloud Drive directory shown in File Explorer.
+iCloud Drive directory shown in File Explorer. Selecting either the provider
+root or its existing `MemoryWuxianExchange` child is normalized to the same
+canonical queue at `<provider-root>/MemoryWuxianExchange/v1`; this prevents two
+paired devices from silently scanning different nested queue roots.
 
 Register the short-lived five-minute scheduler after configuration:
 

@@ -104,6 +104,12 @@ Use Memory無限 to preserve conversation history outside the active context win
 58. Treat project-to-global Skill extraction as a promotion workflow. Require
     explicit source evidence, a complete passing platform matrix, and reviewer
     approval; never infer promotion from repeated use or successful sync.
+59. Treat `PRODUCT_ARCHITECTURE.md` as the single owner for product module
+    boundaries, dependency direction, application contracts, refactoring
+    gates, and the ordered productization roadmap. Before cross-module work,
+    read that contract and preserve its phase order. Do not combine module
+    extraction with a feature, format, protocol, default, or security-policy
+    change.
 
 ## Authority order
 

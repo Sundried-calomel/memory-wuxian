@@ -348,7 +348,7 @@ class CloudFolderTransport:
             raise ValueError("Cloud timing values must not be negative")
         if min(int(early_flush_bytes), int(maximum_pending_seconds)) < 1:
             raise ValueError("Cloud byte and maximum-pending limits must be positive")
-        resolved_exchange_root = Path(exchange_root).expanduser().resolve()
+        resolved_exchange_root = self._provider_root(exchange_root)
         if not resolved_exchange_root.is_dir():
             raise ValueError(
                 f"Cloud synchronization directory does not exist: {resolved_exchange_root}"
@@ -469,10 +469,18 @@ class CloudFolderTransport:
         value = str(self.config.get("exchange_root", "")).strip()
         if not value:
             raise ValueError("Cloud exchange_root is not configured")
-        root = Path(value).expanduser().resolve() / "MemoryWuxianExchange" / "v1"
+        root = self._provider_root(Path(value)) / "MemoryWuxianExchange" / "v1"
         if self.stream_id is not None:
             root = root / self.stream_id
         return Path(filesystem_native_path(root)) if os.name == "nt" else root
+
+    @staticmethod
+    def _provider_root(value: Path) -> Path:
+        """Normalize either a provider root or the fixed queue directory."""
+        resolved = Path(value).expanduser().resolve()
+        if resolved.name.casefold() == "memorywuxianexchange":
+            return resolved.parent
+        return resolved
 
     def _envelope_kind(self, kind: str) -> str:
         return f"{self.stream_id}-{kind}" if self.stream_id is not None else kind
@@ -672,6 +680,75 @@ class CloudFolderTransport:
                     os.close(directory_descriptor)
         finally:
             partial.unlink(missing_ok=True)
+
+    def _migrate_outstanding_path(
+        self,
+        peer_id: str,
+        result: Dict[str, Any],
+    ) -> None:
+        state = self._peer_state(peer_id)
+        outstanding = state.get("outstanding")
+        if not isinstance(outstanding, dict):
+            return
+        source = Path(
+            filesystem_native_path(Path(str(outstanding.get("path", ""))))
+        )
+        if not source.is_file() or source.stat().st_size == 0:
+            return
+        match = ENVELOPE_PATTERN.fullmatch(source.name)
+        if (
+            not match
+            or match.group("bundle_id") != outstanding.get("bundle_id")
+            or match.group("bundle_sha256") != outstanding.get("bundle_sha256")
+            or int(match.group("from_sequence"))
+            != int(outstanding.get("from_event_sequence", -1))
+            or int(match.group("to_sequence"))
+            != int(outstanding.get("to_event_sequence", -1))
+        ):
+            raise RuntimeError("Outstanding cloud envelope metadata is inconsistent")
+        destination = self._outbox(peer_id) / source.name
+        if source.resolve() == destination.resolve():
+            return
+        source_sha256 = bytes_sha256(source.read_bytes())
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            if (
+                not destination.is_file()
+                or bytes_sha256(destination.read_bytes()) != source_sha256
+            ):
+                raise RuntimeError(
+                    "Canonical cloud outbox contains a conflicting envelope"
+                )
+        else:
+            partial = destination.parent / (
+                f".mw-partial-{os.getpid()}-{uuid.uuid4().hex[:16]}.tmp"
+            )
+            try:
+                with source.open("rb") as reader, partial.open("xb") as writer:
+                    while True:
+                        chunk = reader.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        writer.write(chunk)
+                    writer.flush()
+                    os.fsync(writer.fileno())
+                if bytes_sha256(partial.read_bytes()) != source_sha256:
+                    raise RuntimeError("Migrated cloud envelope SHA-256 mismatch")
+                os.replace(
+                    filesystem_native_path(partial),
+                    filesystem_native_path(destination),
+                )
+            finally:
+                partial.unlink(missing_ok=True)
+        outstanding["path"] = display_path(destination)
+        result["migrated"].append(
+            {
+                "peer": peer_id,
+                "from": display_path(source),
+                "to": display_path(destination),
+                "envelope_sha256": source_sha256,
+            }
+        )
 
     def _quarantine(
         self,
@@ -1124,6 +1201,7 @@ class CloudFolderTransport:
             "transient": [],
             "quarantined": [],
             "cleaned": [],
+            "migrated": [],
         }
         if not self.config.get("enabled"):
             return result
@@ -1131,6 +1209,17 @@ class CloudFolderTransport:
             self.crypto.show_identity(self._identity_private_path()), "local"
         )
         peers = self._trusted_cloud_peers()
+        for peer_id in peers:
+            try:
+                self._migrate_outstanding_path(peer_id, result)
+            except (OSError, RuntimeError) as exc:
+                result["transient"].append(
+                    {
+                        "peer": peer_id,
+                        "type": "outbox-path-migration",
+                        "reason": str(exc),
+                    }
+                )
         self._process_acks(peers, result)
         self._process_bundles(peers, local_identity, result)
         observation = self._observation(timestamp)

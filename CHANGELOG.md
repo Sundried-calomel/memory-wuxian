@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.1 - 2026-07-29
+
+- Added a canonical product-architecture contract for module ownership,
+  dependency direction, application contracts, refactoring gates, and the
+  ordered modular-monolith roadmap.
+- Normalized cloud-folder configuration when a user selects either the cloud
+  provider root or its existing `MemoryWuxianExchange` child, preventing paired
+  devices from silently scanning different nested queue roots.
+
 ## 2.0.0 - 2026-07-29
 
 - Added an independent Environment Registry for global and project Rules and

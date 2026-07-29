@@ -327,6 +327,10 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-enable
 ```
 
 誤入力で未同期のローカルフォルダーを作らないよう、選択ディレクトリは既に存在する必要があります。Windowsではエクスプローラーに表示されるローカルOneDriveまたはiCloud Driveを選びます。
+クラウドプロバイダーのルートまたは既存の
+`MemoryWuxianExchange` 子ディレクトリのどちらを選んでも、同じ
+`<provider-root>/MemoryWuxianExchange/v1` キューへ正規化されます。これにより、
+ペアリング済みデバイスが異なる入れ子のキューを走査する状態を防ぎます。
 
 設定後、5分ごとの短時間タスクを登録します。
 

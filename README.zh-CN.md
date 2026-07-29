@@ -317,6 +317,9 @@ python3 scripts/memory_cli.py --root "$ARCHIVE" cloud-enable
 ```
 
 所选目录必须已经存在，避免把拼错路径悄悄创建为未同步的本地目录。Windows 应选择文件资源管理器中显示的本地 OneDrive 或 iCloud Drive 目录。
+选择云盘根目录或其已有的 `MemoryWuxianExchange` 子目录，都会归一到同一个
+`<云盘根目录>/MemoryWuxianExchange/v1` 队列，避免已配对设备静默扫描不同的
+嵌套目录。
 
 配置后注册每五分钟运行一次的短任务：
 
