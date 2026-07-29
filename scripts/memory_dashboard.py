@@ -32,11 +32,14 @@ from memory_cli import (
     atomic_write_json,
     environment_cloud_transport,
     load_simple_yaml,
+    local_platform_name,
+    local_runtime_versions,
     read_jsonl,
 )
 from memory_cloud_transport import CloudFolderTransport
 from memory_environment import EnvironmentRegistry
 from memory_environment_conflicts import EnvironmentConflictStore
+from memory_environment_incoming import EnvironmentIncomingProcessor
 from memory_environment_promotions import PromotionStore
 from memory_federation import FederationManager
 from platform_process import no_window_kwargs
@@ -634,7 +637,7 @@ class EnvironmentDashboardCache:
         "global-skill",
         "project-skill",
     )
-    ACTIVITY_DIRECTORIES = ("conflicts", "promotions", "receipts")
+    ACTIVITY_DIRECTORIES = ("conflicts", "promotions", "receipts", "staging")
 
     def __init__(self, archive_root: Path):
         self.registry = EnvironmentRegistry(archive_root)
@@ -722,6 +725,12 @@ class EnvironmentDashboardCache:
                 "conflicts": [],
                 "promotions": [],
                 "installations": [],
+                "incoming": {
+                    "staged_events": 0,
+                    "processed_events": 0,
+                    "decision_counts": {},
+                    "pending_conflicts": 0,
+                },
             }
 
         try:
@@ -746,6 +755,12 @@ class EnvironmentDashboardCache:
                 "conflicts": [],
                 "promotions": [],
                 "installations": [],
+                "incoming": {
+                    "staged_events": 0,
+                    "processed_events": 0,
+                    "decision_counts": {},
+                    "pending_conflicts": 0,
+                },
             }
         conflicts = EnvironmentConflictStore(self.registry.archive_root).list()
         promotions = PromotionStore(self.registry.archive_root).list()
@@ -857,6 +872,11 @@ class EnvironmentDashboardCache:
                 }
                 for value in receipts
             ],
+            "incoming": EnvironmentIncomingProcessor(
+                self.registry.archive_root,
+                platform=local_platform_name(),
+                runtime_versions=local_runtime_versions([]),
+            ).status(),
         }
 
     def get(self) -> dict[str, Any]:
@@ -901,7 +921,7 @@ def make_handler(store: MemoryStore):
             federation_manager = FederationManager(store)
             devices = federation_manager.status()
             archive_transport = CloudFolderTransport(federation_manager)
-            cloud = archive_transport.status()
+            cloud = dict(archive_transport.status())
             archive_stream = {"stream_id": "archive-v1", **cloud}
             environment_transport = environment_cloud_transport(
                 store, archive_transport, bootstrap=False
@@ -998,7 +1018,11 @@ def make_handler(store: MemoryStore):
 
         def do_POST(self):
             path = urlparse(self.path).path
-            if path not in {"/api/cloud", "/api/import-chatgpt"}:
+            if path not in {
+                "/api/cloud",
+                "/api/import-chatgpt",
+                "/api/environment",
+            }:
                 self.send_error(404)
                 return
             origin = self.headers.get("Origin")
@@ -1019,6 +1043,26 @@ def make_handler(store: MemoryStore):
                     raise ValueError("invalid request length")
                 request = json.loads(self.rfile.read(length))
                 action = request.get("action")
+                if path == "/api/environment":
+                    if action != "process-incoming":
+                        raise ValueError("unsupported Environment action")
+                    result = EnvironmentIncomingProcessor(
+                        store.root,
+                        platform=local_platform_name(),
+                        runtime_versions=local_runtime_versions([]),
+                    ).process(
+                        apply=True,
+                        auto_register_compatible_rules=False,
+                        maximum_events=100,
+                    )
+                    self.send_json(
+                        200,
+                        {
+                            "result": result,
+                            "environment": environment_cache.get(),
+                        },
+                    )
+                    return
                 manager = FederationManager(store)
                 transport = CloudFolderTransport(manager)
                 environment_transport = environment_cloud_transport(

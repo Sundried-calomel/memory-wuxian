@@ -26,6 +26,7 @@ from memory_environment import EnvironmentRegistry
 from memory_environment_bindings import EnvironmentBindingRegistry
 from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_exchange import EnvironmentExchangeManager
+from memory_environment_incoming import EnvironmentIncomingProcessor
 from memory_environment_promotions import PromotionStore
 from memory_environment_rules import EnvironmentRuleInstaller
 from memory_environment_skills import EnvironmentSkillInstaller
@@ -4548,6 +4549,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show the independent environment-v1 stream cursor",
     )
     subparsers.add_parser(
+        "environment-incoming-status",
+        help="Show deterministic decisions for staged Environment updates",
+    )
+    environment_process = subparsers.add_parser(
+        "environment-process-incoming",
+        help="Preview or process staged Environment updates without AI",
+    )
+    environment_process.add_argument("--apply", action="store_true")
+    environment_process.add_argument(
+        "--auto-register-compatible-rules",
+        action="store_true",
+        help="Register only global Rule fast-forwards; never auto-install Skills",
+    )
+    environment_process.add_argument("--maximum-events", type=int, default=100)
+    environment_process.add_argument("--runtime", action="append", default=[])
+    environment_accept = subparsers.add_parser(
+        "environment-accept-incoming",
+        help="Preview or explicitly register one compatible staged update",
+    )
+    environment_accept.add_argument("--stage-sha256", required=True)
+    environment_accept.add_argument("--runtime", action="append", default=[])
+    environment_accept.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
         "environment-bindings-status",
         help="Show this node's explicit Environment roots and bindings",
     )
@@ -5029,11 +5053,21 @@ def dispatch_command(
         result["environment"] = environment_cloud_transport(
             store, archive_transport, bootstrap=True
         ).sync(force=args.force)
+        result["environment"]["incoming"] = EnvironmentIncomingProcessor(
+            store.root,
+            platform=local_platform_name(),
+            runtime_versions=local_runtime_versions([]),
+        ).process(apply=True)
     elif args.command == "cloud-status":
         archive_transport = CloudFolderTransport(FederationManager(store))
         result = archive_transport.status()
         result["environment"] = environment_cloud_transport(
             store, archive_transport, bootstrap=False
+        ).status()
+        result["environment"]["incoming"] = EnvironmentIncomingProcessor(
+            store.root,
+            platform=local_platform_name(),
+            runtime_versions=local_runtime_versions([]),
         ).status()
     elif args.command == "cloud-enable":
         archive_transport = CloudFolderTransport(FederationManager(store))
@@ -5129,6 +5163,36 @@ def dispatch_command(
         )
     elif args.command == "environment-exchange-status":
         result = EnvironmentExchangeManager(store).status()
+    elif args.command in {
+        "environment-incoming-status",
+        "environment-process-incoming",
+        "environment-accept-incoming",
+    }:
+        processor = EnvironmentIncomingProcessor(
+            store.root,
+            platform=local_platform_name(),
+            runtime_versions=local_runtime_versions(
+                args.runtime
+                if args.command
+                in {"environment-process-incoming", "environment-accept-incoming"}
+                else []
+            ),
+        )
+        if args.command == "environment-incoming-status":
+            result = processor.status()
+        elif args.command == "environment-process-incoming":
+            result = processor.process(
+                apply=args.apply,
+                auto_register_compatible_rules=(
+                    args.auto_register_compatible_rules
+                ),
+                maximum_events=args.maximum_events,
+            )
+        else:
+            result = processor.accept(
+                args.stage_sha256,
+                apply=args.apply,
+            )
     elif args.command == "environment-bindings-status":
         result = environment_node_bindings(store).status()
     elif args.command == "environment-register-root":
@@ -5291,6 +5355,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "environment-diff",
             "environment-validate",
             "environment-exchange-status",
+            "environment-incoming-status",
         }:
             return dispatch_command(args, parser, store)
         if args.command in {"environment-init", "environment-register"}:

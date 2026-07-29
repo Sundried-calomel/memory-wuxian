@@ -208,6 +208,9 @@ class EnvironmentSkillInstaller:
         self.transactions_dir = self.registry.transactions_dir / "skill-installs"
         self.rollback_root = self.registry.root / "rollbacks" / "skills"
         self.receipts_dir = self.registry.receipts_dir / "skill-installs"
+        self.package_root = self.registry.root / "packages"
+        self.package_objects = self.package_root / "sha256"
+        self.package_revisions = self.package_root / "by-revision"
 
     @classmethod
     def from_binding_registry(
@@ -400,6 +403,7 @@ class EnvironmentSkillInstaller:
             )
             self._validate_installed_tree(staged_candidate, prepared["manifest"])
             self._run_checks(staged_candidate, prepared["manifest"]["checks"])
+            self._cache_verified_package(prepared)
 
             target.parent.mkdir(parents=True, exist_ok=True)
             self._assert_safe_target_parent(prepared["binding"], target)
@@ -532,6 +536,67 @@ class EnvironmentSkillInstaller:
         if revision["revision_id"] != revision_id:
             raise ValueError("registered Skill revision mismatch")
         return artifact, revision
+
+    def _cache_verified_package(self, prepared: Dict[str, Any]) -> Dict[str, Any]:
+        package_hash = prepared["package_sha256"]
+        package_bytes = prepared["package_path"].read_bytes()
+        if _sha256(package_bytes) != package_hash:
+            raise ValueError("Skill package changed after validation")
+        object_path = self.package_objects / package_hash[:2] / package_hash[2:]
+        reference_path = (
+            self.package_revisions
+            / f"{prepared['revision']['revision_id'].split(':', 1)[1]}.json"
+        )
+        if object_path.exists():
+            if object_path.is_symlink() or not object_path.is_file():
+                raise ValueError("Skill package object path is unsafe")
+            if _sha256(object_path.read_bytes()) != package_hash:
+                raise ValueError("Skill package object hash mismatch")
+        else:
+            object_path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{object_path.name}.", suffix=".tmp", dir=object_path.parent
+            )
+            temporary = Path(temporary_name)
+            try:
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(package_bytes)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, object_path)
+                _fsync_directory(object_path.parent)
+            finally:
+                temporary.unlink(missing_ok=True)
+        reference = {
+            "schema_version": 1,
+            "artifact_id": prepared["artifact"]["artifact_id"],
+            "revision_id": prepared["revision"]["revision_id"],
+            "package_sha256": package_hash,
+            "package_path": object_path.relative_to(self.registry.root).as_posix(),
+            "package_contract_sha256": _sha256(
+                skill_package_contract_bytes(prepared["manifest"])
+            ),
+            "verified_at": _now_iso(),
+        }
+        if reference_path.exists():
+            existing = json.loads(reference_path.read_text(encoding="utf-8"))
+            stable_fields = {
+                key: reference[key]
+                for key in (
+                    "schema_version",
+                    "artifact_id",
+                    "revision_id",
+                    "package_sha256",
+                    "package_path",
+                    "package_contract_sha256",
+                )
+            }
+            existing_stable = {key: existing.get(key) for key in stable_fields}
+            if existing_stable != stable_fields:
+                raise ValueError("Skill revision already references another package")
+        else:
+            _atomic_json(reference_path, reference)
+        return reference
 
     def _resolve_binding(
         self, artifact: Dict[str, Any], target_binding: str

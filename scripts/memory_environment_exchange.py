@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 import re
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from memory_environment import EnvironmentRegistry, canonical_bytes, read_json
+from memory_environment_skills import MANIFEST_NAME, skill_package_contract_bytes
 from memory_federation import (
     FederationManager,
     atomic_write_bytes,
@@ -158,10 +160,14 @@ class EnvironmentExchangeManager:
                 revision["object_path"], "object_path"
             )
             content = object_path.read_bytes()
+            package_attachment = self._skill_package_attachment(
+                artifact, revision, content
+            )
             payload = {
                 "artifact": artifact,
                 "revision": revision,
                 "content_base64": base64.b64encode(content).decode("ascii"),
+                "package_attachment": package_attachment,
             }
             ledger.append(
                 {
@@ -414,7 +420,8 @@ class EnvironmentExchangeManager:
                 "artifact": payload["artifact"],
                 "revision": revision,
                 "content_base64": payload["content_base64"],
-                "received_at": now_iso(),
+                "package_attachment": payload["package_attachment"],
+                "received_bundle_id": manifest["bundle_id"],
             }
             stage_path = incoming / (
                 f"{int(item['event_sequence']):020d}-"
@@ -474,6 +481,7 @@ class EnvironmentExchangeManager:
             "artifact",
             "revision",
             "content_base64",
+            "package_attachment",
         }:
             raise ValueError("environment payload is invalid")
         artifact = self.registry._validate_artifact(payload["artifact"])
@@ -490,3 +498,95 @@ class EnvironmentExchangeManager:
             raise ValueError("environment object base64 is invalid") from error
         if bytes_sha256(content) != revision["content_sha256"]:
             raise ValueError("environment object content hash mismatch")
+        attachment = payload["package_attachment"]
+        if artifact["object_class"].endswith("-skill"):
+            self._validate_skill_attachment(attachment, revision, content)
+        elif attachment is not None:
+            raise ValueError("rule payload cannot carry a Skill package attachment")
+
+    def _skill_package_attachment(
+        self,
+        artifact: Dict[str, Any],
+        revision: Dict[str, Any],
+        contract: bytes,
+    ) -> Optional[Dict[str, str]]:
+        if not artifact["object_class"].endswith("-skill"):
+            return None
+        reference_path = (
+            self.registry.root
+            / "packages"
+            / "by-revision"
+            / f"{revision['revision_id'].split(':', 1)[1]}.json"
+        )
+        if not reference_path.is_file() or reference_path.is_symlink():
+            raise ValueError(
+                "registered Skill revision has no verified package attachment"
+            )
+        reference = read_json(reference_path)
+        required = {
+            "schema_version",
+            "artifact_id",
+            "revision_id",
+            "package_sha256",
+            "package_path",
+            "package_contract_sha256",
+            "verified_at",
+        }
+        if not isinstance(reference, dict) or set(reference) != required:
+            raise ValueError("Skill package reference is invalid")
+        if (
+            reference["artifact_id"] != artifact["artifact_id"]
+            or reference["revision_id"] != revision["revision_id"]
+        ):
+            raise ValueError("Skill package reference identity mismatch")
+        if reference["package_contract_sha256"] != bytes_sha256(contract):
+            raise ValueError("Skill package reference contract hash mismatch")
+        expected_package_path = (
+            f"packages/sha256/{reference['package_sha256'][:2]}/"
+            f"{reference['package_sha256'][2:]}"
+        )
+        if reference["package_path"] != expected_package_path:
+            raise ValueError("Skill package reference path is not content-addressed")
+        package_path = self.registry._resolve_relative(
+            reference["package_path"], "package_path"
+        )
+        package = package_path.read_bytes()
+        if bytes_sha256(package) != reference["package_sha256"]:
+            raise ValueError("Skill package attachment hash mismatch")
+        attachment = {
+            "package_sha256": reference["package_sha256"],
+            "content_base64": base64.b64encode(package).decode("ascii"),
+        }
+        self._validate_skill_attachment(attachment, revision, contract)
+        return attachment
+
+    @staticmethod
+    def _validate_skill_attachment(
+        attachment: Any,
+        revision: Dict[str, Any],
+        contract: bytes,
+    ) -> None:
+        if not isinstance(attachment, dict) or set(attachment) != {
+            "package_sha256",
+            "content_base64",
+        }:
+            raise ValueError("Skill package attachment is invalid")
+        try:
+            package = base64.b64decode(attachment["content_base64"], validate=True)
+        except Exception as error:
+            raise ValueError("Skill package attachment base64 is invalid") from error
+        if not isinstance(attachment["package_sha256"], str) or not re.fullmatch(
+            r"[0-9a-f]{64}", attachment["package_sha256"]
+        ):
+            raise ValueError("Skill package attachment hash is invalid")
+        if bytes_sha256(package) != attachment["package_sha256"]:
+            raise ValueError("Skill package attachment hash mismatch")
+        try:
+            with zipfile.ZipFile(io.BytesIO(package)) as archive:
+                manifest = json.loads(archive.read(MANIFEST_NAME))
+        except (KeyError, OSError, zipfile.BadZipFile, json.JSONDecodeError) as error:
+            raise ValueError("Skill package attachment ZIP is invalid") from error
+        if manifest.get("source_revision") != revision["revision_id"]:
+            raise ValueError("Skill package attachment revision mismatch")
+        if skill_package_contract_bytes(manifest) != contract:
+            raise ValueError("Skill package attachment contract mismatch")

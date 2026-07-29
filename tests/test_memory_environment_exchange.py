@@ -14,6 +14,11 @@ from memory_cli import MemoryStore, load_simple_yaml
 from memory_cloud_transport import CloudFolderTransport
 from memory_environment import revision_id_for
 from memory_environment_exchange import EnvironmentExchangeManager
+from memory_environment_incoming import EnvironmentIncomingProcessor
+from memory_environment_skills import (
+    EnvironmentSkillInstaller,
+    skill_package_contract_bytes,
+)
 from memory_federation import FederationManager
 from tests.test_memory_cloud_transport import FakeCrypto
 
@@ -83,6 +88,116 @@ class EnvironmentExchangeTests(unittest.TestCase):
             apply=True,
         )
 
+    def register_and_cache_skill(self):
+        files = {
+            "SKILL.md": (
+                "---\nname: demo-sync\ndescription: Synced test Skill\n---\n"
+            ).encode(),
+            "agents/openai.yaml": (
+                "interface:\n"
+                '  display_name: "Demo Sync"\n'
+                '  short_description: "Synced test"\n'
+                '  default_prompt: "Use $demo-sync for this task."\n'
+            ).encode(),
+        }
+        manifest = {
+            "schema_version": 1,
+            "skill_id": "demo-sync",
+            "version": "1.0.0",
+            "scope": "global",
+            "project_id": None,
+            "source_revision": "rev:" + "0" * 64,
+            "files": [
+                {
+                    "path": path,
+                    "size": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "executable": False,
+                }
+                for path, payload in sorted(files.items())
+            ],
+            "supported_platforms": ["macos", "windows"],
+            "runtime_requirements": {"python": ">=3.10"},
+            "network_access": {"enabled": False, "destinations": []},
+            "persistent_components": [],
+            "checks": [{"type": "utf8", "path": "SKILL.md"}],
+            "rollback": {"strategy": "one-verified-version"},
+        }
+        contract = skill_package_contract_bytes(manifest)
+        digest = hashlib.sha256(contract).hexdigest()
+        artifact = {
+            "schema_version": 1,
+            "artifact_id": "global-skill:demo-sync",
+            "object_class": "global-skill",
+            "scope": "global",
+            "project_id": None,
+            "display_name": "Demo Sync",
+            "created_at": "2026-07-28T12:00:00+00:00",
+        }
+        revision = {
+            "schema_version": 1,
+            "revision_id": "rev:" + "0" * 64,
+            "artifact_id": artifact["artifact_id"],
+            "origin_node_id": "node-a",
+            "version": 1,
+            "base_revision_id": None,
+            "content_sha256": digest,
+            "object_path": f"objects/sha256/{digest[:2]}/{digest[2:]}",
+            "supported_platforms": ["macos", "windows"],
+            "runtime_requirements": {"python": ">=3.10"},
+            "provenance": {"source": "test-package"},
+            "lifecycle_state": "staged",
+            "created_at": "2026-07-28T12:00:00+00:00",
+        }
+        revision["revision_id"] = revision_id_for(revision)
+        manifest["source_revision"] = revision["revision_id"]
+        self.a.registry.register(
+            {
+                "schema_version": 1,
+                "artifacts": [
+                    {
+                        "artifact": artifact,
+                        "revision": revision,
+                        "content": contract.decode("utf-8"),
+                    }
+                ],
+                "projects": [],
+            },
+            apply=True,
+        )
+        package = self.base / "demo-sync.zip"
+        with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "skill-package-manifest.json",
+                json.dumps(manifest, sort_keys=True),
+            )
+            for path, payload in files.items():
+                archive.writestr(path, payload)
+        target_root = self.base / "global-skills"
+        target_root.mkdir()
+        EnvironmentSkillInstaller(
+            self.a.registry,
+            target_node_id="node-a",
+            platform="macos",
+            runtime_versions={"python": "3.12.0"},
+            global_skill_bindings={
+                "global-demo-sync": {
+                    "skill_id": "demo-sync",
+                    "root": str(target_root),
+                    "relative_path": "demo-sync",
+                    "enabled": True,
+                    "pinned_version": None,
+                }
+            },
+        ).install(
+            package_path=package,
+            artifact_id=artifact["artifact_id"],
+            revision_id=revision["revision_id"],
+            target_binding="global-demo-sync",
+            apply=True,
+        )
+        return revision
+
     def test_independent_delta_stages_remote_without_installing(self):
         self.register_rule()
         bundle = self.base / "environment.mwxb"
@@ -109,6 +224,31 @@ class EnvironmentExchangeTests(unittest.TestCase):
         archive_state = FederationManager(self.store_b).replica_state("node-a")
         self.assertEqual(environment_state["last_event_sequence"], 1)
         self.assertEqual(archive_state["last_event_sequence"], 0)
+
+    def test_skill_delta_carries_verified_package_only_into_staging(self):
+        revision = self.register_and_cache_skill()
+        bundle = self.base / "skill-environment.mwxb"
+        self.a.export_delta(bundle, target_node_id="node-b")
+        imported = self.b.import_delta(bundle, expected_node_id="node-a")
+        self.assertEqual(imported["staged_artifacts"], 1)
+        staged = next(
+            (self.b.registry.staging_dir / "incoming" / "node-a").glob("*.json")
+        )
+        record = json.loads(staged.read_text())
+        self.assertEqual(record["revision"]["revision_id"], revision["revision_id"])
+        self.assertIsNotNone(record["package_attachment"])
+        self.assertEqual(self.b.registry.list(), [])
+        stage_hash = hashlib.sha256(staged.read_bytes()).hexdigest()
+        accepted = EnvironmentIncomingProcessor(
+            self.store_b.root,
+            platform="macos",
+            runtime_versions={"python": "3.12.0"},
+        ).accept(stage_hash, apply=True)
+        self.assertTrue(Path(accepted["package_path"]).is_file())
+        self.assertEqual(
+            self.b.registry.show("global-skill:demo-sync")["revision"]["revision_id"],
+            revision["revision_id"],
+        )
 
     def test_predecessor_gap_and_tamper_fail_closed(self):
         self.register_rule()
