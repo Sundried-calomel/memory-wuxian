@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.4.2 - 2026-07-30
+
+- Fixed Windows dashboard cross-application port capture. The native Memory
+  Wuxian launcher now asks Windows for an unused loopback port and opens the
+  actual assigned port instead of assuming `127.0.0.1:8765`.
+- Kept the storage-organizer audit console on its independent fixed API port;
+  launching either desktop application can no longer display the other
+  application's interface.
+- Added a launcher regression test that forbids restoring the fixed 8765 port.
+
 ## 2.4.1 - 2026-07-30
 
 - Fixed batch Environment export so every artifact has a stable per-item

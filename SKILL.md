@@ -104,6 +104,9 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     mappings, lists, and block scalars; reject unsafe tags and duplicate keys.
     Project registrations received from peers remain read-only replicas and
     never create or activate a local project automatically.
+53. The native dashboard must bind an operating-system-assigned loopback port
+    and open the server's actual port. Never share or assume another local
+    application's fixed port.
 
 ## Operating workflow
 

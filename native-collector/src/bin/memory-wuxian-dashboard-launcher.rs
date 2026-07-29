@@ -75,7 +75,7 @@ fn launch() -> Result<()> {
         .arg("--config")
         .arg(skill_config)
         .arg("--port")
-        .arg("8765")
+        .arg("0")
         .arg("--window")
         .spawn()
         .context("start Memory Wuxian dashboard")?;

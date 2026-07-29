@@ -9,6 +9,18 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 
 
 class DashboardShortcutTest(unittest.TestCase):
+    def test_native_launcher_uses_an_os_assigned_port(self):
+        source = (
+            SKILL_ROOT
+            / "native-collector"
+            / "src"
+            / "bin"
+            / "memory-wuxian-dashboard-launcher.rs"
+        ).read_text(encoding="utf-8")
+        self.assertIn('.arg("--port")', source)
+        self.assertIn('.arg("0")', source)
+        self.assertNotIn('.arg("8765")', source)
+
     def test_shortcut_installer_is_atomic_and_uses_current_paths(self):
         script = (SKILL_ROOT / "scripts/install_dashboard_shortcut_windows.ps1").read_text(
             encoding="utf-8"

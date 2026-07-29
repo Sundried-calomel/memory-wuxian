@@ -546,6 +546,11 @@ parent process supplies a legacy `PYTHONIOENCODING` such as GBK. Interactive
 legacy consoles escape only unsupported characters instead of terminating the
 memory operation.
 
+Since v2.4.2, the Windows native dashboard launcher requests an unused
+loopback port from the operating system and opens the actual assigned port.
+It does not assume port 8765, so another local application cannot replace the
+Memory Wuxian interface by owning that port first.
+
 ```text
 init
 append
