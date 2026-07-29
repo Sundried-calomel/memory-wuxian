@@ -22,59 +22,55 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.source = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
-    def test_platform_gate_covers_python_and_rust_on_all_three_platforms(self) -> None:
-        block = job_block(self.source, "platform-tests")
-        self.assertIn(
-            "os: [ubuntu-latest, macos-latest, windows-latest]",
-            block,
-        )
-        for command in (
-            "cargo fmt --check",
-            "cargo check --locked --all-targets",
-            "cargo test --locked",
-            "cargo build --locked --bins",
-            "python -m unittest discover -s tests -v",
-            "python scripts/run_release_rehearsal.py",
-        ):
-            self.assertIn(command, block)
-        self.assertIn("release-rehearsal-${{ matrix.os }}", block)
+    def test_formal_release_is_manual_and_serialized(self) -> None:
+        self.assertIn("workflow_dispatch:", self.source)
+        self.assertNotIn("pull_request:", self.source)
+        self.assertNotIn("tags:", self.source)
+        self.assertIn("group: memory-wuxian-formal-release", self.source)
+        self.assertIn("cancel-in-progress: false", self.source)
 
-    def test_release_gate_requires_platform_tests_and_documentation(self) -> None:
+    def test_candidate_proof_requires_successful_push_ci_for_same_sha(self) -> None:
+        block = job_block(self.source, "candidate-proof")
+        self.assertIn('workflow_id: "test.yml"', block)
+        self.assertIn("head_sha: context.sha", block)
+        self.assertIn('run.event === "push"', block)
+        self.assertIn('run.conclusion === "success"', block)
+        self.assertIn("has no successful push run of test.yml", block)
+
+    def test_release_gate_requires_metadata_and_candidate_proof(self) -> None:
         block = job_block(self.source, "release-gate")
         self.assertRegex(
             block,
-            r"needs:\s*\[platform-tests,\s*documentation\]",
+            r"needs:\s*\[metadata,\s*candidate-proof\]",
         )
-        self.assertIn('needs.platform-tests.result }}" = "success"', block)
-        self.assertIn('needs.documentation.result }}" = "success"', block)
+        self.assertIn('needs.metadata.result }}" = "success"', block)
+        self.assertIn('needs.candidate-proof.result }}" = "success"', block)
 
-    def test_installers_and_publish_require_release_gate(self) -> None:
+    def test_installers_and_publish_require_release_gate_and_metadata(self) -> None:
         for installer in ("macos-installer", "windows-installer"):
             self.assertRegex(
                 job_block(self.source, installer),
-                r"(?m)^\s{4}needs:\s*release-gate\s*$",
+                r"(?m)^\s{4}needs:\s*\[release-gate,\s*metadata\]\s*$",
             )
         publish = job_block(self.source, "publish")
         self.assertRegex(
             publish,
-            r"needs:\s*\[release-gate,\s*macos-installer,\s*windows-installer\]",
+            r"needs:\s*\[metadata,\s*release-gate,\s*macos-installer,\s*windows-installer\]",
         )
 
     def test_every_source_checkout_is_pinned_to_event_commit(self) -> None:
         checkout_count = self.source.count("uses: actions/checkout@v7")
         pinned_count = self.source.count("ref: ${{ github.sha }}")
-        self.assertGreaterEqual(checkout_count, 4)
+        self.assertGreaterEqual(checkout_count, 3)
         self.assertEqual(pinned_count, checkout_count)
 
-    def test_only_tag_push_can_publish_and_version_checks_remain(self) -> None:
+    def test_publish_creates_single_version_tag_after_installers(self) -> None:
         publish = job_block(self.source, "publish")
-        self.assertIn("if: startsWith(github.ref, 'refs/tags/')", publish)
-        self.assertIn("workflow_dispatch:", self.source)
-        self.assertIn("pull_request:", self.source)
-        self.assertGreaterEqual(
-            self.source.count("does not match project version"),
-            2,
-        )
+        metadata = job_block(self.source, "metadata")
+        self.assertIn("Formal release tag already exists", metadata)
+        self.assertIn("tag_name: ${{ needs.metadata.outputs.tag }}", publish)
+        self.assertIn("target_commitish: ${{ github.sha }}", publish)
+        self.assertNotIn("startsWith(github.ref", publish)
 
     def test_installer_checksums_are_retained(self) -> None:
         self.assertIn("Get-FileHash", job_block(self.source, "windows-installer"))

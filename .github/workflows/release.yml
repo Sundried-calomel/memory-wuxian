@@ -2,21 +2,21 @@ name: release-installers
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: write
+  actions: read
+
+concurrency:
+  group: memory-wuxian-formal-release
+  cancel-in-progress: false
 
 jobs:
-  platform-tests:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -24,45 +24,60 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - run: cargo fmt --check --manifest-path native-collector/Cargo.toml
-      - run: cargo check --locked --all-targets --manifest-path native-collector/Cargo.toml
-      - run: cargo test --locked --manifest-path native-collector/Cargo.toml
-      - run: cargo build --locked --bins --manifest-path native-collector/Cargo.toml
-      - run: python -m unittest discover -s tests -v
-      - run: python scripts/run_release_rehearsal.py --output outputs/rehearsal/${{ matrix.os }}
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: release-rehearsal-${{ matrix.os }}
-          path: outputs/rehearsal/${{ matrix.os }}
+      - id: release
+        shell: bash
+        run: |
+          version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Formal release tag already exists: $tag" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-  documentation:
+  candidate-proof:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - name: Require successful candidate CI for this commit
+        uses: actions/github-script@v8
         with:
-          ref: ${{ github.sha }}
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      - run: python scripts/check_documentation_contract.py
+          script: |
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRuns,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: "test.yml",
+                head_sha: context.sha,
+                status: "completed",
+                per_page: 100
+              }
+            );
+            const proof = runs.find(
+              (run) => run.event === "push" && run.conclusion === "success"
+            );
+            if (!proof) {
+              core.setFailed(
+                `Commit ${context.sha} has no successful push run of test.yml`
+              );
+              return;
+            }
+            core.notice(`Candidate evidence: ${proof.html_url}`);
 
   release-gate:
     if: always()
-    needs: [platform-tests, documentation]
+    needs: [metadata, candidate-proof]
     runs-on: ubuntu-latest
     steps:
-      - name: Require complete tests and documentation
+      - name: Require candidate evidence and unused version
         shell: bash
         run: |
-          test "${{ needs.platform-tests.result }}" = "success"
-          test "${{ needs.documentation.result }}" = "success"
+          test "${{ needs.metadata.result }}" = "success"
+          test "${{ needs.candidate-proof.result }}" = "success"
 
   macos-installer:
-    needs: release-gate
+    needs: [release-gate, metadata]
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v7
@@ -92,11 +107,7 @@ jobs:
       - name: Build PKG
         shell: bash
         run: |
-          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
-          if [[ "$GITHUB_REF" == refs/tags/* && "${GITHUB_REF_NAME#v}" != "$version" ]]; then
-            echo "Tag $GITHUB_REF_NAME does not match project version $version" >&2
-            exit 1
-          fi
+          version="${{ needs.metadata.outputs.version }}"
           packaging/macos/build_pkg.sh "$version" dist
           if ! pkgutil --payload-files "dist/MemoryWuxian-$version-macOS-universal.pkg" \
             | grep -q "Memory無限操作台.app/Contents/MacOS/MemoryDashboard"; then
@@ -115,7 +126,7 @@ jobs:
           path: dist/*
 
   windows-installer:
-    needs: release-gate
+    needs: [release-gate, metadata]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -137,10 +148,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          $version = python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"
-          if ($env:GITHUB_REF.StartsWith('refs/tags/') -and $env:GITHUB_REF_NAME.TrimStart('v') -ne $version) {
-            throw "Tag $env:GITHUB_REF_NAME does not match project version $version"
-          }
+          $version = "${{ needs.metadata.outputs.version }}"
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DSourceRoot=$PWD" "/DAppVersion=$version" packaging/windows/MemoryWuxian.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
           $installer = Get-Item "dist\MemoryWuxian-$version-Windows-x64-Setup.exe"
@@ -156,8 +164,7 @@ jobs:
           path: dist/*
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [release-gate, macos-installer, windows-installer]
+    needs: [metadata, release-gate, macos-installer, windows-installer]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
@@ -166,5 +173,7 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.metadata.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: dist/*
           generate_release_notes: true
