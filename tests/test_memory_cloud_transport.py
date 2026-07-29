@@ -319,7 +319,11 @@ safety:
         )
         self.assertEqual(
             transport._exchange_root(),
-            self.exchange.resolve() / "MemoryWuxianExchange" / "v1",
+            Path(
+                filesystem_native_path(
+                    self.exchange.resolve() / "MemoryWuxianExchange" / "v1"
+                )
+            ),
         )
 
     def test_existing_queue_directory_config_is_normalized_when_read(self):
@@ -333,7 +337,11 @@ safety:
         reloaded = CloudFolderTransport(self.manager_a, crypto=self.crypto)
         self.assertEqual(
             reloaded._exchange_root(),
-            self.exchange.resolve() / "MemoryWuxianExchange" / "v1",
+            Path(
+                filesystem_native_path(
+                    self.exchange.resolve() / "MemoryWuxianExchange" / "v1"
+                )
+            ),
         )
 
     def test_existing_outstanding_envelope_migrates_to_canonical_outbox(self):

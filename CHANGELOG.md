@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.2 - 2026-07-29
+
+- Made the cloud-root normalization regression tests compare Windows native
+  long-path representations correctly without changing runtime behavior.
+
 ## 2.0.1 - 2026-07-29
 
 - Added a canonical product-architecture contract for module ownership,
