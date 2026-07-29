@@ -591,8 +591,11 @@ class EnvironmentBindingRegistryTest(unittest.TestCase):
             persisted["skill_bindings"][0]["target_root"],
             expected_skills_root,
         )
-        with self.assertRaisesRegex(ValueError, "inactive"):
-            windows.get_skill_bindings()
+        if os.name == "nt":
+            self.assertEqual(len(windows.get_skill_bindings()), 1)
+        else:
+            with self.assertRaisesRegex(ValueError, "inactive"):
+                windows.get_skill_bindings()
 
     def test_schema_file_is_closed_and_names_node_path(self):
         schema = json.loads(
