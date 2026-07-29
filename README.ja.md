@@ -165,7 +165,10 @@ Windowsインストーラーは初回導入または更新のたびに
 `Memory无限状态台.lnk`を再作成します。アンインストールではショートカット
 だけを削除し、記憶アーカイブは削除しません。
 
-コンソールはlocalhostだけにバインドし、外部サービスへアーカイブを送りません。通常の状態表示は読取専用です。設定画面の明示的操作では、暗号化クラウド交換の有効化・無効化、即時同期、選択したChatGPTエクスポートのローカル取込みができます。`--window`を使わない場合はクロスプラットフォームのブラウザモード、`--no-browser`はローカルサーバーのみ、`--port`はポート指定です。
+コンソールはlocalhostだけにバインドし、外部サービスへアーカイブを送りません。通常の状態表示は読取専用です。「記憶検索」はCLIと同じ検証済み検索エンジンを使い、キーワード、多言語意味検索、ハイブリッドの各モードを提供します。各結果は人が読める原文、タイトル、日時、話者、原文行範囲、SHA-256バックリンクを保持します。設定画面の明示的操作では、暗号化クラウド交換の有効化・無効化、即時同期、選択したChatGPTエクスポートのローカル取込みができます。`--window`を使わない場合はクロスプラットフォームのブラウザモード、`--no-browser`はローカルサーバーのみ、`--port`はポート指定です。
+
+ローカル読取専用APIは `/api/memory-search` で、モード値は `keyword`、
+`semantic`、`hybrid` です。
 
 ## macOSでCodexを自動収集
 
@@ -544,6 +547,13 @@ Memory無限は[MIT License](LICENSE.txt)で公開されています。
 `retrieval-evaluate` は可読 JSONL テストセットで recall-at-k、誤引用数、
 レイテンシを測定します。`semantic-index-build` の既定
 `local-hash-v1` は完全オフラインで、モデルをダウンロードせず外部サービスも
-利用しません。`semantic-retrieve` は raw SHA-256 を再検証し、会話・
+利用しません。多言語ニューラル検索を使う場合は
+`python scripts/install_multilingual_e5.py` を実行してから
+`semantic-index-build --provider multilingual-e5-small` を実行します。
+任意の 384 次元 `intfloat/multilingual-e5-small` ONNX モデルは不変リビジョンと
+正確な SHA-256 に固定され、隔離環境でリモートモデルコードを無効化し、
+推論を強制的にオフラインで行います。Windows の隔離環境は Python 3.12 に
+固定され、中国語を含む Skill、アーカイブ、worker、索引パスを扱えます。
+`semantic-retrieve` は raw SHA-256 を再検証し、会話・
 メッセージ ID、raw パス、正確な行範囲を返します。
 `semantic-index-clear` は再構築可能なベクトルだけを削除します。

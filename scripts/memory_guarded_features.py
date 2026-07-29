@@ -9,6 +9,7 @@ import json
 import math
 import os
 import shutil
+import subprocess
 import tempfile
 import time
 import zipfile
@@ -19,6 +20,8 @@ from typing import Any, Dict, Iterable, List, Optional
 AUTHORITATIVE_PREFIXES = ("raw/", "summaries/")
 AUTHORITATIVE_FILES = {"state.json"}
 IGNORED_MIGRATION_PARTS = {".locks", ".DS_Store"}
+E5_PROVIDER = "multilingual-e5-small"
+E5_REVISION = "614241f622f53c4eeff9890bdc4f31cfecc418b3"
 
 
 def sha256_file(path: Path) -> str:
@@ -337,23 +340,143 @@ class GuardedFeatures:
         norm = math.sqrt(sum(value * value for value in vector)) or 1.0
         return [value / norm for value in vector]
 
+    @staticmethod
+    def e5_paths() -> tuple[Path, Path]:
+        model_dir = (
+            Path.home()
+            / ".codex/models/memory-wuxian/multilingual-e5-small"
+            / E5_REVISION
+        )
+        runtime_python = Path.home() / ".codex/runtimes/memory-wuxian-e5-py312"
+        runtime_python /= "Scripts/python.exe" if os.name == "nt" else "bin/python"
+        return model_dir, runtime_python
+
+    def validate_e5_install(self) -> tuple[Path, Path]:
+        model_dir, runtime_python = self.e5_paths()
+        manifest_path = model_dir / "model-manifest.json"
+        if not runtime_python.exists() or not manifest_path.exists():
+            raise ValueError(
+                "multilingual-e5-small is not installed; run scripts/install_multilingual_e5.py"
+            )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (
+            manifest.get("format") != "memory-wuxian-e5-model-v1"
+            or manifest.get("model_id") != "intfloat/multilingual-e5-small"
+            or manifest.get("model_revision") != E5_REVISION
+            or manifest.get("offline_only") is not True
+        ):
+            raise ValueError("multilingual-e5-small manifest does not match the pinned provider")
+        for artifact in manifest.get("artifacts", []):
+            path = model_dir / str(artifact["path"])
+            if (
+                not path.is_file()
+                or path.stat().st_size != int(artifact["size"])
+                or sha256_file(path) != str(artifact["sha256"])
+            ):
+                raise ValueError(f"multilingual-e5-small artifact failed verification: {path.name}")
+        return model_dir, runtime_python
+
+    @staticmethod
+    def e5_environment() -> Dict[str, str]:
+        environment = os.environ.copy()
+        environment.update({
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "HF_DATASETS_OFFLINE": "1",
+            "TOKENIZERS_PARALLELISM": "false",
+        })
+        return environment
+
+    def e5_embed(
+        self,
+        texts: List[str],
+        prefix: str,
+        output: Path,
+        batch_size: int = 8,
+    ) -> None:
+        model_dir, runtime_python = self.validate_e5_install()
+        payload = output.with_suffix(".input.json")
+        payload.write_text(
+            json.dumps({"texts": texts}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        try:
+            subprocess.run(
+                [
+                    str(runtime_python),
+                    str(Path(__file__).with_name("semantic_e5_worker.py")),
+                    "--model-dir", str(model_dir),
+                    "--input", str(payload),
+                    "--output", str(output),
+                    "--prefix", prefix,
+                    "--batch-size", str(batch_size),
+                ],
+                check=True,
+                env=self.e5_environment(),
+            )
+        finally:
+            payload.unlink(missing_ok=True)
+
+    def e5_scores(self, query: str, matrix: Path) -> List[float]:
+        model_dir, runtime_python = self.validate_e5_install()
+        with tempfile.TemporaryDirectory(prefix="memory-wuxian-e5-query-") as temp:
+            temporary = Path(temp)
+            payload = temporary / "query.json"
+            output = temporary / "scores.json"
+            payload.write_text(
+                json.dumps({"texts": [query]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [
+                    str(runtime_python),
+                    str(Path(__file__).with_name("semantic_e5_worker.py")),
+                    "--model-dir", str(model_dir),
+                    "--input", str(payload),
+                    "--output", str(output),
+                    "--prefix", "query",
+                    "--batch-size", "1",
+                    "--matrix", str(matrix),
+                ],
+                check=True,
+                env=self.e5_environment(),
+            )
+            return [
+                float(value)
+                for value in json.loads(output.read_text(encoding="utf-8"))["scores"]
+            ]
+
     def semantic_build(self, provider: str) -> Dict[str, Any]:
-        if provider != "local-hash-v1":
-            raise ValueError("Only the offline local-hash-v1 provider is enabled by default")
+        if provider not in {"local-hash-v1", E5_PROVIDER}:
+            raise ValueError("Semantic provider must be local-hash-v1 or multilingual-e5-small")
         directory = self.store.index_dir / "semantic"
         records = []
-        for record in self.store.read_all_raw():
-            records.append({
+        raw_records = self.store.read_all_raw()
+        for record in raw_records:
+            item = {
                 "message_id": record["message_id"],
                 "conversation_id": record["conversation_id"],
                 "raw_path": record["_path"],
                 "record_sha256": record["content_sha256"],
                 **self.raw_pointer(record),
                 "provider": provider,
-                "vector": self._hash_embedding(str(record.get("text", ""))),
-            })
+            }
+            if provider == "local-hash-v1":
+                item["vector"] = self._hash_embedding(str(record.get("text", "")))
+            records.append(item)
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / "vectors.jsonl"
+        vector_path = None
+        if provider == E5_PROVIDER:
+            vector_path = directory / "vectors.npy"
+            temporary_vector = directory / ".vectors.npy"
+            self.e5_embed(
+                [str(record.get("text", "")) for record in raw_records],
+                "passage",
+                temporary_vector,
+                batch_size=16,
+            )
+            os.replace(temporary_vector, vector_path)
         text = "".join(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n" for item in records)
         temporary = path.with_suffix(".tmp")
         temporary.write_text(text, encoding="utf-8")
@@ -361,11 +484,20 @@ class GuardedFeatures:
         atomic_json(directory / "manifest.json", {
             "format": "memory-wuxian-semantic-index-v1",
             "provider": provider,
+            "model_id": "intfloat/multilingual-e5-small" if provider == E5_PROVIDER else None,
+            "model_revision": E5_REVISION if provider == E5_PROVIDER else None,
+            "vector_file": vector_path.name if vector_path else None,
             "record_count": len(records),
             "disposable": True,
             "raw_archive_required_for_verification": True,
         })
-        return {"status": "built", "provider": provider, "record_count": len(records), "path": str(path)}
+        return {
+            "status": "built",
+            "provider": provider,
+            "record_count": len(records),
+            "path": str(path),
+            "vector_path": str(vector_path) if vector_path else None,
+        }
 
     def semantic_clear(self) -> Dict[str, Any]:
         directory = self.store.index_dir / "semantic"
@@ -382,14 +514,28 @@ class GuardedFeatures:
         if not path.exists():
             raise ValueError("Semantic index is not built")
         raw = {str(item["message_id"]): item for item in self.store.read_all_raw()}
+        manifest = json.loads(
+            (self.store.index_dir / "semantic" / "manifest.json").read_text(encoding="utf-8")
+        )
+        provider = str(manifest.get("provider") or "local-hash-v1")
         query_vector = self._hash_embedding(query)
+        e5_scores = None
+        if provider == E5_PROVIDER:
+            e5_scores = self.e5_scores(
+                query,
+                self.store.index_dir / "semantic" / str(manifest["vector_file"]),
+            )
         matches = []
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for index, line in enumerate(path.read_text(encoding="utf-8").splitlines()):
             item = json.loads(line)
             source = raw.get(str(item["message_id"]))
             if not source or source.get("content_sha256") != item["record_sha256"]:
                 continue
-            score = sum(a * b for a, b in zip(query_vector, item["vector"]))
+            score = (
+                e5_scores[index]
+                if e5_scores is not None
+                else float(sum(a * b for a, b in zip(query_vector, item["vector"])))
+            )
             matches.append({
                 "message_id": item["message_id"],
                 "conversation_id": item["conversation_id"],
@@ -402,7 +548,7 @@ class GuardedFeatures:
         matches.sort(key=lambda item: item["score"], reverse=True)
         return {
             "query": query,
-            "provider": "local-hash-v1",
+            "provider": provider,
             "matches": matches[:top_k],
             "verified_against_raw": True,
         }

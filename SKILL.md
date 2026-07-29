@@ -48,48 +48,54 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     behavior must replace the platform launcher, preserve the active archive,
     bind the launcher version to the package version, and pass a live
     post-install self-check before the release is considered complete.
-36. Rebuild the Windows native-dashboard shortcut after every installer upgrade, using the preserved active archive root and the Python runtime validated by the current bootstrap.
-37. Persist top-level Codex `token_count` telemetry in a separate derived
+36. Keep `local-hash-v1` as the no-download semantic default. The optional
+    `multilingual-e5-small` provider must use the pinned installer, immutable
+    model revision, exact artifact SHA-256 verification, an isolated runtime,
+    offline inference, and disabled remote model code. Semantic vectors remain
+    disposable derived data and every returned hit must be verified against raw
+    history.
+37. Rebuild the Windows native-dashboard shortcut after every installer upgrade, using the preserved active archive root and the Python runtime validated by the current bootstrap.
+38. Persist top-level Codex `token_count` telemetry in a separate derived
     per-conversation ledger. Call it Codex-reported model usage, not billing
     usage. Treat cached input and reasoning output as included subfields, detect
     cumulative-counter resets, exclude subagents, and never place telemetry in
     raw dialogue or semantic summaries.
-38. Keep Environment Registry authority, locks, cursors, staging, and receipts
+39. Keep Environment Registry authority, locks, cursors, staging, and receipts
     independent from the 1.x conversation archive. Environment operations must
     never rewrite raw dialogue, summaries, or local archive ownership.
-39. Represent global Rules, project Rules, global Skills, and project Skills as
+40. Represent global Rules, project Rules, global Skills, and project Skills as
     immutable, content-addressed revisions with explicit node-local bindings.
     Synchronize managed rule blocks only; preserve all bytes outside those
     blocks.
-40. Exchange environment revisions through a separate signed and
+41. Exchange environment revisions through a separate signed and
     target-encrypted `environment-v1` stream. Each device keeps its own writable
     local state and receives remote conversation history only as read-only
     replicas.
-41. Let the five-minute cloud task validate and stage incoming Environment
+42. Let the five-minute cloud task validate and stage incoming Environment
     updates without AI. No-change must create no decision, receipt, backup, or
     model call.
-42. Never auto-install a Skill or project-scoped artifact. Divergence, identity
+43. Never auto-install a Skill or project-scoped artifact. Divergence, identity
     changes, permission expansion, persistent-component expansion, and
     incompatible runtimes require explicit review and fail closed.
-43. Install only a registered immutable revision through a verified binding.
+44. Install only a registered immutable revision through a verified binding.
     Validate package contents, platform and runtime contracts, preserve a
     rollback object before mutation, atomically switch, self-check, and append a
     receipt.
-44. Promote reusable project capability to global scope only through a separate
+45. Promote reusable project capability to global scope only through a separate
     evidence-bearing proposal, complete platform matrix, and explicit approval.
-45. Transport governance-insight proposals only as immutable, source-bound
+46. Transport governance-insight proposals only as immutable, source-bound
     evidence. Keep imported proposals in read-only peer replicas; transfer,
     repetition, or arrival from another device never constitutes semantic
     review, acceptance, Rule registration, or Skill installation.
-46. Keep governance-AI orchestration disabled until explicitly enabled.
+47. Keep governance-AI orchestration disabled until explicitly enabled.
     Five-minute checks are model-free; invoke at most one ephemeral Codex
     worker only when a bounded compatible batch is due.
-47. Keep product work on its source device and run cross-device governance
+48. Keep product work on its source device and run cross-device governance
     classification only on the explicitly configured coordinator.
-48. Treat every AI result as a schema-validated, reviewable draft. It must
+49. Treat every AI result as a schema-validated, reviewable draft. It must
     never accept a Rule, install a Skill, remediate a product, rewrite history,
     or mark itself human-reviewed.
-49. Validate evidence hashes before invocation. Retry a failed item at most
+50. Validate evidence hashes before invocation. Retry a failed item at most
     twice, then isolate it without blocking unrelated queue work.
 
 ## Operating workflow

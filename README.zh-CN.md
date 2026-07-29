@@ -155,7 +155,10 @@ Windows 安装器会在每次首次安装或升级后运行
 内置图标和验证通过的 `pythonw.exe` 重新创建
 `Memory无限状态台.lnk`。卸载时只移除快捷方式，不删除记忆档案。
 
-状态台仅绑定 localhost，不向外部服务发送档案。常规状态页面只读；设置页中的明确操作可以开启或关闭加密云文件夹交换、立即执行一次交换，或把用户选择的 ChatGPT 导出包导入本地档案。不使用 `--window` 时仍可使用跨平台浏览器模式；`--no-browser` 只启动本地服务器，`--port` 可指定端口。
+状态台仅绑定 localhost，不向外部服务发送档案。常规状态页面只读。“记忆搜索”与 CLI 共用同一套已验证检索引擎，支持关键词、多语语义和混合模式；每条结果保持人类可读，并显示标题、时间、说话者、原文行范围和 SHA-256 回链。设置页中的明确操作可以开启或关闭加密云文件夹交换、立即执行一次交换，或把用户选择的 ChatGPT 导出包导入本地档案。不使用 `--window` 时仍可使用跨平台浏览器模式；`--no-browser` 只启动本地服务器，`--port` 可指定端口。
+
+本地只读接口为 `/api/memory-search`，三种模式值分别为 `keyword`、
+`semantic` 和 `hybrid`。
 
 ## macOS 自动采集 Codex
 
@@ -519,7 +522,13 @@ raw 历史之外的只读副本区。
 ## v1.11 检索质量与可选本地语义索引
 
 `retrieval-evaluate` 用人类可读 JSONL 测试集统计 recall-at-k、错误引用数和
-延迟。`semantic-index-build` 默认使用完全离线的 `local-hash-v1`，不下载模型，
-不调用外部服务。`semantic-retrieve` 会以 raw SHA-256 复核每条命中，并返回
+延迟。`semantic-index-build` 保留完全离线的默认 `local-hash-v1`，不下载模型，
+不调用外部服务。需要多语神经语义检索时，先运行
+`python scripts/install_multilingual_e5.py`，再运行
+`semantic-index-build --provider multilingual-e5-small`。可选的 384 维
+`intfloat/multilingual-e5-small` ONNX 模型固定到不可变提交和准确 SHA-256，
+使用隔离环境，禁用远程模型代码，并在推理时强制离线。Windows 隔离环境明确
+绑定 Python 3.12，并支持中文 Skill、档案、worker 和索引路径。`semantic-retrieve`
+会以 raw SHA-256 复核每条命中，并返回
 对话/消息 ID、原始路径和准确行范围。`semantic-index-clear` 只删除可重建向量，
 原始历史和关键词检索仍然可用。

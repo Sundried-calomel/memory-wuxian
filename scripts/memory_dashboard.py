@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from conversation_titles import (
     archive_conversation_titles,
@@ -43,6 +43,7 @@ from memory_environment_incoming import EnvironmentIncomingProcessor
 from memory_environment_promotions import PromotionStore
 from memory_federation import FederationManager
 from memory_governance_ai import GovernanceAIQueue
+from memory_guarded_features import GuardedFeatures
 from platform_process import no_window_kwargs
 from token_usage import aggregate_ledgers, normalize_usage, token_usage_ledgers
 
@@ -981,6 +982,110 @@ def make_handler(store: MemoryStore):
     environment_cache = EnvironmentDashboardCache(store.root)
 
     class Handler(BaseHTTPRequestHandler):
+        def memory_search(self, request) -> dict[str, Any]:
+            parameters = parse_qs(request.query)
+            query = str(parameters.get("q", [""])[0]).strip()
+            mode = str(parameters.get("mode", ["hybrid"])[0])
+            if not query or len(query) > 500:
+                raise ValueError("query must contain 1 to 500 characters")
+            if mode not in {"keyword", "semantic", "hybrid"}:
+                raise ValueError("search mode must be keyword, semantic, or hybrid")
+            try:
+                limit = max(1, min(50, int(parameters.get("limit", ["20"])[0])))
+            except ValueError as exc:
+                raise ValueError("limit must be an integer") from exc
+
+            raw_records = store.read_all_raw()
+            raw_by_id = {str(item["message_id"]): item for item in raw_records}
+            titles = archive_conversation_titles(raw_records)
+            ranked: dict[str, dict[str, Any]] = {}
+            normalized_query = store.normalize_search_text(query)
+            query_terms = [term for term in normalized_query.split() if term]
+
+            if mode in {"keyword", "hybrid"}:
+                for record in raw_records:
+                    text = str(record.get("text", ""))
+                    normalized = store.normalize_search_text(text)
+                    if not normalized:
+                        continue
+                    exact = normalized_query in normalized
+                    matched = sum(term in normalized for term in query_terms)
+                    if not exact and not matched:
+                        continue
+                    score = 1.0 if exact else matched / max(1, len(query_terms))
+                    ranked[str(record["message_id"])] = {
+                        "keyword_score": score,
+                        "semantic_score": None,
+                    }
+
+            if mode in {"semantic", "hybrid"}:
+                semantic = GuardedFeatures(store).semantic_retrieve(
+                    query, max(limit * 3, 30)
+                )
+                for position, match in enumerate(semantic["matches"]):
+                    message_id = str(match["message_id"])
+                    item = ranked.setdefault(
+                        message_id,
+                        {"keyword_score": None, "semantic_score": None},
+                    )
+                    item["semantic_score"] = float(match["score"])
+                    item["semantic_rank"] = position + 1
+
+            results = []
+            for message_id, scores in ranked.items():
+                record = raw_by_id.get(message_id)
+                if not record:
+                    continue
+                keyword_score = scores.get("keyword_score")
+                semantic_score = scores.get("semantic_score")
+                if mode == "keyword":
+                    score = float(keyword_score or 0)
+                elif mode == "semantic":
+                    score = float(semantic_score or 0)
+                else:
+                    score = max(
+                        float(keyword_score or 0),
+                        float(semantic_score or 0),
+                    )
+                    if keyword_score is not None and semantic_score is not None:
+                        score = min(1.0, score + 0.08)
+                if record.get("speaker") == "tool":
+                    score *= 0.72
+                conversation_id = str(record.get("conversation_id", ""))
+                results.append({
+                    "message_id": message_id,
+                    "conversation_id": conversation_id,
+                    "conversation_title": titles.get(conversation_id, conversation_id),
+                    "timestamp": record.get("timestamp"),
+                    "speaker": record.get("speaker"),
+                    "record_type": record.get("record_type"),
+                    "text": str(record.get("text", "")),
+                    "score": round(score, 8),
+                    "keyword_score": keyword_score,
+                    "semantic_score": semantic_score,
+                    "raw_path": record.get("_path"),
+                    "raw_line_start": None,
+                    "raw_line_end": None,
+                    "record_sha256": record.get("content_sha256"),
+                })
+            results.sort(
+                key=lambda item: (item["score"], str(item["timestamp"] or "")),
+                reverse=True,
+            )
+            selected = results[:limit]
+            pointers = GuardedFeatures(store)
+            for item in selected:
+                item.update(pointers.raw_pointer(raw_by_id[item["message_id"]]))
+            return {
+                "query": query,
+                "mode": mode,
+                "count": min(limit, len(results)),
+                "results": selected,
+                "verified_against_raw": True,
+                "semantic_provider": "multilingual-e5-small"
+                if mode in {"semantic", "hybrid"} else None,
+            }
+
         def handle(self) -> None:
             try:
                 super().handle()
@@ -1084,6 +1189,20 @@ def make_handler(store: MemoryStore):
                 body = json.dumps(
                     environment_cache.get(), ensure_ascii=False
                 ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+            elif path == "/api/memory-search":
+                try:
+                    body = json.dumps(
+                        self.memory_search(request), ensure_ascii=False
+                    ).encode("utf-8")
+                except ValueError as exc:
+                    self.send_json(400, {"error": str(exc)})
+                    return
+                except Exception as exc:
+                    self.send_json(500, {"error": str(exc)})
+                    return
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.3.0",
+  "reviewed_version": "2.4.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -29,7 +29,7 @@
     },
     {
       "id": "local-dashboard",
-      "required_tokens": ["memory_dashboard.py", "--window"]
+      "required_tokens": ["memory_dashboard.py", "--window", "/api/memory-search", "keyword", "semantic", "hybrid"]
     },
     {
       "id": "windows-dashboard-shortcut",
@@ -89,7 +89,7 @@
     },
     {
       "id": "retrieval-quality-and-local-semantics",
-      "required_tokens": ["retrieval-evaluate", "semantic-index-build", "semantic-index-clear", "semantic-retrieve", "local-hash-v1"]
+      "required_tokens": ["retrieval-evaluate", "semantic-index-build", "semantic-index-clear", "semantic-retrieve", "local-hash-v1", "multilingual-e5-small", "install_multilingual_e5.py"]
     },
     {
       "id": "codex-reported-token-ledger",
