@@ -356,7 +356,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         }
         legacy = {
             "event_sequence": 1,
-            "source_event_id": first["event_id"],
+            "source_event_id": "recovered-artifact-revision-0001",
             "event_kind": "artifact-revision",
             "artifact_id": artifact["artifact_id"],
             "revision_id": revision["revision_id"],

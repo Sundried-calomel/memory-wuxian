@@ -149,6 +149,19 @@ class EnvironmentExchangeManager:
         state = read_json(self.export_state_path)
         known = dict(state.get("source_events") or {})
         ledger = read_jsonl(self.export_ledger_path)
+        exported_revisions = {
+            (item.get("artifact_id"), item.get("revision_id"))
+            for item in ledger
+            if item.get("event_kind") in (None, "artifact-revision")
+        }
+        exported_projects = {
+            (
+                item.get("project_id"),
+                canonical_sha256((item.get("payload") or {}).get("project")),
+            )
+            for item in ledger
+            if item.get("event_kind") == "project-registration"
+        }
         for item in ledger:
             identity = self._ledger_source_identity(item)
             if identity:
@@ -159,7 +172,20 @@ class EnvironmentExchangeManager:
             if event.get("operation") != "artifact-revision":
                 continue
             source_event_id = self._registry_source_identity(event)
-            if source_event_id in known:
+            revision_identity = (event["artifact_id"], event["revision_id"])
+            if source_event_id in known or revision_identity in exported_revisions:
+                known.setdefault(
+                    source_event_id,
+                    next(
+                        int(item["event_sequence"])
+                        for item in ledger
+                        if (
+                            item.get("artifact_id"),
+                            item.get("revision_id"),
+                        )
+                        == revision_identity
+                    ),
+                )
                 continue
             artifact = self.registry._read_relative_json(
                 event["artifact_path"], "artifact_path"
@@ -209,6 +235,12 @@ class EnvironmentExchangeManager:
             project = self.registry._read_relative_json(
                 event["project_path"], "project_path"
             )
+            project_identity = (
+                project["project_id"],
+                canonical_sha256(project),
+            )
+            if project_identity in exported_projects:
+                continue
             payload = {"project": project}
             ledger.append(
                 {
