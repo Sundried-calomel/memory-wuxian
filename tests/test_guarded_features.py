@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +84,30 @@ class GuardedFeaturesTest(unittest.TestCase):
             if item["authoritative"]
         }
         self.assertEqual(raw_before, raw_after)
+
+    def test_multilingual_e5_provider_keeps_vectors_out_of_readable_metadata(self):
+        def fake_embed(texts, prefix, output, batch_size=8):
+            self.assertEqual("passage", prefix)
+            output.write_bytes(b"fake-numpy-matrix")
+
+        with patch.object(self.features, "e5_embed", side_effect=fake_embed):
+            result = self.features.semantic_build("multilingual-e5-small")
+        self.assertEqual("multilingual-e5-small", result["provider"])
+        metadata = [
+            json.loads(line)
+            for line in Path(result["path"]).read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertTrue(metadata)
+        self.assertTrue(all("vector" not in item for item in metadata))
+        self.assertTrue(all(item["raw_line_start"] for item in metadata))
+        with patch.object(
+            self.features,
+            "e5_scores",
+            return_value=[0.9, 0.1],
+        ):
+            retrieved = self.features.semantic_retrieve("保留原始归档", 2)
+        self.assertEqual("multilingual-e5-small", retrieved["provider"])
+        self.assertEqual("m1", retrieved["matches"][0]["message_id"])
 
     def test_retrieval_evaluation_is_human_readable(self):
         dataset = self.base / "evaluation.jsonl"

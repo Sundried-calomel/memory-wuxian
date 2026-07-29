@@ -180,7 +180,10 @@ It recreates `Memory无限状态台.lnk` with the current Skill path, active arc
 bundled icon, and validated `pythonw.exe`. Uninstalling removes only the shortcut,
 not the archive.
 
-The dashboard binds only to localhost and sends no archive data to an external service. Its routine status views are read-only. Explicit Settings actions may enable or disable encrypted cloud-folder exchange, run one immediate exchange pass, or import a user-selected ChatGPT export into the local archive. Without `--window`, the cross-platform browser mode remains available; use `--no-browser` to start only the local server, or `--port` to choose another local port.
+The dashboard binds only to localhost and sends no archive data to an external service. Its routine status views are read-only. The Memory search view uses the same verified retrieval engine as the CLI and offers keyword, multilingual semantic, and hybrid modes. Every result remains human-readable and includes its title, timestamp, speaker, raw line range, and SHA-256 backlink. Explicit Settings actions may enable or disable encrypted cloud-folder exchange, run one immediate exchange pass, or import a user-selected ChatGPT export into the local archive. Without `--window`, the cross-platform browser mode remains available; use `--no-browser` to start only the local server, or `--port` to choose another local port.
+
+The local read-only endpoint is `/api/memory-search`; its mode values are
+`keyword`, `semantic`, and `hybrid`.
 
 ## Automatic Codex capture on macOS
 
@@ -615,8 +618,15 @@ never an authority that can overwrite history.
 ## v1.11 retrieval quality and optional local semantics
 
 `retrieval-evaluate` measures a readable JSONL test set with recall-at-k,
-wrong-citation counts, and latency. `semantic-index-build` uses the default
+wrong-citation counts, and latency. `semantic-index-build` retains the default
 offline `local-hash-v1` provider: it downloads no model and calls no service.
+For multilingual neural retrieval, run `python scripts/install_multilingual_e5.py`
+and then `semantic-index-build --provider multilingual-e5-small`. The optional
+384-dimensional `intfloat/multilingual-e5-small` ONNX model is pinned to an
+immutable revision and exact SHA-256 values, runs from an isolated environment,
+disables remote model code, and performs inference offline. On Windows the
+isolated runtime is explicitly bound to Python 3.12 and accepts Unicode Skill,
+archive, worker, and index paths.
 `semantic-retrieve` verifies each hit against raw SHA-256 and returns the
 conversation/message ID, raw path, and exact line range.
 `semantic-index-clear` removes only disposable vectors; raw history and keyword

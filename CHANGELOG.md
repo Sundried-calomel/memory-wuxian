@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.4.0 - 2026-07-29
+
+- Added the optional offline `intfloat/multilingual-e5-small` semantic provider
+  with 384-dimensional multilingual embeddings and retained `local-hash-v1` as
+  the no-download default.
+- Added a dedicated isolated ONNX runtime and installer pinned to an immutable
+  model revision, exact artifact sizes, and SHA-256 values. Inference is forced
+  offline and remote model code is disabled.
+- Bound the Windows E5 runtime to Python 3.12 so worker, model, and semantic
+  matrix paths remain Unicode-safe when the archive or Skill path is Chinese.
+- Added a three-language dashboard Memory search view with keyword, semantic,
+  and hybrid modes backed by the same verified retrieval engine as the CLI.
+  Results retain readable source text, titles, timestamps, raw line ranges,
+  and SHA-256 evidence; tool activity remains searchable but ranks below
+  matching user and assistant dialogue.
+- Kept semantic vectors disposable and outside human-readable metadata while
+  preserving message IDs, raw line ranges, and raw-record SHA-256 backlinks.
+- Built and verified the current local archive index without rewriting existing
+  raw conversation or summary bytes.
+
 ## 2.3.0 - 2026-07-29
 
 - Added deterministic governance-AI discovery, micro-batching, and a one-shot
