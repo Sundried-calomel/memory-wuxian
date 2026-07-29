@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.3 - 2026-07-29
+
+- Passed URL-safe signing public keys to the native envelope helper with an
+  unambiguous `--option=value` argument so keys beginning with `-` cannot be
+  parsed as command-line options.
+- Retained failed release-rehearsal evidence on every platform for faster,
+  source-grounded diagnosis.
+
 ## 2.0.2 - 2026-07-29
 
 - Made the cloud-root normalization regression tests compare Windows native

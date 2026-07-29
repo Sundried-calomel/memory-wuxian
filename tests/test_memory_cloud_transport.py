@@ -9,17 +9,51 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from memory_cli import MemoryStore, load_simple_yaml
-from memory_cloud_transport import CloudFolderTransport, filesystem_native_path
+from memory_cloud_transport import (
+    CloudFolderTransport,
+    CommandCrypto,
+    filesystem_native_path,
+)
 from memory_federation import FederationManager, read_json
 
 
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
+
+
+class CommandCryptoArgumentTest(unittest.TestCase):
+    def test_open_accepts_signing_key_that_starts_with_hyphen(self):
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="{}\n",
+            stderr="",
+        )
+        crypto = CommandCrypto(Path("memory-wuxian-envelope"))
+
+        with patch("memory_cloud_transport.subprocess.run", return_value=completed) as run:
+            crypto.open(
+                Path("input.mwxa"),
+                Path("output.json"),
+                Path("identity.json"),
+                "-fixed-url-safe-signing-key",
+                "archive-v1-ack",
+                "node-beta",
+                "node-alpha",
+            )
+
+        command = run.call_args.args[0]
+        self.assertIn(
+            "--signing-public-key=-fixed-url-safe-signing-key",
+            command,
+        )
+        self.assertNotIn("--signing-public-key", command)
 
 
 class FakeCrypto:
