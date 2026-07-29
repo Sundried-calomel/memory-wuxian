@@ -77,15 +77,33 @@ Use Memory無限 to preserve conversation history outside the active context win
 50. Do not download a model or enable networked embeddings implicitly. A future
     model adapter requires a pinned source, explicit authorization, and the
     third-party audit gate.
-51. Release v1.9, v1.10, and v1.11 sequentially. Each version requires its own
-    clean commit, tag, documentation contract, full rehearsal directory, passing
-    report, and published GitHub Release. Evidence from one version cannot count
-    for another.
+51. Every release requires its own clean commit, tag, documentation contract,
+    full rehearsal directory, passing report, and published GitHub Release.
+    Evidence from one version cannot count for another.
 52. Persist available top-level Codex `token_count` telemetry as a derived
     per-conversation ledger. Label it Codex-reported model usage rather than
     billing usage; exclude subagents, preserve counter-reset segments, and do
     not add cached-input or reasoning-output subfields to `total_tokens` again.
     Missing telemetry is unavailable, not zero or an archive-text estimate.
+53. Keep the Memory無限 2.0 Environment Registry independent from raw
+    conversation authority. Its locks, revisions, bindings, cursors, staging,
+    receipts, and rollback records must not mutate 1.x archive history.
+54. Synchronize only registered immutable Rule and Skill revisions. Managed
+    Rule blocks preserve all external bytes; Skill packages must match their
+    registered content contract and actual installed-tree hash.
+55. Run incoming Environment validation in the existing five-minute model-free
+    cloud task. Transfer may stage an update but never constitutes approval or
+    installation.
+56. Auto-registration, when explicitly enabled, is limited to compatible
+    global Rule fast-forwards. Project artifacts, Skills, divergence, identity
+    changes, permission expansion, persistent-component expansion, and runtime
+    incompatibility require review and fail closed.
+57. Apply Rules and Skills only through verified node-local bindings,
+    preview-first installers, durable rollback state, atomic replacement,
+    post-install checks, and append-only receipts.
+58. Treat project-to-global Skill extraction as a promotion workflow. Require
+    explicit source evidence, a complete passing platform matrix, and reviewer
+    approval; never infer promotion from repeated use or successful sync.
 
 ## Authority order
 

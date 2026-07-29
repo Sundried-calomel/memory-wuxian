@@ -104,6 +104,51 @@ def main() -> int:
                 "tests.test_memory_dashboard_environment",
             ],
         ),
+        (
+            "environment-exchange-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_environment_exchange",
+            ],
+        ),
+        (
+            "environment-incoming-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_environment_incoming",
+            ],
+        ),
+        (
+            "environment-binding-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_environment_bindings",
+            ],
+        ),
+        (
+            "environment-conflict-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_environment_conflicts",
+                "tests.test_memory_environment_promotions",
+            ],
+        ),
+        (
+            "environment-install-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_environment_rules",
+                "tests.test_memory_environment_skills",
+            ],
+        ),
+        (
+            "environment-cloud-scheduler-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_cloud_scheduler",
+                "tests.test_memory_cloud_transport",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     results = []

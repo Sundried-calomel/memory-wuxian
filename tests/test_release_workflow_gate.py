@@ -34,8 +34,10 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
             "cargo test --locked",
             "cargo build --locked --bins",
             "python -m unittest discover -s tests -v",
+            "python scripts/run_release_rehearsal.py",
         ):
             self.assertIn(command, block)
+        self.assertIn("release-rehearsal-${{ matrix.os }}", block)
 
     def test_release_gate_requires_platform_tests_and_documentation(self) -> None:
         block = job_block(self.source, "release-gate")

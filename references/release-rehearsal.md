@@ -23,6 +23,19 @@ Required scenarios:
 10. Token-ledger tests prove reset-safe aggregation, subagent exclusion,
     preview-first backfill, idempotency, Python/Rust parity, and dashboard
     exposure without rewriting archive authority.
+11. Environment Registry tests prove closed schemas, independent locks,
+    immutable revisions, node-local bindings, and unchanged 1.x archive
+    authority.
+12. Environment exchange tests prove target encryption, origin signatures,
+    predecessor-chain continuity, independent cursors, bounded ZIP handling,
+    and staging without automatic installation.
+13. Incoming-processing, conflict, promotion, and installer tests prove that
+    the five-minute task is model-free, no-change is write-free, divergent or
+    permission-expanding updates fail closed, and accepted installs remain
+    rollback-safe.
+14. Dashboard tests and live viewport checks cover Environment inventory,
+    incoming status, manual update checks, effective conflict and promotion
+    states, desktop layout, and narrow mobile layout.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

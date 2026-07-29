@@ -48,6 +48,7 @@ Memory無限 是一个基于文件的 Codex Skill，用于在活动上下文窗�
 - 一份用于重建派生文件的最新工作区恢复备份
 - 使用增量包、产物账本游标和跨设备检索的联邦只读副本
 - 并行支持 SSH 与加密云文件夹联邦传输
+- 用于跨设备验证并统一规则与 Skill 的独立 Environment Registry
 - 面向 ChatGPT 官方导出 ZIP 和 `conversations.json` 的实验性本地适配器
 - 无数据库依赖、可直接检查的文件布局
 
@@ -332,6 +333,61 @@ python3 scripts/install_cloud_sync.py \
 云文件夹是传输队列，不是共享可写档案。每个节点只写自己的发件箱和确认。导入历史仍位于只读对端副本，`retrieve-global` 对 SSH 和云传输使用相同验证来源路径。`cloud-disable` 可停止交换而不删除档案、密钥或云端加密文件。
 
 1.6.1 起，这些操作也显示在状态台设置页。云同步开关同时控制加密交换和五分钟后台任务；“立即同步”执行一次即时加密交换。面板显示已配置云目录和后台任务状态，日常操作无需 AI 对话或终端命令。
+
+## Memory無限 2.0 环境趋同
+
+2.0 新增第二条彼此独立的同步平面，用于全局规则、项目规则、全局 Skill
+和项目 Skill。它不会把多台设备合并成同一个共享可写档案：每台设备继续拥有
+自己的本地对话主档案，其他设备的对话只作为经过验证的只读副本。
+
+环境产物采用不可变、内容寻址的修订和显式的本机绑定。选定云目录承载独立的
+签名、面向目标加密的 `environment-v1` 流，并使用自己的事件序号、前序链、
+游标、确认、暂存区和已验证 Skill 包。五分钟后台任务只用确定性脚本验证
+传入内容，不调用 AI。传输只会暂存更新，不会自行安装 Skill 或改写规则。
+
+只有显式开启相应策略时，兼容的全局规则快进才可以自动登记。项目产物、Skill、
+分歧、身份变化、权限扩大、持久组件增加和运行环境不兼容始终需要人工审阅。
+安装器会在修改前持久化回滚材料，原子切换，执行安装后检查，并追加证据回执。
+把可复用项目能力提升到全局范围属于另一条治理流程，必须具备完整平台矩阵、
+来源证据和显式批准。
+
+操作台的 Environment 视图会显示清单、传入判定、冲突、提升提案和手动更新
+检查。2.0 的完整 CLI 命令族如下：
+
+```text
+environment-init
+environment-scan
+environment-status
+environment-list
+environment-projects
+environment-show
+environment-diff
+environment-register
+environment-validate
+environment-export-delta
+environment-import-delta
+environment-exchange-status
+environment-incoming-status
+environment-process-incoming
+environment-accept-incoming
+environment-bindings-status
+environment-register-root
+environment-register-project-binding
+environment-register-rule-binding
+environment-register-project-rule-binding
+environment-register-skill-binding
+environment-discover
+environment-install-rule
+environment-recover-rule-installs
+environment-install-skill
+environment-recover-skill-installs
+environment-conflict-assess
+environment-conflicts
+environment-conflict-resolve
+environment-promotion-propose
+environment-promotion-transition
+environment-promotions
+```
 
 ## 隐私与集成边界
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "1.13.0",
+  "reviewed_version": "2.0.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -94,6 +94,22 @@
     {
       "id": "codex-reported-token-ledger",
       "required_tokens": ["token-usage-backfill", "Codex", "Token"]
+    },
+    {
+      "id": "environment-registry",
+      "required_tokens": ["environment-init", "environment-status", "environment-register", "environment-validate"]
+    },
+    {
+      "id": "environment-exchange",
+      "required_tokens": ["environment-export-delta", "environment-import-delta", "environment-process-incoming", "environment-accept-incoming"]
+    },
+    {
+      "id": "environment-installation",
+      "required_tokens": ["environment-install-rule", "environment-install-skill", "environment-recover-rule-installs", "environment-recover-skill-installs"]
+    },
+    {
+      "id": "environment-governance",
+      "required_tokens": ["environment-conflicts", "environment-conflict-resolve", "environment-promotions", "environment-promotion-transition"]
     }
   ]
 }

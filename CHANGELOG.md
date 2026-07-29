@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.0.0 - 2026-07-29
+
+- Added an independent Environment Registry for global and project Rules and
+  Skills without changing the authority or write ownership of conversation
+  archives.
+- Added node-local bindings, immutable revisions, verified Skill packages,
+  append-only receipts, rollback objects, and crash-safe Rule and Skill
+  installation.
+- Added a separate signed and target-encrypted `environment-v1` cloud stream
+  with its own event sequence, predecessor chain, cursors, acknowledgements,
+  staging area, and package cache.
+- Added deterministic, model-free incoming processing. Compatible global Rule
+  fast-forwards may be registered only under an explicit policy; project
+  artifacts, Skills, divergence, identity changes, and permission expansion
+  always require review.
+- Added three-way conflict assessment, explicit conflict resolution, and
+  evidence-gated project-to-global capability promotion.
+- Added Environment inventory, incoming-update status, conflict and promotion
+  state, and a manual update check to the desktop dashboard.
+- Kept each device's local archive independently writable. Remote conversation
+  history remains a verified read-only replica and environment exchange never
+  rewrites raw history.
+
 ## 1.13.0 - 2026-07-28
 
 - Added persistent per-conversation ledgers for top-level Codex-reported model

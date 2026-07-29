@@ -25,6 +25,11 @@ jobs:
       - run: cargo build --locked --bins --manifest-path native-collector/Cargo.toml
       - run: python scripts/check_documentation_contract.py
       - run: python -m unittest discover -s tests -v
+      - run: python scripts/run_release_rehearsal.py --output outputs/rehearsal/${{ matrix.os }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rehearsal-${{ matrix.os }}
+          path: outputs/rehearsal/${{ matrix.os }}
 
   documentation-change-gate:
     if: github.event_name == 'pull_request'

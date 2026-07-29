@@ -54,6 +54,29 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     usage. Treat cached input and reasoning output as included subfields, detect
     cumulative-counter resets, exclude subagents, and never place telemetry in
     raw dialogue or semantic summaries.
+38. Keep Environment Registry authority, locks, cursors, staging, and receipts
+    independent from the 1.x conversation archive. Environment operations must
+    never rewrite raw dialogue, summaries, or local archive ownership.
+39. Represent global Rules, project Rules, global Skills, and project Skills as
+    immutable, content-addressed revisions with explicit node-local bindings.
+    Synchronize managed rule blocks only; preserve all bytes outside those
+    blocks.
+40. Exchange environment revisions through a separate signed and
+    target-encrypted `environment-v1` stream. Each device keeps its own writable
+    local state and receives remote conversation history only as read-only
+    replicas.
+41. Let the five-minute cloud task validate and stage incoming Environment
+    updates without AI. No-change must create no decision, receipt, backup, or
+    model call.
+42. Never auto-install a Skill or project-scoped artifact. Divergence, identity
+    changes, permission expansion, persistent-component expansion, and
+    incompatible runtimes require explicit review and fail closed.
+43. Install only a registered immutable revision through a verified binding.
+    Validate package contents, platform and runtime contracts, preserve a
+    rollback object before mutation, atomically switch, self-check, and append a
+    receipt.
+44. Promote reusable project capability to global scope only through a separate
+    evidence-bearing proposal, complete platform matrix, and explicit approval.
 
 ## Operating workflow
 
@@ -92,6 +115,17 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     when retained historical Codex rollout files need to be measured. Do not
     infer missing usage from archived text or claim that ChatGPT exports expose
     model-consumption telemetry.
+29. Use `environment-init`, explicit root and project bindings, and
+    `environment-register` to establish Environment Registry state. Preview
+    every registration or install before `--apply`.
+30. Let `cloud-sync` process both archive and Environment streams. Incoming
+    Environment material is validated into staging first; use
+    `environment-incoming-status` and the dashboard Environment view before an
+    explicit acceptance or installation.
+31. Use `environment-conflicts` and `environment-promotions` for current
+    governance state. Resolve a conflict or advance a promotion only with
+    explicit reviewer and evidence fields; never infer approval from recency or
+    successful transfer.
 
 ## Commands
 
@@ -145,6 +179,12 @@ python3 scripts/memory_cli.py cloud-disable
 python3 scripts/memory_cli.py cloud-sync
 python3 scripts/memory_cli.py cloud-sync --force
 python3 scripts/memory_cli.py cloud-status
+python3 scripts/memory_cli.py environment-init
+python3 scripts/memory_cli.py environment-status
+python3 scripts/memory_cli.py environment-incoming-status
+python3 scripts/memory_cli.py environment-process-incoming
+python3 scripts/memory_cli.py environment-conflicts
+python3 scripts/memory_cli.py environment-promotions
 scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
 powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1

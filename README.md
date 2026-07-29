@@ -51,6 +51,7 @@ The installable Skill identifier is `memory-wuxian`; `Memory無限` is its proje
 - One latest workspace recovery backup for derived-file reconstruction
 - Federated read-only replicas with delta bundles, artifact-ledger cursors, and cross-device retrieval
 - Parallel SSH and encrypted cloud-folder federation transports
+- An independent Environment Registry for verified cross-device Rule and Skill convergence
 - An experimental local adapter for official ChatGPT export ZIP files and `conversations.json`
 - A transparent file layout with no database dependency
 
@@ -411,6 +412,68 @@ five-minute scheduler. Sync now performs one immediate encrypted exchange pass.
 The panel displays the configured provider directory and the observed scheduler
 state, so ordinary operation does not require an AI conversation or terminal
 commands.
+
+## Memory無限 2.0 environment convergence
+
+Version 2.0 adds a second, independent synchronization plane for global Rules,
+project Rules, global Skills, and project Skills. It does not turn multiple
+devices into one shared writable archive: each device keeps its own local
+conversation authority, while peer conversations remain verified read-only
+replicas.
+
+Environment artifacts use immutable content-addressed revisions and explicit
+node-local bindings. The selected cloud directory carries a separate signed and
+target-encrypted `environment-v1` stream with independent event sequences,
+predecessor chains, cursors, acknowledgements, staging, and verified Skill
+packages. The five-minute task validates incoming data without AI. Transfer
+only stages an update; it never installs a Skill or rewrites a Rule by itself.
+
+Compatible global Rule fast-forwards may be registered only when that policy is
+explicitly enabled. Project artifacts, Skills, divergence, identity changes,
+permission expansion, persistent components, and incompatible runtimes always
+require review. Installers preserve rollback material before mutation, switch
+atomically, run post-install checks, and append evidence receipts. Promotion of
+a reusable project capability to global scope is a separate evidence-gated
+workflow with a complete platform matrix and explicit approval.
+
+The dashboard Environment view exposes inventory, incoming decisions,
+conflicts, promotions, and a manual update check. The complete 2.0 CLI families
+are:
+
+```text
+environment-init
+environment-scan
+environment-status
+environment-list
+environment-projects
+environment-show
+environment-diff
+environment-register
+environment-validate
+environment-export-delta
+environment-import-delta
+environment-exchange-status
+environment-incoming-status
+environment-process-incoming
+environment-accept-incoming
+environment-bindings-status
+environment-register-root
+environment-register-project-binding
+environment-register-rule-binding
+environment-register-project-rule-binding
+environment-register-skill-binding
+environment-discover
+environment-install-rule
+environment-recover-rule-installs
+environment-install-skill
+environment-recover-skill-installs
+environment-conflict-assess
+environment-conflicts
+environment-conflict-resolve
+environment-promotion-propose
+environment-promotion-transition
+environment-promotions
+```
 
 ## Privacy and integration boundary
 

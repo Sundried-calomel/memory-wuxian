@@ -53,6 +53,7 @@ Memory無限は、アクティブなコンテキストウィンドウを越え�
 - 派生ファイル再構築用の最新ワークスペース復旧バックアップ
 - 差分バンドル、成果物台帳カーソル、デバイス間検索を備えたフェデレーション読取専用レプリカ
 - SSHと暗号化クラウドフォルダーの並列フェデレーション転送
+- デバイス間で規則とSkillを検証・収束させる独立Environment Registry
 - ChatGPT公式エクスポートZIPと`conversations.json`向けの実験的ローカルアダプター
 - データベースに依存しない透明なファイル構造
 
@@ -342,6 +343,65 @@ python3 scripts/install_cloud_sync.py \
 クラウドフォルダーは共有書込アーカイブではなく転送キューです。各ノードは自分のoutboxとackだけを書きます。取込み履歴は読取専用ピアレプリカに入り、`retrieve-global`はSSH・クラウドとも同じ検証ソース経路を使います。`cloud-disable`はアーカイブ、鍵、暗号化クラウドファイルを削除せず交換を停止します。
 
 1.6.1からこれらの操作はコンソール設定画面にもあります。クラウド同期スイッチは暗号化交換と5分タスクを同時に制御し、「今すぐ同期」は即時交換を1回実行します。設定済みフォルダーとタスク状態を表示するため、通常操作にAI会話や端末コマンドは不要です。
+
+## Memory無限 2.0 の環境収束
+
+2.0では、グローバル規則、プロジェクト規則、グローバルSkill、
+プロジェクトSkill用の独立した第2同期プレーンを追加します。複数デバイスを
+一つの共有書込アーカイブにはしません。各デバイスは自身のローカル会話権威を
+維持し、他デバイスの会話は検証済み読取専用レプリカとして扱います。
+
+環境成果物は不変のコンテンツアドレス付きリビジョンと明示的なノードローカル
+バインディングを使います。選択したクラウドディレクトリには、独自のイベント
+連番、前段チェーン、カーソル、確認、ステージング、検証済みSkillパッケージを
+持つ、署名済み・対象暗号化済み`environment-v1`ストリームだけを置きます。
+5分タスクはAIを使わず受信内容を決定論的に検証します。転送は更新を
+ステージングするだけで、Skillのインストールや規則の書換えは行いません。
+
+互換性のあるグローバル規則のfast-forwardは、そのポリシーを明示的に有効化
+した場合だけ登録できます。プロジェクト成果物、Skill、分岐、ID変更、権限拡大、
+永続コンポーネント追加、実行環境非互換は常にレビュー対象です。インストーラーは
+変更前にロールバック材料を永続化し、アトミック切替、インストール後検査、
+証拠レシート追記を行います。プロジェクト能力のグローバル昇格は、完全な
+プラットフォームマトリクス、出典証拠、明示承認を必要とする別の手順です。
+
+ダッシュボードのEnvironmentビューでは、インベントリ、受信判定、競合、
+昇格候補、手動更新確認を表示します。2.0の完全なCLIコマンド群は次の通りです。
+
+```text
+environment-init
+environment-scan
+environment-status
+environment-list
+environment-projects
+environment-show
+environment-diff
+environment-register
+environment-validate
+environment-export-delta
+environment-import-delta
+environment-exchange-status
+environment-incoming-status
+environment-process-incoming
+environment-accept-incoming
+environment-bindings-status
+environment-register-root
+environment-register-project-binding
+environment-register-rule-binding
+environment-register-project-rule-binding
+environment-register-skill-binding
+environment-discover
+environment-install-rule
+environment-recover-rule-installs
+environment-install-skill
+environment-recover-skill-installs
+environment-conflict-assess
+environment-conflicts
+environment-conflict-resolve
+environment-promotion-propose
+environment-promotion-transition
+environment-promotions
+```
 
 ## プライバシーと統合境界
 
