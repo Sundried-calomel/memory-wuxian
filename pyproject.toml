@@ -1,8 +1,9 @@
 [project]
 name = "memory-wuxian"
-version = "2.4.0"
+version = "2.4.1"
 description = "File-backed hierarchical and verifiable conversation memory"
 requires-python = ">=3.9"
+dependencies = ["PyYAML>=6.0,<7"]
 
 [project.optional-dependencies]
 dashboard-window = ["pywebview>=6.2,<7", "psutil>=7,<8"]

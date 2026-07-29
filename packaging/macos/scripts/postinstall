@@ -52,6 +52,11 @@ if [[ ! -x "$codex_cli" ]]; then
   echo "MemoryWuxian requires the Codex desktop application." >&2
   exit 1
 fi
+if ! "$python_executable" -c 'import yaml; assert yaml.__version__.split(".", 1)[0] == "6"' 2>/dev/null; then
+  /usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
+    "$python_executable" -m pip install --user --disable-pip-version-check \
+    'PyYAML>=6.0,<7'
+fi
 
 preserved_config="$(/usr/bin/mktemp)"
 if [[ -f "$skill_root/config.yaml" ]]; then

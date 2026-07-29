@@ -390,6 +390,40 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
                 revision_id=self.revision["revision_id"],
                 target_binding="global-demo",
             )
+
+    def test_nested_safe_yaml_metadata_is_accepted(self):
+        frontmatter = self.installer()._parse_frontmatter(
+            "---\n"
+            "name: demo-skill\n"
+            "description: >-\n"
+            "  A nested metadata Skill.\n"
+            "metadata:\n"
+            "  categories:\n"
+            "    - memory\n"
+            "    - tools\n"
+            "---\n"
+        )
+        self.assertEqual(frontmatter["name"], "demo-skill")
+        self.assertEqual(frontmatter["metadata"]["categories"], ["memory", "tools"])
+        interface = self.installer()._parse_openai_yaml(
+            "interface:\n"
+            "  display_name: Demo Skill\n"
+            "  short_description: Nested metadata\n"
+            "policy:\n"
+            "  allow_implicit_invocation: true\n"
+        )
+        self.assertEqual(interface["display_name"], "Demo Skill")
+        self.assertNotIn("default_prompt", interface)
+
+    def test_duplicate_keys_and_unsafe_yaml_tags_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "invalid safe YAML"):
+            self.installer()._parse_frontmatter(
+                "---\nname: demo-skill\nname: other\n---\n"
+            )
+        with self.assertRaisesRegex(ValueError, "invalid safe YAML"):
+            self.installer()._parse_openai_yaml(
+                "interface: !!python/object/apply:os.system ['echo unsafe']\n"
+            )
         bad_files = self.files()
         bad_files["SKILL.md"] = (
             "---\nname: another-skill\ndescription: Wrong\n---\n"

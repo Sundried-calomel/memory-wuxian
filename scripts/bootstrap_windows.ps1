@@ -71,7 +71,14 @@ if (-not $CollectorPath) {
 if (-not $SessionsRoot) { $SessionsRoot = Join-Path $env:USERPROFILE ".codex\sessions" }
 $pythonVersion = if ($python) { & $python -c "import platform; print(platform.python_version())" } else { $null }
 $dashboardWindowReady = $false
+$yamlReady = $false
 if ($python) {
+    $yamlReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('yaml') else '0')") -eq "1"
+    if (-not $yamlReady -and $InstallMissing) {
+        & $python -m pip install --disable-pip-version-check "PyYAML>=6.0,<7"
+        if ($LASTEXITCODE -ne 0) { throw "core YAML dependency installation failed: $LASTEXITCODE" }
+        $yamlReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('yaml') else '0')") -eq "1"
+    }
     $dashboardWindowReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('webview') else '0')") -eq "1"
     if (-not $dashboardWindowReady -and $InstallMissing) {
         & $python -m pip install "pywebview>=6.2,<7" "psutil>=7,<8"
@@ -104,8 +111,13 @@ $checks = [ordered]@{
         runtime = "Microsoft Edge WebView2"
         python_package = "pywebview"
     }
+    yaml = [ordered]@{
+        ready = $yamlReady
+        python_package = "PyYAML"
+        version_range = ">=6.0,<7"
+    }
 }
-$ready = $checks.python.ready -and $checks.codex_cli.ready -and $checks.collector.ready -and $checks.sessions.ready
+$ready = $checks.python.ready -and $checks.codex_cli.ready -and $checks.collector.ready -and $checks.sessions.ready -and $checks.yaml.ready
 if ($AgentsPath) {
     if (-not $python) { throw "Python is required to install Memory无限 AGENTS.md rules." }
     & $python (Join-Path $PSScriptRoot "install_agent_rules.py") --agents-file $AgentsPath

@@ -97,6 +97,13 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     or mark itself human-reviewed.
 50. Validate evidence hashes before invocation. Retry a failed item at most
     twice, then isolate it without blocking unrelated queue work.
+51. Assign every exported Environment Registry item a stable identity derived
+    from its transaction, operation, and immutable object identity. Batch
+    registration must export every artifact and project exactly once.
+52. Parse Skill metadata with a safe full YAML loader. Permit legal nested
+    mappings, lists, and block scalars; reject unsafe tags and duplicate keys.
+    Project registrations received from peers remain read-only replicas and
+    never create or activate a local project automatically.
 
 ## Operating workflow
 
