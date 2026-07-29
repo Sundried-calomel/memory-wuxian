@@ -171,6 +171,34 @@ behavior, documentation, platform tests, installer hashes, dashboard
 replacement, active-archive preservation, live post-install self-check, and
 rollback evidence. Evidence from another version does not satisfy the release.
 
+Release-candidate development and formal publication are separate lifecycle
+states:
+
+1. Accumulate related fixes on the candidate branch without creating a formal
+   tag, GitHub Release, or published installer.
+2. During iteration, run the smallest tests that cover the affected contract.
+   Before publication, run one complete local rehearsal and one candidate CI
+   matrix against the same candidate series.
+3. Fix candidate-test, CI, packaging, and unpublished-artifact defects in the
+   candidate series. These defects do not create a new product version.
+4. Freeze the version and documentation only after the candidate matrix,
+   installer build, package-content checks, and required live installation
+   rehearsal pass.
+5. Create the immutable formal tag once, then run one formal build and upload.
+   A defect in an already published artifact requires a new patch version.
+
+Routine updates for an installed device use the verified user-space update
+transaction. They stage and validate changed product files, preserve the active
+archive and device configuration, atomically replace the installed version,
+refresh the dashboard, run post-update checks, and retain rollback state.
+They do not display the platform installer or request administrator credentials.
+The full installer is reserved for first installation, explicit recovery from
+a damaged or mixed installation, and an upgrade whose declared system-level
+permission or privileged component change cannot be completed in user space.
+Such an upgrade must explain the privileged change before requesting approval.
+Formal releases may continue to publish complete installers for new devices;
+their existence does not require an already installed device to run them.
+
 ## Intended Package Boundaries
 
 ```text

@@ -60,6 +60,33 @@ class ProductArchitectureContractTest(unittest.TestCase):
             architecture,
         )
 
+    def test_release_candidate_and_installed_update_lifecycle_is_hard_gated(self):
+        architecture = (ROOT / "PRODUCT_ARCHITECTURE.md").read_text(encoding="utf-8")
+        rehearsal = (ROOT / "references/release-rehearsal.md").read_text(
+            encoding="utf-8"
+        )
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        normalized_architecture = " ".join(architecture.split())
+        normalized_agents = " ".join(agents.split())
+
+        self.assertIn(
+            "candidate branch without creating a formal tag, GitHub Release, "
+            "or published installer",
+            normalized_architecture,
+        )
+        self.assertIn(
+            "Create the immutable formal tag once", normalized_architecture
+        )
+        self.assertIn(
+            "verified user-space update transaction", normalized_architecture
+        )
+        self.assertIn(
+            "first installation, explicit recovery from a damaged or mixed installation",
+            normalized_architecture,
+        )
+        self.assertIn("release-candidate branch", rehearsal)
+        self.assertIn("keep candidate iteration untagged", normalized_agents)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,26 @@
 # Release rehearsal gate
 
+## Lifecycle order
+
+Use a release-candidate branch before assigning an immutable formal version.
+Run targeted tests while the candidate changes, then run one complete local
+rehearsal and one three-platform candidate CI matrix after the changes
+stabilize. Repair failures in that candidate series without creating formal
+tags or published installers.
+
+Only a candidate that has passed the required matrix, installer builds,
+package-content checks, and applicable live installation rehearsal may be
+version-frozen and tagged. The tag triggers one formal build and upload.
+Published-artifact defects use a new patch version; pre-publication test,
+workflow, packaging, or candidate-artifact defects do not.
+
+An installed device normally consumes the verified user-space update
+transaction and does not rerun the full installer. Use the full installer for
+first installation, explicit damaged-installation recovery, or a declared
+privileged-component change that cannot be applied in user space.
+
+## Evidence gate
+
 A release may be described as fully rehearsed only when
 `scripts/run_release_rehearsal.py` produces a report whose `status` is `passed`
 and every required scenario has its own evidence log and SHA-256.

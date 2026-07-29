@@ -110,6 +110,12 @@ Use Memory無限 to preserve conversation history outside the active context win
     read that contract and preserve its phase order. Do not combine module
     extraction with a feature, format, protocol, default, or security-policy
     change.
+60. Follow the release lifecycle owned by `PRODUCT_ARCHITECTURE.md`: keep
+    candidate iteration untagged, use targeted tests during iteration, pass one
+    complete candidate gate before creating the single formal tag, and update
+    installed devices through the user-space transaction unless first install,
+    explicit recovery, or a declared privileged-component change requires the
+    full installer.
 
 ## Authority order
 
