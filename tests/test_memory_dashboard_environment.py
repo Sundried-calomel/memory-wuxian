@@ -15,6 +15,8 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from memory_dashboard import EnvironmentDashboardCache, make_handler
 from memory_environment import EnvironmentRegistry, revision_id_for
+from memory_environment_conflicts import EnvironmentConflictStore
+from memory_environment_promotions import PromotionStore
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -95,23 +97,56 @@ class EnvironmentDashboardCacheTest(unittest.TestCase):
             apply=True,
         )
         environment = self.archive_root / "environment"
-        write_json(
-            environment / "conflicts" / "conflict-1.json",
+        EnvironmentConflictStore(self.archive_root).assess(
             {
-                "conflict_id": "conflict-1",
                 "artifact_id": artifact["artifact_id"],
-                "status": "pending-review",
+                "object_class": artifact["object_class"],
+                "base_revision_id": None,
+                "local_revision_id": revision["revision_id"],
+                "remote_revision_id": "rev:" + "f" * 64,
+                "base_content_sha256": None,
+                "local_content_sha256": content_sha256,
+                "remote_content_sha256": "f" * 64,
+                "local_changed_blocks": ["shared"],
+                "remote_changed_blocks": ["shared"],
+                "local_deleted": False,
+                "remote_deleted": False,
+                "unregistered_local_change": False,
+                "project_identity_ambiguous": False,
+                "platform_incompatible": False,
+                "permission_expansion": False,
+                "network_expansion": False,
             },
+            apply=True,
         )
-        write_json(
-            environment / "promotions" / "promotion-1.json",
+        PromotionStore(self.archive_root).propose(
             {
+                "schema_version": 1,
                 "promotion_id": "promotion-1",
                 "source_project_id": "orf1-library",
                 "source_skill_id": "orf1-helper",
+                "source_capability": "shared-helper",
                 "classification": "extension",
-                "review_state": "pending-review",
+                "proposed_global_owner": "global-helper",
+                "interface_contract": {"input": "task"},
+                "retained_project_adapter": {"owner": "orf1-helper"},
+                "provenance": {"source_revision": revision["revision_id"]},
+                "validation_matrix": [
+                    {
+                        "name": "candidate-evidence",
+                        "status": "pass",
+                        "evidence": "fixture",
+                    }
+                ],
+                "review_state": "discovered",
+                "approval": {
+                    "required": True,
+                    "approved": False,
+                    "approved_at": None,
+                    "evidence": None,
+                },
             },
+            apply=True,
         )
         write_json(
             environment / "receipts" / "install-1.json",

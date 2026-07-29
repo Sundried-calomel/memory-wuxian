@@ -84,6 +84,25 @@ class EnvironmentSchemaContractTests(unittest.TestCase):
             "rollback",
             "created_at",
         },
+        "environment-conflict.schema.json": {
+            "schema_version",
+            "conflict_id",
+            "event_sequence",
+            "artifact_id",
+            "object_class",
+            "base_revision_id",
+            "local_revision_id",
+            "remote_revision_id",
+            "base_content_sha256",
+            "local_content_sha256",
+            "remote_content_sha256",
+            "conflict_kind",
+            "decision",
+            "status",
+            "details",
+            "resolution",
+            "created_at",
+        },
     }
 
     def load(self, name):

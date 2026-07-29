@@ -53,6 +53,19 @@ def _canonical(value: Any) -> bytes:
     ).encode("utf-8")
 
 
+def skill_package_contract_bytes(manifest: Mapping[str, Any]) -> bytes:
+    """Return the Registry-bound package contract without the circular revision ID."""
+
+    contract_manifest = json.loads(json.dumps(manifest))
+    contract_manifest.pop("source_revision", None)
+    return _canonical(
+        {
+            "format": "memory-wuxian-skill-package-contract-v1",
+            "manifest": contract_manifest,
+        }
+    )
+
+
 def _fsync_directory(path: Path) -> None:
     flags = os.O_RDONLY
     if hasattr(os, "O_DIRECTORY"):
@@ -306,10 +319,18 @@ class EnvironmentSkillInstaller:
         self._validate_runtime_requirements(manifest["runtime_requirements"])
         file_payloads = self._validate_archive_files(package, manifest, entries)
         self._validate_skill_metadata(manifest, file_payloads)
+        package_contract = skill_package_contract_bytes(manifest)
+        registered_contract = self.registry._resolve_relative(
+            revision["object_path"], "object_path"
+        ).read_bytes()
+        if registered_contract != package_contract:
+            raise ValueError(
+                "Skill package contract does not match registered revision content"
+            )
         logical_hash = self._logical_tree_hash(manifest)
-        actual_hash = self._payload_tree_hash(file_payloads)
+        actual_hash = self._payload_tree_hash(file_payloads, manifest)
         current = self._inspect_current(target_path, manifest)
-        if current is not None and current["logical_hash"] == logical_hash:
+        if current is not None and current["exact"]:
             return {
                 "decision": "no-change",
                 "artifact": artifact,
@@ -348,7 +369,7 @@ class EnvironmentSkillInstaller:
             "target_binding": target_binding,
             "binding": binding,
             "target_path": target_path,
-            "previous_hash": None if current is None else current["logical_hash"],
+            "previous_hash": None if current is None else current["actual_hash"],
             "rehearsal": rehearsal,
         }
 
@@ -386,6 +407,11 @@ class EnvironmentSkillInstaller:
             self._validate_installed_tree(sibling_candidate, prepared["manifest"])
             self._run_checks(sibling_candidate, prepared["manifest"]["checks"])
 
+            if target.exists():
+                rollback_saved = self._save_verified_rollback(
+                    target, prepared["target_binding"], prepared["previous_hash"]
+                )
+                self._after_rollback_saved(target)
             transaction_path = self._write_transaction(
                 transaction_id,
                 prepared,
@@ -395,9 +421,6 @@ class EnvironmentSkillInstaller:
                 displaced=displaced,
             )
             if target.exists():
-                rollback_saved = self._save_verified_rollback(
-                    target, prepared["target_binding"], prepared["previous_hash"]
-                )
                 os.replace(target, displaced)
                 target_displaced = True
             os.replace(sibling_candidate, target)
@@ -406,7 +429,7 @@ class EnvironmentSkillInstaller:
             self._after_switch(target)
             self._validate_installed_tree(target, prepared["manifest"])
             self._run_checks(target, prepared["manifest"]["checks"])
-            final_hash = self._logical_tree_hash(prepared["manifest"])
+            final_hash = self._actual_tree_hash(target)
             receipt = self._receipt(
                 prepared,
                 result="installed",
@@ -888,7 +911,8 @@ class EnvironmentSkillInstaller:
                     exact = False
                     break
         return {
-            "logical_hash": self._logical_tree_hash(manifest) if exact else self._actual_tree_hash(target),
+            "logical_hash": self._logical_tree_hash(manifest),
+            "actual_hash": self._actual_tree_hash(target),
             "exact": exact,
         }
 
@@ -1012,8 +1036,7 @@ class EnvironmentSkillInstaller:
         ]
         return _sha256(_canonical(sorted(files, key=lambda item: item["path"])))
 
-    @staticmethod
-    def _actual_tree_hash(root: Path) -> str:
+    def _actual_tree_hash(self, root: Path) -> str:
         records = []
         for path in sorted(item for item in root.rglob("*") if item.is_file()):
             records.append(
@@ -1021,14 +1044,33 @@ class EnvironmentSkillInstaller:
                     "path": path.relative_to(root).as_posix(),
                     "sha256": _sha256(path.read_bytes()),
                     "size": path.stat().st_size,
+                    "executable": (
+                        False
+                        if self.platform == "windows"
+                        else bool(stat.S_IMODE(path.stat().st_mode) & stat.S_IXUSR)
+                    ),
                 }
             )
         return _sha256(_canonical(records))
 
-    @staticmethod
-    def _payload_tree_hash(payloads: Mapping[str, bytes]) -> str:
+    def _payload_tree_hash(
+        self,
+        payloads: Mapping[str, bytes],
+        manifest: Optional[Mapping[str, Any]] = None,
+    ) -> str:
+        executable = {
+            item["path"]: bool(item["executable"])
+            for item in (manifest or {}).get("files", [])
+        }
         records = [
-            {"path": path, "sha256": _sha256(payload), "size": len(payload)}
+            {
+                "path": path,
+                "sha256": _sha256(payload),
+                "size": len(payload),
+                "executable": (
+                    False if self.platform == "windows" else executable.get(path, False)
+                ),
+            }
             for path, payload in sorted(payloads.items())
         ]
         return _sha256(_canonical(records))
@@ -1402,3 +1444,6 @@ class EnvironmentSkillInstaller:
 
     def _after_switch(self, target: Path) -> None:
         """Test seam after directory switch and before final verification."""
+
+    def _after_rollback_saved(self, target: Path) -> None:
+        """Test seam after durable rollback creation and before transaction mutation."""

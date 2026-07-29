@@ -18,6 +18,7 @@ from memory_environment_skills import (
     EnvironmentSkillInstaller,
     INSTALLER_LOCK_NAME,
     SkillInstallationError,
+    skill_package_contract_bytes,
 )
 from platform_lock import exclusive_lock
 
@@ -48,6 +49,11 @@ class FailingInstaller(EnvironmentSkillInstaller):
 class CrashingInstaller(EnvironmentSkillInstaller):
     def _after_switch(self, target):
         raise SystemExit("simulated process termination")
+
+
+class RollbackBoundaryCrashingInstaller(EnvironmentSkillInstaller):
+    def _after_rollback_saved(self, target):
+        raise SystemExit("simulated termination before transaction marker")
 
 
 class FinishFailingInstaller(EnvironmentSkillInstaller):
@@ -148,12 +154,22 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
         version=1,
         base_revision_id=None,
         projects=None,
+        contract_manifest=None,
     ):
         artifact = artifact or self.artifact()
+        if contract_manifest is None:
+            contract_manifest = self.manifest(
+                "rev:" + "0" * 64,
+                skill_id=artifact["artifact_id"].split(":", 1)[-1],
+                scope=artifact["scope"],
+                project_id=artifact["project_id"],
+            )
+        content = skill_package_contract_bytes(contract_manifest).decode("utf-8")
         revision, content = self.revision_value(
             artifact["artifact_id"],
             version=version,
             base_revision_id=base_revision_id,
+            content=content,
         )
         self.registry.register(
             {
@@ -390,6 +406,22 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
                 target_binding="global-demo",
             )
 
+    def test_package_contract_must_match_registered_revision(self):
+        files = self.files(marker="substituted")
+        manifest = self.manifest(
+            self.revision["revision_id"],
+            files=files,
+            version="9.9.9",
+        )
+        package = self.package("substituted.zip", manifest, files)
+        with self.assertRaisesRegex(ValueError, "contract does not match"):
+            self.installer().install(
+                package_path=package,
+                artifact_id=self.artifact_id,
+                revision_id=self.revision["revision_id"],
+                target_binding="global-demo",
+            )
+
     def test_platform_runtime_and_unsafe_check_are_rejected(self):
         manifest = self.manifest(
             self.revision["revision_id"], platforms=["windows"]
@@ -434,17 +466,21 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
             target_binding="global-demo",
             apply=True,
         )
-        second = self.register_revision(
-            version=2, base_revision_id=self.revision["revision_id"]
-        )
-        second_manifest = self.manifest(
-            second["revision_id"],
-            files=self.files(marker="v2"),
+        files = self.files(marker="v2")
+        contract = self.manifest(
+            "rev:" + "0" * 64,
+            files=files,
             version="2.0.0",
             network={"enabled": True, "destinations": ["example.com"]},
         )
+        second = self.register_revision(
+            version=2,
+            base_revision_id=self.revision["revision_id"],
+            contract_manifest=contract,
+        )
+        second_manifest = {**contract, "source_revision": second["revision_id"]}
         package = self.package(
-            "expanded.zip", second_manifest, self.files(marker="v2")
+            "expanded.zip", second_manifest, files
         )
         with self.assertRaisesRegex(ValueError, "expand network"):
             self.installer().install(
@@ -464,16 +500,19 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
             target_binding="global-demo",
             apply=True,
         )
-        second = self.register_revision(
-            version=2, base_revision_id=self.revision["revision_id"]
-        )
         files = self.files(marker="persistent-v2")
-        second_manifest = self.manifest(
-            second["revision_id"],
+        contract = self.manifest(
+            "rev:" + "0" * 64,
             files=files,
             version="2.0.0",
             persistent=[{"component_id": "agent", "type": "launch-agent"}],
         )
+        second = self.register_revision(
+            version=2,
+            base_revision_id=self.revision["revision_id"],
+            contract_manifest=contract,
+        )
+        second_manifest = {**contract, "source_revision": second["revision_id"]}
         package = self.package("persistent-expanded.zip", second_manifest, files)
         with self.assertRaisesRegex(ValueError, "expand persistent"):
             self.installer().install(
@@ -585,13 +624,16 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
             )["target_path"]
         )
         original = (target / "SKILL.md").read_bytes()
-        second = self.register_revision(
-            version=2, base_revision_id=self.revision["revision_id"]
-        )
         files = self.files(marker="v2")
-        manifest = self.manifest(
-            second["revision_id"], files=files, version="2.0.0"
+        contract = self.manifest(
+            "rev:" + "0" * 64, files=files, version="2.0.0"
         )
+        second = self.register_revision(
+            version=2,
+            base_revision_id=self.revision["revision_id"],
+            contract_manifest=contract,
+        )
+        manifest = {**contract, "source_revision": second["revision_id"]}
         package = self.package("failing.zip", manifest, files)
         with self.assertRaises(SkillInstallationError) as raised:
             self.installer(FailingInstaller).install(
@@ -620,13 +662,16 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
             )["target_path"]
         )
         original = (target / "SKILL.md").read_bytes()
-        second = self.register_revision(
-            version=2, base_revision_id=self.revision["revision_id"]
-        )
         files = self.files(marker="crash-v2")
-        manifest = self.manifest(
-            second["revision_id"], files=files, version="2.0.0"
+        contract = self.manifest(
+            "rev:" + "0" * 64, files=files, version="2.0.0"
         )
+        second = self.register_revision(
+            version=2,
+            base_revision_id=self.revision["revision_id"],
+            contract_manifest=contract,
+        )
+        manifest = {**contract, "source_revision": second["revision_id"]}
         package = self.package("crash.zip", manifest, files)
         with self.assertRaises(SystemExit):
             self.installer(CrashingInstaller).install(
@@ -650,6 +695,49 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
         self.assertEqual((target / "SKILL.md").read_bytes(), original)
         self.assertEqual(json.loads(pending[0].read_text())["status"], "rolled-back")
 
+    def test_crash_after_rollback_save_precedes_transaction_and_target_mutation(self):
+        first_manifest = self.manifest(self.revision["revision_id"])
+        first_package = self.package("boundary-base.zip", first_manifest)
+        target = Path(
+            self.installer().install(
+                package_path=first_package,
+                artifact_id=self.artifact_id,
+                revision_id=self.revision["revision_id"],
+                target_binding="global-demo",
+                apply=True,
+            )["target_path"]
+        )
+        original_hash = self.installer()._actual_tree_hash(target)
+        files = self.files(marker="boundary-v2")
+        contract = self.manifest(
+            "rev:" + "0" * 64, files=files, version="2.0.0"
+        )
+        second = self.register_revision(
+            version=2,
+            base_revision_id=self.revision["revision_id"],
+            contract_manifest=contract,
+        )
+        manifest = {**contract, "source_revision": second["revision_id"]}
+        package = self.package("boundary-v2.zip", manifest, files)
+        with self.assertRaises(SystemExit):
+            self.installer(RollbackBoundaryCrashingInstaller).install(
+                package_path=package,
+                artifact_id=self.artifact_id,
+                revision_id=second["revision_id"],
+                target_binding="global-demo",
+                apply=True,
+            )
+        self.assertEqual(self.installer()._actual_tree_hash(target), original_hash)
+        self.assertTrue(
+            self.installer()._rollback_path("global-demo").is_dir()
+        )
+        self.assertFalse(
+            any(
+                json.loads(path.read_text())["status"] == "prepared"
+                for path in self.installer().transactions_dir.glob("*.json")
+            )
+        )
+
     def test_crash_recovery_uses_persistent_rollback_when_displaced_is_missing(self):
         first_manifest = self.manifest(self.revision["revision_id"])
         first_package = self.package("rollback-base.zip", first_manifest)
@@ -663,13 +751,16 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
             )["target_path"]
         )
         original = (target / "SKILL.md").read_bytes()
-        second = self.register_revision(
-            version=2, base_revision_id=self.revision["revision_id"]
-        )
         files = self.files(marker="rollback-v2")
-        manifest = self.manifest(
-            second["revision_id"], files=files, version="2.0.0"
+        contract = self.manifest(
+            "rev:" + "0" * 64, files=files, version="2.0.0"
         )
+        second = self.register_revision(
+            version=2,
+            base_revision_id=self.revision["revision_id"],
+            contract_manifest=contract,
+        )
+        manifest = {**contract, "source_revision": second["revision_id"]}
         package = self.package("rollback-crash.zip", manifest, files)
         with self.assertRaises(SystemExit):
             self.installer(CrashingInstaller).install(

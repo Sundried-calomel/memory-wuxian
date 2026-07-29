@@ -27,9 +27,17 @@ from conversation_titles import (
     codex_thread_metadata,
     codex_thread_titles,
 )
-from memory_cli import MemoryStore, atomic_write_json, load_simple_yaml, read_jsonl
+from memory_cli import (
+    MemoryStore,
+    atomic_write_json,
+    environment_cloud_transport,
+    load_simple_yaml,
+    read_jsonl,
+)
 from memory_cloud_transport import CloudFolderTransport
 from memory_environment import EnvironmentRegistry
+from memory_environment_conflicts import EnvironmentConflictStore
+from memory_environment_promotions import PromotionStore
 from memory_federation import FederationManager
 from platform_process import no_window_kwargs
 from token_usage import aggregate_ledgers, normalize_usage, token_usage_ledgers
@@ -653,7 +661,7 @@ class EnvironmentDashboardCache:
                     directory_stamps.append((str(directory), stat.st_mtime_ns))
                 except OSError:
                     pass
-                paths.extend(path for path in directory.glob("*.json") if path.is_file())
+                paths.extend(path for path in directory.rglob("*.json") if path.is_file())
         stamps = []
         for path in sorted(set(paths), key=str):
             try:
@@ -680,7 +688,7 @@ class EnvironmentDashboardCache:
         if not directory.is_dir():
             return []
         values = []
-        for path in sorted(directory.glob("*.json"), key=str):
+        for path in sorted(directory.rglob("*.json"), key=str):
             value = self._read_json_object(path)
             if value is not None:
                 values.append(value)
@@ -739,8 +747,8 @@ class EnvironmentDashboardCache:
                 "promotions": [],
                 "installations": [],
             }
-        conflicts = self._read_json_objects("conflicts")
-        promotions = self._read_json_objects("promotions")
+        conflicts = EnvironmentConflictStore(self.registry.archive_root).list()
+        promotions = PromotionStore(self.registry.archive_root).list()
         receipts = [
             value
             for value in self._read_json_objects("receipts")
@@ -772,7 +780,15 @@ class EnvironmentDashboardCache:
                     "installation_status": installation.get("result"),
                     "conflict_status": conflict.get("status")
                     or conflict.get("resolution_state"),
-                    "promotion_status": None,
+                    "promotion_status": next(
+                        (
+                            item.get("review_state")
+                            for item in promotions
+                            if item.get("source_skill_id")
+                            == artifact_id.split(":", 1)[-1]
+                        ),
+                        None,
+                    ),
                 }
             )
         return {
@@ -884,7 +900,16 @@ def make_handler(store: MemoryStore):
         def cloud_payload(self) -> dict[str, Any]:
             federation_manager = FederationManager(store)
             devices = federation_manager.status()
-            cloud = CloudFolderTransport(federation_manager).status()
+            archive_transport = CloudFolderTransport(federation_manager)
+            cloud = archive_transport.status()
+            archive_stream = {"stream_id": "archive-v1", **cloud}
+            environment_transport = environment_cloud_transport(
+                store, archive_transport, bootstrap=False
+            )
+            cloud["streams"] = {
+                "archive-v1": archive_stream,
+                "environment-v1": environment_transport.status(),
+            }
             cloud["scheduler"] = cloud_scheduler_status()
             devices["cloud"] = cloud
             return devices
@@ -996,18 +1021,28 @@ def make_handler(store: MemoryStore):
                 action = request.get("action")
                 manager = FederationManager(store)
                 transport = CloudFolderTransport(manager)
+                environment_transport = environment_cloud_transport(
+                    store, transport, bootstrap=True
+                )
                 if action == "enable":
                     if not transport.status().get("configured"):
                         raise ValueError("cloud transport is not configured")
+                    if not environment_transport.status().get("configured"):
+                        raise ValueError(
+                            "environment cloud transport is not configured"
+                        )
                     transport.set_enabled(True)
+                    environment_transport.set_enabled(True)
                     try:
                         scheduler = set_cloud_scheduler(store, True)
                     except Exception:
                         transport.set_enabled(False)
+                        environment_transport.set_enabled(False)
                         raise
                     result = {"status": "enabled", "scheduler": scheduler}
                 elif action == "disable":
                     transport.set_enabled(False)
+                    environment_transport.set_enabled(False)
                     result = {
                         "status": "disabled",
                         "scheduler": set_cloud_scheduler(store, False),
@@ -1015,7 +1050,14 @@ def make_handler(store: MemoryStore):
                 elif action == "sync":
                     if not transport.status().get("enabled"):
                         raise ValueError("cloud transport is disabled")
-                    result = transport.sync(force=True)
+                    if not environment_transport.status().get("enabled"):
+                        raise ValueError(
+                            "environment cloud transport is disabled"
+                        )
+                    result = {
+                        "archive": transport.sync(force=True),
+                        "environment": environment_transport.sync(force=True),
+                    }
                 else:
                     raise ValueError("unsupported cloud action")
                 self.send_json(

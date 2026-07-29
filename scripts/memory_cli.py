@@ -23,6 +23,12 @@ from platform_lock import exclusive_lock
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
 from memory_cloud_transport import CloudFolderTransport
 from memory_environment import EnvironmentRegistry
+from memory_environment_bindings import EnvironmentBindingRegistry
+from memory_environment_conflicts import EnvironmentConflictStore
+from memory_environment_exchange import EnvironmentExchangeManager
+from memory_environment_promotions import PromotionStore
+from memory_environment_rules import EnvironmentRuleInstaller
+from memory_environment_skills import EnvironmentSkillInstaller
 from memory_federation import FederationManager
 from memory_guarded_features import GuardedFeatures, atomic_json
 from token_usage import (
@@ -82,6 +88,78 @@ def load_simple_yaml(path: Path) -> Dict[str, Any]:
         if isinstance(parsed, dict):
             stack.append((indent, parsed))
     return data
+
+
+def environment_cloud_transport(
+    store: "MemoryStore",
+    archive_transport: CloudFolderTransport,
+    *,
+    bootstrap: bool,
+) -> CloudFolderTransport:
+    manager = EnvironmentExchangeManager(store)
+    transport = CloudFolderTransport(
+        manager,
+        config_path=manager.metadata_root / "cloud.json",
+        stream_id="environment-v1",
+    )
+    if (
+        bootstrap
+        and not transport.config_path.exists()
+        and archive_transport.status()["configured"]
+    ):
+        archive_config = archive_transport.config
+        transport.configure(
+            Path(str(archive_config["exchange_root"])),
+            Path(str(archive_config["identity_private_path"])),
+            (
+                Path(str(archive_config["envelope_binary"]))
+                if archive_config.get("envelope_binary")
+                else None
+            ),
+            enabled=bool(archive_config.get("enabled")),
+            merge_window_seconds=int(
+                archive_config.get("merge_window_seconds", 900)
+            ),
+            early_flush_bytes=int(
+                archive_config.get("early_flush_bytes", 1024 * 1024)
+            ),
+            maximum_pending_seconds=int(
+                archive_config.get("maximum_pending_seconds", 3600)
+            ),
+            cleanup_grace_seconds=int(
+                archive_config.get("cleanup_grace_seconds", 24 * 60 * 60)
+            ),
+        )
+    return transport
+
+
+def environment_node_bindings(store: "MemoryStore") -> EnvironmentBindingRegistry:
+    node_id = FederationManager(store).node()["node_id"]
+    return EnvironmentBindingRegistry(
+        EnvironmentRegistry(store.root),
+        node_id=node_id,
+    )
+
+
+def local_runtime_versions(values: Sequence[str]) -> Dict[str, str]:
+    runtimes = {
+        "python": (
+            f"{sys.version_info.major}.{sys.version_info.minor}."
+            f"{sys.version_info.micro}"
+        )
+    }
+    for value in values:
+        name, separator, version = value.partition("=")
+        if not separator or not name or not version:
+            raise ValueError("--runtime must use name=version")
+        runtimes[name] = version
+    return runtimes
+
+
+def local_platform_name() -> str:
+    if os.name == "nt":
+        return "windows"
+    return "macos" if sys.platform == "darwin" else "linux"
 
 
 def nested_get(data: Dict[str, Any], keys: Sequence[str], default: Any) -> Any:
@@ -4451,6 +4529,136 @@ def build_parser() -> argparse.ArgumentParser:
         "environment-validate",
         help="Verify environment registry, revisions, objects, and project bindings",
     )
+    environment_export = subparsers.add_parser(
+        "environment-export-delta",
+        help="Export one independent environment-v1 delta bundle",
+    )
+    environment_export.add_argument("--output", required=True)
+    environment_export.add_argument("--after-event-sequence", type=int, default=0)
+    environment_export.add_argument("--previous-bundle-sha256")
+    environment_export.add_argument("--target-node-id")
+    environment_import = subparsers.add_parser(
+        "environment-import-delta",
+        help="Verify and stage one trusted environment-v1 delta bundle",
+    )
+    environment_import.add_argument("--bundle", required=True)
+    environment_import.add_argument("--expected-node-id")
+    subparsers.add_parser(
+        "environment-exchange-status",
+        help="Show the independent environment-v1 stream cursor",
+    )
+    subparsers.add_parser(
+        "environment-bindings-status",
+        help="Show this node's explicit Environment roots and bindings",
+    )
+    environment_root = subparsers.add_parser(
+        "environment-register-root",
+        help="Preview or register one explicit global rule or Skill root",
+    )
+    environment_root.add_argument("--root-id", required=True)
+    environment_root.add_argument(
+        "--role", required=True, choices=("global-rules", "global-skills")
+    )
+    environment_root.add_argument("--owner", required=True)
+    environment_root.add_argument("--path", required=True)
+    environment_root.add_argument("--base-binding-sha256")
+    environment_root.add_argument("--apply", action="store_true")
+    environment_project = subparsers.add_parser(
+        "environment-register-project-binding",
+        help="Preview or activate one project already present in Environment Registry",
+    )
+    environment_project.add_argument("--project-id", required=True)
+    environment_project.add_argument("--base-binding-sha256")
+    environment_project.add_argument("--apply", action="store_true")
+    for command, help_text in (
+        ("environment-register-rule-binding", "Register one global rule binding JSON"),
+        (
+            "environment-register-project-rule-binding",
+            "Register one node-local project rule base-state JSON",
+        ),
+        ("environment-register-skill-binding", "Register one global Skill binding JSON"),
+    ):
+        binding_parser = subparsers.add_parser(command, help=help_text)
+        binding_parser.add_argument("--binding-json", required=True)
+        binding_parser.add_argument("--base-binding-sha256")
+        binding_parser.add_argument("--apply", action="store_true")
+    environment_discover = subparsers.add_parser(
+        "environment-discover",
+        help="Read-only discovery under one explicitly registered root",
+    )
+    environment_discover.add_argument(
+        "--role", required=True, choices=("global-rules", "global-skills", "project")
+    )
+    environment_discover.add_argument("--path", required=True)
+    environment_discover.add_argument("--project-id")
+    environment_rule_install = subparsers.add_parser(
+        "environment-install-rule",
+        help="Preview or apply one verified registered rule revision",
+    )
+    environment_rule_install.add_argument("--artifact-id", required=True)
+    environment_rule_install.add_argument("--revision-id", required=True)
+    environment_rule_install.add_argument("--binding-id", required=True)
+    environment_rule_install.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "environment-recover-rule-installs",
+        help="Recover interrupted rule-install transactions",
+    )
+    environment_skill_install = subparsers.add_parser(
+        "environment-install-skill",
+        help="Preview or apply one verified immutable Skill package",
+    )
+    environment_skill_install.add_argument("--package", required=True)
+    environment_skill_install.add_argument("--artifact-id", required=True)
+    environment_skill_install.add_argument("--revision-id", required=True)
+    environment_skill_install.add_argument("--binding-id", required=True)
+    environment_skill_install.add_argument("--runtime", action="append", default=[])
+    environment_skill_install.add_argument("--apply", action="store_true")
+    environment_skill_recover = subparsers.add_parser(
+        "environment-recover-skill-installs",
+        help="Recover interrupted Skill-install transactions",
+    )
+    environment_skill_recover.add_argument("--runtime", action="append", default=[])
+    environment_conflict_assess = subparsers.add_parser(
+        "environment-conflict-assess",
+        help="Classify one explicit base/local/remote assessment JSON",
+    )
+    environment_conflict_assess.add_argument("--assessment-json", required=True)
+    environment_conflict_assess.add_argument("--apply", action="store_true")
+    environment_conflicts = subparsers.add_parser(
+        "environment-conflicts",
+        help="List effective Environment conflict states",
+    )
+    environment_conflicts.add_argument("--pending-only", action="store_true")
+    environment_conflict_resolve = subparsers.add_parser(
+        "environment-conflict-resolve",
+        help="Preview or record one explicit conflict resolution",
+    )
+    environment_conflict_resolve.add_argument("--conflict-id", required=True)
+    environment_conflict_resolve.add_argument(
+        "--action",
+        required=True,
+        choices=("take-local", "take-remote", "manual-merge", "reject-remote"),
+    )
+    environment_conflict_resolve.add_argument("--evidence", required=True)
+    environment_conflict_resolve.add_argument("--reviewer", required=True)
+    environment_conflict_resolve.add_argument("--apply", action="store_true")
+    environment_promotion = subparsers.add_parser(
+        "environment-promotion-propose",
+        help="Preview or record one project capability promotion candidate",
+    )
+    environment_promotion.add_argument("--record-json", required=True)
+    environment_promotion.add_argument("--apply", action="store_true")
+    environment_promotion_transition = subparsers.add_parser(
+        "environment-promotion-transition",
+        help="Preview or append one reviewed promotion-state transition",
+    )
+    environment_promotion_transition.add_argument("--promotion-id", required=True)
+    environment_promotion_transition.add_argument("--record-json", required=True)
+    environment_promotion_transition.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "environment-promotions",
+        help="List effective project capability promotion states",
+    )
     return parser
 
 
@@ -4751,6 +4959,10 @@ def dispatch_command(
             ),
         )
         result["identity"] = transport.initialize_identity()
+        environment_transport = environment_cloud_transport(
+            store, transport, bootstrap=True
+        )
+        result["environment"] = environment_transport.status()
         result["scheduler_install_command"] = [
             sys.executable,
             str(SKILL_ROOT / "scripts" / "install_cloud_sync.py"),
@@ -4812,15 +5024,29 @@ def dispatch_command(
             fingerprint,
         )
     elif args.command == "cloud-sync":
-        result = CloudFolderTransport(FederationManager(store)).sync(
-            force=args.force
-        )
+        archive_transport = CloudFolderTransport(FederationManager(store))
+        result = archive_transport.sync(force=args.force)
+        result["environment"] = environment_cloud_transport(
+            store, archive_transport, bootstrap=True
+        ).sync(force=args.force)
     elif args.command == "cloud-status":
-        result = CloudFolderTransport(FederationManager(store)).status()
+        archive_transport = CloudFolderTransport(FederationManager(store))
+        result = archive_transport.status()
+        result["environment"] = environment_cloud_transport(
+            store, archive_transport, bootstrap=False
+        ).status()
     elif args.command == "cloud-enable":
-        result = CloudFolderTransport(FederationManager(store)).set_enabled(True)
+        archive_transport = CloudFolderTransport(FederationManager(store))
+        result = archive_transport.set_enabled(True)
+        result["environment"] = environment_cloud_transport(
+            store, archive_transport, bootstrap=True
+        ).set_enabled(True)
     elif args.command == "cloud-disable":
-        result = CloudFolderTransport(FederationManager(store)).set_enabled(False)
+        archive_transport = CloudFolderTransport(FederationManager(store))
+        result = archive_transport.set_enabled(False)
+        result["environment"] = environment_cloud_transport(
+            store, archive_transport, bootstrap=True
+        ).set_enabled(False)
     elif args.command == "migration-preview":
         result = GuardedFeatures(store).migration_preview(Path(args.destination))
     elif args.command == "migration-apply":
@@ -4889,6 +5115,144 @@ def dispatch_command(
         )
     elif args.command == "environment-validate":
         result = EnvironmentRegistry(store.root).validate()
+    elif args.command == "environment-export-delta":
+        result = EnvironmentExchangeManager(store).export_delta(
+            Path(args.output),
+            after_event_sequence=args.after_event_sequence,
+            target_node_id=args.target_node_id,
+            previous_bundle_sha256=args.previous_bundle_sha256,
+        )
+    elif args.command == "environment-import-delta":
+        result = EnvironmentExchangeManager(store).import_delta(
+            Path(args.bundle),
+            expected_node_id=args.expected_node_id,
+        )
+    elif args.command == "environment-exchange-status":
+        result = EnvironmentExchangeManager(store).status()
+    elif args.command == "environment-bindings-status":
+        result = environment_node_bindings(store).status()
+    elif args.command == "environment-register-root":
+        result = environment_node_bindings(store).register_root(
+            root_id=args.root_id,
+            role=args.role,
+            owner=args.owner,
+            root=args.path,
+            apply=args.apply,
+            base_binding_sha256=args.base_binding_sha256,
+        )
+    elif args.command == "environment-register-project-binding":
+        result = environment_node_bindings(store).register_project(
+            project_id=args.project_id,
+            apply=args.apply,
+            base_binding_sha256=args.base_binding_sha256,
+        )
+    elif args.command in {
+        "environment-register-rule-binding",
+        "environment-register-project-rule-binding",
+        "environment-register-skill-binding",
+    }:
+        bindings = environment_node_bindings(store)
+        binding = read_json(Path(args.binding_json).expanduser().resolve())
+        method = {
+            "environment-register-rule-binding": bindings.register_rule_binding,
+            "environment-register-project-rule-binding": (
+                bindings.register_project_rule_binding
+            ),
+            "environment-register-skill-binding": bindings.register_skill_binding,
+        }[args.command]
+        result = method(
+            binding,
+            apply=args.apply,
+            base_binding_sha256=args.base_binding_sha256,
+        )
+    elif args.command == "environment-discover":
+        result = environment_node_bindings(store).discover(
+            role=args.role,
+            root=args.path,
+            project_id=args.project_id,
+        )
+    elif args.command in {
+        "environment-install-rule",
+        "environment-recover-rule-installs",
+    }:
+        registry = EnvironmentRegistry(store.root)
+        bindings = environment_node_bindings(store)
+        installer = EnvironmentRuleInstaller.from_binding_registry(
+            registry,
+            target_node_id=bindings.node_id,
+            binding_registry=bindings,
+        )
+        if args.command == "environment-install-rule":
+            result = installer.install(
+                artifact_id=args.artifact_id,
+                revision_id=args.revision_id,
+                target_binding=args.binding_id,
+                apply=args.apply,
+            )
+        else:
+            result = installer.recover_pending()
+    elif args.command in {
+        "environment-install-skill",
+        "environment-recover-skill-installs",
+    }:
+        registry = EnvironmentRegistry(store.root)
+        bindings = environment_node_bindings(store)
+        installer = EnvironmentSkillInstaller.from_binding_registry(
+            registry,
+            target_node_id=bindings.node_id,
+            platform=local_platform_name(),
+            runtime_versions=local_runtime_versions(args.runtime),
+            binding_registry=bindings,
+        )
+        if args.command == "environment-install-skill":
+            result = installer.install(
+                package_path=Path(args.package).expanduser().resolve(),
+                artifact_id=args.artifact_id,
+                revision_id=args.revision_id,
+                target_binding=args.binding_id,
+                apply=args.apply,
+            )
+        else:
+            result = {
+                "status": "recovered",
+                "receipts": installer.recover_transactions(),
+            }
+    elif args.command == "environment-conflict-assess":
+        result = EnvironmentConflictStore(store.root).assess(
+            read_json(Path(args.assessment_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-conflicts":
+        result = {
+            "status": "ok",
+            "conflicts": EnvironmentConflictStore(store.root).list(
+                pending_only=args.pending_only
+            ),
+        }
+    elif args.command == "environment-conflict-resolve":
+        result = EnvironmentConflictStore(store.root).resolve(
+            args.conflict_id,
+            action=args.action,
+            evidence=args.evidence,
+            reviewer=args.reviewer,
+            apply=args.apply,
+        )
+    elif args.command == "environment-promotion-propose":
+        result = PromotionStore(store.root).propose(
+            read_json(Path(args.record_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-promotion-transition":
+        result = PromotionStore(store.root).transition(
+            args.promotion_id,
+            read_json(Path(args.record_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-promotions":
+        result = {
+            "status": "ok",
+            "promotions": PromotionStore(store.root).list(),
+        }
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2
@@ -4926,9 +5290,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "environment-show",
             "environment-diff",
             "environment-validate",
+            "environment-exchange-status",
         }:
             return dispatch_command(args, parser, store)
         if args.command in {"environment-init", "environment-register"}:
+            return dispatch_command(args, parser, store)
+        if args.command in {
+            "environment-export-delta",
+            "environment-import-delta",
+        }:
+            with exclusive_lock(
+                store.root / ".locks" / "environment-exchange.lock"
+            ):
+                return dispatch_command(args, parser, store)
+        if args.command.startswith("environment-"):
             return dispatch_command(args, parser, store)
         if args.command in {
             "init-node",

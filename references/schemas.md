@@ -273,3 +273,7 @@ and result. A failed installation records its error and rollback result without
 claiming the new revision as installed.
 
 Node-local bindings conform to `schemas/environment-binding.schema.json`.
+
+Three-way conflict events conform to
+`schemas/environment-conflict.schema.json`. Conflict events are append-only;
+modification times are not authority inputs.

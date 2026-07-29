@@ -131,12 +131,23 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         manager.status.return_value = federation_status
         cloud_transport = Mock()
         cloud_transport.status.return_value = cloud_status
+        environment_cloud_status = {
+            **cloud_status,
+            "stream_id": "environment-v1",
+            "peers": [],
+        }
+        environment_cloud_transport = Mock()
+        environment_cloud_transport.status.return_value = environment_cloud_status
         with (
             patch("memory_dashboard.FederationManager", return_value=manager),
             patch(
                 "memory_dashboard.CloudFolderTransport",
                 return_value=cloud_transport,
             ) as cloud_factory,
+            patch(
+                "memory_dashboard.environment_cloud_transport",
+                return_value=environment_cloud_transport,
+            ),
             patch(
                 "memory_dashboard.cloud_scheduler_status",
                 return_value={
@@ -172,6 +183,13 @@ class MemoryDashboardFederationTest(unittest.TestCase):
                 **federation_status,
                 "cloud": {
                     **cloud_status,
+                    "streams": {
+                        "archive-v1": {
+                            "stream_id": "archive-v1",
+                            **cloud_status,
+                        },
+                        "environment-v1": environment_cloud_status,
+                    },
                     "scheduler": {
                         "platform": "macos",
                         "installed": True,
@@ -220,6 +238,12 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "enabled": True,
             "exchange_root": "/OneDrive/MemoryWuxianExchange",
         }
+        environment_transport = Mock()
+        environment_transport.status.return_value = {
+            "configured": True,
+            "enabled": True,
+            "stream_id": "environment-v1",
+        }
         scheduler = {
             "platform": "macos",
             "installed": True,
@@ -230,6 +254,10 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             patch(
                 "memory_dashboard.CloudFolderTransport",
                 return_value=transport,
+            ),
+            patch(
+                "memory_dashboard.environment_cloud_transport",
+                return_value=environment_transport,
             ),
             patch("memory_dashboard.set_cloud_scheduler", return_value=scheduler),
             patch("memory_dashboard.cloud_scheduler_status", return_value=scheduler),
@@ -256,6 +284,7 @@ class MemoryDashboardFederationTest(unittest.TestCase):
 
         self.assertEqual(payload["result"]["status"], "enabled")
         transport.set_enabled.assert_called_once_with(True)
+        environment_transport.set_enabled.assert_called_once_with(True)
 
     def test_cloud_api_rejects_cross_origin_requests(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.store))

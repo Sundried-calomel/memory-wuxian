@@ -289,10 +289,16 @@ class CloudFolderTransport:
         crypto: Optional[CryptoAdapter] = None,
         config_path: Optional[Path] = None,
         clock: Optional[Any] = None,
+        stream_id: Optional[str] = None,
     ):
         self.manager = manager
         self.store = manager.store
         self.archive_root = manager.root
+        self.stream_id = stream_id
+        if stream_id is not None and not re.fullmatch(
+            r"[a-z0-9][a-z0-9._-]{2,63}", stream_id
+        ):
+            raise ValueError("invalid cloud stream_id")
         self.config_path = (
             Path(config_path)
             if config_path is not None
@@ -456,6 +462,7 @@ class CloudFolderTransport:
             ),
             "schedule": self.config.get("schedule"),
             "peers": peers,
+            "stream_id": self.stream_id or "archive-v1",
         }
 
     def _exchange_root(self) -> Path:
@@ -463,7 +470,19 @@ class CloudFolderTransport:
         if not value:
             raise ValueError("Cloud exchange_root is not configured")
         root = Path(value).expanduser().resolve() / "MemoryWuxianExchange" / "v1"
+        if self.stream_id is not None:
+            root = root / self.stream_id
         return Path(filesystem_native_path(root)) if os.name == "nt" else root
+
+    def _envelope_kind(self, kind: str) -> str:
+        return f"{self.stream_id}-{kind}" if self.stream_id is not None else kind
+
+    def _ack_format(self) -> str:
+        return (
+            f"memory-wuxian-cloud-ack-{self.stream_id}"
+            if self.stream_id is not None
+            else ACK_FORMAT
+        )
 
     def _identity_private_path(self) -> Path:
         value = str(self.config.get("identity_private_path", "")).strip()
@@ -529,6 +548,8 @@ class CloudFolderTransport:
         return state
 
     def _observation(self, timestamp: float) -> Dict[str, Any]:
+        if hasattr(self.manager, "exchange_observation"):
+            return self.manager.exchange_observation(timestamp)
         state = read_json(self.store.state_path, {})
         completed = int(state.get("completed_rounds", 0)) + len(
             state.get("completed_rounds_out_of_order") or []
@@ -698,12 +719,12 @@ class CloudFolderTransport:
                 plaintext,
                 self._identity_private_path(),
                 peer_identity["signing_public_key"],
-                "ack",
+                self._envelope_kind("ack"),
                 peer_node_id,
                 self._local_node_id(),
             )
             ack = json.loads(plaintext.read_text(encoding="utf-8"))
-        if ack.get("format") != ACK_FORMAT:
+        if ack.get("format") != self._ack_format():
             raise ValueError("Unsupported cloud acknowledgement format")
         if int(ack.get("protocol_version", 0)) != PROTOCOL_VERSION:
             raise ValueError("Unsupported cloud acknowledgement protocol")
@@ -814,7 +835,7 @@ class CloudFolderTransport:
         bundle_sha256: str,
     ) -> Path:
         ack = {
-            "format": ACK_FORMAT,
+            "format": self._ack_format(),
             "protocol_version": PROTOCOL_VERSION,
             "origin_node_id": self._local_node_id(),
             "target_node_id": peer_id,
@@ -840,7 +861,7 @@ class CloudFolderTransport:
                     local_identity["encryption_public_key"],
                     peer_identity["encryption_public_key"],
                 ],
-                "ack",
+                self._envelope_kind("ack"),
                 peer_id,
             )
         return destination
@@ -898,7 +919,7 @@ class CloudFolderTransport:
                             bundle,
                             self._identity_private_path(),
                             peer["cloud_identity"]["signing_public_key"],
-                            "bundle",
+                            self._envelope_kind("bundle"),
                             peer_id,
                             self._local_node_id(),
                         )
@@ -1004,7 +1025,12 @@ class CloudFolderTransport:
         acknowledged = state["acknowledged"]
         with tempfile.TemporaryDirectory(prefix="memory-wuxian-cloud-export-") as temp:
             bundle = Path(temp) / "delta.mwxb"
-            with exclusive_lock(self.archive_root / ".locks" / "archive.lock"):
+            exchange_lock = getattr(
+                self.manager,
+                "exchange_lock_path",
+                self.archive_root / ".locks" / "archive.lock",
+            )
+            with exclusive_lock(exchange_lock):
                 exported = self.manager.export_delta(
                     bundle,
                     after_event_sequence=int(acknowledged["last_event_sequence"]),
@@ -1025,7 +1051,7 @@ class CloudFolderTransport:
                     local_identity["encryption_public_key"],
                     peer["cloud_identity"]["encryption_public_key"],
                 ],
-                "bundle",
+                self._envelope_kind("bundle"),
                 peer_id,
             )
         state["outstanding"] = {

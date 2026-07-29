@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/environment-conflict.schema.json",
+  "title": "Memory Wuxian environment conflict event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "conflict_id",
+    "event_sequence",
+    "artifact_id",
+    "object_class",
+    "base_revision_id",
+    "local_revision_id",
+    "remote_revision_id",
+    "base_content_sha256",
+    "local_content_sha256",
+    "remote_content_sha256",
+    "conflict_kind",
+    "decision",
+    "status",
+    "details",
+    "resolution",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "conflict_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,191}$"
+    },
+    "event_sequence": {"type": "integer", "minimum": 1},
+    "artifact_id": {"type": "string", "minLength": 3},
+    "object_class": {
+      "enum": ["global-rule", "project-rule", "global-skill", "project-skill"]
+    },
+    "base_revision_id": {
+      "type": ["string", "null"],
+      "pattern": "^rev:[0-9a-f]{64}$"
+    },
+    "local_revision_id": {
+      "type": ["string", "null"],
+      "pattern": "^rev:[0-9a-f]{64}$"
+    },
+    "remote_revision_id": {
+      "type": ["string", "null"],
+      "pattern": "^rev:[0-9a-f]{64}$"
+    },
+    "base_content_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "local_content_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "remote_content_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "conflict_kind": {
+      "enum": [
+        "same-managed-block",
+        "delete-modify",
+        "divergent-skill-code",
+        "unregistered-local-change",
+        "project-identity-ambiguity",
+        "platform-incompatible",
+        "permission-expansion",
+        "network-expansion",
+        "base-mismatch",
+        "manual-review"
+      ]
+    },
+    "decision": {"const": "queue-conflict"},
+    "status": {"enum": ["pending-review", "resolved", "rejected"]},
+    "details": {"type": "object"},
+    "resolution": {
+      "type": ["object", "null"]
+    },
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}
