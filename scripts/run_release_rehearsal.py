@@ -119,6 +119,13 @@ def main() -> int:
             ],
         ),
         (
+            "environment-product-evolution-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_environment_evolution",
+            ],
+        ),
+        (
             "environment-incoming-contract",
             [
                 python, "-m", "unittest", "-v",
