@@ -439,6 +439,12 @@ atomically, run post-install checks, and append evidence receipts. Promotion of
 a reusable project capability to global scope is a separate evidence-gated
 workflow with a complete platform matrix and explicit approval.
 
+Verified local architecture lessons can also be recorded as immutable
+governance-insight proposals. Paired devices exchange these proposals in the
+same signed, target-encrypted Environment stream, but imported proposals remain
+read-only evidence. `work-system-governor` must classify and validate a
+proposal before an explicit acceptance can create a new Rule or Skill revision.
+
 The dashboard Environment view exposes inventory, incoming decisions,
 conflicts, promotions, and a manual update check. The complete 2.0 CLI families
 are:
@@ -476,6 +482,8 @@ environment-conflict-resolve
 environment-promotion-propose
 environment-promotion-transition
 environment-promotions
+environment-governance-propose
+environment-governance-proposals
 ```
 
 ## Privacy and integration boundary

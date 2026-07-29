@@ -104,13 +104,17 @@ Use Memory無限 to preserve conversation history outside the active context win
 58. Treat project-to-global Skill extraction as a promotion workflow. Require
     explicit source evidence, a complete passing platform matrix, and reviewer
     approval; never infer promotion from repeated use or successful sync.
-59. Treat `PRODUCT_ARCHITECTURE.md` as the single owner for product module
+59. Exchange governance-insight proposals only as immutable, source-bound
+    evidence. Store peer proposals outside Rule and Skill installation staging.
+    Successful transport, repetition, or presence on another device never
+    means the proposal was reviewed, accepted, registered, or installed.
+60. Treat `PRODUCT_ARCHITECTURE.md` as the single owner for product module
     boundaries, dependency direction, application contracts, refactoring
     gates, and the ordered productization roadmap. Before cross-module work,
     read that contract and preserve its phase order. Do not combine module
     extraction with a feature, format, protocol, default, or security-policy
     change.
-60. Follow the release lifecycle owned by `PRODUCT_ARCHITECTURE.md`: keep
+61. Follow the release lifecycle owned by `PRODUCT_ARCHITECTURE.md`: keep
     candidate iteration untagged, use targeted tests during iteration, pass one
     complete candidate gate before creating the single formal tag, and update
     installed devices through the user-space transaction unless first install,

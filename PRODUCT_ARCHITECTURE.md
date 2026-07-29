@@ -51,7 +51,8 @@ Memory無限
 │   ├── Rule Manager
 │   ├── Skill Package Manager
 │   ├── Conflict Manager
-│   └── Promotion Manager
+│   ├── Promotion Manager
+│   └── Governance Proposal Replica
 ├── Exchange Plane
 │   ├── Federation Protocol
 │   ├── Cloud-Folder Transport
@@ -79,6 +80,12 @@ receipts, and rollback evidence.
 The Exchange Plane owns transport identities, envelopes, event sequences,
 predecessor chains, acknowledgements, replica delivery, and diagnostics. It
 does not own the meaning of a conversation, summary, Rule, or Skill.
+
+Governance-insight proposals are inert domain records. The Environment Plane
+stores local immutable proposals and read-only peer replicas; the Exchange
+Plane transports them. `work-system-governor` owns semantic abstraction,
+classification, validation, and acceptance. A transported or imported proposal
+does not authorize a Rule or Skill revision.
 
 `archive-v1` and `environment-v1` remain independent streams. A fault,
 conflict, or acknowledgement delay in one stream must not advance or block the
@@ -198,6 +205,20 @@ permission or privileged component change cannot be completed in user space.
 Such an upgrade must explain the privileged change before requesting approval.
 Formal releases may continue to publish complete installers for new devices;
 their existence does not require an already installed device to run them.
+
+### 11. Governance Insight Contract
+
+A local product may emit one source-bound governance proposal containing its
+origin node, source product and Owner, source revision, local problem and
+change, generalized principle, applicability, exclusions, invariants, negative
+cases, proposed global Owner, and evidence references. Proposal identity and
+content are immutable.
+
+Cross-device transport verifies the envelope and stores a read-only replica.
+Semantic classification remains `unresolved` until the global governance Owner
+reviews it as `duplicate`, `extension`, `conflict`, `new_domain`,
+`project-only`, or `rejected`. Only an explicitly accepted `extension` or
+`new_domain` may start a separate Rule or Skill revision lifecycle.
 
 ## Intended Package Boundaries
 

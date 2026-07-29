@@ -77,6 +77,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     receipt.
 44. Promote reusable project capability to global scope only through a separate
     evidence-bearing proposal, complete platform matrix, and explicit approval.
+45. Transport governance-insight proposals only as immutable, source-bound
+    evidence. Keep imported proposals in read-only peer replicas; transfer,
+    repetition, or arrival from another device never constitutes semantic
+    review, acceptance, Rule registration, or Skill installation.
 
 ## Operating workflow
 
@@ -126,6 +130,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     governance state. Resolve a conflict or advance a promotion only with
     explicit reviewer and evidence fields; never infer approval from recency or
     successful transfer.
+32. Validate a governance insight with `work-system-governor`, then use
+    `environment-governance-propose` to preview and persist the immutable local
+    envelope. Use `environment-governance-proposals` to inspect local and peer
+    proposals; acceptance remains a separate global Owner workflow.
 
 ## Commands
 
@@ -185,6 +193,8 @@ python3 scripts/memory_cli.py environment-incoming-status
 python3 scripts/memory_cli.py environment-process-incoming
 python3 scripts/memory_cli.py environment-conflicts
 python3 scripts/memory_cli.py environment-promotions
+python3 scripts/memory_cli.py environment-governance-propose --proposal-json /path/to/proposal.json
+python3 scripts/memory_cli.py environment-governance-proposals
 scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
 powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1

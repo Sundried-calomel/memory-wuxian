@@ -35,6 +35,20 @@ discovered -> review -> classified -> deprojectized -> validating
 Rejected, project-only, and conflicting candidates remain durable records. They
 are not repeatedly proposed unless their source evidence changes.
 
+## Governance insight exchange
+
+Local product architecture lessons use an independent proposal contract:
+
+```text
+local evidence -> immutable proposal -> encrypted transport -> peer replica
+-> work-system-governor review -> explicit acceptance -> Environment revision
+```
+
+Memory無限 verifies proposal identity, origin, size, encoding, and content
+hash. It does not decide whether the proposal is useful, general, duplicate,
+conflicting, or accepted. Imported proposals never enter Rule or Skill install
+staging and never mutate a global Owner automatically.
+
 ## Defaults
 
 - automatic download: enabled

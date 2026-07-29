@@ -354,6 +354,11 @@ python3 scripts/install_cloud_sync.py \
 把可复用项目能力提升到全局范围属于另一条治理流程，必须具备完整平台矩阵、
 来源证据和显式批准。
 
+经过验证的局部架构经验也可以记录为不可变的治理思想提案。已配对设备会通过
+同一条签名、面向目标加密的 Environment 流交换提案，但导入的提案始终只是
+只读证据。只有 `work-system-governor` 完成分类和验证并取得显式接受后，
+才能据此生成新的规则或 Skill 修订。
+
 操作台的 Environment 视图会显示清单、传入判定、冲突、提升提案和手动更新
 检查。2.0 的完整 CLI 命令族如下：
 
@@ -390,6 +395,8 @@ environment-conflict-resolve
 environment-promotion-propose
 environment-promotion-transition
 environment-promotions
+environment-governance-propose
+environment-governance-proposals
 ```
 
 ## 隐私与集成边界

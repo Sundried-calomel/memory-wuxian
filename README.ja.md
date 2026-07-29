@@ -369,6 +369,12 @@ python3 scripts/install_cloud_sync.py \
 証拠レシート追記を行います。プロジェクト能力のグローバル昇格は、完全な
 プラットフォームマトリクス、出典証拠、明示承認を必要とする別の手順です。
 
+検証済みのローカルなアーキテクチャ知見は、不変のガバナンス提案として
+記録できます。ペアリング済みデバイスは同じ署名済み・対象暗号化済み
+Environmentストリームで提案を交換しますが、受信提案は読取専用の証拠の
+ままです。`work-system-governor`による分類と検証、明示承認が完了するまで、
+新しい規則やSkillリビジョンにはなりません。
+
 ダッシュボードのEnvironmentビューでは、インベントリ、受信判定、競合、
 昇格候補、手動更新確認を表示します。2.0の完全なCLIコマンド群は次の通りです。
 
@@ -405,6 +411,8 @@ environment-conflict-resolve
 environment-promotion-propose
 environment-promotion-transition
 environment-promotions
+environment-governance-propose
+environment-governance-proposals
 ```
 
 ## プライバシーと統合境界

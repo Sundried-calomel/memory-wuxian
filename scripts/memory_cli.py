@@ -25,6 +25,7 @@ from memory_cloud_transport import CloudFolderTransport
 from memory_environment import EnvironmentRegistry
 from memory_environment_bindings import EnvironmentBindingRegistry
 from memory_environment_conflicts import EnvironmentConflictStore
+from memory_environment_governance import GovernanceProposalStore
 from memory_environment_exchange import EnvironmentExchangeManager
 from memory_environment_incoming import EnvironmentIncomingProcessor
 from memory_environment_promotions import PromotionStore
@@ -4683,6 +4684,16 @@ def build_parser() -> argparse.ArgumentParser:
         "environment-promotions",
         help="List effective project capability promotion states",
     )
+    environment_governance = subparsers.add_parser(
+        "environment-governance-propose",
+        help="Preview or record one immutable governance insight proposal",
+    )
+    environment_governance.add_argument("--proposal-json", required=True)
+    environment_governance.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "environment-governance-proposals",
+        help="List local and imported governance proposals without accepting them",
+    )
     return parser
 
 
@@ -5317,6 +5328,13 @@ def dispatch_command(
             "status": "ok",
             "promotions": PromotionStore(store.root).list(),
         }
+    elif args.command == "environment-governance-propose":
+        result = GovernanceProposalStore(store).propose(
+            read_json(Path(args.proposal_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-governance-proposals":
+        result = GovernanceProposalStore(store).list()
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2

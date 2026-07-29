@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0 - 2026-07-29
+
+- Added immutable governance-insight proposal envelopes to the independent
+  `environment-v1` stream so verified local product lessons can be shared
+  across paired devices without being accepted or installed automatically.
+- Kept imported proposals in read-only peer replicas, separate from incoming
+  Rule and Skill installation staging.
+- Added explicit proposal preview, persistence, listing, origin, content-hash,
+  idempotency, conflict, and tamper checks.
+- Documented the boundary between Memory無限 transport and
+  `work-system-governor` classification, validation, and acceptance.
+
 ## 2.0.5 - 2026-07-29
 
 - Correct the macOS release gate to expand the built package into a
