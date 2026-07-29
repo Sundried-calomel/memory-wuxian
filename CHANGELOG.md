@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.0 - 2026-07-29
+
+- Added immutable product evolution records for bounded development history,
+  verified current state, corrected future flow, and reusable lesson candidates.
+- Added signed, encrypted Environment transport into read-only peer replicas;
+  receipt never implies remediation or governance acceptance.
+- Defined the deterministic scheduler versus bounded AI semantic-review
+  boundary for recurring product retrospectives.
+
 ## 2.1.0 - 2026-07-29
 
 - Added immutable governance-insight proposal envelopes to the independent

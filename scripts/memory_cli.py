@@ -25,6 +25,7 @@ from memory_cloud_transport import CloudFolderTransport
 from memory_environment import EnvironmentRegistry
 from memory_environment_bindings import EnvironmentBindingRegistry
 from memory_environment_conflicts import EnvironmentConflictStore
+from memory_environment_evolution import ProductEvolutionStore
 from memory_environment_governance import GovernanceProposalStore
 from memory_environment_exchange import EnvironmentExchangeManager
 from memory_environment_incoming import EnvironmentIncomingProcessor
@@ -4694,6 +4695,16 @@ def build_parser() -> argparse.ArgumentParser:
         "environment-governance-proposals",
         help="List local and imported governance proposals without accepting them",
     )
+    environment_evolution = subparsers.add_parser(
+        "environment-product-evolution-record",
+        help="Preview or record one immutable product evolution report",
+    )
+    environment_evolution.add_argument("--record-json", required=True)
+    environment_evolution.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "environment-product-evolution-records",
+        help="List local and imported product evolution reports without remediation",
+    )
     return parser
 
 
@@ -5335,6 +5346,13 @@ def dispatch_command(
         )
     elif args.command == "environment-governance-proposals":
         result = GovernanceProposalStore(store).list()
+    elif args.command == "environment-product-evolution-record":
+        result = ProductEvolutionStore(store).record(
+            read_json(Path(args.record_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-product-evolution-records":
+        result = ProductEvolutionStore(store).list()
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2

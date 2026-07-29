@@ -445,6 +445,13 @@ same signed, target-encrypted Environment stream, but imported proposals remain
 read-only evidence. `work-system-governor` must classify and validate a
 proposal before an explicit acceptance can create a new Rule or Skill revision.
 
+Evidence-bound product evolution records can preserve a bounded development
+history, verified current state, corrected next-development flow, and reusable
+lesson candidates. They are exchanged as read-only evidence; receipt never
+triggers product remediation or global governance acceptance. Deterministic
+jobs collect and queue changed evidence, while AI is invoked only for bounded
+semantic review.
+
 The dashboard Environment view exposes inventory, incoming decisions,
 conflicts, promotions, and a manual update check. The complete 2.0 CLI families
 are:
@@ -484,6 +491,8 @@ environment-promotion-transition
 environment-promotions
 environment-governance-propose
 environment-governance-proposals
+environment-product-evolution-record
+environment-product-evolution-records
 ```
 
 ## Privacy and integration boundary

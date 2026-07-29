@@ -49,6 +49,15 @@ hash. It does not decide whether the proposal is useful, general, duplicate,
 conflicting, or accepted. Imported proposals never enter Rule or Skill install
 staging and never mutate a global Owner automatically.
 
+## Product evolution exchange
+
+Validated product evolution records use the same Environment stream as
+immutable, read-only evidence. They may describe bounded development history,
+current state, corrected future development flow, and reusable lesson
+candidates. Receiving a record does not remediate the source product or promote
+any lesson into global governance. Full raw logs and project data remain local
+unless a separate transport allowlist explicitly includes them.
+
 ## Defaults
 
 - automatic download: enabled

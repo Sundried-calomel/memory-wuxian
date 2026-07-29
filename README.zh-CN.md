@@ -359,6 +359,11 @@ python3 scripts/install_cloud_sync.py \
 只读证据。只有 `work-system-governor` 完成分类和验证并取得显式接受后，
 才能据此生成新的规则或 Skill 修订。
 
+经过证据约束的产品演化记录可以保存有边界的开发历史、已验证现状、纠正后的
+下一次开发流程和可复用经验候选。它们只作为只读（read-only）证据交换；接收不会触发产品
+修复或全局治理接受。确定性任务负责采集变化并排队，AI 只在需要语义复盘时
+介入。
+
 操作台的 Environment 视图会显示清单、传入判定、冲突、提升提案和手动更新
 检查。2.0 的完整 CLI 命令族如下：
 
@@ -397,6 +402,8 @@ environment-promotion-transition
 environment-promotions
 environment-governance-propose
 environment-governance-proposals
+environment-product-evolution-record
+environment-product-evolution-records
 ```
 
 ## 隐私与集成边界

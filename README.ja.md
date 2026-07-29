@@ -375,6 +375,12 @@ Environmentストリームで提案を交換しますが、受信提案は読取
 ままです。`work-system-governor`による分類と検証、明示承認が完了するまで、
 新しい規則やSkillリビジョンにはなりません。
 
+証拠に結び付いた製品進化記録は、範囲を限定した開発履歴、検証済みの現状、
+修正後の次回開発フロー、再利用可能な教訓候補を保存できます。交換後も
+読取専用（read-only）の証拠であり、製品修復やグローバルガバナンス受入れを自動実行
+しません。決定論的タスクが変更証拠を収集してキュー化し、AIは限定された
+意味レビューが必要な時だけ呼び出されます。
+
 ダッシュボードのEnvironmentビューでは、インベントリ、受信判定、競合、
 昇格候補、手動更新確認を表示します。2.0の完全なCLIコマンド群は次の通りです。
 
@@ -413,6 +419,8 @@ environment-promotion-transition
 environment-promotions
 environment-governance-propose
 environment-governance-proposals
+environment-product-evolution-record
+environment-product-evolution-records
 ```
 
 ## プライバシーと統合境界

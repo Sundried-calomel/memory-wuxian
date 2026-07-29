@@ -134,6 +134,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     `environment-governance-propose` to preview and persist the immutable local
     envelope. Use `environment-governance-proposals` to inspect local and peer
     proposals; acceptance remains a separate global Owner workflow.
+33. Validate product evolution reports with `work-system-governor`, then use
+    `environment-product-evolution-record` to preserve and exchange the
+    immutable evidence record. Peer records stay read-only and never trigger
+    product remediation or governance acceptance.
 
 ## Commands
 
@@ -195,6 +199,8 @@ python3 scripts/memory_cli.py environment-conflicts
 python3 scripts/memory_cli.py environment-promotions
 python3 scripts/memory_cli.py environment-governance-propose --proposal-json /path/to/proposal.json
 python3 scripts/memory_cli.py environment-governance-proposals
+python3 scripts/memory_cli.py environment-product-evolution-record --record-json /path/to/product-evolution.json
+python3 scripts/memory_cli.py environment-product-evolution-records
 scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
 powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1

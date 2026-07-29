@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from memory_environment import EnvironmentRegistry, canonical_bytes, read_json
+from memory_environment_evolution import ProductEvolutionStore
 from memory_environment_governance import GovernanceProposalStore
 from memory_environment_skills import MANIFEST_NAME, skill_package_contract_bytes
 from memory_federation import (
@@ -56,6 +57,7 @@ class EnvironmentExchangeManager:
         self.registry = EnvironmentRegistry(self.root)
         self.federation = FederationManager(store)
         self.governance = GovernanceProposalStore(store)
+        self.evolution = ProductEvolutionStore(store)
         self.metadata_root = self.registry.root / "exchange"
         self.export_state_path = self.metadata_root / "export-state.json"
         self.export_ledger_path = self.metadata_root / "export-ledger.jsonl"
@@ -68,6 +70,7 @@ class EnvironmentExchangeManager:
     def init_layout(self) -> None:
         self.registry.init()
         self.governance.init()
+        self.evolution.init()
         for directory in (
             self.metadata_root,
             self.replica_root / "peers",
@@ -204,6 +207,23 @@ class EnvironmentExchangeManager:
                     "source_event_id": source_event_id,
                     "event_kind": "governance-proposal",
                     "proposal_id": event["proposal_id"],
+                    "payload_sha256": canonical_sha256(payload),
+                    "payload": payload,
+                }
+            )
+            known[source_event_id] = next_sequence
+            next_sequence += 1
+        for event in self.evolution.local_events():
+            source_event_id = event["source_event_id"]
+            if source_event_id in known:
+                continue
+            payload = event["payload"]
+            ledger.append(
+                {
+                    "event_sequence": next_sequence,
+                    "source_event_id": source_event_id,
+                    "event_kind": "product-evolution",
+                    "record_id": event["record_id"],
                     "payload_sha256": canonical_sha256(payload),
                     "payload": payload,
                 }
@@ -462,8 +482,10 @@ class EnvironmentExchangeManager:
         proposal_replica_root = (
             self._peer_root(origin) / "governance-proposals"
         )
+        evolution_replica_root = self._peer_root(origin) / "product-evolution"
         staged_artifacts = 0
         staged_governance_proposals = 0
+        staged_product_evolution_records = 0
         for item in records:
             if item.get("event_kind") == "governance-proposal":
                 envelope = self.governance.validate_envelope(
@@ -499,6 +521,38 @@ class EnvironmentExchangeManager:
                         proposal_record,
                     )
                 staged_governance_proposals += 1
+                continue
+            if item.get("event_kind") == "product-evolution":
+                envelope = self.evolution.validate_envelope(
+                    item["payload"], expected_origin=origin
+                )
+                evolution_replica_root.mkdir(parents=True, exist_ok=True)
+                record_id = envelope["record_id"]
+                digest = envelope["content_sha256"]
+                conflicts = sorted(
+                    evolution_replica_root.glob(f"{record_id}-*.json")
+                )
+                replica_record = {
+                    "schema_version": 1,
+                    "stream_id": "environment-v1",
+                    "origin_node_id": origin,
+                    "event_sequence": item["event_sequence"],
+                    "product_evolution": envelope,
+                    "received_bundle_id": manifest["bundle_id"],
+                    "automatic_remediation": False,
+                    "automatic_governance_acceptance": False,
+                }
+                if conflicts:
+                    if len(conflicts) != 1 or read_json(conflicts[0]) != replica_record:
+                        raise ValueError(
+                            "peer product evolution ID conflicts with existing content"
+                        )
+                else:
+                    atomic_write_json(
+                        evolution_replica_root / f"{record_id}-{digest}.json",
+                        replica_record,
+                    )
+                staged_product_evolution_records += 1
                 continue
             payload = item["payload"]
             content = base64.b64decode(payload["content_base64"], validate=True)
@@ -553,6 +607,7 @@ class EnvironmentExchangeManager:
             "to_event_sequence": manifest["to_event_sequence"],
             "staged_artifacts": staged_artifacts,
             "staged_governance_proposals": staged_governance_proposals,
+            "staged_product_evolution_records": staged_product_evolution_records,
         }
 
     def _peer_root(self, node_id: str) -> Path:
@@ -586,6 +641,19 @@ class EnvironmentExchangeManager:
                 raise ValueError("governance proposal event identity mismatch")
             if item["payload_sha256"] != canonical_sha256(payload):
                 raise ValueError("governance proposal event hash mismatch")
+            return
+        if event_kind == "product-evolution":
+            required = {
+                "event_sequence", "source_event_id", "event_kind", "record_id",
+                "payload_sha256", "payload",
+            }
+            if set(item) != required:
+                raise ValueError("product evolution event fields are invalid")
+            payload = self.evolution.validate_envelope(item["payload"])
+            if item["record_id"] != payload["record_id"]:
+                raise ValueError("product evolution event identity mismatch")
+            if item["payload_sha256"] != canonical_sha256(payload):
+                raise ValueError("product evolution event hash mismatch")
             return
         if event_kind == "artifact-revision":
             required = legacy_required | {"event_kind"}

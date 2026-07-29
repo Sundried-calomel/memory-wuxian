@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.1.0",
+  "reviewed_version": "2.2.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -110,6 +110,10 @@
     {
       "id": "environment-governance",
       "required_tokens": ["environment-conflicts", "environment-conflict-resolve", "environment-promotions", "environment-promotion-transition", "environment-governance-propose", "environment-governance-proposals"]
+    },
+    {
+      "id": "product-evolution-feedback",
+      "required_tokens": ["environment-product-evolution-record", "environment-product-evolution-records", "read-only", "AI"]
     }
   ]
 }
