@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.4 - 2026-07-29
+
+- Mark the packaged macOS dashboard bundle as non-relocatable so Installer
+  leaves it inside the Skill payload until the post-install transaction copies
+  the verified application to the user's Desktop.
+- Add release and regression gates that reject a macOS package when bundle
+  relocation is still enabled.
+
 ## 2.0.3 - 2026-07-29
 
 - Passed URL-safe signing public keys to the native envelope helper with an

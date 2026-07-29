@@ -47,9 +47,26 @@ if [[ "$dashboard_version" != "$version" ]]; then
   exit 1
 fi
 
+component_plist="$work_dir/component.plist"
+pkgbuild --analyze --root "$work_dir/root" "$component_plist"
+dashboard_bundle_path="Library/Application Support/MemoryWuxian/skill/assets/macos/Memory無限操作台.app"
+component_bundle_path="$(/usr/libexec/PlistBuddy \
+  -c 'Print :0:RootRelativeBundlePath' "$component_plist" 2>/dev/null || true)"
+if [[ "$component_bundle_path" != "$dashboard_bundle_path" ]]; then
+  echo "Unexpected macOS package bundle path: $component_bundle_path" >&2
+  exit 1
+fi
+/usr/libexec/PlistBuddy \
+  -c 'Set :0:BundleIsRelocatable false' "$component_plist"
+if [[ "$(/usr/libexec/PlistBuddy -c 'Print :0:BundleIsRelocatable' "$component_plist")" != "false" ]]; then
+  echo "macOS dashboard bundle must be marked non-relocatable." >&2
+  exit 1
+fi
+
 pkgbuild \
   --root "$work_dir/root" \
   --scripts "$repo_root/packaging/macos/scripts" \
+  --component-plist "$component_plist" \
   --identifier "io.github.sundried-calomel.memory-wuxian" \
   --version "$version" \
   --install-location / \

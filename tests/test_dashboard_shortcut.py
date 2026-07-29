@@ -63,6 +63,10 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn("install_dashboard_app_macos.py", postinstall)
         self.assertIn("build_dashboard_app.sh", package)
         self.assertIn("CFBundleShortVersionString", package)
+        self.assertIn("pkgbuild --analyze", package)
+        self.assertIn("BundleIsRelocatable false", package)
+        self.assertIn('--component-plist "$component_plist"', package)
+        self.assertIn("Unexpected macOS package bundle path", package)
         self.assertIn("Memory無限操作台.app/Contents/MacOS/MemoryDashboard", workflow)
 
     def test_macos_dashboard_is_config_driven_and_self_checkable(self):
