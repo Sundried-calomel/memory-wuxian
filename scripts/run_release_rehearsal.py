@@ -77,6 +77,10 @@ def main() -> int:
             [python, "scripts/check_documentation_contract.py"],
         ),
         (
+            "architecture-contract",
+            [python, "scripts/check_architecture_contract.py"],
+        ),
+        (
             "desktop-dashboard-contract",
             [
                 python, "-m", "unittest", "-v",

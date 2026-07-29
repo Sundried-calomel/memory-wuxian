@@ -120,6 +120,12 @@ Use Memory無限 to preserve conversation history outside the active context win
     installed devices through the user-space transaction unless first install,
     explicit recovery, or a declared privileged-component change requires the
     full installer.
+62. Register every new production file in
+    `docs/module-architecture.json` under exactly one canonical module owner
+    before implementation. Run `scripts/check_architecture_contract.py` for
+    every feature, fix, refactor, installer, dashboard, schema, or runtime
+    change. Do not accept unowned files, overlapping owners, or a prohibited
+    dependency as temporary release debt.
 
 ## Authority order
 

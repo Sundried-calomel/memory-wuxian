@@ -222,6 +222,14 @@ reviews it as `duplicate`, `extension`, `conflict`, `new_domain`,
 
 ## Intended Package Boundaries
 
+`docs/module-architecture.json` is the machine-readable ownership registry for
+the current source tree. Every production file under its declared source roots
+must have exactly one module owner. `scripts/check_architecture_contract.py`
+rejects unowned files, overlapping ownership, and declared prohibited
+dependencies. A feature change must register its target owner before adding a
+new production file, and the architecture check must pass before focused tests
+or release rehearsal can count as evidence.
+
 ```text
 memory_wuxian/
 ├── application/

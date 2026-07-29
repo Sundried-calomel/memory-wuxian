@@ -107,6 +107,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 53. The native dashboard must bind an operating-system-assigned loopback port
     and open the server's actual port. Never share or assume another local
     application's fixed port.
+54. Treat `PRODUCT_ARCHITECTURE.md` as the canonical module-boundary owner and
+    `docs/module-architecture.json` as its machine-readable source-ownership
+    registry. Register each new production file under exactly one owner and
+    pass `scripts/check_architecture_contract.py` for every product change.
+    Unowned files, overlapping owners, and prohibited dependencies fail closed.
 
 ## Operating workflow
 
@@ -169,6 +174,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     `environment-governance-ai-tick` for a bounded one-shot review. Configure
     or enqueue only through preview-first CLI commands. Human review remains
     mandatory before any downstream acceptance or installation.
+35. Before implementing a product change, identify its canonical owner in
+    `PRODUCT_ARCHITECTURE.md`. If it adds or relocates production code, update
+    `docs/module-architecture.json` first, then run the architecture contract
+    before focused behavioral tests.
 
 ## Commands
 

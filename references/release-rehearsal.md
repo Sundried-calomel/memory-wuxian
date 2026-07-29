@@ -63,6 +63,8 @@ Required scenarios:
     before invocation; malformed results retry twice then isolate; valid
     results remain unreviewed drafts; and macOS/Windows schedulers remain
     independent from cloud synchronization.
+16. The machine-readable architecture contract proves every production file
+    has exactly one module owner and no declared prohibited dependency.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

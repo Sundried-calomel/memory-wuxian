@@ -1,11 +1,71 @@
 from pathlib import Path
+import json
+import subprocess
+import sys
 import unittest
+from unittest.mock import patch
+
+from scripts import check_architecture_contract
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProductArchitectureContractTest(unittest.TestCase):
+    def test_machine_readable_module_contract_passes(self):
+        completed = subprocess.run(
+            [sys.executable, "scripts/check_architecture_contract.py"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+    def test_every_declared_module_has_one_architecture_owner(self):
+        contract = json.loads(
+            (ROOT / "docs/module-architecture.json").read_text(encoding="utf-8")
+        )
+        module_ids = [module["id"] for module in contract["modules"]]
+        self.assertEqual(len(module_ids), len(set(module_ids)))
+        self.assertTrue(
+            all(module.get("architecture_owner") for module in contract["modules"])
+        )
+
+    def test_unowned_production_file_fails_closed(self):
+        actual = check_architecture_contract.production_files
+
+        def with_unowned(contract):
+            return actual(contract) + ["scripts/new_unowned_feature.py"]
+
+        with patch.object(
+            check_architecture_contract, "production_files", side_effect=with_unowned
+        ):
+            errors = check_architecture_contract.validate()
+        self.assertIn(
+            "unowned production file: scripts/new_unowned_feature.py", errors
+        )
+
+    def test_domain_to_dashboard_dependency_fails_closed(self):
+        with (
+            patch.object(
+                check_architecture_contract,
+                "production_files",
+                return_value=["scripts/token_usage.py"],
+            ),
+            patch.object(
+                check_architecture_contract,
+                "imported_modules",
+                return_value={"memory_dashboard"},
+            ),
+        ):
+            errors = check_architecture_contract.validate()
+        self.assertIn(
+            "forbidden dependency: scripts/token_usage.py "
+            "(memory-plane) -> memory_dashboard",
+            errors,
+        )
+
     def test_canonical_contract_and_agent_route_exist(self):
         architecture = (ROOT / "PRODUCT_ARCHITECTURE.md").read_text(encoding="utf-8")
         agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")

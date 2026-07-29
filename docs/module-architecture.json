@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "source_roots": [
+    {"path": "scripts", "extensions": [".py", ".ps1", ".sh"]},
+    {"path": "native-collector/src", "extensions": [".rs"]},
+    {"path": "dashboard", "extensions": [".html", ".css", ".js"]},
+    {"path": "schemas", "extensions": [".json"]}
+  ],
+  "modules": [
+    {
+      "id": "product-shell",
+      "architecture_owner": "Product Shell",
+      "patterns": [
+        "dashboard/**",
+        "scripts/auto_update.py",
+        "scripts/bootstrap_windows.ps1",
+        "scripts/install_*.py",
+        "scripts/install_*.ps1",
+        "scripts/memory_cli.py",
+        "scripts/memory_dashboard.py",
+        "native-collector/src/bin/memory-wuxian-dashboard-launcher.rs"
+      ]
+    },
+    {
+      "id": "control-plane",
+      "architecture_owner": "Control Plane",
+      "patterns": [
+        "scripts/governance_ai_worker.py",
+        "scripts/semantic_backfill.py",
+        "scripts/semantic_e5_worker.py",
+        "scripts/semantic_worker.py"
+      ]
+    },
+    {
+      "id": "memory-plane",
+      "architecture_owner": "Memory Plane",
+      "patterns": [
+        "scripts/conversation_titles.py",
+        "scripts/memory_guarded_features.py",
+        "scripts/token_usage.py",
+        "native-collector/src/main.rs"
+      ]
+    },
+    {
+      "id": "environment-plane",
+      "architecture_owner": "Environment Plane",
+      "patterns": [
+        "scripts/memory_environment*.py",
+        "scripts/memory_governance_ai.py"
+      ]
+    },
+    {
+      "id": "exchange-plane",
+      "architecture_owner": "Exchange Plane",
+      "patterns": [
+        "scripts/memory_cloud_transport.py",
+        "scripts/memory_federation.py",
+        "native-collector/src/bin/memory-wuxian-envelope.rs"
+      ]
+    },
+    {
+      "id": "platform-foundation",
+      "architecture_owner": "Platform Foundation",
+      "patterns": [
+        "scripts/console_encoding.py",
+        "scripts/platform_*.py",
+        "schemas/**"
+      ]
+    },
+    {
+      "id": "product-quality",
+      "architecture_owner": "Release Evidence Contract",
+      "patterns": [
+        "scripts/build_native_collector.ps1",
+        "scripts/build_native_collector.sh",
+        "scripts/check_architecture_contract.py",
+        "scripts/check_documentation_changes.py",
+        "scripts/check_documentation_contract.py",
+        "scripts/run_release_rehearsal.py"
+      ]
+    }
+  ],
+  "python_dependency_rules": {
+    "forbidden_imports": {
+      "control-plane": ["memory_dashboard"],
+      "memory-plane": ["memory_cli", "memory_dashboard"],
+      "environment-plane": ["memory_cli", "memory_dashboard"],
+      "exchange-plane": ["memory_cli", "memory_dashboard"],
+      "platform-foundation": [
+        "memory_cli",
+        "memory_dashboard",
+        "memory_environment",
+        "memory_federation",
+        "memory_cloud_transport"
+      ]
+    }
+  }
+}

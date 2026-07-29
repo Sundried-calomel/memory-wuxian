@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added a machine-readable module ownership registry and fail-closed
+  architecture gate. Every production file must have exactly one canonical
+  owner, and declared prohibited dependencies now fail tests and release
+  rehearsal.
+
 ## 2.4.2 - 2026-07-30
 
 - Fixed Windows dashboard cross-application port capture. The native Memory
