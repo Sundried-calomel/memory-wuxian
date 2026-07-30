@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +84,55 @@ class GuardedFeaturesTest(unittest.TestCase):
             if item["authoritative"]
         }
         self.assertEqual(raw_before, raw_after)
+
+    def test_semantic_pointer_index_reads_each_raw_file_once(self):
+        records = self.store.read_all_raw()
+        raw_path = self.store.root / records[0]["_path"]
+        original_read_text = Path.read_text
+        raw_reads = 0
+
+        def counted_read_text(path, *args, **kwargs):
+            nonlocal raw_reads
+            if path == raw_path:
+                raw_reads += 1
+            return original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", counted_read_text):
+            pointers = self.features.raw_pointer_index(records)
+
+        self.assertEqual(1, raw_reads)
+        self.assertEqual({("m1", 10, 13), ("m2", 15, 18)}, {
+            (
+                message_id,
+                pointer["raw_line_start"],
+                pointer["raw_line_end"],
+            )
+            for (_, message_id), pointer in pointers.items()
+        })
+
+    def test_multilingual_e5_provider_keeps_vectors_out_of_readable_metadata(self):
+        def fake_embed(texts, prefix, output, batch_size=8):
+            self.assertEqual("passage", prefix)
+            output.write_bytes(b"fake-numpy-matrix")
+
+        with patch.object(self.features, "e5_embed", side_effect=fake_embed):
+            result = self.features.semantic_build("multilingual-e5-small")
+        self.assertEqual("multilingual-e5-small", result["provider"])
+        metadata = [
+            json.loads(line)
+            for line in Path(result["path"]).read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertTrue(metadata)
+        self.assertTrue(all("vector" not in item for item in metadata))
+        self.assertTrue(all(item["raw_line_start"] for item in metadata))
+        with patch.object(
+            self.features,
+            "e5_scores",
+            return_value=[0.9, 0.1],
+        ):
+            retrieved = self.features.semantic_retrieve("保留原始归档", 2)
+        self.assertEqual("multilingual-e5-small", retrieved["provider"])
+        self.assertEqual("m1", retrieved["matches"][0]["message_id"])
 
     def test_retrieval_evaluation_is_human_readable(self):
         dataset = self.base / "evaluation.jsonl"

@@ -12,6 +12,11 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Sequence
 
+try:
+    from platform_runtime import executable_entry_path
+except ModuleNotFoundError:
+    from scripts.platform_runtime import executable_entry_path
+
 
 LABEL = "com.memorywuxian.codex-sync"
 
@@ -22,6 +27,20 @@ def atomic_write_plist(path: Path, payload: dict) -> None:
     try:
         with os.fdopen(fd, "wb") as handle:
             plistlib.dump(payload, handle, sort_keys=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def atomic_write_text(path: Path, payload: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
@@ -91,6 +110,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         args.collector_executable or skill_root / "bin" / "memory-wuxian-collector"
     ).expanduser().absolute()
     output = Path(args.output).expanduser().resolve()
+    codex_home = Path(
+        os.environ.get("CODEX_HOME", str(skill_root.parent.parent))
+    ).expanduser().resolve()
+    active_root_pointer = codex_home / "memory-wuxian-active-root.txt"
     config = skill_root / "config.yaml"
     if not config.is_file():
         raise SystemExit(f"Memory無限 installation is incomplete: {skill_root}")
@@ -105,7 +128,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     dt.datetime.fromisoformat(since[:-1] + "+00:00" if since.endswith("Z") else since)
     environment = {"RUST_BACKTRACE": "1"}
     if args.python_executable:
-        python_executable = Path(args.python_executable).expanduser().resolve()
+        python_executable = executable_entry_path(args.python_executable)
         if not python_executable.is_file():
             raise SystemExit(f"Python executable does not exist: {python_executable}")
         environment["MEMORY_WUXIAN_PYTHON"] = str(python_executable)
@@ -150,6 +173,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             stderr=subprocess.DEVNULL,
         )
         subprocess.run(["/bin/launchctl", "bootstrap", domain, str(output)], check=True)
+    atomic_write_text(active_root_pointer, f"{archive_root}\n")
     print(output)
     return 0
 

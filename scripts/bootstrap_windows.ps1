@@ -9,11 +9,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 $SkillRoot = Split-Path -Parent $PSScriptRoot
-$MinimumPython = [version]"3.9"
+$MinimumPython = [version]"3.14"
+$MaximumPython = [version]"3.15"
 
 function Find-Python {
-    if ($PythonPath -and (Test-Path -LiteralPath $PythonPath)) { return (Resolve-Path $PythonPath).Path }
     $candidates = @()
+    if ($PythonPath -and (Test-Path -LiteralPath $PythonPath)) {
+        $candidates += (Resolve-Path $PythonPath).Path
+    }
     $command = Get-Command python.exe -ErrorAction SilentlyContinue
     if ($command) { $candidates += $command.Source }
     $runtimeRoot = Join-Path $env:USERPROFILE ".cache\codex-runtimes"
@@ -22,12 +25,15 @@ function Find-Python {
             Where-Object { $_.FullName -match '\\dependencies\\python\\python\.exe$' } |
             Select-Object -ExpandProperty FullName
     }
-    $candidates += Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
+    $candidates += Join-Path $env:LOCALAPPDATA "Programs\Python\Python314\python.exe"
     foreach ($candidate in $candidates | Select-Object -Unique) {
         if (-not (Test-Path -LiteralPath $candidate)) { continue }
         try {
             $versionText = & $candidate -c "import platform; print(platform.python_version())"
-            if ([version]$versionText -ge $MinimumPython) { return (Resolve-Path $candidate).Path }
+            $version = [version]$versionText
+            if ($version -ge $MinimumPython -and $version -lt $MaximumPython) {
+                return (Resolve-Path $candidate).Path
+            }
         } catch {}
     }
     return $null
@@ -36,17 +42,34 @@ function Find-Python {
 function Install-Python {
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
     if ($winget) {
-        & $winget.Source install --id Python.Python.3.12 --exact --scope user --silent --accept-package-agreements --accept-source-agreements
+        & $winget.Source install --id Python.Python.3.14 --exact --scope user --silent --accept-package-agreements --accept-source-agreements
         if ($LASTEXITCODE -ne 0) { throw "winget Python installation failed: $LASTEXITCODE" }
         return
     }
-    $version = "3.12.10"
+    $version = "3.14.0"
     $installer = Join-Path $env:TEMP "python-$version-amd64.exe"
     Invoke-WebRequest -Uri "https://www.python.org/ftp/python/$version/python-$version-amd64.exe" -OutFile $installer
     $process = Start-Process -FilePath $installer -ArgumentList @(
         "/quiet", "InstallAllUsers=0", "PrependPath=1", "Include_test=0"
     ) -Wait -PassThru
     if ($process.ExitCode -ne 0) { throw "Python installer failed: $($process.ExitCode)" }
+}
+
+function Get-PyYamlStatus([string]$Executable) {
+    $probe = @'
+import json
+import re
+try:
+    import yaml
+    from importlib.metadata import version
+    installed = version('PyYAML')
+    importable = getattr(yaml, '__version__', None) == installed
+    stable_six = re.fullmatch(r'6\.\d+(?:\.\d+)?', installed) is not None
+    print(json.dumps({'ready': importable and stable_six, 'version': installed}))
+except Exception:
+    print(json.dumps({'ready': False, 'version': None}))
+'@
+    return (& $Executable -c $probe | ConvertFrom-Json)
 }
 
 $python = Find-Python
@@ -71,7 +94,19 @@ if (-not $CollectorPath) {
 if (-not $SessionsRoot) { $SessionsRoot = Join-Path $env:USERPROFILE ".codex\sessions" }
 $pythonVersion = if ($python) { & $python -c "import platform; print(platform.python_version())" } else { $null }
 $dashboardWindowReady = $false
+$yamlReady = $false
+$yamlVersion = $null
 if ($python) {
+    $yamlInfo = Get-PyYamlStatus $python
+    $yamlReady = [bool]$yamlInfo.ready
+    $yamlVersion = $yamlInfo.version
+    if (-not $yamlReady -and $InstallMissing) {
+        & $python -m pip install --disable-pip-version-check "PyYAML>=6.0,<7"
+        if ($LASTEXITCODE -ne 0) { throw "core YAML dependency installation failed: $LASTEXITCODE" }
+        $yamlInfo = Get-PyYamlStatus $python
+        $yamlReady = [bool]$yamlInfo.ready
+        $yamlVersion = $yamlInfo.version
+    }
     $dashboardWindowReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('webview') else '0')") -eq "1"
     if (-not $dashboardWindowReady -and $InstallMissing) {
         & $python -m pip install "pywebview>=6.2,<7" "psutil>=7,<8"
@@ -104,8 +139,14 @@ $checks = [ordered]@{
         runtime = "Microsoft Edge WebView2"
         python_package = "pywebview"
     }
+    yaml = [ordered]@{
+        ready = $yamlReady
+        python_package = "PyYAML"
+        version = $yamlVersion
+        version_range = ">=6.0,<7"
+    }
 }
-$ready = $checks.python.ready -and $checks.codex_cli.ready -and $checks.collector.ready -and $checks.sessions.ready
+$ready = $checks.python.ready -and $checks.codex_cli.ready -and $checks.collector.ready -and $checks.sessions.ready -and $checks.yaml.ready
 if ($AgentsPath) {
     if (-not $python) { throw "Python is required to install Memory无限 AGENTS.md rules." }
     & $python (Join-Path $PSScriptRoot "install_agent_rules.py") --agents-file $AgentsPath

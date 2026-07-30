@@ -1,5 +1,9 @@
 # Memory無限
 
+> **2.4.6：**这个稳定版增加了跨设备语义运行时合同、显式本机 E5 实现，
+> 并把首次语义建库的原文定位改为线性扫描。它同步统一接口和固定依赖，
+> 不复制平台运行时、模型缓存或语义索引。
+>
 > Windows v1.7.8 安全说明：桌面状态台快捷方式现在只指向无控制台的原生启动器，
 > 且不携带命令行参数。安装器把已验证的 Python 运行时与活动归档路径写入本机
 > `.codex` 配置，不再创建直接以长参数调用 `pythonw.exe` 和脚本的快捷方式。
@@ -83,7 +87,7 @@ $skill-installer install https://github.com/Sundried-calomel/memory-wuxian
 
 先阅读 [`SKILL.md`](SKILL.md)。真实对话历史应使用仓库外部的档案根目录，避免源码检出或 Skill 更新与私人记忆数据混在一起。
 
-官方安装包会注册每日稳定版本检查。更新器忽略分支、草稿和预发布版本，同时下载平台安装包及其 SHA-256 文件；校验和或文件名不匹配时拒绝暂存更新。Windows 会在下次登录时静默安装已验证更新；macOS 会保留已验证 PKG，等待操作系统要求的安装授权。使用 `python scripts/install_auto_update.py --uninstall` 可关闭检查。
+官方安装包会注册每日稳定版本检查。更新器忽略分支、草稿和预发布版本，同时下载平台安装包及其 SHA-256 文件；校验和或文件名不匹配时拒绝更新。Windows 会在下次登录时静默安装已验证更新。已有安装的 macOS 会只展开已验证 PKG 中的 Skill payload，并运行具备自动回滚的用户级事务；不会打开系统安装器，也不需要管理员密码。完整 PKG 仅保留给首次安装和恢复。使用 `python scripts/install_auto_update.py --uninstall` 可关闭检查。
 
 Windows 每次安装或自动升级都会保留
 `~/.codex/memory-wuxian-active-root.txt` 指定的真实档案，检查或安装原生窗口
@@ -155,7 +159,10 @@ Windows 安装器会在每次首次安装或升级后运行
 内置图标和验证通过的 `pythonw.exe` 重新创建
 `Memory无限状态台.lnk`。卸载时只移除快捷方式，不删除记忆档案。
 
-状态台仅绑定 localhost，不向外部服务发送档案。常规状态页面只读；设置页中的明确操作可以开启或关闭加密云文件夹交换、立即执行一次交换，或把用户选择的 ChatGPT 导出包导入本地档案。不使用 `--window` 时仍可使用跨平台浏览器模式；`--no-browser` 只启动本地服务器，`--port` 可指定端口。
+状态台仅绑定 localhost，不向外部服务发送档案。常规状态页面只读。“记忆搜索”与 CLI 共用同一套已验证检索引擎，支持关键词、多语语义和混合模式；每条结果保持人类可读，并显示标题、时间、说话者、原文行范围和 SHA-256 回链。设置页中的明确操作可以开启或关闭加密云文件夹交换、立即执行一次交换，或把用户选择的 ChatGPT 导出包导入本地档案。不使用 `--window` 时仍可使用跨平台浏览器模式；`--no-browser` 只启动本地服务器，`--port` 可指定端口。
+
+本地只读接口为 `/api/memory-search`，三种模式值分别为 `keyword`、
+`semantic` 和 `hybrid`。
 
 ## macOS 自动采集 Codex
 
@@ -170,13 +177,21 @@ python3 scripts/install_codex_autosync.py \
 
 LaunchAgent 保持一个优化后的 Rust 进程，接收操作系统文件变化通知，并使用自适应大小/mtime 检查补充深层目录中遗漏的事件。活跃时每 5 秒补检，空闲 2 分钟后降为 30 秒，空闲 15 分钟后降为 5 分钟；原生事件会立即唤醒。采集器保存用户消息、可见助手 commentary/final，以及顶层 Codex 时间线中可见的轻量工具活动。工具活动在可用时保留工具名、嵌套工具名和命令文本；工具输出、系统指令、隐藏推理和子代理会话不归档。顶层 rollout 中可用的 `token_count` 遥测单独写入每个对话的派生账本，标记为“Codex 报告模型用量”而非账单用量。累计计数器重置时封存上一段再累加；重复快照不重复计为请求；缓存输入与推理输出是已包含分项，不能再次加入 `total_tokens`。仍保留的 rollout 可精确回填；已经删除的遥测、ChatGPT 网页对话和官方导出包不能恢复实际模型用量。逐会话游标和稳定来源 ID 保证重试幂等。
 
-原生采集器直接负责事件驱动 JSONL 解析、原文追加、逐对话全文更新、确定性路由索引、游标写入、到期一级摘要任务和桌面快照。成功的 Codex 文件修改会记录路径、变更类型、移动目标、增删行数、hunk 行范围及精确统一 diff。一般工具输出和隐藏推理继续排除。已有安装会对历史 patch 事件执行一次回填。任务到期时，采集器运行一个 Python wrapper，调用一次临时 Codex CLI 摘要进程，导入后退出。Python CLI 继续负责低频维护、检索、重建和摘要导入。
+原生采集器直接负责事件驱动 JSONL 解析、原文追加、逐对话全文更新、确定性路由索引、游标写入、到期一级摘要任务和原子备份债务登记。成功的 Codex 文件修改会记录路径、变更类型、移动目标、增删行数、hunk 行范围及精确统一 diff。一般工具输出和隐藏推理继续排除。已有安装会对历史 patch 事件执行一次回填。任务到期时，采集器运行一个 Python wrapper，调用一次临时 Codex CLI 摘要进程，导入后退出。Python CLI 继续负责低频维护、检索、重建、备份维护和摘要导入。
 
 每个导入对话还会单独写入 `memory/conversations/`。每份全文只包含一个 conversation ID，同时保留精确机器记录和可读消息。独立索引位于 `memory/indexes/by-conversation/<conversation>/`。`raw/` 下不可变文件仍是权威来源；逐对话全文和索引都是可重建的确定性视图。
 
-当档案或备份位于受保护的 `Documents` 或 `Desktop` 时，在 macOS 中应向 `bin/memory-wuxian-collector` 授予完全磁盘访问权限。声称自动采集有效前，应核对生成 plist 中的实际可执行文件。
+当档案或备份位于受保护的 `Documents` 或 `Desktop` 时，在 macOS 中应向 `bin/memory-wuxian-collector` 授予完全磁盘访问权限。声称自动采集有效前，应核对生成 plist 中的实际可执行文件。后台定义保留 `/opt/homebrew/bin/python3` 这类稳定 Python 入口，不把它解析成带版本号的 Homebrew Cellar 路径；因此普通 Python 升级不会产生新的隐私身份，也不会再次反复请求桌面或文稿权限。
 
-采集器在 `imports/codex/collector-telemetry.json` 发布轻量运行遥测。状态台显示活跃、空闲或深度空闲模式、当前补检间隔、最近文件事件、最近归档写入、一小时唤醒次数以及 CPU/内存。遥测仅在发生活动或模式转换时写入。
+采集器在 `imports/codex/collector-telemetry.json` 发布轻量运行遥测。状态台显示活跃、空闲或深度空闲模式、当前补检间隔、最近文件事件、最近归档写入、一小时唤醒次数以及 CPU/内存。新进程先报告 `phase=starting` 和 `ready=false`，只有初始同步成功后才进入 `phase=ready`。即使空闲，遥测也会在每个监测周期续写，并分别记录来源水位与归档水位。启动仍在进行、遥测过期、采集器停止或来源水位领先归档水位时，状态台会明确告警。
+
+macOS 既有安装通过 `scripts/install_macos_transaction.py` 更新。它先暂存候选版，在隔离档案中证明候选采集器能够精确写入合成的用户与助手消息，通过后才切换；切换后还要验证采集器 PID 已替换、遥测新鲜且当前操作台自检通过。任何切换后失败都会恢复旧 Skill、旧 LaunchAgent 和旧采集器。日常更新使用该用户级事务，不需要重新运行完整安装器，也不需要管理员密码。
+
+采集器首次同步不会等待 AI 摘要。如果启动追赶过程达到摘要阈值，系统会持久化不可变的摘要任务，并在采集器进入 ready 后交给既有 semantic-backfill worker 处理。这样既不丢失原文和摘要债务，也不会让一次较长的 Codex CLI 调用阻塞事务切换。
+
+按时间范围生成报告前，先运行 `scripts/archive_waterline.py --cutoff <ISO-8601>`。它核对报告截止时间之前保留的来源是否已被持久化游标覆盖。`--backfill` 必须显式调用，并且只处理被判定为滞后的保留来源文件；只有最终结果为 `covered` 时，报告才可继续使用 Memory无限。
+
+每日归档量柱状图继续以字符数决定柱高。鼠标悬停或键盘聚焦任一柱时，会显示本地化气泡，列出完整日期、精确归档消息数和精确可见字符数。
 
 ## 导入 ChatGPT 对话
 
@@ -194,7 +209,7 @@ python3 scripts/memory_cli.py import-chatgpt --export /path/to/chatgpt-export.zi
 
 ## Windows 自动采集 Codex
 
-先运行环境引导。它会报告 Python 版本，以及 Python、Codex CLI、随包采集器和 Codex 会话的路径。使用 `-InstallMissing` 时，只有在不存在兼容的 `>=3.9` 运行时或 Codex 自带 Python 时才安装 Python。
+先运行环境引导。它会报告 Python 版本，以及 Python、Codex CLI、随包采集器和 Codex 会话的路径。主程序只支持 Python 3.14.x。使用 `-InstallMissing` 时，只有在不存在受支持的运行时或兼容的 Codex 自带 Python 时才安装 Python 3.14。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
@@ -219,7 +234,7 @@ python scripts/install_codex_autosync_windows.py `
 
 采集器使用明确的 16 MiB worker 栈，使 Windows 上首次全历史导入可以安全解析和索引大型 Codex rollout 集合。
 
-默认配置下，每次成功修改记忆都会在主档案写入完成后，在 `~/Desktop/Memory無限-记忆归档备份/` 下创建完整新快照、验证清单并移除旧快照。因此备份根目录包含一份最新恢复副本和只追加的 `backup-log.jsonl` 操作历史。
+默认配置下，每次原生记忆修改都会在主档案写入完成后原子更新 `pending/backup-debt.json`。低频维护任务把所有待处理修改合并成 `~/Desktop/Memory無限-记忆归档备份/` 下的一份完整验证快照，成功后才清除债务并移除旧快照。采集器不会因为复制整份档案而阻塞启动或采集。备份根目录保留一份最新恢复副本和只追加的 `backup-log.jsonl` 操作历史；存在更新的待生成快照时，状态台会明确告警。
 
 应用重建命令可先把旧派生文件保存在 `memory/archive/`。内部恢复副本使用 `backup.workspace_retention_count`，默认同样只保留最新一份。开发编辑使用一份可替换代码备份，不额外复制实时对话档案。
 
@@ -335,6 +350,8 @@ python3 scripts/install_cloud_sync.py \
 
 云文件夹是传输队列，不是共享可写档案。每个节点只写自己的发件箱和确认。导入历史仍位于只读对端副本，`retrieve-global` 对 SSH 和云传输使用相同验证来源路径。`cloud-disable` 可停止交换而不删除档案、密钥或云端加密文件。
 
+在 macOS 上，OneDrive“文件按需”信封可能已经显示在目录中，但本地尚无可读字节。Memory無限 会先探测文件以触发有界下载，并把暂时性的 File Provider 可用性错误作为可重试状态，而不是损坏文件。对于 `environment-v1`，如果发送端从更早游标重发了覆盖范围更大的包，只有在已持久化前缀逐事件完全一致时才会安全接续；任何冲突仍会失败关闭并隔离。
+
 1.6.1 起，这些操作也显示在状态台设置页。云同步开关同时控制加密交换和五分钟后台任务；“立即同步”执行一次即时加密交换。面板显示已配置云目录和后台任务状态，日常操作无需 AI 对话或终端命令。
 
 ## Memory無限 2.0 环境趋同
@@ -347,12 +364,26 @@ python3 scripts/install_cloud_sync.py \
 签名、面向目标加密的 `environment-v1` 流，并使用自己的事件序号、前序链、
 游标、确认、暂存区和已验证 Skill 包。五分钟后台任务只用确定性脚本验证
 传入内容，不调用 AI。传输只会暂存更新，不会自行安装 Skill 或改写规则。
+从 2.4.1 开始，同一批注册中的每一项都有独立、稳定的导出身份，项目注册也会
+同步。收到的项目只作为只读对端元数据保存，绝不会自动在本机创建或激活。
+Skill 包改用安全的完整 YAML 解析器，支持合法的嵌套映射、列表和块文本，同时
+拒绝重复键与危险标签；安装器会提供所需的 PyYAML 6.x 运行依赖。
 
 只有显式开启相应策略时，兼容的全局规则快进才可以自动登记。项目产物、Skill、
 分歧、身份变化、权限扩大、持久组件增加和运行环境不兼容始终需要人工审阅。
 安装器会在修改前持久化回滚材料，原子切换，执行安装后检查，并追加证据回执。
 把可复用项目能力提升到全局范围属于另一条治理流程，必须具备完整平台矩阵、
 来源证据和显式批准。
+
+经过验证的局部架构经验也可以记录为不可变的治理思想提案。已配对设备会通过
+同一条签名、面向目标加密的 Environment 流交换提案，但导入的提案始终只是
+只读证据。只有 `work-system-governor` 完成分类和验证并取得显式接受后，
+才能据此生成新的规则或 Skill 修订。
+
+经过证据约束的产品演化记录可以保存有边界的开发历史、已验证现状、纠正后的
+下一次开发流程和可复用经验候选。它们只作为只读（read-only）证据交换；接收不会触发产品
+修复或全局治理接受。确定性任务负责采集变化并排队，AI 只在需要语义复盘时
+介入。
 
 操作台的 Environment 视图会显示清单、传入判定、冲突、提升提案和手动更新
 检查。2.0 的完整 CLI 命令族如下：
@@ -390,6 +421,44 @@ environment-conflict-resolve
 environment-promotion-propose
 environment-promotion-transition
 environment-promotions
+environment-governance-propose
+environment-governance-proposals
+environment-product-evolution-record
+environment-product-evolution-records
+environment-governance-ai-discover
+environment-governance-ai-status
+environment-governance-ai-enqueue
+environment-governance-ai-configure
+environment-governance-ai-tick
+```
+
+### 有界治理 AI
+
+Memory無限可以在不维持活动 AI 对话的前提下排队语义任务。脚本每五分钟执行
+一次无模型发现和到期检查；只有兼容的微批次到期时，才启动一次临时 Codex
+worker。产品批次按 3 项或 6 小时触发（最多 5 项），治理分类按同一 owner
+5 项或 24 小时触发（最多 10 项），单批证据上限为 80,000 字符，每日本机最多
+运行 6 次。紧急项目可以跳过数量和时龄阈值。
+
+该功能默认关闭。产品任务只在来源设备执行，全局分类必须由一个明确配置的
+协调设备执行。所有结果都是通过严格 schema 校验、等待人工审批的草案。
+worker 无权接受规则、安装 Skill、修复产品或改写历史档案。
+
+### 可解释配置与设备兼容性
+
+Memory无限会把现有 YAML 编译成封闭、确定性的 configuration-v1 视图，
+但不修改源文件，也不初始化档案。每个有效值都会标明来源层，完整有效配置
+具有稳定 SHA-256。未知键、重复键、无效类型和越界值都会直接失败。
+
+`environment-capability-status` 只报告产品、平台、运行时、协议和接口兼容性。
+旧设备没有能力声明时只标记为诊断状态，不会中断现有同步。兼容结果绝不授予
+安装、信任、权限或同步权。状态台的“系统”（System）页显示同一份只读信息。
+
+```bash
+python3 scripts/memory_cli.py configuration-compile
+python3 scripts/memory_cli.py configuration-explain
+python3 scripts/memory_cli.py environment-capability-status
+python3 scripts/memory_cli.py environment-capability-status --peer-offer /path/to/peer-offer.json
 ```
 
 ## 隐私与集成边界
@@ -412,6 +481,10 @@ environment-promotions
 从 v1.7.5 开始，即使父进程通过 `PYTHONIOENCODING` 传入 GBK 等旧编码，
 Windows CLI 的重定向输出也始终使用 UTF-8。旧式交互控制台遇到无法表示的
 字符时只转义该字符，不会再让记忆操作终止。
+
+从 v2.4.2 开始，Windows 原生状态台启动器会向系统申请未占用的本机回环端口，
+并打开实际分配的端口，不再假定使用 8765。其他本地软件即使先占用 8765，
+也不能再把自己的界面显示到 Memory无限窗口中。
 
 ```text
 init
@@ -450,6 +523,9 @@ cloud-sync
 cloud-status
 cloud-enable
 cloud-disable
+configuration-compile
+configuration-explain
+environment-capability-status
 ```
 
 手动恢复语义摘要时还会使用 `semantic_worker.py` 和
@@ -470,6 +546,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 
 架构决策和实现合同位于 [`PROJECT.md`](PROJECT.md) 与 [`references/`](references/)。变更记录位于 [`CHANGELOG.md`](CHANGELOG.md)。`README.md`、`README.zh-CN.md` 和 `README.ja.md` 作为同一份文档合同维护；文档所述行为变化时必须同时更新。
 
+从 v2.4.3 开始，[`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md)
+是模块边界的唯一权威，
+[`docs/module-architecture.json`](docs/module-architecture.json)
+是机器可读的文件所有权清单。每个生产文件必须且只能属于一个模块；
+`scripts/check_architecture_contract.py` 会拒绝未归属文件、重复归属和已声明的
+禁止依赖。Windows 与 macOS 安装包如果缺少这些架构门禁文件，发布将直接失败。
+
 ## 许可证
 
 Memory無限 使用 [MIT License](LICENSE.txt) 发布。
@@ -488,7 +571,30 @@ raw 历史之外的只读副本区。
 ## v1.11 检索质量与可选本地语义索引
 
 `retrieval-evaluate` 用人类可读 JSONL 测试集统计 recall-at-k、错误引用数和
-延迟。`semantic-index-build` 默认使用完全离线的 `local-hash-v1`，不下载模型，
-不调用外部服务。`semantic-retrieve` 会以 raw SHA-256 复核每条命中，并返回
+延迟。`semantic-index-build` 保留完全离线的默认 `local-hash-v1`，不下载模型，
+不调用外部服务。需要多语神经语义检索时，先运行
+`python scripts/install_multilingual_e5.py`，再运行
+`semantic-index-build --provider multilingual-e5-small`。可选的 384 维
+`intfloat/multilingual-e5-small` ONNX 模型固定到不可变提交和准确 SHA-256，
+使用隔离环境，禁用远程模型代码，并在推理时强制离线。Windows 隔离环境明确
+绑定 Python 3.12，并支持中文 Skill、档案、worker 和索引路径。`semantic-retrieve`
+会以 raw SHA-256 复核每条命中，并返回
 对话/消息 ID、原始路径和准确行范围。`semantic-index-clear` 只删除可重建向量，
 原始历史和关键词检索仍然可用。
+
+E5 接口也可以作为不可变的 `global-runtime-contract` 注册到独立的
+Environment Registry：
+
+```bash
+python scripts/memory_cli.py semantic-runtime-status
+python scripts/memory_cli.py environment-register-semantic-runtime \
+  --origin-node-id <node-id> --apply
+python scripts/memory_cli.py environment-realize-semantic-runtime
+python scripts/memory_cli.py environment-realize-semantic-runtime --apply
+```
+
+签名且面向目标加密的 `environment-v1` 流会把合同传给已配对设备。合同固定
+模型 revision、文件哈希、运行时包、query/passage 前缀、池化、归一化、
+相似度算法和安装入口。接收或接受合同不会自动安装或下载任何内容；每台设备
+都必须显式地在本机实现已接受的合同。模型文件、虚拟环境、凭据和语义索引
+始终保留在各自设备。

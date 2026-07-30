@@ -1,8 +1,31 @@
 # Release rehearsal gate
 
+## Lifecycle order
+
+Use a release-candidate branch before assigning an immutable formal version.
+Run targeted tests while the candidate changes, then run one complete local
+rehearsal and one three-platform candidate CI matrix after the changes
+stabilize. Repair failures in that candidate series without creating formal
+tags or published installers.
+
+Only a candidate that has passed the required matrix, installer builds,
+package-content checks, and applicable live installation rehearsal may be
+version-frozen and tagged. The tag triggers one formal build and upload.
+Published-artifact defects use a new patch version; pre-publication test,
+workflow, packaging, or candidate-artifact defects do not.
+
+An installed device normally consumes the verified user-space update
+transaction and does not rerun the full installer. Use the full installer for
+first installation, explicit damaged-installation recovery, or a declared
+privileged-component change that cannot be applied in user space.
+
+## Evidence gate
+
 A release may be described as fully rehearsed only when
 `scripts/run_release_rehearsal.py` produces a report whose `status` is `passed`
-and every required scenario has its own evidence log and SHA-256.
+and every required scenario has its own report-relative evidence log and
+SHA-256. Relative evidence paths keep the report portable across devices and
+avoid locale-dependent corruption of absolute Windows paths.
 
 Required scenarios:
 
@@ -36,6 +59,50 @@ Required scenarios:
 14. Dashboard tests and live viewport checks cover Environment inventory,
     incoming status, manual update checks, effective conflict and promotion
     states, desktop layout, and narrow mobile layout.
+15. Governance-AI tests prove disabled and no-due checks invoke no model;
+    compatible batching, age triggers, urgent bypass, coordinator ownership,
+    character and daily limits are deterministic; evidence tampering fails
+    before invocation; malformed results retry twice then isolate; valid
+    results remain unreviewed drafts; and macOS/Windows schedulers remain
+    independent from cloud synchronization.
+16. The machine-readable architecture contract proves every production file
+    has exactly one module owner and no declared prohibited dependency.
+17. macOS runtime-path tests prove generated background definitions retain a
+    stable Python entry path and contain no version-specific Homebrew Cellar
+    executable.
+18. macOS update-transaction tests prove candidate capture before cutover,
+    no cutover on probe failure, live collector replacement after success, and
+    restoration of the prior Skill, plist, and process after a post-switch
+    failure.
+19. Collector-health tests prove idle heartbeat renewal, stale-telemetry
+    detection, independent source/archive watermarks, and archive-lag warning.
+20. Report-preflight tests prove both a covered cutoff and a lagging cutoff,
+    with bounded backfill restricted to the exact retained source files.
+21. Dashboard interaction tests prove every daily archive bar exposes the
+    localized full date, exact message count, and exact character count by
+    mouse hover and keyboard focus without changing the bar metric.
+22. Collector-startup tests prove initial catch-up persists summary work without
+    invoking or awaiting the semantic worker before ready telemetry.
+23. Coalesced-backup tests prove native capture records durable debt without
+    copying the full archive, maintenance creates one complete snapshot even
+    when no summary job is due, debt clears only after success, and the
+    dashboard exposes pending debt.
+24. Configuration-v1 tests prove closed defaults, duplicate and unknown-key
+    rejection, stable canonical hashes, unchanged root precedence, source
+    provenance for every effective leaf, and read-only CLI diagnostics on every
+    supported platform.
+25. Device-capability tests prove closed path-free offers, deterministic
+    compatibility reason codes, legacy-peer continuity, and zero installation,
+    trust, permission, or synchronization authority.
+26. Dashboard System tests prove the supplied configuration path is used,
+    `/api/system` is read-only, no archive state is initialized, and localized
+    desktop and mobile views expose configuration and capability diagnostics.
+27. Bundled-native tests prove both final `bin/` executables exist and report
+    the exact current product version, preventing newly versioned source from
+    shipping stale collector or envelope binaries.
+28. On macOS, bundled-dashboard signature tests run deep strict verification
+    against the exact `.app` candidate so version metadata changes cannot reach
+    the update transaction with a stale signature.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

@@ -1,7 +1,13 @@
-import unittest
+import json
+import plistlib
+import shutil
+import subprocess
 import tempfile
+import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from scripts import install_dashboard_app_macos as installer
 from scripts.install_dashboard_app_macos import launcher_payload
 
 
@@ -9,6 +15,18 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 
 
 class DashboardShortcutTest(unittest.TestCase):
+    def test_native_launcher_uses_an_os_assigned_port(self):
+        source = (
+            SKILL_ROOT
+            / "native-collector"
+            / "src"
+            / "bin"
+            / "memory-wuxian-dashboard-launcher.rs"
+        ).read_text(encoding="utf-8")
+        self.assertIn('.arg("--port")', source)
+        self.assertIn('.arg("0")', source)
+        self.assertNotIn('.arg("8765")', source)
+
     def test_shortcut_installer_is_atomic_and_uses_current_paths(self):
         script = (SKILL_ROOT / "scripts/install_dashboard_shortcut_windows.ps1").read_text(
             encoding="utf-8"
@@ -55,14 +73,30 @@ class DashboardShortcutTest(unittest.TestCase):
         package = (
             SKILL_ROOT / "packaging/macos/build_pkg.sh"
         ).read_text(encoding="utf-8")
+        dashboard_build = (
+            SKILL_ROOT / "packaging/macos/build_dashboard_app.sh"
+        ).read_text(encoding="utf-8")
         workflow = (
             SKILL_ROOT / ".github/workflows/release.yml"
         ).read_text(encoding="utf-8")
         self.assertIn("memory-wuxian-active-root.txt", postinstall)
         self.assertIn("preserved_archive_root", postinstall)
-        self.assertIn("install_dashboard_app_macos.py", postinstall)
+        transaction = (
+            SKILL_ROOT / "scripts/install_macos_transaction.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("install_macos_transaction.py", postinstall)
+        self.assertIn("install_dashboard_app_macos.py", transaction)
+        self.assertIn("probe_candidate", transaction)
+        self.assertIn("wait_for_collector", transaction)
         self.assertIn("build_dashboard_app.sh", package)
-        self.assertIn("CFBundleShortVersionString", package)
+        self.assertIn("CFBundleShortVersionString", dashboard_build)
+        self.assertIn("MemoryWuxianProductVersion", dashboard_build)
+        self.assertIn("MemoryWuxianProductVersion", package)
+        self.assertIn('package_version="$version"', package)
+        self.assertIn("pkgbuild --analyze", package)
+        self.assertIn("BundleIsRelocatable false", package)
+        self.assertIn('--component-plist "$component_plist"', package)
+        self.assertIn("Unexpected macOS package bundle path", package)
         self.assertIn("Memory無限操作台.app/Contents/MacOS/MemoryDashboard", workflow)
 
     def test_macos_dashboard_is_config_driven_and_self_checkable(self):
@@ -98,6 +132,112 @@ class DashboardShortcutTest(unittest.TestCase):
                 "archive_root": str(archive),
             },
         )
+
+    def test_macos_dashboard_metadata_accepts_standard_bundle_version(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            app = Path(temporary) / "Memory.app"
+            executable = app / "Contents/MacOS/MemoryDashboard"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b"dashboard")
+            with (app / "Contents/Info.plist").open("wb") as handle:
+                plistlib.dump({"CFBundleShortVersionString": "2.4.5"}, handle)
+
+            actual_executable, version = installer.app_metadata(app)
+
+        self.assertEqual(actual_executable, executable)
+        self.assertEqual(version, "2.4.5")
+
+    def test_macos_dashboard_rollback_has_portable_copy_fallback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "rollback.app"
+            destination = root / "installed.app"
+            source.mkdir()
+            destination.mkdir()
+            (source / "marker").write_text("old", encoding="utf-8")
+            with patch.object(installer.Path, "is_file", return_value=False):
+                installer.restore_app_in_place(source, destination)
+
+            self.assertEqual((destination / "marker").read_text(), "old")
+
+    def test_macos_dashboard_install_restores_all_artifacts_after_self_check_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.app"
+            destination = root / "installed.app"
+            executable = destination / "Contents/MacOS/MemoryDashboard"
+            source.mkdir()
+            destination.mkdir()
+            (destination / "old-marker").write_text("old", encoding="utf-8")
+            config = root / "launcher.json"
+            installation = root / "installation.json"
+            config.write_text('{"version":"old"}\n', encoding="utf-8")
+            installation.write_text('{"version":"old"}\n', encoding="utf-8")
+
+            def synthetic_replace(_source, target):
+                (target / "Contents/MacOS").mkdir(parents=True)
+                (target / "Contents/MacOS/MemoryDashboard").write_text(
+                    "new", encoding="utf-8"
+                )
+
+            with (
+                patch.object(installer, "replace_app", side_effect=synthetic_replace),
+                patch.object(
+                    installer,
+                    "app_metadata",
+                    return_value=(executable, "2.4.5"),
+                ),
+                patch.object(installer, "sha256", return_value="abc"),
+                patch.object(
+                    installer,
+                    "verify",
+                    side_effect=RuntimeError("synthetic self-check failure"),
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "synthetic self-check failure"):
+                    installer.install(
+                        source=source,
+                        destination=destination,
+                        config_path=config,
+                        installation_path=installation,
+                        python_executable=root / "python3",
+                        skill_root=root / "skill",
+                        archive_root=root / "archive",
+                        version="2.4.5",
+                    )
+
+            self.assertEqual((destination / "old-marker").read_text(), "old")
+            self.assertEqual(json.loads(config.read_text()), {"version": "old"})
+            self.assertEqual(json.loads(installation.read_text()), {"version": "old"})
+
+    def test_macos_dashboard_replace_uses_in_place_ditto_when_desktop_rename_is_denied(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.app"
+            destination = root / "destination.app"
+            for app, marker in ((source, "new"), (destination, "old")):
+                executable = app / "Contents/MacOS/MemoryDashboard"
+                executable.parent.mkdir(parents=True)
+                executable.write_text(marker, encoding="utf-8")
+
+            def synthetic_run(command, **kwargs):
+                if command[0] == "/usr/bin/ditto":
+                    shutil.copytree(
+                        Path(command[1]), Path(command[2]), dirs_exist_ok=True
+                    )
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with (
+                patch.object(installer.os, "replace", side_effect=PermissionError(13)),
+                patch.object(installer.subprocess, "run", side_effect=synthetic_run),
+            ):
+                installer.replace_app(source, destination)
+
+            self.assertEqual(
+                (destination / "Contents/MacOS/MemoryDashboard").read_text(),
+                "new",
+            )
 
 
 if __name__ == "__main__":

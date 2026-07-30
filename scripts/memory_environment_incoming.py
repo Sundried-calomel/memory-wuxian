@@ -75,13 +75,16 @@ class EnvironmentIncomingProcessor:
         self.incoming_root = self.registry.staging_dir / "incoming"
         self.decisions_root = self.registry.staging_dir / "decisions"
         self.accepted_root = self.registry.staging_dir / "accepted"
+        self.completed_root = self.registry.staging_dir / "completed"
+        self.batch_root = self.registry.staging_dir / "processing-batches"
         self.validated_packages = self.registry.staging_dir / "validated" / "packages"
         self.lock_path = self.registry.locks_dir / "environment-incoming.lock"
         self.conflicts = EnvironmentConflictStore(archive_root)
 
     def status(self) -> Dict[str, Any]:
         decisions = self._decisions()
-        pending_files = self._stage_paths()
+        completions = self._completions()
+        pending_files = self._processable_stage_paths()
         counts: Dict[str, int] = {}
         for decision in decisions:
             state = str(decision["decision"])
@@ -89,7 +92,7 @@ class EnvironmentIncomingProcessor:
         return {
             "stream_id": "environment-v1",
             "staged_events": len(pending_files),
-            "processed_events": len(decisions),
+            "processed_events": len(completions),
             "decision_counts": counts,
             "pending_conflicts": len(self.conflicts.list(pending_only=True)),
         }
@@ -103,30 +106,75 @@ class EnvironmentIncomingProcessor:
     ) -> Dict[str, Any]:
         if maximum_events < 1:
             raise ValueError("maximum_events must be positive")
-        paths = self._stage_paths()[:maximum_events]
+        paths = self._processable_stage_paths()
         results = []
+        actionable_count = 0
         if not apply:
             for path in paths:
-                results.append(self._assess_path(path, persist=False, auto_register=False))
+                result = self._assess_path(
+                    path, persist=False, auto_register=False
+                )
+                results.append(result)
+                if result["decision"] != "no-change":
+                    actionable_count += 1
+                if actionable_count >= maximum_events:
+                    break
             return {
                 "status": "preview",
-                "processed": len(results),
+                "processed": actionable_count,
+                "examined": len(results),
                 "results": results,
             }
         self.registry.init()
         with exclusive_lock(self.lock_path):
             for path in paths:
-                results.append(
-                    self._assess_path(
+                try:
+                    result = self._assess_path(
                         path,
                         persist=True,
                         auto_register=auto_register_compatible_rules,
                     )
+                    if result["decision"] != "no-change":
+                        self._record_completion(path, result)
+                        actionable_count += 1
+                    results.append(result)
+                    if actionable_count >= maximum_events:
+                        break
+                except Exception as error:
+                    failure = self._record_batch_result(
+                        status="partial",
+                        results=results,
+                        failed_path=path,
+                        error=error,
+                    )
+                    return {
+                        "status": "partial",
+                        "processed": actionable_count,
+                        "examined": len(results) + 1,
+                        "results": results,
+                        "failed_stage_path": str(
+                            path.relative_to(self.registry.root)
+                        ),
+                        "error": f"{type(error).__name__}: {error}",
+                        "batch_evidence_path": str(failure),
+                    }
+            actionable = [
+                item for item in results if item["decision"] != "no-change"
+            ]
+            evidence = (
+                self._record_batch_result(
+                    status="processed",
+                    results=actionable,
                 )
+                if actionable
+                else None
+            )
         return {
             "status": "processed",
-            "processed": len(results),
+            "processed": len(actionable),
+            "examined": len(results),
             "results": results,
+            "batch_evidence_path": str(evidence) if evidence else None,
         }
 
     def accept(self, stage_sha256: str, *, apply: bool = False) -> Dict[str, Any]:
@@ -260,7 +308,11 @@ class EnvironmentIncomingProcessor:
                 reason = (
                     "skill-install-review"
                     if artifact["object_class"].endswith("-skill")
-                    else "project-binding-review"
+                    else (
+                        "runtime-contract-review"
+                        if artifact["object_class"] == "global-runtime-contract"
+                        else "project-binding-review"
+                    )
                 )
         else:
             assessment = self._conflict_assessment(artifact, revision, current)
@@ -382,7 +434,15 @@ class EnvironmentIncomingProcessor:
                 base_hash = base["content_sha256"]
             except (FileNotFoundError, ValueError, KeyError):
                 base_hash = None
-        block = "skill-tree" if artifact["object_class"].endswith("-skill") else "document"
+        block = (
+            "skill-tree"
+            if artifact["object_class"].endswith("-skill")
+            else (
+                "runtime-interface"
+                if artifact["object_class"] == "global-runtime-contract"
+                else "document"
+            )
+        )
         return {
             "artifact_id": artifact["artifact_id"],
             "object_class": artifact["object_class"],
@@ -416,7 +476,103 @@ class EnvironmentIncomingProcessor:
             path
             for path in self.incoming_root.glob("*/*.json")
             if path.is_file() and not path.is_symlink()
+            and self._is_committed_stage(path)
         )
+
+    def _processable_stage_paths(self) -> List[Path]:
+        return [
+            path
+            for path in self._stage_paths()
+            if not self._completion_path(path).exists()
+        ]
+
+    def _is_committed_stage(self, path: Path) -> bool:
+        try:
+            record = read_json(path)
+            origin = str(record["origin_node_id"])
+            bundle_id = str(record["received_bundle_id"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return True
+        receipt = (
+            self.registry.root
+            / "replicas"
+            / "peers"
+            / origin
+            / "receipts"
+            / f"{bundle_id}.json"
+        )
+        transaction = (
+            self.registry.root
+            / "replicas"
+            / "peers"
+            / origin
+            / "transactions"
+            / bundle_id
+            / "transaction.json"
+        )
+        # Legacy/manual stage fixtures have no transaction marker. New imports
+        # become visible only after their durable bundle receipt exists.
+        return receipt.is_file() or not transaction.exists()
+
+    def _completion_path(self, path: Path) -> Path:
+        return self.completed_root / f"{_sha256(path.read_bytes())}.json"
+
+    def _record_completion(self, path: Path, result: Dict[str, Any]) -> Path:
+        stage_sha256 = _sha256(path.read_bytes())
+        evidence = {
+            "schema_version": 1,
+            "stage_sha256": stage_sha256,
+            "stage_path": str(path.relative_to(self.registry.root)),
+            "decision": result["decision"],
+            "registered": bool(result.get("registered")),
+            "completed_at": now_iso(),
+        }
+        target = self.completed_root / f"{stage_sha256}.json"
+        if target.exists():
+            existing = read_json(target)
+            stable = (
+                "schema_version",
+                "stage_sha256",
+                "stage_path",
+                "decision",
+                "registered",
+            )
+            if any(existing.get(key) != evidence[key] for key in stable):
+                raise ValueError("incoming completion evidence conflicts")
+        else:
+            atomic_write_json(target, evidence)
+        return target
+
+    def _record_batch_result(
+        self,
+        *,
+        status: str,
+        results: List[Dict[str, Any]],
+        failed_path: Optional[Path] = None,
+        error: Optional[Exception] = None,
+    ) -> Path:
+        evidence = {
+            "schema_version": 1,
+            "status": status,
+            "completed_stage_sha256": [
+                str(result["stage_sha256"])
+                for result in results
+                if result["decision"] != "no-change"
+            ],
+            "failed_stage_path": (
+                str(failed_path.relative_to(self.registry.root))
+                if failed_path is not None
+                else None
+            ),
+            "error": (
+                f"{type(error).__name__}: {error}" if error is not None else None
+            ),
+            "created_at": now_iso(),
+        }
+        digest = _sha256(canonical_bytes(evidence))
+        target = self.batch_root / f"{digest}.json"
+        atomic_write_json(target, evidence)
+        return target
 
     def _decisions(self) -> List[Dict[str, Any]]:
         if not self.decisions_root.is_dir():
@@ -424,6 +580,15 @@ class EnvironmentIncomingProcessor:
         return [
             read_json(path)
             for path in sorted(self.decisions_root.glob("*.json"))
+            if path.is_file() and not path.is_symlink()
+        ]
+
+    def _completions(self) -> List[Dict[str, Any]]:
+        if not self.completed_root.is_dir():
+            return []
+        return [
+            read_json(path)
+            for path in sorted(self.completed_root.glob("*.json"))
             if path.is_file() and not path.is_symlink()
         ]
 

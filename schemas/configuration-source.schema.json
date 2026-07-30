@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/configuration-source.schema.json",
+  "title": "Memory Wuxian configuration source",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "root_directory": {"type": "string", "minLength": 1},
+        "timezone": {"type": "string", "minLength": 1}
+      }
+    },
+    "raw": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": {"const": "markdown-json-records"},
+        "split_by": {"const": "day"},
+        "append_only": {"const": true},
+        "flush_after_each_message": {"type": "boolean"}
+      }
+    },
+    "summaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level_1_trigger_rounds": {"type": "integer", "minimum": 1},
+        "level_1_trigger_characters": {"type": "integer", "minimum": 1},
+        "automatic_semantic_jobs": {"type": "boolean"},
+        "higher_level_trigger_count": {"type": "integer", "minimum": 2},
+        "maximum_summary_depth": {"type": "integer", "minimum": 1},
+        "persist_all_levels": {"type": "boolean"},
+        "immutable": {"const": true}
+      }
+    },
+    "ai_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "python_path": {"type": "string", "minLength": 1},
+        "python_path_windows": {"type": "string", "minLength": 1},
+        "worker_path": {"type": "string", "minLength": 1},
+        "codex_cli_path": {"type": "string", "minLength": 1},
+        "codex_cli_path_windows": {"type": "string", "minLength": 1},
+        "timeout_seconds": {"type": "integer", "minimum": 1},
+        "model": {"type": "string"}
+      }
+    },
+    "governance_ai": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "mode": {"enum": ["manual", "automatic-drafts"]},
+        "coordinator_node_id": {"type": "string"},
+        "governor_skill_path": {"type": "string", "minLength": 1},
+        "codex_cli_path": {"type": "string", "minLength": 1},
+        "codex_cli_path_windows": {"type": "string", "minLength": 1},
+        "timeout_seconds": {"type": "integer", "minimum": 1},
+        "model": {"type": "string"},
+        "product_min_items": {"type": "integer", "minimum": 1},
+        "product_max_items": {"type": "integer", "minimum": 1},
+        "product_max_wait_seconds": {"type": "integer", "minimum": 1},
+        "classification_min_items": {"type": "integer", "minimum": 1},
+        "classification_max_items": {"type": "integer", "minimum": 1},
+        "classification_max_wait_seconds": {"type": "integer", "minimum": 1},
+        "maximum_evidence_characters": {"type": "integer", "minimum": 1},
+        "maximum_ai_runs_per_day": {"type": "integer", "minimum": 1},
+        "maximum_failed_retries": {"type": "integer", "minimum": 0}
+      }
+    },
+    "indexes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeline": {"type": "boolean"},
+        "concepts": {"type": "boolean"},
+        "machine_readable_jsonl": {"type": "boolean"}
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "verify_against_raw": {"type": "boolean"},
+        "context_messages_before": {"type": "integer", "minimum": 0},
+        "context_messages_after": {"type": "integer", "minimum": 0},
+        "maximum_initial_candidates": {"type": "integer", "minimum": 1},
+        "log_queries": {"type": "boolean"}
+      }
+    },
+    "heartbeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create_pending_jobs": {"type": "boolean"},
+        "retry_failed_jobs": {"type": "boolean"},
+        "validate_references": {"type": "boolean"},
+        "detect_overlapping_ranges": {"type": "boolean"}
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hash_algorithm": {"const": "sha256"},
+        "verify_raw_records": {"type": "boolean"},
+        "verify_summary_sources": {"type": "boolean"},
+        "verify_summary_files": {"type": "boolean"}
+      }
+    },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "directory": {"type": "string"},
+        "retention_count": {"type": "integer", "minimum": 1},
+        "workspace_retention_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "codex": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sessions_root": {"type": "string", "minLength": 1},
+        "collector": {"const": "native-event-driven"},
+        "debounce_milliseconds": {"type": "integer", "minimum": 0}
+      }
+    },
+    "federation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "replica_directory": {"type": "string"},
+        "transport": {"type": "string", "minLength": 1},
+        "ssh_strict_host_key_checking": {"type": "boolean"}
+      }
+    },
+    "cloud_transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "directory": {"type": "string"},
+        "check_interval_seconds": {"type": "integer", "minimum": 1},
+        "merge_window_seconds": {"type": "integer", "minimum": 0},
+        "early_flush_bytes": {"type": "integer", "minimum": 1},
+        "maximum_pending_seconds": {"type": "integer", "minimum": 1},
+        "acknowledged_retention_seconds": {"type": "integer", "minimum": 0}
+      }
+    },
+    "context_refresh": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "round_interval": {"type": "integer", "minimum": 1},
+        "utilization_low_percent": {"type": "integer", "minimum": 0, "maximum": 100},
+        "utilization_high_percent": {"type": "integer", "minimum": 0, "maximum": 100},
+        "compaction_drop_percent": {"type": "integer", "minimum": 1, "maximum": 100},
+        "context_fraction_percent": {"type": "integer", "minimum": 1, "maximum": 100},
+        "soft_max_tokens": {"type": "integer", "minimum": 1},
+        "absolute_max_tokens": {"type": "integer", "minimum": 1},
+        "recent_rounds": {"type": "integer", "minimum": 1}
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "redact_secrets": {"type": "boolean"},
+        "atomic_writes": {"const": true},
+        "file_locking": {"const": true}
+      }
+    }
+  }
+}

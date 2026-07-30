@@ -19,6 +19,8 @@ from memory_cli import MemoryStore, load_simple_yaml
 from memory_cloud_transport import (
     CloudFolderTransport,
     CommandCrypto,
+    TransientCloudArtifactError,
+    display_path,
     filesystem_native_path,
 )
 from memory_federation import FederationManager, read_json
@@ -54,6 +56,27 @@ class CommandCryptoArgumentTest(unittest.TestCase):
             command,
         )
         self.assertNotIn("--signing-public-key", command)
+
+    def test_open_classifies_file_provider_deadlock_as_transient(self):
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr="read input: Resource deadlock avoided (os error 11)",
+        )
+        crypto = CommandCrypto(Path("memory-wuxian-envelope"))
+
+        with patch("memory_cloud_transport.subprocess.run", return_value=completed):
+            with self.assertRaises(TransientCloudArtifactError):
+                crypto.open(
+                    Path("placeholder.mwxe"),
+                    Path("output.mwxb"),
+                    Path("identity.json"),
+                    "signing-key",
+                    "environment-v1-bundle",
+                    "node-alpha",
+                    "node-beta",
+                )
 
 
 class FakeCrypto:
@@ -254,6 +277,7 @@ safety:
             encoding="utf-8",
             capture_output=True,
             check=False,
+            timeout=30,
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
         if completed.returncode != 0:
@@ -378,6 +402,28 @@ safety:
             ),
         )
 
+    def test_native_windows_queue_directory_config_is_normalized_when_read(self):
+        queue_directory = self.exchange / "MemoryWuxianExchange"
+        queue_directory.mkdir(exist_ok=True)
+        transport = CloudFolderTransport(self.manager_a, crypto=self.crypto)
+        transport.configure(self.exchange, self.key_a, enabled=True)
+        transport.config["exchange_root"] = (
+            "\\\\?\\" + str(queue_directory.resolve())
+        )
+        transport.save_config()
+        reloaded = CloudFolderTransport(self.manager_a, crypto=self.crypto)
+
+        self.assertEqual(
+            reloaded._exchange_root(),
+            Path(
+                filesystem_native_path(
+                    self.exchange.resolve()
+                    / "MemoryWuxianExchange"
+                    / "v1"
+                )
+            ),
+        )
+
     def test_existing_outstanding_envelope_migrates_to_canonical_outbox(self):
         self.append_round(self.node_a, "MIGRATE")
         first = self.transport_a.sync(force=True, now=1000)
@@ -393,13 +439,14 @@ safety:
             / "node-beta"
             / canonical.name
         )
-        legacy.parent.mkdir(parents=True)
-        canonical.replace(legacy)
+        legacy_native = Path(filesystem_native_path(legacy))
+        legacy_native.parent.mkdir(parents=True)
+        Path(filesystem_native_path(canonical)).replace(legacy_native)
         config = read_json(self.node_a / "federation/cloud.json")
         config["exchange_root"] = str(
             (self.exchange / "MemoryWuxianExchange").resolve()
         )
-        config["outbound"]["node-beta"]["outstanding"]["path"] = str(legacy)
+        config["outbound"]["node-beta"]["outstanding"]["path"] = str(legacy_native)
         (self.node_a / "federation/cloud.json").write_text(
             json.dumps(config, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
@@ -411,8 +458,8 @@ safety:
         self.assertEqual(len(migrated["migrated"]), 1)
         restored = self.own_outbox("node-alpha", "node-beta") / legacy.name
         self.assertTrue(restored.is_file())
-        self.assertTrue(legacy.is_file())
-        self.assertEqual(restored.read_bytes(), legacy.read_bytes())
+        self.assertTrue(legacy_native.is_file())
+        self.assertEqual(restored.read_bytes(), legacy_native.read_bytes())
         state = read_json(self.node_a / "federation/cloud.json")
         self.assertEqual(
             Path(state["outbound"]["node-beta"]["outstanding"]["path"]),
@@ -594,12 +641,12 @@ safety:
         )
         self.assertEqual(
             [
-                path.resolve()
+                display_path(path.resolve())
                 for path in self.own_outbox(
                     "node-alpha", "node-beta"
                 ).glob("*.mwxe")
             ],
-            [envelope.resolve()],
+            [display_path(envelope.resolve())],
         )
 
     def test_out_of_order_waits_and_partial_and_zero_files_are_transient(self):
@@ -637,6 +684,24 @@ safety:
         self.assertTrue(gap.exists())
         self.assertTrue(zero.exists())
         self.assertTrue(partial.exists())
+
+    def test_unreadable_cloud_placeholder_is_transient_not_quarantined(self):
+        self.append_round(self.node_a, "PLACEHOLDER")
+        sent = self.transport_a.sync(force=True, now=3500)
+        envelope = Path(sent["published"][0]["path"])
+
+        with patch.object(
+            self.transport_b,
+            "_materialize_candidate",
+            side_effect=TransientCloudArtifactError("provider placeholder"),
+        ):
+            result = self.transport_b.sync(force=False, now=3510)
+
+        self.assertEqual(result["imports"], [])
+        self.assertEqual(result["quarantined"], [])
+        self.assertEqual(len(result["transient"]), 1)
+        self.assertEqual(result["transient"][0]["type"], "bundle")
+        self.assertTrue(envelope.exists())
 
     def test_tampered_bundle_is_quarantined_without_moving_peer_file(self):
         self.append_round(self.node_a, "TAMPER")
@@ -682,7 +747,10 @@ safety:
         self.assertEqual(before_grace["cleaned"], [])
         at_grace = self.transport_a.sync(force=False, now=6100)
         self.assertFalse(envelope.exists())
-        self.assertEqual(at_grace["cleaned"], [str(envelope)])
+        self.assertEqual(
+            at_grace["cleaned"],
+            [display_path(envelope)],
+        )
 
         foreign = (
             self.exchange

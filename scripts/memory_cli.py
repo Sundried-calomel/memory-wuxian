@@ -22,9 +22,14 @@ from console_encoding import configure_unicode_stdio
 from platform_lock import exclusive_lock
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
 from memory_cloud_transport import CloudFolderTransport
+import memory_configuration
 from memory_environment import EnvironmentRegistry
 from memory_environment_bindings import EnvironmentBindingRegistry
+import memory_environment_capabilities
 from memory_environment_conflicts import EnvironmentConflictStore
+from memory_environment_evolution import ProductEvolutionStore
+from memory_environment_governance import GovernanceProposalStore
+from memory_governance_ai import GovernanceAIQueue
 from memory_environment_exchange import EnvironmentExchangeManager
 from memory_environment_incoming import EnvironmentIncomingProcessor
 from memory_environment_promotions import PromotionStore
@@ -32,6 +37,14 @@ from memory_environment_rules import EnvironmentRuleInstaller
 from memory_environment_skills import EnvironmentSkillInstaller
 from memory_federation import FederationManager
 from memory_guarded_features import GuardedFeatures, atomic_json
+from semantic_runtime_contract import (
+    ARTIFACT_ID as SEMANTIC_RUNTIME_ARTIFACT_ID,
+    environment_manifest as semantic_runtime_environment_manifest,
+    load_contract as load_semantic_runtime_contract,
+    local_status as semantic_runtime_local_status,
+    realize as realize_semantic_runtime,
+    registered_contract as registered_semantic_runtime_contract,
+)
 from token_usage import (
     add_usage,
     aggregate_ledgers,
@@ -1005,6 +1018,25 @@ class MemoryStore:
             )
             self.prune_backup_snapshots(backup_root, [final_path])
         return final_path
+
+    @property
+    def backup_debt_path(self) -> Path:
+        return self.pending_dir / "backup-debt.json"
+
+    def drain_backup_debt(self) -> Optional[Path]:
+        if not self.backup_debt_path.exists():
+            return None
+        with exclusive_lock(self.locks_dir / "archive.lock"):
+            if not self.backup_debt_path.exists():
+                return None
+            debt = json.loads(self.backup_debt_path.read_text(encoding="utf-8"))
+            backup = self.create_backup_snapshot(
+                "coalesced-archive-mutations",
+                {"backup_debt": debt},
+            )
+            if backup is not None:
+                self.backup_debt_path.unlink()
+            return backup
 
     def codex_session_metadata(self, path: Path) -> Dict[str, Any]:
         with path.open("r", encoding="utf-8") as handle:
@@ -4195,6 +4227,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="Configuration YAML path")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    subparsers.add_parser(
+        "configuration-compile",
+        help="Compile and print the effective configuration without creating state",
+    )
+    subparsers.add_parser(
+        "configuration-explain",
+        help="Explain effective configuration sources without creating state",
+    )
+    capability_status = subparsers.add_parser(
+        "environment-capability-status",
+        help="Show local device capability compatibility without creating state",
+    )
+    capability_status.add_argument(
+        "--peer-offer",
+        help="Optional peer device capability offer JSON",
+    )
     subparsers.add_parser("init", help="Initialize an archive without overwriting existing records")
     append_parser = subparsers.add_parser("append", help="Append one exact dialogue message")
     append_parser.add_argument("--speaker", required=True, choices=["user", "assistant", "system", "tool"])
@@ -4479,6 +4527,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     semantic_retrieve.add_argument("--query", required=True)
     semantic_retrieve.add_argument("--top-k", type=int, default=10)
+    semantic_runtime_status = subparsers.add_parser(
+        "semantic-runtime-status",
+        help="Validate the shared E5 interface contract and inspect local realization",
+    )
+    semantic_runtime_status.add_argument(
+        "--artifact-id", default=SEMANTIC_RUNTIME_ARTIFACT_ID
+    )
+    semantic_runtime_register = subparsers.add_parser(
+        "environment-register-semantic-runtime",
+        help="Preview or register the bundled E5 interface contract in environment-v1",
+    )
+    semantic_runtime_register.add_argument("--origin-node-id", required=True)
+    semantic_runtime_register.add_argument("--apply", action="store_true")
+    semantic_runtime_realize = subparsers.add_parser(
+        "environment-realize-semantic-runtime",
+        help="Preview or explicitly realize one registered E5 interface contract locally",
+    )
+    semantic_runtime_realize.add_argument(
+        "--artifact-id", default=SEMANTIC_RUNTIME_ARTIFACT_ID
+    )
+    semantic_runtime_realize.add_argument("--model-root")
+    semantic_runtime_realize.add_argument("--runtime-dir")
+    semantic_runtime_realize.add_argument("--apply", action="store_true")
 
     subparsers.add_parser(
         "environment-init",
@@ -4500,7 +4571,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     environment_list.add_argument(
         "--object-class",
-        choices=("global-rule", "project-rule", "global-skill", "project-skill"),
+        choices=(
+            "global-rule",
+            "project-rule",
+            "global-skill",
+            "project-skill",
+            "global-runtime-contract",
+        ),
     )
     subparsers.add_parser(
         "environment-projects",
@@ -4683,7 +4760,95 @@ def build_parser() -> argparse.ArgumentParser:
         "environment-promotions",
         help="List effective project capability promotion states",
     )
+    environment_governance = subparsers.add_parser(
+        "environment-governance-propose",
+        help="Preview or record one immutable governance insight proposal",
+    )
+    environment_governance.add_argument("--proposal-json", required=True)
+    environment_governance.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "environment-governance-proposals",
+        help="List local and imported governance proposals without accepting them",
+    )
+    environment_evolution = subparsers.add_parser(
+        "environment-product-evolution-record",
+        help="Preview or record one immutable product evolution report",
+    )
+    environment_evolution.add_argument("--record-json", required=True)
+    environment_evolution.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "environment-product-evolution-records",
+        help="List local and imported product evolution reports without remediation",
+    )
+    governance_ai_enqueue = subparsers.add_parser(
+        "environment-governance-ai-enqueue",
+        help="Preview or enqueue one source-hashed governance AI work item",
+    )
+    governance_ai_enqueue.add_argument("--item-json", required=True)
+    governance_ai_enqueue.add_argument("--apply", action="store_true")
+    governance_ai_configure = subparsers.add_parser(
+        "environment-governance-ai-configure",
+        help="Preview or persist the local governance AI scheduler policy",
+    )
+    governance_ai_configure.add_argument("--policy-json", required=True)
+    governance_ai_configure.add_argument("--apply", action="store_true")
+    governance_ai_tick = subparsers.add_parser(
+        "environment-governance-ai-tick",
+        help="Check due micro-batches and optionally run ephemeral AI drafts",
+    )
+    governance_ai_tick.add_argument("--run-ai", action="store_true")
+    governance_ai_tick.add_argument("--maximum-batches", type=int, default=1)
+    governance_ai_discover = subparsers.add_parser(
+        "environment-governance-ai-discover",
+        help="Preview or create model-free tasks from registered Environment evidence",
+    )
+    governance_ai_discover.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "environment-governance-ai-status",
+        help="Show governance AI queue, coordinator, limits, and draft counters",
+    )
     return parser
+
+
+def dispatch_stateless_read_only_command(args: argparse.Namespace) -> Optional[int]:
+    if args.command in {"configuration-compile", "configuration-explain"}:
+        compiled = memory_configuration.compile_configuration(
+            Path(args.config),
+            root_argument=args.root,
+        )
+        result = (
+            compiled
+            if args.command == "configuration-compile"
+            else memory_configuration.explain_configuration(compiled)
+        )
+    elif args.command == "environment-capability-status":
+        project_text = (SKILL_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        version_match = re.search(
+            r'^version\s*=\s*"([^"]+)"',
+            project_text,
+            re.MULTILINE,
+        )
+        if version_match is None:
+            raise ValueError("pyproject.toml does not declare a project version")
+        product_version = version_match.group(1)
+        local_offer = memory_environment_capabilities.local_device_capability_offer(
+            product_version,
+            local_platform_name(),
+            local_runtime_versions([])["python"],
+        )
+        peer_offer = (
+            read_json(Path(args.peer_offer).expanduser().resolve())
+            if args.peer_offer
+            else None
+        )
+        result = memory_environment_capabilities.negotiate_device_capabilities(
+            local_offer,
+            peer_offer,
+        )
+    else:
+        return None
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
 
 
 def dispatch_command(
@@ -5113,6 +5278,48 @@ def dispatch_command(
         result = GuardedFeatures(store).semantic_clear()
     elif args.command == "semantic-retrieve":
         result = GuardedFeatures(store).semantic_retrieve(args.query, args.top_k)
+    elif args.command == "semantic-runtime-status":
+        contract = load_semantic_runtime_contract()
+        registered = None
+        try:
+            registered = registered_semantic_runtime_contract(
+                EnvironmentRegistry(store.root), args.artifact_id
+            )
+        except KeyError:
+            pass
+        selected = registered or contract
+        result = {
+            "status": "ok",
+            "artifact_id": args.artifact_id,
+            "registered": registered is not None,
+            "bundled_matches_registered": (
+                registered is None or registered == contract
+            ),
+            "local": semantic_runtime_local_status(
+                selected,
+                model_root=Path(selected["installation"]["model_root"]),
+                runtime_root=Path(selected["installation"]["runtime_root"]),
+            ),
+        }
+    elif args.command == "environment-register-semantic-runtime":
+        result = EnvironmentRegistry(store.root).register(
+            semantic_runtime_environment_manifest(args.origin_node_id),
+            apply=args.apply,
+        )
+    elif args.command == "environment-realize-semantic-runtime":
+        contract = registered_semantic_runtime_contract(
+            EnvironmentRegistry(store.root), args.artifact_id
+        )
+        result = realize_semantic_runtime(
+            contract,
+            model_root=Path(
+                args.model_root or contract["installation"]["model_root"]
+            ),
+            runtime_root=Path(
+                args.runtime_dir or contract["installation"]["runtime_root"]
+            ),
+            apply=args.apply,
+        )
     elif args.command == "environment-init":
         result = EnvironmentRegistry(store.root).init()
     elif args.command == "environment-scan":
@@ -5317,6 +5524,39 @@ def dispatch_command(
             "status": "ok",
             "promotions": PromotionStore(store.root).list(),
         }
+    elif args.command == "environment-governance-propose":
+        result = GovernanceProposalStore(store).propose(
+            read_json(Path(args.proposal_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-governance-proposals":
+        result = GovernanceProposalStore(store).list()
+    elif args.command == "environment-product-evolution-record":
+        result = ProductEvolutionStore(store).record(
+            read_json(Path(args.record_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-product-evolution-records":
+        result = ProductEvolutionStore(store).list()
+    elif args.command == "environment-governance-ai-enqueue":
+        result = GovernanceAIQueue(store).enqueue(
+            read_json(Path(args.item_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-governance-ai-configure":
+        result = GovernanceAIQueue(store).configure(
+            read_json(Path(args.policy_json).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-governance-ai-tick":
+        result = GovernanceAIQueue(store).tick(
+            run_ai=args.run_ai,
+            maximum_batches=args.maximum_batches,
+        )
+    elif args.command == "environment-governance-ai-discover":
+        result = GovernanceAIQueue(store).discover(apply=args.apply)
+    elif args.command == "environment-governance-ai-status":
+        result = GovernanceAIQueue(store).status()
     else:
         parser.error(f"Unknown command: {args.command}")
         return 2
@@ -5329,6 +5569,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        stateless_result = dispatch_stateless_read_only_command(args)
+        if stateless_result is not None:
+            return stateless_result
         config = resolve_config(Path(args.config))
         store = MemoryStore(resolve_root(args.root, config), config)
         if args.command == "token-usage-backfill" and not args.apply:
@@ -5347,6 +5590,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "as-of",
             "decision-graph",
             "semantic-retrieve",
+            "semantic-runtime-status",
             "environment-scan",
             "environment-status",
             "environment-list",

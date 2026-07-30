@@ -16,6 +16,11 @@ from pathlib import Path
 from typing import Callable, Optional, Sequence
 from xml.etree import ElementTree as ET
 
+try:
+    from platform_runtime import executable_entry_path
+except ModuleNotFoundError:
+    from scripts.platform_runtime import executable_entry_path
+
 
 MACOS_LABEL = "com.openai.codex.memory-wuxian-cloud-sync"
 WINDOWS_TASK_NAME = "MemoryWuxianCloudSync"
@@ -358,7 +363,10 @@ def main(
 
     archive_root = Path(args.archive_root).expanduser().resolve()
     skill_root = Path(args.skill_root).expanduser().resolve()
-    python_executable = Path(args.python_executable).expanduser().resolve()
+    python_executable = executable_entry_path(
+        args.python_executable,
+        platform_name=platform_name,
+    )
     validate_install_paths(archive_root, skill_root, python_executable)
     if platform_name == "darwin":
         output = install_macos(

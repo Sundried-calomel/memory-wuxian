@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.0.3",
+  "reviewed_version": "2.5.1",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -25,11 +25,19 @@
     },
     {
       "id": "native-codex-capture",
-      "required_tokens": ["memory-wuxian-collector", "install_codex_autosync.py", "install_codex_autosync_windows.py"]
+      "required_tokens": ["memory-wuxian-collector", "install_codex_autosync.py", "install_codex_autosync_windows.py", "collector-telemetry.json"]
+    },
+    {
+      "id": "transactional-macos-update",
+      "required_tokens": ["install_macos_transaction.py", "LaunchAgent"]
+    },
+    {
+      "id": "archive-waterline",
+      "required_tokens": ["archive_waterline.py", "--cutoff", "--backfill"]
     },
     {
       "id": "local-dashboard",
-      "required_tokens": ["memory_dashboard.py", "--window"]
+      "required_tokens": ["memory_dashboard.py", "--window", "/api/memory-search", "keyword", "semantic", "hybrid"]
     },
     {
       "id": "windows-dashboard-shortcut",
@@ -73,7 +81,7 @@
     },
     {
       "id": "event-driven-dashboard",
-      "required_tokens": ["/api/events", "project-filter", "source-filter", "device-filter"]
+      "required_tokens": ["/api/events", "project-filter", "source-filter", "device-filter", "collector-telemetry.json"]
     },
     {
       "id": "auditable-release-rehearsal",
@@ -89,7 +97,11 @@
     },
     {
       "id": "retrieval-quality-and-local-semantics",
-      "required_tokens": ["retrieval-evaluate", "semantic-index-build", "semantic-index-clear", "semantic-retrieve", "local-hash-v1"]
+      "required_tokens": ["retrieval-evaluate", "semantic-index-build", "semantic-index-clear", "semantic-retrieve", "local-hash-v1", "multilingual-e5-small", "install_multilingual_e5.py"]
+    },
+    {
+      "id": "cross-device-semantic-runtime-contract",
+      "required_tokens": ["semantic-runtime-status", "environment-register-semantic-runtime", "environment-realize-semantic-runtime", "global-runtime-contract", "--apply"]
     },
     {
       "id": "codex-reported-token-ledger",
@@ -109,7 +121,19 @@
     },
     {
       "id": "environment-governance",
-      "required_tokens": ["environment-conflicts", "environment-conflict-resolve", "environment-promotions", "environment-promotion-transition"]
+      "required_tokens": ["environment-conflicts", "environment-conflict-resolve", "environment-promotions", "environment-promotion-transition", "environment-governance-propose", "environment-governance-proposals"]
+    },
+    {
+      "id": "product-evolution-feedback",
+      "required_tokens": ["environment-product-evolution-record", "environment-product-evolution-records", "read-only", "AI"]
+    },
+    {
+      "id": "bounded-governance-ai",
+      "required_tokens": ["environment-governance-ai-discover", "environment-governance-ai-status", "environment-governance-ai-tick", "AI"]
+    },
+    {
+      "id": "explainable-configuration-and-capabilities",
+      "required_tokens": ["configuration-compile", "configuration-explain", "environment-capability-status", "configuration-v1", "System"]
     }
   ]
 }

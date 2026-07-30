@@ -18,9 +18,16 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from platform_lock import exclusive_lock
+from platform_paths import is_link_like
 
 SCHEMA_VERSION = 1
-OBJECT_CLASSES = {"global-rule", "project-rule", "global-skill", "project-skill"}
+OBJECT_CLASSES = {
+    "global-rule",
+    "project-rule",
+    "global-skill",
+    "project-skill",
+    "global-runtime-contract",
+}
 SCOPES = {"global", "project"}
 PLATFORMS = {"macos", "windows", "linux"}
 LIFECYCLE_STATES = {
@@ -686,7 +693,7 @@ class EnvironmentRegistry:
                 )
                 content_bytes = item["content"].encode("utf-8")
                 if object_path.exists():
-                    if object_path.is_symlink() or sha256_bytes(object_path.read_bytes()) != revision[
+                    if is_link_like(object_path) or sha256_bytes(object_path.read_bytes()) != revision[
                         "content_sha256"
                     ]:
                         raise ValueError("existing content-addressed object is invalid")
@@ -778,7 +785,7 @@ class EnvironmentRegistry:
         path = self._resolve_relative(relative, "immutable path", for_write=True)
         validator(value)
         if path.exists():
-            if path.is_symlink() or canonical_bytes(read_json(path)) != canonical_bytes(value):
+            if is_link_like(path) or canonical_bytes(read_json(path)) != canonical_bytes(value):
                 raise ValueError("immutable path already contains different content")
             return
         atomic_write_json(path, value)
@@ -791,7 +798,7 @@ class EnvironmentRegistry:
         if revision["object_path"] != self._object_relative(revision["content_sha256"]):
             raise ValueError("revision object_path is not canonical")
         path = self._resolve_relative(revision["object_path"], "object_path")
-        if path.is_symlink() or not path.is_file():
+        if is_link_like(path) or not path.is_file():
             raise ValueError("content object is missing or unsafe")
         if sha256_bytes(path.read_bytes()) != revision["content_sha256"]:
             raise ValueError("content object SHA-256 mismatch")
@@ -895,12 +902,14 @@ class EnvironmentRegistry:
             "project-rules.json",
             "global-skills.json",
             "project-skills.json",
+            "global-runtime-contracts.json",
         )}
         name_by_class = {
             "global-rule": "global-rules.json",
             "project-rule": "project-rules.json",
             "global-skill": "global-skills.json",
             "project-skill": "project-skills.json",
+            "global-runtime-contract": "global-runtime-contracts.json",
         }
         for artifact_id, entry in registry["current_artifacts"].items():
             artifact = self._read_relative_json(entry["artifact_path"], "artifact_path")
@@ -963,11 +972,11 @@ class EnvironmentRegistry:
             resolved.relative_to(root)
         except ValueError as error:
             raise ValueError(f"{label}: path escapes environment root") from error
-        if candidate.is_symlink():
+        if is_link_like(candidate):
             raise ValueError(f"{label}: symlink path is forbidden")
         parent = candidate.parent
         while parent != self.root and parent != parent.parent:
-            if parent.exists() and parent.is_symlink():
+            if parent.exists() and is_link_like(parent):
                 raise ValueError(f"{label}: symlink parent is forbidden")
             parent = parent.parent
         if not for_write and not candidate.exists():

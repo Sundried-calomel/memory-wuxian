@@ -13,6 +13,11 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+try:
+    from platform_runtime import executable_entry_path
+except ModuleNotFoundError:
+    from scripts.platform_runtime import executable_entry_path
+
 
 APP_NAME = "Memory無限操作台.app"
 CONFIG_NAME = "memory-wuxian-dashboard-launcher.json"
@@ -41,7 +46,10 @@ def app_metadata(app: Path) -> tuple[Path, str]:
         raise ValueError(f"incomplete dashboard application: {app}")
     with plist.open("rb") as handle:
         payload = plistlib.load(handle)
-    return executable, str(payload.get("CFBundleShortVersionString", ""))
+    version = payload.get("MemoryWuxianProductVersion")
+    if not version:
+        version = payload.get("CFBundleShortVersionString", "")
+    return executable, str(version)
 
 
 def launcher_payload(
@@ -70,6 +78,27 @@ def atomic_json(path: Path, payload: dict) -> None:
             os.unlink(temporary)
 
 
+def atomic_bytes(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def restore_file(path: Path, previous: bytes | None) -> None:
+    if previous is None:
+        path.unlink(missing_ok=True)
+    else:
+        atomic_bytes(path, previous)
+
+
 def replace_app(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.parent / f".{destination.name}.installing"
@@ -84,7 +113,23 @@ def replace_app(source: Path, destination: Path) -> None:
         text=True,
     )
     if destination.exists():
-        os.replace(destination, previous)
+        try:
+            os.replace(destination, previous)
+        except PermissionError:
+            subprocess.run(
+                ["/usr/bin/ditto", str(temporary), str(destination)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["codesign", "--verify", "--deep", "--strict", str(destination)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            shutil.rmtree(temporary, ignore_errors=True)
+            return
     try:
         os.replace(temporary, destination)
     except Exception:
@@ -92,6 +137,19 @@ def replace_app(source: Path, destination: Path) -> None:
             os.replace(previous, destination)
         raise
     shutil.rmtree(previous, ignore_errors=True)
+
+
+def restore_app_in_place(source: Path, destination: Path) -> None:
+    ditto = Path("/usr/bin/ditto")
+    if ditto.is_file():
+        subprocess.run(
+            [str(ditto), str(source), str(destination)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return
+    shutil.copytree(source, destination, dirs_exist_ok=True, symlinks=True)
 
 
 def verify(
@@ -146,35 +204,26 @@ def verify(
     return result
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--skill-root", required=True)
-    parser.add_argument("--archive-root", required=True)
-    parser.add_argument("--python-executable", required=True)
-    parser.add_argument("--source-app")
-    parser.add_argument("--destination")
-    parser.add_argument("--verify-only", action="store_true")
-    args = parser.parse_args()
-
-    skill_root = Path(args.skill_root).expanduser().resolve()
-    archive_root = Path(args.archive_root).expanduser().resolve()
-    python_executable = Path(args.python_executable).expanduser().resolve()
-    destination = Path(
-        args.destination or f"~/Desktop/{APP_NAME}"
-    ).expanduser().resolve()
-    codex_home = skill_root.parent.parent
-    config_path = codex_home / CONFIG_NAME
-    installation_path = codex_home / INSTALLATION_NAME
-    version = project_version(skill_root)
-
-    if not args.verify_only:
-        source = Path(
-            args.source_app or skill_root / "assets/macos" / APP_NAME
-        ).expanduser().resolve()
-        if not source.is_dir():
-            raise SystemExit(f"packaged dashboard application does not exist: {source}")
-        if not archive_root.is_dir() or not python_executable.is_file():
-            raise SystemExit("dashboard runtime paths do not exist")
+def install(
+    *,
+    source: Path,
+    destination: Path,
+    config_path: Path,
+    installation_path: Path,
+    python_executable: Path,
+    skill_root: Path,
+    archive_root: Path,
+    version: str,
+) -> dict:
+    previous_config = config_path.read_bytes() if config_path.is_file() else None
+    previous_installation = (
+        installation_path.read_bytes() if installation_path.is_file() else None
+    )
+    rollback_app = destination.parent / f".{destination.name}.transaction-rollback"
+    shutil.rmtree(rollback_app, ignore_errors=True)
+    if destination.exists():
+        shutil.copytree(destination, rollback_app, symlinks=True)
+    try:
         replace_app(source, destination)
         atomic_json(
             config_path,
@@ -191,13 +240,73 @@ def main() -> int:
                 "config": str(config_path),
             },
         )
+        return verify(
+            app=destination,
+            config_path=config_path,
+            installation_path=installation_path,
+            expected_version=version,
+        )
+    except Exception:
+        if rollback_app.exists():
+            if destination.exists():
+                restore_app_in_place(rollback_app, destination)
+            else:
+                os.replace(rollback_app, destination)
+        else:
+            shutil.rmtree(destination, ignore_errors=True)
+        restore_file(config_path, previous_config)
+        restore_file(installation_path, previous_installation)
+        raise
+    finally:
+        shutil.rmtree(rollback_app, ignore_errors=True)
 
-    result = verify(
-        app=destination,
-        config_path=config_path,
-        installation_path=installation_path,
-        expected_version=version,
-    )
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--skill-root", required=True)
+    parser.add_argument("--archive-root", required=True)
+    parser.add_argument("--python-executable", required=True)
+    parser.add_argument("--source-app")
+    parser.add_argument("--destination")
+    parser.add_argument("--verify-only", action="store_true")
+    args = parser.parse_args()
+
+    skill_root = Path(args.skill_root).expanduser().resolve()
+    archive_root = Path(args.archive_root).expanduser().resolve()
+    python_executable = executable_entry_path(args.python_executable)
+    destination = Path(
+        args.destination or f"~/Desktop/{APP_NAME}"
+    ).expanduser().resolve()
+    codex_home = skill_root.parent.parent
+    config_path = codex_home / CONFIG_NAME
+    installation_path = codex_home / INSTALLATION_NAME
+    version = project_version(skill_root)
+
+    if not args.verify_only:
+        source = Path(
+            args.source_app or skill_root / "assets/macos" / APP_NAME
+        ).expanduser().resolve()
+        if not source.is_dir():
+            raise SystemExit(f"packaged dashboard application does not exist: {source}")
+        if not archive_root.is_dir() or not python_executable.is_file():
+            raise SystemExit("dashboard runtime paths do not exist")
+        result = install(
+            source=source,
+            destination=destination,
+            config_path=config_path,
+            installation_path=installation_path,
+            python_executable=python_executable,
+            skill_root=skill_root,
+            archive_root=archive_root,
+            version=version,
+        )
+    else:
+        result = verify(
+            app=destination,
+            config_path=config_path,
+            installation_path=installation_path,
+            expected_version=version,
+        )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

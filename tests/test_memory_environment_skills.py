@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -21,6 +22,20 @@ from memory_environment_skills import (
     skill_package_contract_bytes,
 )
 from platform_lock import exclusive_lock
+
+
+def make_directory_link(link: Path, target: Path) -> None:
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode:
+            raise OSError(completed.stderr or completed.stdout)
+    else:
+        link.symlink_to(target, target_is_directory=True)
 
 
 def sha256(value):
@@ -390,6 +405,40 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
                 revision_id=self.revision["revision_id"],
                 target_binding="global-demo",
             )
+
+    def test_nested_safe_yaml_metadata_is_accepted(self):
+        frontmatter = self.installer()._parse_frontmatter(
+            "---\n"
+            "name: demo-skill\n"
+            "description: >-\n"
+            "  A nested metadata Skill.\n"
+            "metadata:\n"
+            "  categories:\n"
+            "    - memory\n"
+            "    - tools\n"
+            "---\n"
+        )
+        self.assertEqual(frontmatter["name"], "demo-skill")
+        self.assertEqual(frontmatter["metadata"]["categories"], ["memory", "tools"])
+        interface = self.installer()._parse_openai_yaml(
+            "interface:\n"
+            "  display_name: Demo Skill\n"
+            "  short_description: Nested metadata\n"
+            "policy:\n"
+            "  allow_implicit_invocation: true\n"
+        )
+        self.assertEqual(interface["display_name"], "Demo Skill")
+        self.assertNotIn("default_prompt", interface)
+
+    def test_duplicate_keys_and_unsafe_yaml_tags_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "invalid safe YAML"):
+            self.installer()._parse_frontmatter(
+                "---\nname: demo-skill\nname: other\n---\n"
+            )
+        with self.assertRaisesRegex(ValueError, "invalid safe YAML"):
+            self.installer()._parse_openai_yaml(
+                "interface: !!python/object/apply:os.system ['echo unsafe']\n"
+            )
         bad_files = self.files()
         bad_files["SKILL.md"] = (
             "---\nname: another-skill\ndescription: Wrong\n---\n"
@@ -415,6 +464,21 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
         )
         package = self.package("substituted.zip", manifest, files)
         with self.assertRaisesRegex(ValueError, "contract does not match"):
+            self.installer().install(
+                package_path=package,
+                artifact_id=self.artifact_id,
+                revision_id=self.revision["revision_id"],
+                target_binding="global-demo",
+            )
+
+    def test_skill_binding_root_link_is_rejected(self):
+        manifest = self.manifest(self.revision["revision_id"])
+        package = self.package("linked-root.zip", manifest)
+        outside = self.base / "outside-global"
+        outside.mkdir()
+        self.global_root.rmdir()
+        make_directory_link(self.global_root, outside)
+        with self.assertRaisesRegex(ValueError, "root symlinks"):
             self.installer().install(
                 package_path=package,
                 artifact_id=self.artifact_id,

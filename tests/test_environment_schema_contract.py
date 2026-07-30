@@ -103,6 +103,17 @@ class EnvironmentSchemaContractTests(unittest.TestCase):
             "resolution",
             "created_at",
         },
+        "semantic-runtime-contract.schema.json": {
+            "schema_version",
+            "contract_id",
+            "interface_version",
+            "provider",
+            "supported_platforms",
+            "model",
+            "runtime",
+            "embedding",
+            "installation",
+        },
     }
 
     def load(self, name):
@@ -132,19 +143,20 @@ class EnvironmentSchemaContractTests(unittest.TestCase):
             revision["object_path"]["pattern"],
         )
 
-    def test_four_object_classes_are_exact(self):
-        classes = self.load("environment-artifact.schema.json")["properties"][
-            "object_class"
-        ]["enum"]
-        self.assertEqual(
-            {
-                "global-rule",
-                "project-rule",
-                "global-skill",
-                "project-skill",
-            },
-            set(classes),
-        )
+    def test_environment_object_classes_are_exact(self):
+        expected = {
+            "global-rule",
+            "project-rule",
+            "global-skill",
+            "project-skill",
+            "global-runtime-contract",
+        }
+        for schema_name in (
+            "environment-artifact.schema.json",
+            "environment-conflict.schema.json",
+        ):
+            classes = self.load(schema_name)["properties"]["object_class"]["enum"]
+            self.assertEqual(expected, set(classes), schema_name)
 
     def test_promotion_requires_review_and_explicit_approval(self):
         promotion = self.load("environment-promotion.schema.json")

@@ -27,6 +27,25 @@ ai_summary:
   timeout_seconds: 900
   model: ""
 
+governance_ai:
+  enabled: false
+  mode: "automatic-drafts"
+  coordinator_node_id: ""
+  governor_skill_path: "~/.codex/skills/work-system-governor"
+  codex_cli_path: "/Applications/ChatGPT.app/Contents/Resources/codex"
+  codex_cli_path_windows: "~/.codex/.sandbox-bin/codex.exe"
+  timeout_seconds: 900
+  model: ""
+  product_min_items: 3
+  product_max_items: 5
+  product_max_wait_seconds: 21600
+  classification_min_items: 5
+  classification_max_items: 10
+  classification_max_wait_seconds: 86400
+  maximum_evidence_characters: 80000
+  maximum_ai_runs_per_day: 6
+  maximum_failed_retries: 2
+
 indexes:
   timeline: true
   concepts: true

@@ -97,7 +97,7 @@ class AutoUpdateTest(unittest.TestCase):
             state = root / "state.json"
             with patch.object(auto_update.platform, "system", return_value="Windows"), \
                  patch.object(auto_update, "download", side_effect=fake_download), \
-                 patch.object(auto_update, "stage_install", return_value="staged-for-next-login"):
+                 patch.object(auto_update, "stage_install", return_value="staged-for-next-login") as stage:
                 result = auto_update.main([
                     "--skill-root", str(skill), "--state-file", str(state),
                     "--download-directory", str(root / "downloads"),
@@ -107,6 +107,69 @@ class AutoUpdateTest(unittest.TestCase):
             payload = json.loads(state.read_text(encoding="utf-8"))
             self.assertEqual(payload["status"], "staged-for-next-login")
             self.assertEqual(payload["sha256"], digest)
+            stage.assert_called_once()
+            self.assertEqual("Windows", stage.call_args.args[1])
+
+    def test_macos_update_uses_user_transaction_without_installer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = root / "MemoryWuxian-1.3.0-macOS-universal.pkg"
+            package.write_bytes(b"package")
+            skill = root / ".codex/skills/memory-wuxian"
+            skill.mkdir(parents=True)
+            python = root / "bin/python3"
+            python.parent.mkdir()
+            python.write_text("", encoding="utf-8")
+            source = root / "source"
+            source.joinpath("scripts").mkdir(parents=True)
+            source.joinpath("scripts/install_macos_transaction.py").write_text(
+                "", encoding="utf-8"
+            )
+            source.joinpath("SKILL.md").write_text("", encoding="utf-8")
+            archive = root / "archive"
+            archive.mkdir()
+            pointer = skill.parent.parent / "memory-wuxian-active-root.txt"
+            pointer.write_text(str(archive) + "\n", encoding="utf-8")
+            codex = root / "codex"
+            codex.write_text("", encoding="utf-8")
+            codex.chmod(0o755)
+
+            completed = type(
+                "Completed",
+                (),
+                {"stdout": json.dumps({"status": "installed"})},
+            )()
+            with patch.object(
+                auto_update,
+                "_extract_macos_skill",
+                return_value=source,
+            ), patch.object(
+                auto_update,
+                "_codex_cli",
+                return_value=codex,
+            ), patch.object(
+                auto_update.subprocess,
+                "run",
+                return_value=completed,
+            ) as run:
+                status = auto_update.stage_install(
+                    package,
+                    "Darwin",
+                    skill_root=skill,
+                    python_executable=python,
+                    runner=run,
+                )
+            self.assertEqual("installed-user-transaction", status)
+            command = run.call_args.args[0]
+            self.assertIn("install_macos_transaction.py", command[1])
+            self.assertNotIn("/usr/sbin/installer", command)
+
+    def test_macos_scheduler_passes_the_stable_python_entry(self):
+        installer = (
+            SKILL_ROOT / "scripts" / "install_auto_update.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"--python-executable"', installer)
+        self.assertIn("executable_entry_path", installer)
 
 
 if __name__ == "__main__":

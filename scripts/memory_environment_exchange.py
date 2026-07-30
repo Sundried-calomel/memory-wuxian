@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from memory_environment import EnvironmentRegistry, canonical_bytes, read_json
+from memory_environment_evolution import ProductEvolutionStore
+from memory_environment_governance import GovernanceProposalStore
 from memory_environment_skills import MANIFEST_NAME, skill_package_contract_bytes
 from memory_federation import (
     FederationManager,
@@ -54,6 +56,8 @@ class EnvironmentExchangeManager:
         self.root = store.root
         self.registry = EnvironmentRegistry(self.root)
         self.federation = FederationManager(store)
+        self.governance = GovernanceProposalStore(store)
+        self.evolution = ProductEvolutionStore(store)
         self.metadata_root = self.registry.root / "exchange"
         self.export_state_path = self.metadata_root / "export-state.json"
         self.export_ledger_path = self.metadata_root / "export-ledger.jsonl"
@@ -65,6 +69,8 @@ class EnvironmentExchangeManager:
 
     def init_layout(self) -> None:
         self.registry.init()
+        self.governance.init()
+        self.evolution.init()
         for directory in (
             self.metadata_root,
             self.replica_root / "peers",
@@ -93,6 +99,29 @@ class EnvironmentExchangeManager:
 
     def status(self) -> Dict[str, Any]:
         base = self.federation.status()
+        recent_sync = []
+        for record in read_jsonl(self.sync_log_path)[-20:]:
+            details = record.get("details")
+            if not isinstance(details, dict):
+                details = {}
+            recent_sync.append(
+                {
+                    "timestamp": record.get("timestamp"),
+                    "event": record.get("event"),
+                    "node_id": record.get("node_id"),
+                    "published": int(
+                        record.get("published", details.get("published", 0))
+                    ),
+                    "imported": int(
+                        record.get("imported", details.get("imported", 0))
+                    ),
+                    "acknowledged": int(
+                        record.get(
+                            "acknowledged", details.get("acknowledged", 0)
+                        )
+                    ),
+                }
+            )
         base.update(
             {
                 "stream_id": "environment-v1",
@@ -103,22 +132,27 @@ class EnvironmentExchangeManager:
                     ),
                     default=0,
                 ),
+                "recent_sync": recent_sync,
             }
         )
         return base
 
     def log_sync(self, event: str, node_id: str, details: Dict[str, Any]) -> None:
         self.init_layout()
-        rows = read_jsonl(self.sync_log_path)
-        rows.append(
-            {
-                "timestamp": now_iso(),
-                "event": event,
-                "node_id": safe_node_id(node_id),
-                "details": details,
-            }
-        )
-        atomic_write_jsonl(self.sync_log_path, rows)
+        record = {
+            "timestamp": now_iso(),
+            "event": event,
+            "node_id": safe_node_id(node_id),
+            **details,
+        }
+        with self.sync_log_path.open(
+            "a", encoding="utf-8", newline="\n"
+        ) as handle:
+            handle.write(
+                json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
+            )
+            handle.flush()
+            os.fsync(handle.fileno())
 
     def exchange_observation(self, _timestamp: float) -> Dict[str, Any]:
         registry = (
@@ -131,6 +165,10 @@ class EnvironmentExchangeManager:
             "raw_today": _file_marker(self.registry.registry_path),
             "summary_registry": _file_marker(self.export_ledger_path),
             "title_index": _file_marker(self.registry.state_path),
+            "governance_proposals": {
+                "count": len(self.governance.local_events()),
+                "directory": _file_marker(self.governance.local_root),
+            },
         }
 
     def refresh_export_ledger(self) -> List[Dict[str, Any]]:
@@ -139,13 +177,43 @@ class EnvironmentExchangeManager:
         state = read_json(self.export_state_path)
         known = dict(state.get("source_events") or {})
         ledger = read_jsonl(self.export_ledger_path)
+        exported_revisions = {
+            (item.get("artifact_id"), item.get("revision_id"))
+            for item in ledger
+            if item.get("event_kind") in (None, "artifact-revision")
+        }
+        exported_projects = {
+            (
+                item.get("project_id"),
+                canonical_sha256((item.get("payload") or {}).get("project")),
+            )
+            for item in ledger
+            if item.get("event_kind") == "project-registration"
+        }
+        for item in ledger:
+            identity = self._ledger_source_identity(item)
+            if identity:
+                known.setdefault(identity, int(item["event_sequence"]))
         next_sequence = int(state.get("next_event_sequence", 1))
         registry = self.registry._read_registry()
         for event in registry["events"]:
             if event.get("operation") != "artifact-revision":
                 continue
-            source_event_id = str(event["event_id"])
-            if source_event_id in known:
+            source_event_id = self._registry_source_identity(event)
+            revision_identity = (event["artifact_id"], event["revision_id"])
+            if source_event_id in known or revision_identity in exported_revisions:
+                known.setdefault(
+                    source_event_id,
+                    next(
+                        int(item["event_sequence"])
+                        for item in ledger
+                        if (
+                            item.get("artifact_id"),
+                            item.get("revision_id"),
+                        )
+                        == revision_identity
+                    ),
+                )
                 continue
             artifact = self.registry._read_relative_json(
                 event["artifact_path"], "artifact_path"
@@ -154,6 +222,10 @@ class EnvironmentExchangeManager:
                 event["revision_path"], "revision_path"
             )
             if revision["origin_node_id"] != local_node_id:
+                continue
+            if self._superseded_skill_without_package(
+                registry, artifact, revision
+            ):
                 continue
             self.registry._verify_object(revision)
             object_path = self.registry._resolve_relative(
@@ -173,8 +245,71 @@ class EnvironmentExchangeManager:
                 {
                     "event_sequence": next_sequence,
                     "source_event_id": source_event_id,
+                    "event_kind": "artifact-revision",
                     "artifact_id": artifact["artifact_id"],
                     "revision_id": revision["revision_id"],
+                    "payload_sha256": canonical_sha256(payload),
+                    "payload": payload,
+                }
+            )
+            known[source_event_id] = next_sequence
+            next_sequence += 1
+        for event in registry["events"]:
+            if event.get("operation") != "project-registration":
+                continue
+            source_event_id = self._registry_source_identity(event)
+            if source_event_id in known:
+                continue
+            project = self.registry._read_relative_json(
+                event["project_path"], "project_path"
+            )
+            project_identity = (
+                project["project_id"],
+                canonical_sha256(project),
+            )
+            if project_identity in exported_projects:
+                continue
+            payload = {"project": project}
+            ledger.append(
+                {
+                    "event_sequence": next_sequence,
+                    "source_event_id": source_event_id,
+                    "event_kind": "project-registration",
+                    "project_id": project["project_id"],
+                    "payload_sha256": canonical_sha256(payload),
+                    "payload": payload,
+                }
+            )
+            known[source_event_id] = next_sequence
+            next_sequence += 1
+        for event in self.governance.local_events():
+            source_event_id = event["source_event_id"]
+            if source_event_id in known:
+                continue
+            payload = event["payload"]
+            ledger.append(
+                {
+                    "event_sequence": next_sequence,
+                    "source_event_id": source_event_id,
+                    "event_kind": "governance-proposal",
+                    "proposal_id": event["proposal_id"],
+                    "payload_sha256": canonical_sha256(payload),
+                    "payload": payload,
+                }
+            )
+            known[source_event_id] = next_sequence
+            next_sequence += 1
+        for event in self.evolution.local_events():
+            source_event_id = event["source_event_id"]
+            if source_event_id in known:
+                continue
+            payload = event["payload"]
+            ledger.append(
+                {
+                    "event_sequence": next_sequence,
+                    "source_event_id": source_event_id,
+                    "event_kind": "product-evolution",
+                    "record_id": event["record_id"],
                     "payload_sha256": canonical_sha256(payload),
                     "payload": payload,
                 }
@@ -191,6 +326,69 @@ class EnvironmentExchangeManager:
             },
         )
         return ledger
+
+    @staticmethod
+    def _registry_source_identity(event: Dict[str, Any]) -> str:
+        event_id = str(event["event_id"])
+        if event["operation"] == "artifact-revision":
+            return (
+                f"{event_id}:artifact-revision:"
+                f"{event['artifact_id']}:{event['revision_id']}"
+            )
+        if event["operation"] == "project-registration":
+            return (
+                f"{event_id}:project-registration:"
+                f"{event['project_id']}:{event['project_path']}"
+            )
+        raise ValueError("unsupported Environment Registry event")
+
+    @staticmethod
+    def _ledger_source_identity(item: Dict[str, Any]) -> Optional[str]:
+        source = item.get("source_event_id")
+        if not isinstance(source, str) or not source:
+            return None
+        if ":" in source.removeprefix("evt-"):
+            return source
+        if item.get("event_kind") in (None, "artifact-revision"):
+            artifact_id = item.get("artifact_id")
+            revision_id = item.get("revision_id")
+            if isinstance(artifact_id, str) and isinstance(revision_id, str):
+                return (
+                    f"{source}:artifact-revision:{artifact_id}:{revision_id}"
+                )
+        if item.get("event_kind") == "project-registration":
+            project = (item.get("payload") or {}).get("project") or {}
+            project_id = item.get("project_id")
+            project_path = project.get("local_root")
+            if isinstance(project_id, str) and isinstance(project_path, str):
+                return (
+                    f"{source}:project-registration:{project_id}:{project_path}"
+                )
+        return None
+
+    def _superseded_skill_without_package(
+        self,
+        registry: Dict[str, Any],
+        artifact: Dict[str, Any],
+        revision: Dict[str, Any],
+    ) -> bool:
+        """Skip only replaced local Skill candidates that never passed package verification."""
+
+        if not artifact["object_class"].endswith("-skill"):
+            return False
+        current = registry["current_artifacts"].get(artifact["artifact_id"])
+        if (
+            not isinstance(current, dict)
+            or current.get("revision_id") == revision["revision_id"]
+        ):
+            return False
+        reference_path = (
+            self.registry.root
+            / "packages"
+            / "by-revision"
+            / f"{revision['revision_id'].split(':', 1)[1]}.json"
+        )
+        return not reference_path.is_file() or reference_path.is_symlink()
 
     def export_delta(
         self,
@@ -367,6 +565,99 @@ class EnvironmentExchangeManager:
                 "last_sync_at": None,
             }
 
+    def _replica_events_path(self, node_id: str) -> Path:
+        return self._peer_root(node_id) / "replica-events.jsonl"
+
+    def _legacy_replica_event_matches(
+        self, origin: str, item: Dict[str, Any]
+    ) -> bool:
+        sequence = int(item["event_sequence"])
+        peer_root = self._peer_root(origin)
+        event_kind = item.get("event_kind")
+        if event_kind == "governance-proposal":
+            candidates = (peer_root / "governance-proposals").glob("*.json")
+            return any(
+                int(record.get("event_sequence", -1)) == sequence
+                and record.get("proposal") == item["payload"]
+                for record in map(read_json, candidates)
+            )
+        if event_kind == "product-evolution":
+            candidates = (peer_root / "product-evolution").glob("*.json")
+            return any(
+                int(record.get("event_sequence", -1)) == sequence
+                and record.get("product_evolution") == item["payload"]
+                for record in map(read_json, candidates)
+            )
+        if event_kind == "project-registration":
+            candidates = (peer_root / "projects").glob("*.json")
+            return any(
+                int(record.get("event_sequence", -1)) == sequence
+                and record.get("project") == item["payload"]["project"]
+                for record in map(read_json, candidates)
+            )
+        candidates = (
+            self.registry.staging_dir / "incoming" / origin
+        ).glob(f"{sequence:020d}-*.json")
+        records = list(map(read_json, candidates))
+        if len(records) != 1:
+            return False
+        stored = records[0]
+        payload = item["payload"]
+        return all(
+            (
+                stored.get("artifact") == payload.get("artifact"),
+                stored.get("revision") == payload.get("revision"),
+                stored.get("content_base64") == payload.get("content_base64"),
+                stored.get("package_attachment")
+                == payload.get("package_attachment"),
+            )
+        )
+
+    def _verify_overlap_records(
+        self,
+        origin: str,
+        records: List[Dict[str, Any]],
+        current_sequence: int,
+    ) -> None:
+        persisted = {
+            int(item["event_sequence"]): item
+            for item in read_jsonl(self._replica_events_path(origin))
+        }
+        for item in records:
+            sequence = int(item["event_sequence"])
+            if sequence > current_sequence:
+                break
+            existing = persisted.get(sequence)
+            if existing is not None:
+                matches = canonical_sha256(existing) == canonical_sha256(item)
+            else:
+                matches = self._legacy_replica_event_matches(origin, item)
+            if not matches:
+                raise ValueError(
+                    "environment overlap conflicts with persisted replica event"
+                )
+
+    def _persist_replica_events(
+        self, origin: str, records: List[Dict[str, Any]]
+    ) -> None:
+        path = self._replica_events_path(origin)
+        persisted = {
+            int(item["event_sequence"]): item
+            for item in read_jsonl(path)
+        }
+        for item in records:
+            sequence = int(item["event_sequence"])
+            existing = persisted.get(sequence)
+            if (
+                existing is not None
+                and canonical_sha256(existing) != canonical_sha256(item)
+            ):
+                raise ValueError(
+                    "environment replica event ledger conflicts with import"
+                )
+            persisted[sequence] = item
+        atomic_write_jsonl(path, [persisted[key] for key in sorted(persisted)])
+
     def import_delta(
         self, bundle: Path, expected_node_id: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -384,7 +675,6 @@ class EnvironmentExchangeManager:
         peers = {item["node_id"]: item for item in self.peers()}
         if origin not in peers or not peers[origin].get("trusted"):
             raise ValueError("environment bundle peer is not trusted")
-        state = self.replica_state(origin)
         bundle_hash = bytes_sha256(bundle.read_bytes())
         receipt_path = (
             self._peer_root(origin) / "receipts" / f"{manifest['bundle_id']}.json"
@@ -396,17 +686,168 @@ class EnvironmentExchangeManager:
                 "origin_node_id": origin,
                 "to_event_sequence": manifest["to_event_sequence"],
             }
-        expected_sequence = int(state["last_event_sequence"]) + 1
-        if int(manifest["from_event_sequence"]) != expected_sequence:
+        transaction_root = (
+            self._peer_root(origin) / "transactions" / str(manifest["bundle_id"])
+        )
+        marker_path = transaction_root / "transaction.json"
+        if marker_path.exists():
+            self._recover_import_transaction(
+                marker_path=marker_path,
+                receipt_path=receipt_path,
+                expected_bundle_id=str(manifest["bundle_id"]),
+            )
+            if receipt_path.exists():
+                return {
+                    "status": "no-change",
+                    "bundle_id": manifest["bundle_id"],
+                    "origin_node_id": origin,
+                    "to_event_sequence": manifest["to_event_sequence"],
+                }
+        state = self.replica_state(origin)
+        current_sequence = int(state["last_event_sequence"])
+        expected_sequence = current_sequence + 1
+        from_sequence = int(manifest["from_event_sequence"])
+        to_sequence = int(manifest["to_event_sequence"])
+        if from_sequence > expected_sequence:
             raise ValueError("environment replica sequence gap")
-        if state["last_event_sequence"]:
+        overlap_recovery = from_sequence < expected_sequence <= to_sequence
+        if to_sequence < expected_sequence:
+            raise ValueError("environment bundle is older than replica cursor")
+        if overlap_recovery:
+            self._verify_overlap_records(origin, records, current_sequence)
+        elif current_sequence:
             if manifest["previous_bundle_sha256"] != state["last_bundle_sha256"]:
                 raise ValueError("environment predecessor bundle mismatch")
         elif manifest["previous_bundle_sha256"] is not None:
             raise ValueError("initial environment import names a predecessor")
+        new_records = [
+            item
+            for item in records
+            if int(item["event_sequence"]) >= expected_sequence
+        ]
         incoming = self.registry.staging_dir / "incoming" / origin
-        incoming.mkdir(parents=True, exist_ok=True)
-        for item in records:
+        proposal_replica_root = (
+            self._peer_root(origin) / "governance-proposals"
+        )
+        evolution_replica_root = self._peer_root(origin) / "product-evolution"
+        project_replica_root = self._peer_root(origin) / "projects"
+        staged_artifacts = 0
+        staged_projects = 0
+        staged_governance_proposals = 0
+        staged_product_evolution_records = 0
+        prepared: List[Dict[str, Any]] = []
+
+        def prepare_json(path: Path, value: Dict[str, Any]) -> None:
+            payload = canonical_bytes(value) + b"\n"
+            if path.exists():
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError("environment import target path is unsafe")
+                if path.read_bytes() != payload:
+                    raise ValueError(
+                        "environment import target conflicts with existing content"
+                    )
+                return
+            relative = path.relative_to(self.registry.root).as_posix()
+            prepared.append(
+                {
+                    "relative_path": relative,
+                    "sha256": bytes_sha256(payload),
+                    "content_base64": base64.b64encode(payload).decode("ascii"),
+                }
+            )
+
+        for item in new_records:
+            if item.get("event_kind") == "governance-proposal":
+                envelope = self.governance.validate_envelope(
+                    item["payload"], expected_origin=origin
+                )
+                proposal_id = envelope["proposal_id"]
+                digest = envelope["content_sha256"]
+                conflicts = sorted(
+                    proposal_replica_root.glob(f"{proposal_id}-*.json")
+                )
+                proposal_record = {
+                    "schema_version": 1,
+                    "stream_id": "environment-v1",
+                    "origin_node_id": origin,
+                    "event_sequence": item["event_sequence"],
+                    "proposal": envelope,
+                    "received_bundle_id": manifest["bundle_id"],
+                    "automatic_acceptance": False,
+                }
+                if conflicts:
+                    if (
+                        len(conflicts) != 1
+                        or read_json(conflicts[0]) != proposal_record
+                    ):
+                        raise ValueError(
+                            "peer governance proposal ID conflicts with existing content"
+                        )
+                else:
+                    prepare_json(
+                        proposal_replica_root
+                        / f"{proposal_id}-{digest}.json",
+                        proposal_record,
+                    )
+                staged_governance_proposals += 1
+                continue
+            if item.get("event_kind") == "product-evolution":
+                envelope = self.evolution.validate_envelope(
+                    item["payload"], expected_origin=origin
+                )
+                record_id = envelope["record_id"]
+                digest = envelope["content_sha256"]
+                conflicts = sorted(
+                    evolution_replica_root.glob(f"{record_id}-*.json")
+                )
+                replica_record = {
+                    "schema_version": 1,
+                    "stream_id": "environment-v1",
+                    "origin_node_id": origin,
+                    "event_sequence": item["event_sequence"],
+                    "product_evolution": envelope,
+                    "received_bundle_id": manifest["bundle_id"],
+                    "automatic_remediation": False,
+                    "automatic_governance_acceptance": False,
+                }
+                if conflicts:
+                    if len(conflicts) != 1 or read_json(conflicts[0]) != replica_record:
+                        raise ValueError(
+                            "peer product evolution ID conflicts with existing content"
+                        )
+                else:
+                    prepare_json(
+                        evolution_replica_root / f"{record_id}-{digest}.json",
+                        replica_record,
+                    )
+                staged_product_evolution_records += 1
+                continue
+            if item.get("event_kind") == "project-registration":
+                project = self.registry._validate_project(item["payload"]["project"])
+                project_record = {
+                    "schema_version": 1,
+                    "stream_id": "environment-v1",
+                    "origin_node_id": origin,
+                    "event_sequence": item["event_sequence"],
+                    "project": project,
+                    "received_bundle_id": manifest["bundle_id"],
+                    "automatic_registration": False,
+                }
+                project_path = project_replica_root / (
+                    f"{project['project_id']}-{canonical_sha256(project)}.json"
+                )
+                conflicts = sorted(
+                    project_replica_root.glob(f"{project['project_id']}-*.json")
+                )
+                if conflicts:
+                    if len(conflicts) != 1 or read_json(conflicts[0]) != project_record:
+                        raise ValueError(
+                            "peer project registration conflicts with existing content"
+                        )
+                else:
+                    prepare_json(project_path, project_record)
+                staged_projects += 1
+                continue
             payload = item["payload"]
             content = base64.b64decode(payload["content_base64"], validate=True)
             revision = payload["revision"]
@@ -429,7 +870,8 @@ class EnvironmentExchangeManager:
             )
             if stage_path.exists() and read_json(stage_path) != stage_record:
                 raise ValueError("staged Environment event conflicts with existing event")
-            atomic_write_json(stage_path, stage_record)
+            prepare_json(stage_path, stage_record)
+            staged_artifacts += 1
         peer_root = self._peer_root(origin)
         peer_root.mkdir(parents=True, exist_ok=True)
         new_state = {
@@ -441,30 +883,127 @@ class EnvironmentExchangeManager:
             "last_bundle_sha256": bundle_hash,
             "last_sync_at": now_iso(),
         }
-        atomic_write_json(peer_root / "replica-state.json", new_state)
-        atomic_write_json(
-            receipt_path,
-            {
-                "format_version": 1,
-                "stream_id": "environment-v1",
-                "bundle_sha256": bundle_hash,
-                "manifest": manifest,
-                "received_at": new_state["last_sync_at"],
-            },
-        )
+        marker = {
+            "format_version": 1,
+            "stream_id": "environment-v1",
+            "bundle_id": manifest["bundle_id"],
+            "bundle_sha256": bundle_hash,
+            "status": "prepared",
+            "previous_state": state,
+            "new_state": new_state,
+            "outputs": prepared,
+            "created_at": now_iso(),
+        }
+        atomic_write_json(marker_path, marker)
+        try:
+            for output in prepared:
+                target = self.registry.root / safe_relative_path(
+                    str(output["relative_path"])
+                )
+                payload = base64.b64decode(
+                    output["content_base64"], validate=True
+                )
+                if bytes_sha256(payload) != output["sha256"]:
+                    raise ValueError("environment transaction output hash mismatch")
+                atomic_write_bytes(target, payload)
+            marker["status"] = "outputs-written"
+            atomic_write_json(marker_path, marker)
+            atomic_write_json(peer_root / "replica-state.json", new_state)
+            marker["status"] = "state-written"
+            atomic_write_json(marker_path, marker)
+            atomic_write_json(
+                receipt_path,
+                {
+                    "format_version": 1,
+                    "stream_id": "environment-v1",
+                    "bundle_sha256": bundle_hash,
+                    "manifest": manifest,
+                    "overlap_recovery": overlap_recovery,
+                    "received_at": new_state["last_sync_at"],
+                },
+            )
+            self._persist_replica_events(origin, records)
+            marker["status"] = "committed"
+            marker["outputs"] = [
+                {
+                    "relative_path": output["relative_path"],
+                    "sha256": output["sha256"],
+                }
+                for output in prepared
+            ]
+            atomic_write_json(marker_path, marker)
+        except Exception:
+            committed = self._recover_import_transaction(
+                marker_path=marker_path,
+                receipt_path=receipt_path,
+                expected_bundle_id=str(manifest["bundle_id"]),
+            )
+            if not committed:
+                raise
         return {
             "status": "imported",
             "bundle_id": manifest["bundle_id"],
             "origin_node_id": origin,
             "to_event_sequence": manifest["to_event_sequence"],
-            "staged_artifacts": len(records),
+            "overlap_recovery": overlap_recovery,
+            "staged_artifacts": staged_artifacts,
+            "staged_projects": staged_projects,
+            "staged_governance_proposals": staged_governance_proposals,
+            "staged_product_evolution_records": staged_product_evolution_records,
         }
+
+    def _recover_import_transaction(
+        self,
+        *,
+        marker_path: Path,
+        receipt_path: Path,
+        expected_bundle_id: str,
+    ) -> bool:
+        marker = read_json(marker_path)
+        if (
+            marker.get("format_version") != 1
+            or marker.get("stream_id") != "environment-v1"
+            or marker.get("bundle_id") != expected_bundle_id
+            or not isinstance(marker.get("outputs"), list)
+        ):
+            raise ValueError("environment import transaction marker is invalid")
+        if receipt_path.exists():
+            return True
+        for output in marker["outputs"]:
+            relative = safe_relative_path(str(output["relative_path"]))
+            target = self.registry.root / relative
+            if not target.exists():
+                continue
+            if (
+                target.is_symlink()
+                or not target.is_file()
+                or bytes_sha256(target.read_bytes()) != output["sha256"]
+            ):
+                raise ValueError(
+                    "environment import transaction output changed during recovery"
+                )
+            target.unlink()
+        previous_state = marker.get("previous_state")
+        if not isinstance(previous_state, dict):
+            raise ValueError("environment import transaction previous state is invalid")
+        state_path = self._peer_root(
+            str(previous_state["origin_node_id"])
+        ) / "replica-state.json"
+        current_state = read_json(state_path) if state_path.exists() else None
+        if current_state == marker.get("new_state"):
+            atomic_write_json(state_path, previous_state)
+        marker_path.unlink(missing_ok=True)
+        try:
+            marker_path.parent.rmdir()
+        except OSError:
+            pass
+        return False
 
     def _peer_root(self, node_id: str) -> Path:
         return self.replica_root / "peers" / safe_node_id(node_id)
 
     def _validate_payload_record(self, item: Dict[str, Any]) -> None:
-        required = {
+        legacy_required = {
             "event_sequence",
             "source_event_id",
             "artifact_id",
@@ -472,7 +1011,66 @@ class EnvironmentExchangeManager:
             "payload_sha256",
             "payload",
         }
-        if not isinstance(item, dict) or set(item) != required:
+        if not isinstance(item, dict):
+            raise ValueError("environment payload event fields are invalid")
+        event_kind = item.get("event_kind")
+        if event_kind == "governance-proposal":
+            required = {
+                "event_sequence",
+                "source_event_id",
+                "event_kind",
+                "proposal_id",
+                "payload_sha256",
+                "payload",
+            }
+            if set(item) != required:
+                raise ValueError("governance proposal event fields are invalid")
+            payload = self.governance.validate_envelope(item["payload"])
+            if item["proposal_id"] != payload["proposal_id"]:
+                raise ValueError("governance proposal event identity mismatch")
+            if item["payload_sha256"] != canonical_sha256(payload):
+                raise ValueError("governance proposal event hash mismatch")
+            return
+        if event_kind == "product-evolution":
+            required = {
+                "event_sequence", "source_event_id", "event_kind", "record_id",
+                "payload_sha256", "payload",
+            }
+            if set(item) != required:
+                raise ValueError("product evolution event fields are invalid")
+            payload = self.evolution.validate_envelope(item["payload"])
+            if item["record_id"] != payload["record_id"]:
+                raise ValueError("product evolution event identity mismatch")
+            if item["payload_sha256"] != canonical_sha256(payload):
+                raise ValueError("product evolution event hash mismatch")
+            return
+        if event_kind == "project-registration":
+            required = {
+                "event_sequence",
+                "source_event_id",
+                "event_kind",
+                "project_id",
+                "payload_sha256",
+                "payload",
+            }
+            if set(item) != required:
+                raise ValueError("project registration event fields are invalid")
+            payload = item["payload"]
+            if not isinstance(payload, dict) or set(payload) != {"project"}:
+                raise ValueError("project registration payload is invalid")
+            project = self.registry._validate_project(payload["project"])
+            if item["project_id"] != project["project_id"]:
+                raise ValueError("project registration identity mismatch")
+            if item["payload_sha256"] != canonical_sha256(payload):
+                raise ValueError("project registration event hash mismatch")
+            return
+        if event_kind == "artifact-revision":
+            required = legacy_required | {"event_kind"}
+        elif event_kind is None:
+            required = legacy_required
+        else:
+            raise ValueError("environment payload event kind is unsupported")
+        if set(item) != required:
             raise ValueError("environment payload event fields are invalid")
         payload = item["payload"]
         if item["payload_sha256"] != canonical_sha256(payload):

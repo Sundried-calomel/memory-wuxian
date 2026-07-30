@@ -104,12 +104,44 @@ Use Memory無限 to preserve conversation history outside the active context win
 58. Treat project-to-global Skill extraction as a promotion workflow. Require
     explicit source evidence, a complete passing platform matrix, and reviewer
     approval; never infer promotion from repeated use or successful sync.
-59. Treat `PRODUCT_ARCHITECTURE.md` as the single owner for product module
+59. Exchange governance-insight proposals only as immutable, source-bound
+    evidence. Store peer proposals outside Rule and Skill installation staging.
+    Successful transport, repetition, or presence on another device never
+    means the proposal was reviewed, accepted, registered, or installed.
+60. Treat `PRODUCT_ARCHITECTURE.md` as the single owner for product module
     boundaries, dependency direction, application contracts, refactoring
     gates, and the ordered productization roadmap. Before cross-module work,
     read that contract and preserve its phase order. Do not combine module
     extraction with a feature, format, protocol, default, or security-policy
     change.
+61. Follow the release lifecycle owned by `PRODUCT_ARCHITECTURE.md`: keep
+    candidate iteration untagged, use targeted tests during iteration, pass one
+    complete candidate gate before creating the single formal tag, and update
+    installed devices through the user-space transaction unless first install,
+    explicit recovery, or a declared privileged-component change requires the
+    full installer.
+62. Register every new production file in
+    `docs/module-architecture.json` under exactly one canonical module owner
+    before implementation. Run `scripts/check_architecture_contract.py` for
+    every feature, fix, refactor, installer, dashboard, schema, or runtime
+    change. Do not accept unowned files, overlapping owners, or a prohibited
+    dependency as temporary release debt.
+63. On macOS, preserve stable executable entry paths in every LaunchAgent.
+    Existing installations update through the isolated candidate transaction:
+    prove capture before cutover, verify the replacement collector and
+    dashboard afterward, and restore the prior Skill, plist, and process on
+    failure. A Homebrew Cellar version path is not a stable background entry.
+64. A report with a historical cutoff must pass
+    `scripts/archive_waterline.py --cutoff <ISO-8601>` before Memory無限 is
+    treated as complete through that time. A running process or recent summary
+    alone is not archive-waterline evidence.
+65. Collector startup may persist due semantic-summary jobs, but it must not run
+    or wait for the AI worker before publishing ready telemetry. The independent
+    semantic-backfill scheduler owns queued execution after capture readiness.
+66. Native capture must not synchronously copy the complete archive. Every
+    backup-eligible mutation atomically records coalescing backup debt; the
+    independent maintenance worker creates one complete snapshot for the batch
+    and clears the debt only after successful verification.
 
 ## Authority order
 

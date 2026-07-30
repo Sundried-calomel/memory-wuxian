@@ -20,8 +20,9 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
+from auto_update import current_version
 from conversation_titles import (
     archive_conversation_titles,
     codex_thread_metadata,
@@ -37,11 +38,16 @@ from memory_cli import (
     read_jsonl,
 )
 from memory_cloud_transport import CloudFolderTransport
+from memory_configuration import compile_configuration, explain_configuration
 from memory_environment import EnvironmentRegistry
+from memory_environment_capabilities import local_device_capability_offer
 from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_incoming import EnvironmentIncomingProcessor
 from memory_environment_promotions import PromotionStore
 from memory_federation import FederationManager
+from memory_governance_ai import GovernanceAIQueue
+from memory_guarded_features import GuardedFeatures
+from platform_lock import exclusive_lock
 from platform_process import no_window_kwargs
 from token_usage import aggregate_ledgers, normalize_usage, token_usage_ledgers
 
@@ -51,6 +57,8 @@ INDEX_HTML = SKILL_ROOT / "dashboard/index.html"
 DASHBOARD_ICON = SKILL_ROOT / "assets/memory-wuxian.ico"
 CLOUD_SCHEDULER_LABEL = "com.openai.codex.memory-wuxian-cloud-sync"
 CLOUD_SCHEDULER_TASK = "MemoryWuxianCloudSync"
+GOVERNANCE_AI_SCHEDULER_LABEL = "com.openai.codex.memory-wuxian-governance-ai"
+GOVERNANCE_AI_SCHEDULER_TASK = "MemoryWuxianGovernanceAI"
 
 
 def background_subprocess_kwargs() -> dict[str, Any]:
@@ -60,6 +68,35 @@ def background_subprocess_kwargs() -> dict[str, Any]:
     return {
         "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
     }
+
+
+def windows_process_running(pid: int, kernel32: Any | None = None) -> bool:
+    """Check a Windows process without sending a console-control signal."""
+    if pid <= 0:
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    api = kernel32 or ctypes.WinDLL("kernel32", use_last_error=True)
+    api.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    api.OpenProcess.restype = wintypes.HANDLE
+    api.GetExitCodeProcess.argtypes = [wintypes.HANDLE, wintypes.LPDWORD]
+    api.GetExitCodeProcess.restype = wintypes.BOOL
+    api.CloseHandle.argtypes = [wintypes.HANDLE]
+    api.CloseHandle.restype = wintypes.BOOL
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+    handle = api.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return False
+    try:
+        exit_code = wintypes.DWORD()
+        return bool(api.GetExitCodeProcess(handle, ctypes.byref(exit_code))) and (
+            exit_code.value == still_active
+        )
+    finally:
+        api.CloseHandle(handle)
 
 
 def cloud_scheduler_status() -> dict[str, Any]:
@@ -113,6 +150,68 @@ def cloud_scheduler_status() -> dict[str, Any]:
         "installed": False,
         "running": False,
     }
+
+
+def governance_ai_scheduler_status() -> dict[str, Any]:
+    if sys.platform == "darwin":
+        plist = (
+            Path.home()
+            / "Library"
+            / "LaunchAgents"
+            / f"{GOVERNANCE_AI_SCHEDULER_LABEL}.plist"
+        )
+        installed = plist.is_file()
+        running = False
+        if installed:
+            result = subprocess.run(
+                [
+                    "/bin/launchctl",
+                    "print",
+                    f"gui/{os.getuid()}/{GOVERNANCE_AI_SCHEDULER_LABEL}",
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                **no_window_kwargs(),
+            )
+            running = result.returncode == 0
+        return {"platform": "macos", "installed": installed, "running": running}
+    if sys.platform == "win32":
+        import winreg
+
+        key = (
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule"
+            rf"\TaskCache\Tree\{GOVERNANCE_AI_SCHEDULER_TASK}"
+        )
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key):
+                installed = True
+        except OSError:
+            installed = False
+        return {"platform": "windows", "installed": installed, "running": installed}
+    return {"platform": sys.platform, "installed": False, "running": False}
+
+
+def set_governance_ai_scheduler(store: MemoryStore, enabled: bool) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        str(SKILL_ROOT / "scripts" / "install_governance_ai.py"),
+        "--archive-root",
+        str(store.root),
+        "--skill-root",
+        str(SKILL_ROOT),
+        "--python-executable",
+        sys.executable,
+        "--load" if enabled else "--uninstall",
+    ]
+    subprocess.run(
+        command,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        **background_subprocess_kwargs(),
+    )
+    return governance_ai_scheduler_status()
 
 
 def set_cloud_scheduler(store: MemoryStore, enabled: bool) -> dict[str, Any]:
@@ -266,18 +365,79 @@ def collector_telemetry(root: Path) -> dict[str, Any] | None:
         return None
     telemetry["cpu_percent"] = None
     telemetry["memory_bytes"] = None
+    telemetry["process_running"] = False
     try:
         import psutil
     except ImportError:
-        telemetry["process_running"] = None
-        return telemetry
+        try:
+            pid = int(telemetry["pid"])
+            if sys.platform == "win32":
+                telemetry["process_running"] = windows_process_running(pid)
+            else:
+                os.kill(pid, 0)
+                telemetry["process_running"] = True
+        except (KeyError, TypeError, ValueError, OSError):
+            pass
+    else:
+        try:
+            process = psutil.Process(int(telemetry["pid"]))
+            telemetry["cpu_percent"] = round(process.cpu_percent(interval=0.05), 1)
+            telemetry["memory_bytes"] = int(process.memory_info().rss)
+            telemetry["process_running"] = process.is_running()
+        except (psutil.Error, KeyError, TypeError, ValueError, OSError):
+            pass
+
+    now = datetime.now(timezone.utc)
+
+    def parsed(value: Any) -> datetime | None:
+        try:
+            text = str(value)
+            return datetime.fromisoformat(text[:-1] + "+00:00" if text.endswith("Z") else text)
+        except (TypeError, ValueError):
+            return None
+
+    updated = parsed(telemetry.get("updated_at"))
+    interval = max(1, int(telemetry.get("fallback_interval_seconds") or 5))
+    telemetry_age = max(0.0, (now - updated).total_seconds()) if updated else None
+    telemetry["telemetry_age_seconds"] = (
+        round(telemetry_age, 1) if telemetry_age is not None else None
+    )
+    telemetry["telemetry_stale"] = bool(
+        telemetry["process_running"]
+        and (telemetry_age is None or telemetry_age > max(90, interval * 2 + 30))
+    )
+
+    source_watermark = parsed(telemetry.get("source_watermark"))
+    archive_watermark = parsed(telemetry.get("archive_watermark"))
+    lag = (
+        max(0.0, (source_watermark - archive_watermark).total_seconds())
+        if source_watermark and archive_watermark
+        else None
+    )
+    telemetry["archive_lag_seconds"] = round(lag, 1) if lag is not None else None
+    telemetry["archive_lagging"] = bool(lag is not None and lag > 1)
+    telemetry["startup_pending"] = bool(
+        int(telemetry.get("format_version") or 0) >= 2
+        and not bool(telemetry.get("ready"))
+    )
+    alerts = []
+    if telemetry["process_running"] and telemetry["startup_pending"]:
+        alerts.append("collector-starting")
+    if telemetry["process_running"] and telemetry["telemetry_stale"]:
+        alerts.append("collector-telemetry-stale")
+    if telemetry["archive_lagging"]:
+        alerts.append("archive-watermark-lag")
+    if not telemetry["process_running"]:
+        alerts.append("collector-not-running")
+    backup_debt_path = root / "pending/backup-debt.json"
     try:
-        process = psutil.Process(int(telemetry["pid"]))
-        telemetry["cpu_percent"] = round(process.cpu_percent(interval=0.05), 1)
-        telemetry["memory_bytes"] = int(process.memory_info().rss)
-        telemetry["process_running"] = process.is_running()
-    except (psutil.Error, KeyError, TypeError, ValueError, OSError):
-        telemetry["process_running"] = False
+        backup_debt = json.loads(backup_debt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        backup_debt = None
+    telemetry["backup_debt"] = backup_debt
+    if backup_debt is not None:
+        alerts.append("backup-pending")
+    telemetry["alerts"] = alerts
     return telemetry
 
 
@@ -321,7 +481,10 @@ def verified_retrieval_stats(store: MemoryStore) -> dict[str, int]:
     }
 
 
-def dashboard_health(status: dict[str, Any]) -> str:
+def dashboard_health(
+    status: dict[str, Any],
+    collector: dict[str, Any] | None = None,
+) -> str:
     actionable_fields = (
         "integrity_issues",
         "issues",
@@ -331,7 +494,10 @@ def dashboard_health(status: dict[str, Any]) -> str:
     )
     return (
         "attention"
-        if any(status.get(field) for field in actionable_fields)
+        if (
+            any(status.get(field) for field in actionable_fields)
+            or bool((collector or {}).get("alerts"))
+        )
         else "ok"
     )
 
@@ -437,11 +603,12 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
     measured_codex_conversations = len(
         codex_conversation_ids.intersection(usage_by_conversation)
     )
+    collector = collector_telemetry(store.root)
     return {
         "generated_at": now.isoformat(),
         "archive_root": str(store.root),
-        "health": dashboard_health(status),
-        "collector": collector_telemetry(store.root),
+        "health": dashboard_health(status, collector),
+        "collector": collector,
         "totals": {
             "conversations": len(conversations),
             "active_conversations": len(active_conversations),
@@ -587,6 +754,8 @@ class DashboardSnapshotCache:
                 self._signature = signature
         response = dict(payload)
         response["collector"] = collector_telemetry(self.store.root)
+        if (response["collector"] or {}).get("alerts"):
+            response["health"] = "attention"
         response["served_at"] = datetime.now(timezone.utc).isoformat()
         response["snapshot"] = {
             "source_signature": signature,
@@ -606,6 +775,8 @@ class DashboardSnapshotCache:
             if isinstance(payload, dict):
                 response = dict(payload)
                 response["collector"] = collector_telemetry(self.store.root)
+                if (response["collector"] or {}).get("alerts"):
+                    response["health"] = "attention"
                 response["served_at"] = datetime.now(timezone.utc).isoformat()
                 response["snapshot"] = {"persisted": True, "refreshing": True}
                 if not self._refreshing:
@@ -636,8 +807,15 @@ class EnvironmentDashboardCache:
         "project-rule",
         "global-skill",
         "project-skill",
+        "global-runtime-contract",
     )
-    ACTIVITY_DIRECTORIES = ("conflicts", "promotions", "receipts", "staging")
+    ACTIVITY_DIRECTORIES = (
+        "conflicts",
+        "promotions",
+        "receipts",
+        "staging",
+        "governance-ai",
+    )
 
     def __init__(self, archive_root: Path):
         self.registry = EnvironmentRegistry(archive_root)
@@ -731,6 +909,9 @@ class EnvironmentDashboardCache:
                     "decision_counts": {},
                     "pending_conflicts": 0,
                 },
+                "governance_ai": GovernanceAIQueue(
+                    self.registry.archive_root
+                ).status(),
             }
 
         try:
@@ -760,6 +941,10 @@ class EnvironmentDashboardCache:
                     "processed_events": 0,
                     "decision_counts": {},
                     "pending_conflicts": 0,
+                },
+                "governance_ai": {
+                    **GovernanceAIQueue(self.registry.archive_root).status(),
+                    "scheduler": governance_ai_scheduler_status(),
                 },
             }
         conflicts = EnvironmentConflictStore(self.registry.archive_root).list()
@@ -877,6 +1062,10 @@ class EnvironmentDashboardCache:
                 platform=local_platform_name(),
                 runtime_versions=local_runtime_versions([]),
             ).status(),
+            "governance_ai": {
+                **GovernanceAIQueue(self.registry.archive_root).status(),
+                "scheduler": governance_ai_scheduler_status(),
+            },
         }
 
     def get(self) -> dict[str, Any]:
@@ -894,11 +1083,141 @@ class EnvironmentDashboardCache:
         return payload
 
 
-def make_handler(store: MemoryStore):
+def system_dashboard_data(
+    store: MemoryStore,
+    configuration_path: Path | None = None,
+) -> dict[str, Any]:
+    """Build the read-only configuration and local-capability view."""
+
+    config_path = Path(configuration_path or SKILL_ROOT / "config.yaml")
+    compiled = compile_configuration(
+        config_path.expanduser().resolve(),
+        root_argument=str(store.root),
+    )
+    runtimes = local_runtime_versions([])
+    return {
+        "schema_version": 1,
+        "configuration": explain_configuration(compiled),
+        "capabilities": local_device_capability_offer(
+            product_version=current_version(SKILL_ROOT),
+            platform=local_platform_name(),
+            python_version=runtimes["python"],
+        ),
+    }
+
+
+def make_handler(
+    store: MemoryStore,
+    configuration_path: Path | None = None,
+):
     snapshot_cache = DashboardSnapshotCache(store)
     environment_cache = EnvironmentDashboardCache(store.root)
 
     class Handler(BaseHTTPRequestHandler):
+        def memory_search(self, request) -> dict[str, Any]:
+            parameters = parse_qs(request.query)
+            query = str(parameters.get("q", [""])[0]).strip()
+            mode = str(parameters.get("mode", ["hybrid"])[0])
+            if not query or len(query) > 500:
+                raise ValueError("query must contain 1 to 500 characters")
+            if mode not in {"keyword", "semantic", "hybrid"}:
+                raise ValueError("search mode must be keyword, semantic, or hybrid")
+            try:
+                limit = max(1, min(50, int(parameters.get("limit", ["20"])[0])))
+            except ValueError as exc:
+                raise ValueError("limit must be an integer") from exc
+
+            raw_records = store.read_all_raw()
+            raw_by_id = {str(item["message_id"]): item for item in raw_records}
+            titles = archive_conversation_titles(raw_records)
+            ranked: dict[str, dict[str, Any]] = {}
+            normalized_query = store.normalize_search_text(query)
+            query_terms = [term for term in normalized_query.split() if term]
+
+            if mode in {"keyword", "hybrid"}:
+                for record in raw_records:
+                    text = str(record.get("text", ""))
+                    normalized = store.normalize_search_text(text)
+                    if not normalized:
+                        continue
+                    exact = normalized_query in normalized
+                    matched = sum(term in normalized for term in query_terms)
+                    if not exact and not matched:
+                        continue
+                    score = 1.0 if exact else matched / max(1, len(query_terms))
+                    ranked[str(record["message_id"])] = {
+                        "keyword_score": score,
+                        "semantic_score": None,
+                    }
+
+            if mode in {"semantic", "hybrid"}:
+                semantic = GuardedFeatures(store).semantic_retrieve(
+                    query, max(limit * 3, 30)
+                )
+                for position, match in enumerate(semantic["matches"]):
+                    message_id = str(match["message_id"])
+                    item = ranked.setdefault(
+                        message_id,
+                        {"keyword_score": None, "semantic_score": None},
+                    )
+                    item["semantic_score"] = float(match["score"])
+                    item["semantic_rank"] = position + 1
+
+            results = []
+            for message_id, scores in ranked.items():
+                record = raw_by_id.get(message_id)
+                if not record:
+                    continue
+                keyword_score = scores.get("keyword_score")
+                semantic_score = scores.get("semantic_score")
+                if mode == "keyword":
+                    score = float(keyword_score or 0)
+                elif mode == "semantic":
+                    score = float(semantic_score or 0)
+                else:
+                    score = max(
+                        float(keyword_score or 0),
+                        float(semantic_score or 0),
+                    )
+                    if keyword_score is not None and semantic_score is not None:
+                        score = min(1.0, score + 0.08)
+                if record.get("speaker") == "tool":
+                    score *= 0.72
+                conversation_id = str(record.get("conversation_id", ""))
+                results.append({
+                    "message_id": message_id,
+                    "conversation_id": conversation_id,
+                    "conversation_title": titles.get(conversation_id, conversation_id),
+                    "timestamp": record.get("timestamp"),
+                    "speaker": record.get("speaker"),
+                    "record_type": record.get("record_type"),
+                    "text": str(record.get("text", "")),
+                    "score": round(score, 8),
+                    "keyword_score": keyword_score,
+                    "semantic_score": semantic_score,
+                    "raw_path": record.get("_path"),
+                    "raw_line_start": None,
+                    "raw_line_end": None,
+                    "record_sha256": record.get("content_sha256"),
+                })
+            results.sort(
+                key=lambda item: (item["score"], str(item["timestamp"] or "")),
+                reverse=True,
+            )
+            selected = results[:limit]
+            pointers = GuardedFeatures(store)
+            for item in selected:
+                item.update(pointers.raw_pointer(raw_by_id[item["message_id"]]))
+            return {
+                "query": query,
+                "mode": mode,
+                "count": min(limit, len(results)),
+                "results": selected,
+                "verified_against_raw": True,
+                "semantic_provider": "multilingual-e5-small"
+                if mode in {"semantic", "hybrid"} else None,
+            }
+
         def handle(self) -> None:
             try:
                 super().handle()
@@ -916,6 +1235,14 @@ def make_handler(store: MemoryStore):
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 return
+
+        def discard_request_body(self, maximum: int = 65536) -> None:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return
+            if 0 < length <= maximum:
+                self.rfile.read(length)
 
         def cloud_payload(self) -> dict[str, Any]:
             federation_manager = FederationManager(store)
@@ -955,13 +1282,20 @@ def make_handler(store: MemoryStore):
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("ETag", etag)
             elif path == "/api/events":
+                event_path = store.root / "dashboard/events.jsonl"
+                try:
+                    stat = event_path.stat()
+                    last_stamp: tuple[int, int] = (
+                        stat.st_size,
+                        stat.st_mtime_ns,
+                    )
+                except OSError:
+                    last_stamp = (0, 0)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream; charset=utf-8")
                 self.send_header("Cache-Control", "no-cache")
                 self.send_header("Connection", "keep-alive")
                 self.end_headers()
-                event_path = store.root / "dashboard/events.jsonl"
-                last_stamp: tuple[int, int] | None = None
                 last_heartbeat = 0.0
                 try:
                     while True:
@@ -970,9 +1304,7 @@ def make_handler(store: MemoryStore):
                             stamp = (stat.st_size, stat.st_mtime_ns)
                         except OSError:
                             stamp = (0, 0)
-                        if last_stamp is None:
-                            last_stamp = stamp
-                        elif stamp != last_stamp:
+                        if stamp != last_stamp:
                             last_stamp = stamp
                             payload = snapshot_cache.get()
                             event_id = str(int(time.time() * 1000))
@@ -1005,6 +1337,32 @@ def make_handler(store: MemoryStore):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
+            elif path == "/api/system":
+                try:
+                    body = json.dumps(
+                        system_dashboard_data(store, configuration_path),
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                except Exception as exc:
+                    self.send_json(500, {"error": str(exc)})
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+            elif path == "/api/memory-search":
+                try:
+                    body = json.dumps(
+                        self.memory_search(request), ensure_ascii=False
+                    ).encode("utf-8")
+                except ValueError as exc:
+                    self.send_json(400, {"error": str(exc)})
+                    return
+                except Exception as exc:
+                    self.send_json(500, {"error": str(exc)})
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
             elif path in {"/", "/index.html"}:
                 body = INDEX_HTML.read_bytes()
                 self.send_response(200)
@@ -1027,6 +1385,8 @@ def make_handler(store: MemoryStore):
                 return
             origin = self.headers.get("Origin")
             if origin and urlparse(origin).netloc != self.headers.get("Host"):
+                self.discard_request_body()
+                self.close_connection = True
                 self.send_json(403, {"error": "origin-not-allowed"})
                 return
             if path == "/api/import-chatgpt":
@@ -1044,17 +1404,58 @@ def make_handler(store: MemoryStore):
                 request = json.loads(self.rfile.read(length))
                 action = request.get("action")
                 if path == "/api/environment":
-                    if action != "process-incoming":
+                    if action == "process-incoming":
+                        result = EnvironmentIncomingProcessor(
+                            store.root,
+                            platform=local_platform_name(),
+                            runtime_versions=local_runtime_versions([]),
+                        ).process(
+                            apply=True,
+                            auto_register_compatible_rules=False,
+                            maximum_events=100,
+                        )
+                    elif action == "governance-ai-enable":
+                        queue = GovernanceAIQueue(store)
+                        policy = queue.policy()
+                        coordinator = (
+                            policy["coordinator_node_id"]
+                            or queue.local_node_id()
+                        )
+                        configured = queue.configure(
+                            {
+                                "enabled": True,
+                                "mode": "automatic-drafts",
+                                "coordinator_node_id": coordinator,
+                            },
+                            apply=True,
+                        )
+                        try:
+                            scheduler = set_governance_ai_scheduler(store, True)
+                        except Exception:
+                            queue.configure({"enabled": False}, apply=True)
+                            raise
+                        result = {
+                            "status": "enabled",
+                            "policy": configured["policy"],
+                            "scheduler": scheduler,
+                        }
+                    elif action == "governance-ai-disable":
+                        queue = GovernanceAIQueue(store)
+                        configured = queue.configure(
+                            {"enabled": False}, apply=True
+                        )
+                        result = {
+                            "status": "disabled",
+                            "policy": configured["policy"],
+                            "scheduler": set_governance_ai_scheduler(store, False),
+                        }
+                    elif action == "governance-ai-run":
+                        result = GovernanceAIQueue(store).tick(
+                            run_ai=True,
+                            maximum_batches=1,
+                        )
+                    else:
                         raise ValueError("unsupported Environment action")
-                    result = EnvironmentIncomingProcessor(
-                        store.root,
-                        platform=local_platform_name(),
-                        runtime_versions=local_runtime_versions([]),
-                    ).process(
-                        apply=True,
-                        auto_register_compatible_rules=False,
-                        maximum_events=100,
-                    )
                     self.send_json(
                         200,
                         {
@@ -1098,9 +1499,35 @@ def make_handler(store: MemoryStore):
                         raise ValueError(
                             "environment cloud transport is disabled"
                         )
+                    streams: dict[str, dict[str, Any]] = {}
+                    with exclusive_lock(
+                        store.root / ".locks" / "federation.lock"
+                    ):
+                        for name, stream_transport in (
+                            ("archive", transport),
+                            ("environment", environment_transport),
+                        ):
+                            try:
+                                stream_result = stream_transport.sync(force=True)
+                                streams[name] = {
+                                    "status": "ok",
+                                    "result": stream_result,
+                                }
+                            except Exception as exc:
+                                streams[name] = {
+                                    "status": "error",
+                                    "error": str(exc),
+                                }
+                    successful = sum(
+                        stream["status"] == "ok" for stream in streams.values()
+                    )
                     result = {
-                        "archive": transport.sync(force=True),
-                        "environment": environment_transport.sync(force=True),
+                        "status": (
+                            "ok"
+                            if successful == len(streams)
+                            else "partial" if successful else "failed"
+                        ),
+                        "streams": streams,
                     }
                 else:
                     raise ValueError("unsupported cloud action")
@@ -1258,7 +1685,10 @@ def main() -> int:
     parser.add_argument("--window", action="store_true", help="Open a native WebView2 application window")
     args = parser.parse_args()
     store = MemoryStore(Path(args.root).expanduser().resolve(), load_simple_yaml(Path(args.config).expanduser().resolve()))
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(store))
+    server = ThreadingHTTPServer(
+        (args.host, args.port),
+        make_handler(store, Path(args.config).expanduser().resolve()),
+    )
     url = f"http://{args.host}:{server.server_port}/"
     if args.window:
         print(json.dumps({"status": "opening-window", "url": url}, ensure_ascii=False), flush=True)

@@ -2,8 +2,9 @@
 
 ## Purpose
 
-Memory無限 2.0 synchronizes global rules, project rules, global Skills, and
-project Skills. It also provides a reviewed path for promoting
+Memory無限 2.0 synchronizes global rules, project rules, global Skills, project
+Skills, and portable global runtime contracts. It also provides a reviewed
+path for promoting
 project-independent capability cores into global Skills while retaining
 project-specific adapters.
 
@@ -24,6 +25,14 @@ project-specific adapters.
 | Project rule | registered project | project-relative path | safe update by class |
 | Global Skill | global Skill owner | Codex Skill directory | verified no-conflict |
 | Project Skill | project Skill owner | Skill directory + project binding | require project |
+| Global runtime contract | capability owner | device-local runtime | explicit realization |
+
+Runtime contracts carry pinned interfaces and reproducible installation
+descriptions. They never carry a macOS or Windows virtual environment, model
+cache, credential, or semantic index. Incoming contracts remain
+`pending-review`; acceptance registers the immutable contract, while a
+separate explicit local realization may download and verify its declared
+artifacts.
 
 ## Promotion lifecycle
 
@@ -34,6 +43,45 @@ discovered -> review -> classified -> deprojectized -> validating
 
 Rejected, project-only, and conflicting candidates remain durable records. They
 are not repeatedly proposed unless their source evidence changes.
+
+## Governance insight exchange
+
+Local product architecture lessons use an independent proposal contract:
+
+```text
+local evidence -> immutable proposal -> encrypted transport -> peer replica
+-> work-system-governor review -> explicit acceptance -> Environment revision
+```
+
+Memory無限 verifies proposal identity, origin, size, encoding, and content
+hash. It does not decide whether the proposal is useful, general, duplicate,
+conflicting, or accepted. Imported proposals never enter Rule or Skill install
+staging and never mutate a global Owner automatically.
+
+## Product evolution exchange
+
+Validated product evolution records use the same Environment stream as
+immutable, read-only evidence. They may describe bounded development history,
+current state, corrected future development flow, and reusable lesson
+candidates. Receiving a record does not remediate the source product or promote
+any lesson into global governance. Full raw logs and project data remain local
+unless a separate transport allowlist explicitly includes them.
+
+## Governance-AI scheduler
+
+The governance-AI scheduler is independent from cloud synchronization and is
+disabled by default. It performs model-free discovery and due checks every five
+minutes. Product retrospectives trigger at 3 items or 6 hours (maximum 5);
+governance classification triggers at 5 same-owner items or 24 hours (maximum
+10). Urgent items may bypass count and age thresholds. One batch is limited to
+80,000 evidence characters and one device may run no more than 6 AI batches per
+local day.
+
+Product-specific work executes only on the source device. Cross-device
+classification executes only on the configured coordinator. The worker is a
+one-shot ephemeral Codex process with read-only sandboxing and a strict output
+schema. Results remain drafts for human review and cannot accept, install,
+remediate, or rewrite anything.
 
 ## Defaults
 
@@ -59,3 +107,16 @@ are not repeatedly proposed unless their source evidence changes.
 10. Complete dashboard controls
 11. macOS and Windows bidirectional rehearsal
 12. 2.0 installers, migration guidance, and verified release
+
+## Cloud placeholder and overlap recovery
+
+Cloud-provider directory visibility is not proof that an envelope has local
+bytes. The transport probes each stable candidate before decryption. A
+temporary Files On-Demand or File Provider read failure remains transient and
+must not create a corruption quarantine record.
+
+`environment-v1` may recover a wider bundle whose start precedes the current
+cursor only when every overlapping event is byte-semantically identical to the
+persisted replica event. New suffix events are then staged normally and the
+receipt records overlap recovery. Missing or conflicting prefix evidence fails
+closed. This recovery does not apply to `archive-v1`.

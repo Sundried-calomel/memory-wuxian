@@ -16,6 +16,7 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 from memory_environment import EnvironmentRegistry
 from platform_lock import exclusive_lock
+from platform_paths import is_link_like
 
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -338,7 +339,7 @@ class EnvironmentRuleInstaller:
                         rollback_error = str(rollback_failure)
                 result = "rolled-back" if rolled_back else "failed"
                 final_hash = None
-                if target_path is not None and target_path.exists() and not target_path.is_symlink():
+                if target_path is not None and target_path.exists() and not is_link_like(target_path):
                     try:
                         final_hash = _sha256(self._read_regular_file(target_path))
                     except Exception:
@@ -392,7 +393,7 @@ class EnvironmentRuleInstaller:
             if not self.transactions_dir.exists():
                 return result
             for transaction_dir in sorted(self.transactions_dir.iterdir()):
-                if not transaction_dir.is_dir() or transaction_dir.is_symlink():
+                if not transaction_dir.is_dir() or is_link_like(transaction_dir):
                     continue
                 transaction_path = transaction_dir / "transaction.json"
                 if not transaction_path.exists():
@@ -676,17 +677,17 @@ class EnvironmentRuleInstaller:
         ):
             raise ValueError("target binding relative path is unsafe")
         supplied_root = Path(root_text).expanduser()
-        if supplied_root.is_symlink():
+        if is_link_like(supplied_root):
             raise ValueError("target binding root symlinks are forbidden")
         root = supplied_root.resolve(strict=True)
         if not root.is_dir():
             raise ValueError("target binding root must be a real directory")
         candidate = root.joinpath(*pure.parts)
-        if candidate.is_symlink():
+        if is_link_like(candidate):
             raise ValueError("target path symlinks are forbidden")
         parent = candidate.parent
         while parent != root:
-            if parent.is_symlink():
+            if is_link_like(parent):
                 raise ValueError("target parent symlinks are forbidden")
             parent = parent.parent
         resolved = candidate.resolve(strict=False)
@@ -779,7 +780,7 @@ class EnvironmentRuleInstaller:
         strategy: str,
         block_id: Optional[str],
     ) -> None:
-        if candidate.is_symlink() or not candidate.is_file():
+        if is_link_like(candidate) or not candidate.is_file():
             raise ValueError("candidate is not a regular file")
         actual = candidate.read_bytes()
         actual.decode("utf-8")
@@ -810,7 +811,7 @@ class EnvironmentRuleInstaller:
 
     @staticmethod
     def _read_regular_file(path: Path) -> bytes:
-        if path.is_symlink() or not path.is_file():
+        if is_link_like(path) or not path.is_file():
             raise ValueError("path must be a non-symlink regular file")
         return path.read_bytes()
 
@@ -878,10 +879,10 @@ class EnvironmentRuleInstaller:
         _fsync_directory(transaction_dir)
 
     def _load_transaction(self, transaction_dir: Path) -> Dict[str, Any]:
-        if transaction_dir.is_symlink() or not transaction_dir.is_dir():
+        if is_link_like(transaction_dir) or not transaction_dir.is_dir():
             raise ValueError("transaction directory is unsafe")
         path = transaction_dir / "transaction.json"
-        if path.is_symlink() or not path.is_file():
+        if is_link_like(path) or not path.is_file():
             raise ValueError("transaction record is missing or unsafe")
         value = json.loads(path.read_text(encoding="utf-8"))
         required = {
@@ -1011,7 +1012,7 @@ class EnvironmentRuleInstaller:
         receipt: Dict[str, Any],
     ) -> None:
         receipt_path = self.receipts_dir / f"{receipt['receipt_id']}.json"
-        if receipt_path.is_symlink() or not receipt_path.is_file():
+        if is_link_like(receipt_path) or not receipt_path.is_file():
             raise ValueError("verified receipt is not durable")
         persisted_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
         self._validate_receipt(persisted_receipt)
@@ -1029,7 +1030,7 @@ class EnvironmentRuleInstaller:
     def _delete_rollback_object(self, transaction_dir: Path) -> None:
         rollback_path = transaction_dir / "rollback.bin"
         if rollback_path.exists():
-            if rollback_path.is_symlink() or not rollback_path.is_file():
+            if is_link_like(rollback_path) or not rollback_path.is_file():
                 raise ValueError("rollback object is unsafe")
             rollback_path.unlink()
             _fsync_directory(transaction_dir)
@@ -1038,7 +1039,7 @@ class EnvironmentRuleInstaller:
         self, transaction_dir: Path, transaction: Dict[str, Any]
     ) -> bytes:
         rollback_path = transaction_dir / "rollback.bin"
-        if rollback_path.is_symlink() or not rollback_path.is_file():
+        if is_link_like(rollback_path) or not rollback_path.is_file():
             raise ValueError("rollback object is missing or unsafe")
         original = rollback_path.read_bytes()
         if _sha256(original) != transaction["original_sha256"]:
@@ -1233,7 +1234,7 @@ class EnvironmentRuleInstaller:
         if not self.receipts_dir.exists():
             return None
         for receipt_path in sorted(self.receipts_dir.glob("*.json")):
-            if receipt_path.is_symlink() or not receipt_path.is_file():
+            if is_link_like(receipt_path) or not receipt_path.is_file():
                 continue
             try:
                 receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -1315,7 +1316,7 @@ class EnvironmentRuleInstaller:
         if transaction["receipt_id"] is None or transaction["receipt_sha256"] is None:
             raise RuleInstallationError("terminal transaction has no receipt")
         path = self.receipts_dir / f"{transaction['receipt_id']}.json"
-        if path.is_symlink() or not path.is_file():
+        if is_link_like(path) or not path.is_file():
             raise RuleInstallationError("terminal transaction receipt is missing")
         if _sha256(path.read_bytes()) != transaction["receipt_sha256"]:
             raise RuleInstallationError("terminal transaction receipt hash mismatch")
@@ -1335,7 +1336,7 @@ class EnvironmentRuleInstaller:
     def _discard_incomplete_prepared_directory(self, transaction_dir: Path) -> None:
         entries = list(transaction_dir.iterdir())
         if any(
-            entry.name not in {"rollback.bin"} or entry.is_symlink()
+            entry.name not in {"rollback.bin"} or is_link_like(entry)
             for entry in entries
         ):
             raise RuleInstallationError(

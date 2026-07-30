@@ -51,7 +51,8 @@ Memory無限
 │   ├── Rule Manager
 │   ├── Skill Package Manager
 │   ├── Conflict Manager
-│   └── Promotion Manager
+│   ├── Promotion Manager
+│   └── Governance Proposal Replica
 ├── Exchange Plane
 │   ├── Federation Protocol
 │   ├── Cloud-Folder Transport
@@ -79,6 +80,12 @@ receipts, and rollback evidence.
 The Exchange Plane owns transport identities, envelopes, event sequences,
 predecessor chains, acknowledgements, replica delivery, and diagnostics. It
 does not own the meaning of a conversation, summary, Rule, or Skill.
+
+Governance-insight proposals are inert domain records. The Environment Plane
+stores local immutable proposals and read-only peer replicas; the Exchange
+Plane transports them. `work-system-governor` owns semantic abstraction,
+classification, validation, and acceptance. A transported or imported proposal
+does not authorize a Rule or Skill revision.
 
 `archive-v1` and `environment-v1` remain independent streams. A fault,
 conflict, or acknowledgement delay in one stream must not advance or block the
@@ -112,8 +119,10 @@ Hidden reasoning, system prompts, and general tool output remain excluded.
 ### 2. Archive Transaction Contract
 
 One mutation owns raw append, transcript and index updates, cursor updates,
-trigger evaluation, and backup handoff in the prescribed order under the
-archive lock. Failure must not expose a partially committed state.
+trigger evaluation, and an atomic coalescing backup-debt handoff in the
+prescribed order under the archive lock. Failure must not expose a partially
+committed state. Complete external snapshot creation is an independent
+maintenance transaction; it clears debt only after the snapshot succeeds.
 
 ### 3. Summary Job Contract
 
@@ -129,10 +138,17 @@ Current-policy and chronological retrieval remain distinct modes.
 
 ### 5. Environment Artifact Contract
 
-Each global Rule, project Rule, global Skill, and project Skill has a stable
-artifact identity and immutable revision. Revisions declare content, base,
-provenance, platform and runtime requirements, network access, persistence,
-and local binding requirements.
+Each global Rule, project Rule, global Skill, project Skill, and global runtime
+contract has a stable artifact identity and immutable revision. Revisions
+declare content, base, provenance, platform and runtime requirements, network
+access, persistence, and local binding requirements.
+
+A runtime contract synchronizes a portable capability interface rather than a
+platform binary environment. It may pin model identity, artifact hashes,
+runtime packages, input/output semantics, and installer entry points. Model
+files, virtual environments, credentials, and derived indexes remain local.
+Registration and transport do not authorize realization; realization is an
+explicit device-local installer transaction.
 
 ### 6. Installer Transaction Contract
 
@@ -171,7 +187,112 @@ behavior, documentation, platform tests, installer hashes, dashboard
 replacement, active-archive preservation, live post-install self-check, and
 rollback evidence. Evidence from another version does not satisfy the release.
 
+Release-candidate development and formal publication are separate lifecycle
+states:
+
+1. Accumulate related fixes on the candidate branch without creating a formal
+   tag, GitHub Release, or published installer.
+2. During iteration, run the smallest tests that cover the affected contract.
+   Before publication, run one complete local rehearsal and one candidate CI
+   matrix against the same candidate series.
+3. Fix candidate-test, CI, packaging, and unpublished-artifact defects in the
+   candidate series. These defects do not create a new product version.
+4. Freeze the version and documentation only after the candidate matrix,
+   installer build, package-content checks, and required live installation
+   rehearsal pass.
+5. Create the immutable formal tag once, then run one formal build and upload.
+   A defect in an already published artifact requires a new patch version.
+
+Routine updates for an installed device use the verified user-space update
+transaction. They stage and validate changed product files, preserve the active
+archive and device configuration, atomically replace the installed version,
+refresh the dashboard, run post-update checks, and retain rollback state.
+They do not display the platform installer or request administrator credentials.
+The full installer is reserved for first installation, explicit recovery from
+a damaged or mixed installation, and an upgrade whose declared system-level
+permission or privileged component change cannot be completed in user space.
+Such an upgrade must explain the privileged change before requesting approval.
+Formal releases may continue to publish complete installers for new devices;
+their existence does not require an already installed device to run them.
+
+On macOS, the transaction must preserve a stable executable entry path rather
+than a version-specific Homebrew Cellar target. Before cutover it must prove
+exact user and assistant capture with the candidate collector in an isolated
+archive. After cutover it must prove that the previous collector PID was
+replaced, telemetry is fresh, and the current dashboard passes its live
+self-check. Any failure after cutover restores the previous Skill tree,
+LaunchAgent bytes, and collector process before reporting failure.
+Initial synchronization may create a source-locked semantic-summary job, but it
+must not execute or await the AI worker before collector readiness. The job
+remains durable for the independent semantic-backfill scheduler. Raw capture,
+cursor advancement, deterministic indexes, and atomic backup-debt registration
+complete before the startup watermark becomes ready. Full snapshot copying must
+not hold collector readiness or transactional cutover open.
+
+Archive freshness is a two-watermark contract. The source watermark records the
+newest retained rollout state observed by the collector; the archive watermark
+advances only after the corresponding archive transaction succeeds. Reporting
+for a historical cutoff must verify persisted source cursors through that
+cutoff, and may backfill only the exact retained files found to be lagging.
+
+### 11. Governance Insight Contract
+
+A local product may emit one source-bound governance proposal containing its
+origin node, source product and Owner, source revision, local problem and
+change, generalized principle, applicability, exclusions, invariants, negative
+cases, proposed global Owner, and evidence references. Proposal identity and
+content are immutable.
+
+Cross-device transport verifies the envelope and stores a read-only replica.
+Semantic classification remains `unresolved` until the global governance Owner
+reviews it as `duplicate`, `extension`, `conflict`, `new_domain`,
+`project-only`, or `rejected`. Only an explicitly accepted `extension` or
+`new_domain` may start a separate Rule or Skill revision lifecycle.
+
+### 12. Configuration Resolution Contract
+
+Configuration resolution compiles a closed default contract and explicit input
+layers into one canonical effective configuration. Every effective value names
+its source layer, and the canonical value set has a stable SHA-256. Compilation
+and explanation are read-only and never mutate a source configuration,
+archive, Environment Registry, scheduler, or dashboard setting. Unknown keys,
+duplicate keys, invalid types, and invalid ranges fail closed.
+
+### 13. Device Capability Negotiation Contract
+
+A device capability offer declares only product, platform, runtime, protocol,
+and interface support needed for compatibility decisions. It contains no local
+paths, usernames, hostnames, credentials, complete configuration, or memory
+content. Negotiation produces diagnostic reason codes and never grants trust,
+installation authority, permission expansion, or synchronization authority.
+Legacy devices without an offer remain `unknown-legacy` and continue through
+the existing archive and Environment contracts.
+
+When capability offers are later exchanged between devices, they must use a
+target-encrypted sidecar independent from the ordered `archive-v1` and
+`environment-v1` streams. The v2.5 contract provides local offer generation and
+explicit peer-file diagnostics only; it does not publish or transport offers.
+Transport remains opaque and does not interpret compatibility policy.
+
+### 14. Deferred Memory-Scope Design
+
+Memory sharing scopes are intentionally not a runtime product capability. The
+current single-user product treats retained memory as shareable among the
+user's explicitly trusted devices. Reconsider scopes before multi-user access,
+third-party AI write access, partial project sharing, hosted memory service,
+explicitly non-shareable data, or cross-identity shared memory is introduced.
+Until then, do not add scope fields, filters, migration, enforcement, or
+dashboard controls.
+
 ## Intended Package Boundaries
+
+`docs/module-architecture.json` is the machine-readable ownership registry for
+the current source tree. Every production file under its declared source roots
+must have exactly one module owner. `scripts/check_architecture_contract.py`
+rejects unowned files, overlapping ownership, and declared prohibited
+dependencies. A feature change must register its target owner before adding a
+new production file, and the architecture check must pass before focused tests
+or release rehearsal can count as evidence.
 
 ```text
 memory_wuxian/

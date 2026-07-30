@@ -53,7 +53,11 @@ def run_backfill(
                 break
 
     backup = None
-    if completed and not dry_run:
+    backup_debt_drained = False
+    if not dry_run and store.backup_debt_path.exists():
+        backup = store.drain_backup_debt()
+        backup_debt_drained = backup is not None
+    elif completed and not dry_run:
         backup = store.create_backup_snapshot(
             "semantic-backfill-batch",
             {
@@ -67,6 +71,7 @@ def run_backfill(
         "completed_jobs": len(completed),
         "job_ids": [item["job_id"] for item in completed],
         "backup": str(backup) if backup else None,
+        "backup_debt_drained": backup_debt_drained,
         "remaining_pending_jobs": len(store.pending_jobs()),
     }
 

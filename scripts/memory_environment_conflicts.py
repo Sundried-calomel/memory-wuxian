@@ -15,7 +15,13 @@ from platform_lock import exclusive_lock
 REVISION_RE = re.compile(r"^rev:[0-9a-f]{64}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 CONFLICT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,191}$")
-OBJECT_CLASSES = {"global-rule", "project-rule", "global-skill", "project-skill"}
+OBJECT_CLASSES = {
+    "global-rule",
+    "project-rule",
+    "global-skill",
+    "project-skill",
+    "global-runtime-contract",
+}
 CONFLICT_KINDS = {
     "same-managed-block",
     "delete-modify",
@@ -377,4 +383,3 @@ class EnvironmentConflictStore:
             value["resolution"], dict
         ):
             raise ValueError("terminal conflict requires resolution")
-

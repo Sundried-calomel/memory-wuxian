@@ -30,14 +30,18 @@ from memory_federation import (
 
 def filesystem_native_path(path: Path) -> str:
     value = str(path.resolve())
-    if os.name != "nt" or value.startswith("\\\\?\\"):
+    if (
+        os.name != "nt"
+        or value.startswith("\\\\?\\")
+        or len(value) < 240
+    ):
         return value
     if value.startswith("\\\\"):
         return "\\\\?\\UNC\\" + value[2:]
     return "\\\\?\\" + value
 
 
-def display_path(path: Path) -> str:
+def display_path(path: str | Path) -> str:
     value = str(path)
     if value.startswith("\\\\?\\UNC\\"):
         return "\\\\" + value[8:]
@@ -98,6 +102,10 @@ class CryptoAdapter(Protocol):
         ...
 
 
+class TransientCloudArtifactError(RuntimeError):
+    """A synchronized artifact is visible but not locally readable yet."""
+
+
 class CommandCrypto:
     """Adapter for the memory-wuxian-envelope command-line helper."""
 
@@ -125,6 +133,15 @@ class CommandCrypto:
                 f"memory-wuxian-envelope failed with exit code "
                 f"{completed.returncode}: {detail}"
             )
+            if invalid_envelope_on_failure and any(
+                marker in detail.casefold()
+                for marker in (
+                    "resource deadlock avoided",
+                    "temporarily unavailable",
+                    "operation would block",
+                )
+            ):
+                raise TransientCloudArtifactError(error)
             if invalid_envelope_on_failure:
                 raise ValueError(error)
             raise RuntimeError(error)
@@ -468,15 +485,18 @@ class CloudFolderTransport:
         value = str(self.config.get("exchange_root", "")).strip()
         if not value:
             raise ValueError("Cloud exchange_root is not configured")
-        root = self._provider_root(Path(value)) / "MemoryWuxianExchange" / "v1"
+        root = self._provider_root(value) / "MemoryWuxianExchange" / "v1"
         if self.stream_id is not None:
             root = root / self.stream_id
         return Path(filesystem_native_path(root)) if os.name == "nt" else root
 
     @staticmethod
-    def _provider_root(value: Path) -> Path:
+    def _provider_root(value: str | Path) -> Path:
         """Normalize either a provider root or the fixed queue directory."""
-        resolved = Path(value).expanduser().resolve()
+        # Persisted Windows paths may carry the native ``\\?\`` prefix. Strip
+        # it before inspecting the final component so legacy queue roots are
+        # not mistaken for provider roots and appended a second time.
+        resolved = Path(display_path(value)).expanduser().resolve()
         if resolved.name.casefold() == "memorywuxianexchange":
             return resolved.parent
         return resolved
@@ -666,6 +686,17 @@ class CloudFolderTransport:
                 filesystem_native_path(partial),
                 filesystem_native_path(destination),
             )
+            published_path = Path(filesystem_native_path(destination))
+            visibility_deadline = time.monotonic() + 1.0
+            while (
+                not published_path.is_file()
+                or published_path.stat().st_size == 0
+            ):
+                if time.monotonic() >= visibility_deadline:
+                    raise RuntimeError(
+                        f"Published cloud envelope is not visible: {destination}"
+                    )
+                time.sleep(0.01)
             try:
                 directory_descriptor = os.open(
                     str(destination.parent), getattr(os, "O_DIRECTORY", 0)
@@ -782,12 +813,25 @@ class CloudFolderTransport:
         except OSError:
             return False
 
+    @staticmethod
+    def _materialize_candidate(path: Path) -> None:
+        """Trigger cloud-provider hydration without reading the whole envelope."""
+        try:
+            with path.open("rb") as handle:
+                if not handle.read(1):
+                    raise OSError("Cloud artifact is empty")
+        except OSError as exc:
+            raise TransientCloudArtifactError(
+                f"Cloud artifact is not locally readable yet: {exc}"
+            ) from exc
+
     def _read_ack(
         self,
         path: Path,
         peer_node_id: str,
         peer_identity: Dict[str, str],
     ) -> Dict[str, Any]:
+        self._materialize_candidate(path)
         with tempfile.TemporaryDirectory(prefix="memory-wuxian-cloud-ack-") as temp:
             plaintext = Path(temp) / "ack.json"
             self.crypto.open(
@@ -830,7 +874,8 @@ class CloudFolderTransport:
                     {"peer": peer_id, "type": "ack-scan", "reason": str(exc)}
                 )
                 continue
-            for path in paths:
+            for discovered_path in paths:
+                path = Path(filesystem_native_path(discovered_path))
                 if ".partial" in path.name:
                     result["transient"].append(
                         {"peer": peer_id, "type": "ack", "path": display_path(path)}
@@ -957,10 +1002,12 @@ class CloudFolderTransport:
                     {"peer": peer_id, "type": "bundle-scan", "reason": str(exc)}
                 )
                 continue
-            expected_sequence = int(
-                self.manager.replica_state(peer_id).get("last_event_sequence", 0)
-            ) + 1
-            for path in paths:
+            replica_state = self.manager.replica_state(peer_id)
+            current_sequence = int(replica_state.get("last_event_sequence", 0))
+            expected_sequence = current_sequence + 1
+            candidates = []
+            for discovered_path in paths:
+                path = Path(filesystem_native_path(discovered_path))
                 if ".partial" in path.name:
                     result["transient"].append(
                         {"peer": peer_id, "type": "bundle", "path": display_path(path)}
@@ -975,6 +1022,55 @@ class CloudFolderTransport:
                     )
                     continue
                 from_sequence = int(match.group("from_sequence"))
+                if from_sequence < expected_sequence:
+                    overlaps_expected = (
+                        self.stream_id == "environment-v1"
+                        and
+                        int(match.group("to_sequence")) >= expected_sequence
+                    )
+                    is_current_replay = (
+                        int(match.group("to_sequence")) == current_sequence
+                        and match.group("bundle_id")
+                        == replica_state.get("last_bundle_id")
+                        and match.group("bundle_sha256")
+                        == replica_state.get("last_bundle_sha256")
+                    )
+                    if not is_current_replay and not overlaps_expected:
+                        continue
+                else:
+                    is_current_replay = False
+                candidates.append(
+                    (
+                        from_sequence,
+                        int(match.group("to_sequence")),
+                        path.stat().st_mtime_ns,
+                        is_current_replay,
+                        path,
+                        match,
+                    )
+                )
+            candidates.sort(
+                key=lambda item: (
+                    item[0],
+                    -item[1],
+                    -item[2],
+                    item[4].name,
+                )
+            )
+            for (
+                from_sequence,
+                _to_sequence,
+                _mtime_ns,
+                is_current_replay,
+                path,
+                match,
+            ) in candidates:
+                if (
+                    from_sequence < expected_sequence
+                    and not is_current_replay
+                    and _to_sequence < expected_sequence
+                ):
+                    continue
                 if from_sequence > expected_sequence:
                     result["transient"].append(
                         {
@@ -986,6 +1082,7 @@ class CloudFolderTransport:
                     )
                     continue
                 try:
+                    self._materialize_candidate(path)
                     with tempfile.TemporaryDirectory(
                         prefix="memory-wuxian-cloud-bundle-"
                     ) as temp:
@@ -1013,9 +1110,15 @@ class CloudFolderTransport:
                             raise ValueError(
                                 "Cloud envelope filename sequence mismatch"
                             )
-                        imported = self.manager.import_delta(
-                            bundle, expected_node_id=peer_id
+                        exchange_lock = getattr(
+                            self.manager,
+                            "exchange_lock_path",
+                            self.archive_root / ".locks" / "archive.lock",
                         )
+                        with exclusive_lock(exchange_lock):
+                            imported = self.manager.import_delta(
+                                bundle, expected_node_id=peer_id
+                            )
                         ack_path = self._write_ack(
                             peer_id,
                             peer["cloud_identity"],
@@ -1130,8 +1233,9 @@ class CloudFolderTransport:
                 self._envelope_kind("bundle"),
                 peer_id,
             )
+        native_destination = filesystem_native_path(destination)
         state["outstanding"] = {
-            "path": display_path(destination),
+            "path": native_destination,
             "bundle_id": exported["bundle_id"],
             "bundle_sha256": exported["sha256"],
             "from_event_sequence": int(exported["from_event_sequence"]),
@@ -1141,7 +1245,8 @@ class CloudFolderTransport:
         result["published"].append(
             {
                 "peer": peer_id,
-                "path": display_path(destination),
+                "path": native_destination,
+                "display_path": display_path(destination),
                 "bundle_id": exported["bundle_id"],
                 "from_event_sequence": int(exported["from_event_sequence"]),
                 "to_event_sequence": int(exported["to_event_sequence"]),

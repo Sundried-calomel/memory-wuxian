@@ -240,6 +240,13 @@ content-addressed object path, platform/runtime declarations, provenance, and
 lifecycle state. Absolute installation paths are local bindings and never
 define global identity.
 
+The synchronized E5 interface conforms to
+`schemas/semantic-runtime-contract.schema.json`. It pins model artifacts,
+runtime packages, query and passage prefixes, pooling, normalization,
+similarity, and platform-neutral installation entry points. The contract is
+portable; model files, virtual environments, credentials, and semantic indexes
+remain device-local.
+
 ## Project registration
 
 Files under `environment/projects/` conform to

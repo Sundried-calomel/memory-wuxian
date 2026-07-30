@@ -1,5 +1,10 @@
 # Memory無限
 
+> **2.4.6:** This stable release adds a cross-device semantic runtime contract,
+> explicit local E5 realization, and linear-time raw-pointer construction for
+> first-time semantic indexing. It synchronizes the interface and pinned
+> dependencies without copying platform runtimes, model caches, or indexes.
+>
 > Windows v1.7.8 security note: the desktop dashboard shortcut now targets a
 > dedicated no-console native launcher with no command-line arguments. The
 > installer stores the validated Python runtime and active archive path in a
@@ -100,9 +105,12 @@ Start with [`SKILL.md`](SKILL.md). Use an external archive root for real convers
 
 Official installers register a daily stable-release check. The updater ignores branches,
 drafts, and prereleases, downloads both the platform installer and its published SHA-256
-file, and refuses to stage an update unless the checksum and filename match. Windows
-installs a verified update silently at the next login; macOS keeps the verified PKG ready
-for the operating system's required installation authorization. Disable the check with
+file, and refuses an update unless the checksum and filename match. Windows
+installs a verified update silently at the next login. On an existing macOS
+installation, the updater extracts only the verified Skill payload and runs the
+rollback-capable user-space transaction without opening Installer or requesting
+an administrator password. The full PKG remains the first-install and recovery
+path. Disable the check with
 `python scripts/install_auto_update.py --uninstall`.
 
 Every Windows install or automatic upgrade preserves the archive named by
@@ -180,7 +188,10 @@ It recreates `Memory无限状态台.lnk` with the current Skill path, active arc
 bundled icon, and validated `pythonw.exe`. Uninstalling removes only the shortcut,
 not the archive.
 
-The dashboard binds only to localhost and sends no archive data to an external service. Its routine status views are read-only. Explicit Settings actions may enable or disable encrypted cloud-folder exchange, run one immediate exchange pass, or import a user-selected ChatGPT export into the local archive. Without `--window`, the cross-platform browser mode remains available; use `--no-browser` to start only the local server, or `--port` to choose another local port.
+The dashboard binds only to localhost and sends no archive data to an external service. Its routine status views are read-only. The Memory search view uses the same verified retrieval engine as the CLI and offers keyword, multilingual semantic, and hybrid modes. Every result remains human-readable and includes its title, timestamp, speaker, raw line range, and SHA-256 backlink. Explicit Settings actions may enable or disable encrypted cloud-folder exchange, run one immediate exchange pass, or import a user-selected ChatGPT export into the local archive. Without `--window`, the cross-platform browser mode remains available; use `--no-browser` to start only the local server, or `--port` to choose another local port.
+
+The local read-only endpoint is `/api/memory-search`; its mode values are
+`keyword`, `semantic`, and `hybrid`.
 
 ## Automatic Codex capture on macOS
 
@@ -195,13 +206,25 @@ python3 scripts/install_codex_autosync.py \
 
 The LaunchAgent keeps one optimized Rust process alive and receives filesystem change notifications from the operating system, with an adaptive size/mtime fallback for missed deep-directory events. The fallback runs every 5 seconds while active, slows to 30 seconds after 2 idle minutes, and to 5 minutes after 15 idle minutes; a native event wakes it immediately. It stores user messages, visible assistant commentary/final answers, and the lightweight tool activity already visible in top-level Codex task timelines. Tool activity retains the tool name, nested tool names, and command text when available; tool outputs, system instructions, hidden reasoning, and subagent sessions remain excluded. A per-session cursor and stable source-derived IDs make retries idempotent.
 
-The native collector directly owns event-driven JSONL parsing, raw append, per-conversation transcript updates, deterministic routing indexes, cursor writes, due Level-1 job creation, and desktop snapshots. It records successful Codex file edits with their file paths, change types, move targets, addition/deletion counts, hunk line ranges, and exact unified diffs. General tool output and hidden reasoning remain excluded. Existing installations perform a one-time patch-event-only history backfill. When a job becomes due, it runs one Python wrapper that invokes one ephemeral Codex CLI summary process and exits after ingestion. The Python CLI remains the low-frequency interface for summary ingestion, retrieval, heartbeat, and preview-first reconstruction.
+The native collector directly owns event-driven JSONL parsing, raw append, per-conversation transcript updates, deterministic routing indexes, cursor writes, due Level-1 job creation, and atomic backup-debt registration. It records successful Codex file edits with their file paths, change types, move targets, addition/deletion counts, hunk line ranges, and exact unified diffs. General tool output and hidden reasoning remain excluded. Existing installations perform a one-time patch-event-only history backfill. When a job becomes due, it runs one Python wrapper that invokes one ephemeral Codex CLI summary process and exits after ingestion. The Python CLI remains the low-frequency interface for summary ingestion, retrieval, heartbeat, backup maintenance, and preview-first reconstruction.
 
 Every imported conversation is also written to its own file under `memory/conversations/`. A transcript contains only one conversation ID and includes both exact machine-readable records and readable message text. Its isolated indexes are stored under `memory/indexes/by-conversation/<conversation>/`. The immutable files under `raw/` remain authoritative; per-conversation transcripts and indexes are deterministic views that can be rebuilt without changing raw history.
 
-On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the exact executable in the generated plist before claiming automatic capture is active.
+On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the exact executable in the generated plist before claiming automatic capture is active. Background definitions preserve a stable Python entry path such as `/opt/homebrew/bin/python3`; they do not resolve it to a version-specific Homebrew Cellar path, so a routine Python upgrade does not create a new privacy identity and repeat Desktop or Documents permission prompts.
 
-The collector publishes lightweight runtime telemetry under `imports/codex/collector-telemetry.json`. The status console shows its active, idle, or deep-idle mode, current safety interval, latest filesystem event, latest archive write, wakeups during the last hour, and CPU/memory use. Telemetry is written only on activity or mode transitions.
+The collector publishes lightweight runtime telemetry under `imports/codex/collector-telemetry.json`. The status console shows its active, idle, or deep-idle mode, current safety interval, latest filesystem event, latest archive write, wakeups during the last hour, and CPU/memory use. A new process first reports `phase=starting` and `ready=false`; it becomes `phase=ready` only after initial synchronization succeeds. Telemetry renews on every monitoring interval, including idle intervals, and carries independent source and archive watermarks. The dashboard warns when startup is still pending, telemetry is stale, the collector is stopped, or the source watermark is ahead of the archive watermark.
+
+Existing macOS installations update through `scripts/install_macos_transaction.py`. It stages a candidate, runs an isolated candidate probe that must capture exact synthetic user and assistant messages, and cuts over only after that proof passes. It then verifies a replacement collector PID, fresh telemetry, and the current dashboard. Any post-switch failure restores the previous Skill, LaunchAgent, and collector. Routine updates use this user-space transaction and do not require the full installer or an administrator password.
+
+Initial collector synchronization never waits for an AI summary. If startup
+crosses a summary threshold, it persists the immutable summary job and lets the
+existing semantic-backfill worker process that queue after collector readiness.
+This keeps exact raw capture and summary debt durable without allowing a long
+Codex CLI call to block transactional cutover.
+
+Before a time-bounded report relies on Memory无限, run `scripts/archive_waterline.py --cutoff <ISO-8601>`. The preflight verifies persisted source cursors through the report cutoff. `--backfill` is explicit and bounded to the retained source files reported as lagging; the report may proceed only after the result is `covered`.
+
+The daily archive chart uses the same character-count bars as before. Hovering a bar, or focusing it from the keyboard, opens a localized bubble with the full date, exact archived-message count, and exact visible-character count.
 
 ## Import ChatGPT conversations
 
@@ -219,7 +242,7 @@ This feature is **experimental**. Automated tests cover synthetic ZIP and JSON f
 
 ## Automatic Codex capture on Windows
 
-Run the environment bootstrap first. It reports the detected Python version and paths for Python, Codex CLI, the bundled collector, and Codex sessions. With `-InstallMissing`, it installs Python only when no compatible `>=3.9` runtime or Codex-bundled Python exists.
+Run the environment bootstrap first. It reports the detected Python version and paths for Python, Codex CLI, the bundled collector, and Codex sessions. The only supported main runtime is Python 3.14.x. With `-InstallMissing`, it installs Python 3.14 only when no supported runtime or compatible Codex-bundled Python exists.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
@@ -253,7 +276,7 @@ Retrieval itself does not take the archive's exclusive write lock. If the curren
 
 The collector uses an explicit 16 MiB worker stack so a fresh full-history import can safely parse and index large Codex rollout sets on Windows, where the default console main-thread stack is comparatively small.
 
-With the default configuration, every successful memory mutation creates a new complete snapshot under `~/Desktop/Memory無限-记忆归档备份/` after the primary archive write finishes, verifies its manifest, and removes older snapshot directories. The backup root therefore contains one latest recovery copy plus the append-only `backup-log.jsonl` operation history.
+With the default configuration, every successful native memory mutation atomically updates `pending/backup-debt.json` after the primary archive write. The low-frequency maintenance worker coalesces all pending mutations into one complete verified snapshot under `~/Desktop/Memory無限-记忆归档备份/`, then clears the debt only after success and removes older snapshot directories. The collector never blocks startup or capture by copying the complete archive. The backup root therefore contains one latest recovery copy plus the append-only `backup-log.jsonl` operation history, while the dashboard warns whenever a newer snapshot is pending.
 
 Applied reconstruction commands may first preserve the previous derived files under `memory/archive/`. These internal recovery copies use `backup.workspace_retention_count` and also retain only the newest one by default. Development edits use one replaceable code backup; they do not create additional copies of the live conversation archive.
 
@@ -409,6 +432,13 @@ continues to live in read-only peer replicas, and `retrieve-global` follows the
 same verified source path for SSH and cloud deliveries. Use `cloud-disable` to
 stop exchange without deleting archives, keys, or encrypted cloud files.
 
+On macOS, OneDrive Files On-Demand envelopes may initially appear as directory
+entries without readable local bytes. Memory Wuxian probes them to trigger
+bounded hydration and treats temporary File Provider availability failures as
+retryable, not corrupt. For `environment-v1`, a wider retry that overlaps an
+already verified prefix is accepted only when every persisted prefix event
+matches exactly; conflicting overlap remains quarantined.
+
 Version 1.6.1 also exposes these operations in the dashboard Settings panel.
 The Cloud sync switch enables or disables encrypted exchange together with its
 five-minute scheduler. Sync now performs one immediate encrypted exchange pass.
@@ -430,6 +460,11 @@ target-encrypted `environment-v1` stream with independent event sequences,
 predecessor chains, cursors, acknowledgements, staging, and verified Skill
 packages. The five-minute task validates incoming data without AI. Transfer
 only stages an update; it never installs a Skill or rewrites a Rule by itself.
+Since 2.4.1, each batch member has its own stable export identity, including
+project registrations. Received projects remain read-only peer metadata and
+are never created or activated locally. Skill packages use a safe full YAML
+parser: legal nested metadata is supported, while duplicate keys and unsafe
+tags are rejected. Installers provide the required PyYAML 6.x dependency.
 
 Compatible global Rule fast-forwards may be registered only when that policy is
 explicitly enabled. Project artifacts, Skills, divergence, identity changes,
@@ -438,6 +473,19 @@ require review. Installers preserve rollback material before mutation, switch
 atomically, run post-install checks, and append evidence receipts. Promotion of
 a reusable project capability to global scope is a separate evidence-gated
 workflow with a complete platform matrix and explicit approval.
+
+Verified local architecture lessons can also be recorded as immutable
+governance-insight proposals. Paired devices exchange these proposals in the
+same signed, target-encrypted Environment stream, but imported proposals remain
+read-only evidence. `work-system-governor` must classify and validate a
+proposal before an explicit acceptance can create a new Rule or Skill revision.
+
+Evidence-bound product evolution records can preserve a bounded development
+history, verified current state, corrected next-development flow, and reusable
+lesson candidates. They are exchanged as read-only evidence; receipt never
+triggers product remediation or global governance acceptance. Deterministic
+jobs collect and queue changed evidence, while AI is invoked only for bounded
+semantic review.
 
 The dashboard Environment view exposes inventory, incoming decisions,
 conflicts, promotions, and a manual update check. The complete 2.0 CLI families
@@ -476,6 +524,50 @@ environment-conflict-resolve
 environment-promotion-propose
 environment-promotion-transition
 environment-promotions
+environment-governance-propose
+environment-governance-proposals
+environment-product-evolution-record
+environment-product-evolution-records
+environment-governance-ai-discover
+environment-governance-ai-status
+environment-governance-ai-enqueue
+environment-governance-ai-configure
+environment-governance-ai-tick
+```
+
+### Bounded governance AI
+
+Memory無限 can queue semantic work without keeping an AI conversation active.
+Scripts perform five-minute model-free discovery and due checks; an ephemeral
+Codex worker runs only when a compatible micro-batch is due. Product batches
+trigger at 3 items or 6 hours (maximum 5), classification batches at 5
+same-owner items or 24 hours (maximum 10), with an 80,000-character cap and
+6 runs per local day. Urgent items may bypass count and age thresholds.
+
+The feature is disabled by default. Product work remains on its source device,
+while global classification requires one explicit coordinator. Every result is
+a schema-validated draft requiring human review. The worker cannot accept
+rules, install Skills, remediate products, or rewrite archives.
+
+### Explainable configuration and device compatibility
+
+Memory Wuxian compiles the existing YAML into a closed, deterministic
+configuration-v1 view without changing the source file or initializing an
+archive. Every effective value reports its source and the effective value set
+has a stable SHA-256. Unknown keys, duplicate keys, invalid types, and invalid
+ranges fail closed.
+
+`environment-capability-status` reports only product, platform, runtime,
+protocol, and interface compatibility. A missing legacy offer remains
+diagnostic and does not interrupt existing synchronization. Compatibility
+never grants installation, trust, permissions, or synchronization authority.
+The dashboard System tab presents the same read-only information.
+
+```bash
+python3 scripts/memory_cli.py configuration-compile
+python3 scripts/memory_cli.py configuration-explain
+python3 scripts/memory_cli.py environment-capability-status
+python3 scripts/memory_cli.py environment-capability-status --peer-offer /path/to/peer-offer.json
 ```
 
 ## Privacy and integration boundary
@@ -501,6 +593,11 @@ Since v1.7.5, redirected Windows CLI output is always UTF-8 even when the
 parent process supplies a legacy `PYTHONIOENCODING` such as GBK. Interactive
 legacy consoles escape only unsupported characters instead of terminating the
 memory operation.
+
+Since v2.4.2, the Windows native dashboard launcher requests an unused
+loopback port from the operating system and opens the actual assigned port.
+It does not assume port 8765, so another local application cannot replace the
+Memory Wuxian interface by owning that port first.
 
 ```text
 init
@@ -539,6 +636,9 @@ cloud-sync
 cloud-status
 cloud-enable
 cloud-disable
+configuration-compile
+configuration-explain
+environment-capability-status
 ```
 
 Manual semantic-summary recovery additionally uses `semantic_worker.py` and
@@ -558,6 +658,14 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
 Architecture decisions and implementation contracts are documented in [`PROJECT.md`](PROJECT.md) and [`references/`](references/). Changes are recorded in [`CHANGELOG.md`](CHANGELOG.md). `README.md`, `README.zh-CN.md`, and `README.ja.md` are maintained as one documentation contract and must be updated together when documented behavior changes.
+
+Since v2.4.3, [`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md) is the
+canonical module-boundary contract and
+[`docs/module-architecture.json`](docs/module-architecture.json) is its
+machine-readable ownership registry. Every production file must have exactly
+one owner, and `scripts/check_architecture_contract.py` rejects unowned files,
+overlapping ownership, and declared prohibited dependencies. Windows and
+macOS package builds fail if these architecture-gate files are absent.
 
 ## License
 
@@ -579,9 +687,35 @@ never an authority that can overwrite history.
 ## v1.11 retrieval quality and optional local semantics
 
 `retrieval-evaluate` measures a readable JSONL test set with recall-at-k,
-wrong-citation counts, and latency. `semantic-index-build` uses the default
+wrong-citation counts, and latency. `semantic-index-build` retains the default
 offline `local-hash-v1` provider: it downloads no model and calls no service.
+For multilingual neural retrieval, run `python scripts/install_multilingual_e5.py`
+and then `semantic-index-build --provider multilingual-e5-small`. The optional
+384-dimensional `intfloat/multilingual-e5-small` ONNX model is pinned to an
+immutable revision and exact SHA-256 values, runs from an isolated environment,
+disables remote model code, and performs inference offline. On Windows the
+isolated runtime is explicitly bound to Python 3.12 and accepts Unicode Skill,
+archive, worker, and index paths.
 `semantic-retrieve` verifies each hit against raw SHA-256 and returns the
 conversation/message ID, raw path, and exact line range.
 `semantic-index-clear` removes only disposable vectors; raw history and keyword
 retrieval continue to work.
+
+The E5 interface can also be registered as an immutable
+`global-runtime-contract` in the independent Environment Registry:
+
+```bash
+python scripts/memory_cli.py semantic-runtime-status
+python scripts/memory_cli.py environment-register-semantic-runtime \
+  --origin-node-id <node-id> --apply
+python scripts/memory_cli.py environment-realize-semantic-runtime
+python scripts/memory_cli.py environment-realize-semantic-runtime --apply
+```
+
+The signed and target-encrypted `environment-v1` stream transports the
+contract to paired devices. It pins the model revision, artifact hashes,
+runtime packages, query/passage prefixes, pooling, normalization, similarity,
+and installer entry point. Receiving or accepting it does not install or
+download anything. Each device must explicitly realize the accepted contract
+into its own compatible local runtime. Model files, virtual environments,
+credentials, and semantic indexes remain device-local.

@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import os
 import platform
 import re
+import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
@@ -93,10 +96,93 @@ def verify_checksum(package: Path, checksum: Path) -> str:
     return digest
 
 
-def stage_install(package: Path, system: str) -> str:
+def _active_archive_root(skill_root: Path) -> Path:
+    pointer = skill_root.parent.parent / "memory-wuxian-active-root.txt"
+    if not pointer.is_file():
+        raise ValueError("active MemoryWuxian archive pointer is missing")
+    archive_root = Path(pointer.read_text(encoding="utf-8").splitlines()[0]).expanduser()
+    if not archive_root.is_absolute() or not archive_root.is_dir():
+        raise ValueError("active MemoryWuxian archive pointer is invalid")
+    return archive_root.resolve()
+
+
+def _codex_cli() -> Path:
+    candidates = (
+        Path("/Applications/ChatGPT.app/Contents/Resources/codex"),
+        Path.home() / ".codex/.sandbox-bin/codex",
+    )
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate.resolve()
+    raise ValueError("Codex CLI executable is unavailable")
+
+
+def _extract_macos_skill(
+    package: Path,
+    destination: Path,
+    *,
+    runner=subprocess.run,
+) -> Path:
+    pkgutil = shutil.which("pkgutil") or "/usr/sbin/pkgutil"
+    cpio = shutil.which("cpio") or "/usr/bin/cpio"
+    expanded = destination / "expanded"
+    payload_root = destination / "payload"
+    runner(
+        [pkgutil, "--expand", str(package), str(expanded)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = expanded / "Payload"
+    if not payload.is_file():
+        raise ValueError("macOS release package has no component payload")
+    with gzip.open(payload, "rb") as archive:
+        listing = runner(
+            [cpio, "-it"],
+            stdin=archive,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+    if not listing:
+        raise ValueError("macOS release package payload is empty")
+    for item in listing:
+        normalized = item.removeprefix("./")
+        path = Path(normalized)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("macOS release package contains an unsafe payload path")
+    payload_root.mkdir()
+    with gzip.open(payload, "rb") as archive:
+        runner(
+            [cpio, "-idm", "--quiet"],
+            stdin=archive,
+            cwd=payload_root,
+            check=True,
+            capture_output=True,
+        )
+    source_root = (
+        payload_root
+        / "Library"
+        / "Application Support"
+        / "MemoryWuxian"
+        / "skill"
+    )
+    if not (source_root / "SKILL.md").is_file():
+        raise ValueError("macOS release package is missing the Skill payload")
+    return source_root
+
+
+def stage_install(
+    package: Path,
+    system: str,
+    *,
+    skill_root: Optional[Path] = None,
+    python_executable: Optional[Path] = None,
+    runner=subprocess.run,
+) -> str:
     if system == "Windows":
         command = f'"{package}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
-        subprocess.run(
+        runner(
             ["reg.exe", "ADD", WINDOWS_RUN_ONCE, "/V", WINDOWS_RUN_ONCE_VALUE,
              "/T", "REG_SZ", "/D", command, "/F"],
             check=True,
@@ -104,7 +190,42 @@ def stage_install(package: Path, system: str) -> str:
             **no_window_kwargs(),
         )
         return "staged-for-next-login"
-    return "downloaded-awaiting-macos-authorization"
+    if system != "Darwin":
+        raise ValueError(f"Automatic release updates are unsupported on {system}")
+    if skill_root is None or python_executable is None:
+        raise ValueError("macOS user transaction requires Skill and Python paths")
+    with tempfile.TemporaryDirectory(prefix="memory-wuxian-release-") as temporary:
+        source_root = _extract_macos_skill(
+            package,
+            Path(temporary),
+            runner=runner,
+        )
+        completed = runner(
+            [
+                str(python_executable),
+                str(source_root / "scripts" / "install_macos_transaction.py"),
+                "--source-root",
+                str(source_root),
+                "--skill-root",
+                str(skill_root),
+                "--archive-root",
+                str(_active_archive_root(skill_root)),
+                "--sessions-root",
+                str(Path.home() / ".codex/sessions"),
+                "--python-executable",
+                str(python_executable),
+                "--codex-cli",
+                str(_codex_cli()),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=420,
+        )
+        result = json.loads(completed.stdout)
+        if result.get("status") != "installed":
+            raise ValueError("macOS user transaction did not report installation")
+    return "installed-user-transaction"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -113,6 +234,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--state-file", default="~/.codex/memory-wuxian-update.json")
     parser.add_argument("--download-directory", default="~/.codex/updates/memory-wuxian")
     parser.add_argument("--interval-seconds", type=int, default=DEFAULT_INTERVAL_SECONDS)
+    parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     parser.add_argument("--release-json", help=argparse.SUPPRESS)
@@ -157,7 +279,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             download(assets[checksum_name], checksum)
             digest = verify_checksum(package, checksum)
             result.update({
-                "status": stage_install(package, platform.system()),
+                "status": stage_install(
+                    package,
+                    platform.system(),
+                    skill_root=skill_root,
+                    python_executable=Path(args.python_executable).expanduser(),
+                ),
                 "package": str(package),
                 "sha256": digest,
             })

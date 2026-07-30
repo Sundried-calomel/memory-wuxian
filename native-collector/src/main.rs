@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 #[cfg(not(target_os = "macos"))]
@@ -211,6 +211,7 @@ fn summarize_file_change(payload: &Value) -> Option<String> {
 
 #[derive(Parser, Debug)]
 #[command(
+    name = "memory-wuxian-collector",
     version,
     about = "Event-driven native Codex collector for Memory Wuxian"
 )]
@@ -302,8 +303,6 @@ struct BackupConfig {
     enabled: bool,
     #[serde(default)]
     directory: String,
-    #[serde(default = "default_backup_retention")]
-    retention_count: usize,
 }
 
 impl Default for BackupConfig {
@@ -311,7 +310,6 @@ impl Default for BackupConfig {
         Self {
             enabled: false,
             directory: String::new(),
-            retention_count: default_backup_retention(),
         }
     }
 }
@@ -359,10 +357,6 @@ fn default_semantic_worker_path() -> String {
 fn default_true() -> bool {
     true
 }
-fn default_backup_retention() -> usize {
-    1
-}
-
 #[derive(Debug, Default)]
 struct FileSyncResult {
     session_id: String,
@@ -2056,130 +2050,65 @@ impl Store {
         )
     }
 
-    fn prune_backup_snapshots(&self, backup_root: &Path) -> Result<Vec<String>> {
-        if self.config.backup.retention_count == 0 {
-            bail!("backup.retention_count must be at least 1");
-        }
-        let pattern = Regex::new(r"^\d{4}-\d{2}-\d{2}_\d{4}(?:\d{2}(?:_\d{6})?)?$")?;
-        let mut snapshots = Vec::new();
-        for entry in fs::read_dir(backup_root)? {
-            let path = entry?.path();
-            if path.is_dir()
-                && path
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .is_some_and(|name| pattern.is_match(name))
-            {
-                snapshots.push(path);
-            }
-        }
-        snapshots.sort();
-        let remove_count = snapshots
-            .len()
-            .saturating_sub(self.config.backup.retention_count);
-        let mut removed = Vec::new();
-        for path in snapshots.into_iter().take(remove_count) {
-            fs::remove_dir_all(&path)?;
-            removed.push(
-                path.file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned(),
-            );
-        }
-        Ok(removed)
-    }
-
-    fn create_backup(&self, reason: &str, metadata: Value) -> Result<Option<PathBuf>> {
+    fn record_backup_debt(&self, reason: &str, metadata: Value) -> Result<Option<PathBuf>> {
         if !self.config.backup.enabled {
             return Ok(None);
         }
         if self.config.backup.directory.trim().is_empty() {
             bail!("backup.enabled requires backup.directory");
         }
-        let backup_root = expand_tilde(Path::new(&self.config.backup.directory))?;
-        if backup_root.starts_with(&self.root) {
-            bail!("backup directory must be outside the archive root");
-        }
-        fs::create_dir_all(&backup_root)?;
-        self.lock("desktop-backup.lock", || {
-            let stamp = Local::now().format("%Y-%m-%d_%H%M%S_%6f").to_string();
-            let final_path = backup_root.join(&stamp);
-            let temporary = backup_root.join(format!(".{stamp}.tmp-{}", std::process::id()));
-            if final_path.exists() || temporary.exists() {
-                bail!(
-                    "backup destination already exists: {}",
-                    final_path.display()
-                );
-            }
-            fs::create_dir_all(&temporary)?;
-            let mut copied_files = Vec::new();
-            for entry in WalkDir::new(&self.root).sort_by_file_name() {
-                let entry = entry?;
-                let relative = entry.path().strip_prefix(&self.root)?;
-                if relative
-                    .components()
-                    .next()
-                    .is_some_and(|value| value.as_os_str() == ".locks")
-                {
-                    continue;
-                }
-                if entry.file_name() == ".DS_Store" {
-                    continue;
-                }
-                let destination = temporary.join(relative);
-                if entry.file_type().is_dir() {
-                    fs::create_dir_all(&destination)?;
-                    continue;
-                }
-                if entry.file_type().is_file() {
-                    if let Some(parent) = destination.parent() {
-                        fs::create_dir_all(parent)?;
-                    }
-                    fs::copy(entry.path(), &destination)?;
-                    copied_files.push(json!({
-                        "path": relative.to_string_lossy(),
-                        "sha256": file_sha256(&destination)?,
-                        "bytes": fs::metadata(&destination)?.len(),
-                    }));
-                }
-            }
-            let state = self.load_state()?;
-            let created_at = now_iso();
-            atomic_write_json(
-                &temporary.join("backup-manifest.json"),
-                &json!({
-                    "format_version": 1,
-                    "created_at": created_at,
-                    "source_root": self.root.to_string_lossy(),
-                    "reason": reason,
-                    "metadata": metadata,
-                    "state": state,
-                    "files": copied_files,
-                }),
-            )?;
-            fs::rename(&temporary, &final_path)?;
-            append_jsonl(
-                &backup_root.join("backup-log.jsonl"),
-                &json!({
-                    "created_at": created_at,
-                    "snapshot": stamp,
-                    "reason": reason,
-                    "source_root": self.root.to_string_lossy(),
-                    "file_count": copied_files.len(),
-                    "total_messages": state["total_messages"],
-                    "completed_rounds": state["completed_rounds"],
-                    "metadata": metadata,
-                }),
-            )?;
-            self.prune_backup_snapshots(&backup_root)?;
-            Ok(Some(final_path))
-        })
+        let path = self.root.join("pending/backup-debt.json");
+        let now = now_iso();
+        let existing = if path.exists() {
+            read_json(&path)?
+        } else {
+            json!({})
+        };
+        let first_recorded_at = existing
+            .get("first_recorded_at")
+            .and_then(Value::as_str)
+            .unwrap_or(&now)
+            .to_owned();
+        let mutation_count = existing
+            .get("mutation_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            + 1;
+        let mut reason_counts = existing
+            .get("reason_counts")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        let reason_count = reason_counts
+            .get(reason)
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            + 1;
+        reason_counts.insert(reason.to_owned(), json!(reason_count));
+        atomic_write_json(
+            &path,
+            &json!({
+                "format_version": 1,
+                "status": "pending",
+                "first_recorded_at": first_recorded_at,
+                "updated_at": now,
+                "mutation_count": mutation_count,
+                "reason_counts": reason_counts,
+                "latest_reason": reason,
+                "latest_metadata": metadata,
+            }),
+        )?;
+        Ok(Some(path))
     }
 
-    fn sync_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
+    fn sync_batch_with_semantic_worker(
+        &self,
+        paths: Vec<PathBuf>,
+        run_semantic_worker: bool,
+    ) -> Result<Value> {
         let mut result = self.lock("archive.lock", || self.sync_batch_unlocked(paths))?;
-        if self.config.ai_summary.enabled
+        if run_semantic_worker
+            && self.config.ai_summary.enabled
             && let Some(job) = result.get("created_summary_job").and_then(Value::as_str)
         {
             result["semantic_worker"] = self.run_one_shot_summary(Path::new(job));
@@ -2199,6 +2128,14 @@ impl Store {
             }),
         )?;
         Ok(result)
+    }
+
+    fn sync_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
+        self.sync_batch_with_semantic_worker(paths, true)
+    }
+
+    fn sync_startup_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
+        self.sync_batch_with_semantic_worker(paths, false)
     }
 
     fn run_one_shot_summary(&self, job_path: &Path) -> Value {
@@ -2236,7 +2173,8 @@ impl Store {
             .arg("--config")
             .arg(&self.config_path)
             .arg("--job")
-            .arg(job_path);
+            .arg(job_path)
+            .arg("--no-backup");
         if let Some(codex_cli) = &self.codex_cli {
             command.env("MEMORY_WUXIAN_CODEX", codex_cli);
         }
@@ -2315,8 +2253,8 @@ impl Store {
             "created_summary_job": created_job.as_ref().map(|path| path.to_string_lossy()),
             "deterministic_indexes": deterministic_indexes,
         });
-        let backup = if mutation {
-            self.create_backup("codex-native-sync", metadata.clone())?
+        let backup_debt = if mutation {
+            self.record_backup_debt("codex-native-sync", metadata.clone())?
         } else {
             None
         };
@@ -2327,7 +2265,8 @@ impl Store {
             "token_usage_changed_events": token_usage_changed_events,
             "created_summary_job": created_job.map(|path| path.to_string_lossy().into_owned()),
             "deterministic_indexes": deterministic_indexes,
-            "backup": backup.map(|path| path.to_string_lossy().into_owned()),
+            "backup": Value::Null,
+            "backup_debt": backup_debt.map(|path| path.to_string_lossy().into_owned()),
         }))
     }
 }
@@ -2427,20 +2366,6 @@ fn raw_source_sha256(records: &[Value]) -> Result<String> {
         })
         .collect();
     canonical_sha256(&Value::Array(payload?))
-}
-
-fn file_sha256(path: &Path) -> Result<String> {
-    let mut file = File::open(path)?;
-    let mut digest = Sha256::new();
-    let mut buffer = [0_u8; 1024 * 1024];
-    loop {
-        let count = file.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        digest.update(&buffer[..count]);
-    }
-    Ok(format!("{:x}", digest.finalize()))
 }
 
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -2759,18 +2684,24 @@ fn adaptive_fallback(idle_for: Duration) -> Duration {
 }
 
 struct CollectorTelemetry {
+    ready: bool,
     last_mode: &'static str,
     last_file_event: Option<String>,
     last_archive_update: Option<String>,
+    source_watermark: Option<String>,
+    archive_watermark: Option<String>,
     wakeups: VecDeque<(std::time::Instant, String)>,
 }
 
 impl CollectorTelemetry {
     fn new() -> Self {
         Self {
+            ready: false,
             last_mode: "active",
             last_file_event: None,
             last_archive_update: None,
+            source_watermark: None,
+            archive_watermark: None,
             wakeups: VecDeque::new(),
         }
     }
@@ -2791,8 +2722,17 @@ impl CollectorTelemetry {
         self.wakeups.push_back((std::time::Instant::now(), now));
     }
 
-    fn record_archive(&mut self) {
+    fn record_source_watermark(&mut self, watermark: Option<String>) {
+        self.source_watermark = watermark;
+    }
+
+    fn record_archive(&mut self, watermark: Option<String>) {
         self.last_archive_update = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true));
+        self.archive_watermark = watermark;
+    }
+
+    fn mark_ready(&mut self) {
+        self.ready = true;
     }
 
     fn write(&mut self, store: &Store, interval: Duration) -> Result<()> {
@@ -2807,18 +2747,30 @@ impl CollectorTelemetry {
         atomic_write_json(
             &store.root.join("imports/codex/collector-telemetry.json"),
             &json!({
-                "format_version": 1,
+                "format_version": 2,
                 "pid": std::process::id(),
+                "phase": if self.ready { "ready" } else { "starting" },
+                "ready": self.ready,
                 "mode": self.last_mode,
                 "fallback_interval_seconds": interval.as_secs(),
                 "last_file_event": self.last_file_event,
                 "last_archive_update": self.last_archive_update,
+                "source_watermark": self.source_watermark,
+                "archive_watermark": self.archive_watermark,
                 "wakeups_last_hour": self.wakeups.len(),
                 "recent_wakeups": self.wakeups.iter().map(|(_, timestamp)| timestamp).collect::<Vec<_>>(),
                 "updated_at": Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
             }),
         )
     }
+}
+
+fn newest_source_watermark(stamps: &HashMap<PathBuf, (u64, SystemTime)>) -> Option<String> {
+    stamps
+        .values()
+        .map(|(_, modified)| *modified)
+        .max()
+        .map(|modified| DateTime::<Utc>::from(modified).to_rfc3339_opts(SecondsFormat::Secs, true))
 }
 
 #[cfg(target_os = "macos")]
@@ -2833,6 +2785,10 @@ fn run_event_loop(
     let mut known_stamps = rollout_stamps(&initial_paths)?;
     let mut last_activity = std::time::Instant::now();
     let mut telemetry = CollectorTelemetry::new();
+    let initial_watermark = newest_source_watermark(&known_stamps);
+    telemetry.record_source_watermark(initial_watermark.clone());
+    telemetry.record_archive(initial_watermark);
+    telemetry.mark_ready();
     telemetry.write(store, ACTIVE_FALLBACK)?;
     eprintln!(
         "memory-wuxian-collector ready (kqueue with adaptive 5s/30s/5m metadata fallback): {}",
@@ -2850,6 +2806,8 @@ fn run_event_loop(
         }
         let current_paths = recent_rollouts(sessions_root, since)?;
         let current_stamps = rollout_stamps(&current_paths)?;
+        let source_watermark = newest_source_watermark(&current_stamps);
+        telemetry.record_source_watermark(source_watermark.clone());
         let changed_paths: Vec<PathBuf> = current_paths
             .iter()
             .filter(|path| known_stamps.get(*path) != current_stamps.get(*path))
@@ -2857,7 +2815,7 @@ fn run_event_loop(
             .collect();
         let sync_succeeded = changed_paths.is_empty() || sync_and_emit(store, changed_paths);
         if sync_succeeded && known_stamps != current_stamps {
-            telemetry.record_archive();
+            telemetry.record_archive(source_watermark);
         }
         if received_event || known_stamps != current_stamps {
             last_activity = std::time::Instant::now();
@@ -2869,6 +2827,7 @@ fn run_event_loop(
         if sync_succeeded {
             known_stamps = current_stamps;
         }
+        telemetry.write(store, interval)?;
     }
 }
 
@@ -2888,6 +2847,10 @@ fn run_event_loop(
     let mut known_stamps = rollout_stamps(&initial_paths)?;
     let mut last_activity = std::time::Instant::now();
     let mut telemetry = CollectorTelemetry::new();
+    let initial_watermark = newest_source_watermark(&known_stamps);
+    telemetry.record_source_watermark(initial_watermark.clone());
+    telemetry.record_archive(initial_watermark);
+    telemetry.mark_ready();
     telemetry.write(store, ACTIVE_FALLBACK)?;
     eprintln!(
         "memory-wuxian-collector ready (native watcher with adaptive 5s/30s/5m metadata fallback): {}",
@@ -2927,6 +2890,8 @@ fn run_event_loop(
 
         let current_paths = recent_rollouts(sessions_root, since)?;
         let current_stamps = rollout_stamps(&current_paths)?;
+        let source_watermark = newest_source_watermark(&current_stamps);
+        telemetry.record_source_watermark(source_watermark.clone());
         candidates.extend(
             current_paths
                 .iter()
@@ -2936,7 +2901,7 @@ fn run_event_loop(
         let sync_succeeded =
             candidates.is_empty() || sync_and_emit(store, candidates.into_iter().collect());
         if sync_succeeded && known_stamps != current_stamps {
-            telemetry.record_archive();
+            telemetry.record_archive(source_watermark);
         }
         if received_event || known_stamps != current_stamps {
             last_activity = std::time::Instant::now();
@@ -2945,6 +2910,7 @@ fn run_event_loop(
         if sync_succeeded {
             known_stamps = current_stamps;
         }
+        telemetry.write(store, interval)?;
     }
 }
 
@@ -3005,6 +2971,10 @@ fn run() -> Result<()> {
         args.python_executable.clone(),
         args.codex_cli.clone(),
     )?;
+    if !args.once {
+        let mut startup_telemetry = CollectorTelemetry::new();
+        startup_telemetry.write(&store, ACTIVE_FALLBACK)?;
+    }
     let initial_paths = if args.session_files.is_empty() {
         recent_rollouts(&sessions_root, since)?
     } else {
@@ -3027,7 +2997,11 @@ fn run() -> Result<()> {
         initial_paths.len()
     );
     eprintln!("memory-wuxian-collector startup: synchronization started");
-    let initial = store.sync_batch(initial_paths)?;
+    let initial = if args.once {
+        store.sync_batch(initial_paths)?
+    } else {
+        store.sync_startup_batch(initial_paths)?
+    };
     eprintln!("memory-wuxian-collector startup: synchronization completed");
     if args.once {
         emit(&initial)?;

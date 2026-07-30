@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/semantic-runtime-contract.schema.json",
+  "title": "Memory Wuxian semantic runtime contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "interface_version",
+    "provider",
+    "supported_platforms",
+    "model",
+    "runtime",
+    "embedding",
+    "installation"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "contract_id": {
+      "const": "memory-wuxian-semantic-runtime:multilingual-e5-small"
+    },
+    "interface_version": {"const": 1},
+    "provider": {"const": "multilingual-e5-small"},
+    "supported_platforms": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["macos", "windows", "linux"]}
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "dimension", "artifacts"],
+      "properties": {
+        "id": {"const": "intfloat/multilingual-e5-small"},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "dimension": {"const": 384},
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source", "path", "size", "sha256"],
+            "properties": {
+              "source": {"type": "string", "minLength": 1},
+              "path": {"type": "string", "pattern": "^[^/\\\\]+$"},
+              "size": {"type": "integer", "minimum": 1},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            }
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packages", "remote_model_code", "offline_inference"],
+      "properties": {
+        "packages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9._-]+==[^=]+$"}
+        },
+        "remote_model_code": {"const": false},
+        "offline_inference": {"const": true}
+      }
+    },
+    "embedding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "query_prefix",
+        "passage_prefix",
+        "max_length",
+        "pooling",
+        "normalize",
+        "similarity"
+      ],
+      "properties": {
+        "query_prefix": {"const": "query: "},
+        "passage_prefix": {"const": "passage: "},
+        "max_length": {"const": 512},
+        "pooling": {"const": "attention-mask-mean"},
+        "normalize": {"const": true},
+        "similarity": {"const": "dot-product"}
+      }
+    },
+    "installation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["installer", "model_root", "runtime_root"],
+      "properties": {
+        "installer": {"const": "scripts/install_multilingual_e5.py"},
+        "model_root": {"type": "string", "minLength": 1},
+        "runtime_root": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

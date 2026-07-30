@@ -1,5 +1,10 @@
 # Memory無限
 
+> **2.4.6:** この安定版では、デバイス間セマンティック・ランタイム契約、
+> 明示的なローカル E5 実装、初回セマンティック索引の線形 raw ポインタ生成を
+> 追加します。プラットフォームのランタイム、モデルキャッシュ、索引を
+> コピーせず、共通インターフェースと固定依存関係を同期します。
+>
 > Windows v1.7.8 セキュリティ注記：デスクトップのダッシュボードショートカットは、
 > コマンドライン引数なしで専用のコンソール非表示ネイティブランチャーだけを起動します。
 > 検証済み Python と有効なアーカイブのパスはローカルの `.codex` 設定に保存され、
@@ -88,7 +93,7 @@ $skill-installer install https://github.com/Sundried-calomel/memory-wuxian
 
 最初に[`SKILL.md`](SKILL.md)を読んでください。実際の会話履歴にはリポジトリ外のアーカイブルートを使い、ソース更新と個人記憶データが混ざらないようにします。
 
-公式インストーラーは安定版を毎日確認します。更新処理はブランチ、ドラフト、プレリリースを無視し、プラットフォーム用インストーラーとSHA-256ファイルの両方を取得します。チェックサムやファイル名が一致しない更新は保存しません。Windowsは次回ログイン時に検証済み更新をサイレントインストールし、macOSはOSのインストール承認を待つ検証済みPKGを保持します。`python scripts/install_auto_update.py --uninstall`で確認を無効化できます。
+公式インストーラーは安定版を毎日確認します。更新処理はブランチ、ドラフト、プレリリースを無視し、プラットフォーム用インストーラーとSHA-256ファイルの両方を取得します。チェックサムやファイル名が一致しない更新は拒否します。Windowsは次回ログイン時に検証済み更新をサイレントインストールします。既存のmacOSインストールでは、検証済みPKGからSkill payloadだけを展開し、ロールバック可能なユーザー領域トランザクションを実行するため、システムインストーラーも管理者パスワードも不要です。完全なPKGは初回インストールと復旧用に残します。`python scripts/install_auto_update.py --uninstall`で確認を無効化できます。
 
 Windowsではインストールまたは自動更新のたびに
 `~/.codex/memory-wuxian-active-root.txt`で指定された実アーカイブを保持し、
@@ -165,7 +170,10 @@ Windowsインストーラーは初回導入または更新のたびに
 `Memory无限状态台.lnk`を再作成します。アンインストールではショートカット
 だけを削除し、記憶アーカイブは削除しません。
 
-コンソールはlocalhostだけにバインドし、外部サービスへアーカイブを送りません。通常の状態表示は読取専用です。設定画面の明示的操作では、暗号化クラウド交換の有効化・無効化、即時同期、選択したChatGPTエクスポートのローカル取込みができます。`--window`を使わない場合はクロスプラットフォームのブラウザモード、`--no-browser`はローカルサーバーのみ、`--port`はポート指定です。
+コンソールはlocalhostだけにバインドし、外部サービスへアーカイブを送りません。通常の状態表示は読取専用です。「記憶検索」はCLIと同じ検証済み検索エンジンを使い、キーワード、多言語意味検索、ハイブリッドの各モードを提供します。各結果は人が読める原文、タイトル、日時、話者、原文行範囲、SHA-256バックリンクを保持します。設定画面の明示的操作では、暗号化クラウド交換の有効化・無効化、即時同期、選択したChatGPTエクスポートのローカル取込みができます。`--window`を使わない場合はクロスプラットフォームのブラウザモード、`--no-browser`はローカルサーバーのみ、`--port`はポート指定です。
+
+ローカル読取専用APIは `/api/memory-search` で、モード値は `keyword`、
+`semantic`、`hybrid` です。
 
 ## macOSでCodexを自動収集
 
@@ -184,9 +192,17 @@ LaunchAgentは最適化されたRustプロセスを維持し、OSのファイル
 
 各会話は`memory/conversations/`に個別保存され、一つのconversation IDだけを含みます。機械可読レコードと可読メッセージの両方を保持し、個別インデックスは`memory/indexes/by-conversation/<conversation>/`にあります。`raw/`の不変ファイルが権威ある情報源で、全文とインデックスは再構築可能な決定的ビューです。
 
-保護された`Documents`や`Desktop`にアーカイブまたはバックアップを置く場合、macOSで`bin/memory-wuxian-collector`にフルディスクアクセスを付与します。自動収集が有効と判断する前に、生成plist内の実行ファイルを確認してください。
+保護された`Documents`や`Desktop`にアーカイブまたはバックアップを置く場合、macOSで`bin/memory-wuxian-collector`にフルディスクアクセスを付与します。自動収集が有効と判断する前に、生成plist内の実行ファイルを確認してください。バックグラウンド定義は`/opt/homebrew/bin/python3`のような安定したPythonエントリを保持し、バージョン固有のHomebrew Cellarパスへ解決しません。通常のPython更新で新しいプライバシーIDが作られ、DesktopやDocumentsの許可が繰り返し要求されることを防ぎます。
 
-コレクターは`imports/codex/collector-telemetry.json`へ軽量テレメトリーを公開します。コンソールはactive、idle、deep-idle、補助確認間隔、最新ファイルイベント、最新アーカイブ書込、1時間の起動回数、CPU/メモリを表示します。テレメトリーは活動時またはモード変化時だけ書き込みます。
+コレクターは`imports/codex/collector-telemetry.json`へ軽量テレメトリーを公開します。コンソールはactive、idle、deep-idle、補助確認間隔、最新ファイルイベント、最新アーカイブ書込、1時間の起動回数、CPU/メモリを表示します。新しいプロセスはまず`phase=starting`と`ready=false`を報告し、初期同期が成功した後だけ`phase=ready`になります。アイドル中も各監視間隔で更新し、source watermarkとarchive watermarkを別々に保持します。起動処理中、テレメトリーの期限切れ、コレクター停止、またはsourceがarchiveより先行した場合、コンソールが警告します。
+
+既存のmacOSインストールは`scripts/install_macos_transaction.py`で更新します。候補をステージし、隔離アーカイブで合成ユーザー/assistantメッセージを正確に取得できることを証明してから切り替えます。切替後は新しいコレクターPID、新鮮なテレメトリー、現行ダッシュボードの自己診断を確認します。切替後の失敗では旧Skill、LaunchAgent、コレクターを復元します。通常更新はこのユーザー空間トランザクションを使い、完全インストーラーや管理者パスワードを必要としません。
+
+コレクターの初回同期はAI要約を待ちません。起動中の追随処理が要約しきい値に達した場合、不変の要約ジョブを永続化し、コレクターがreadyになった後で既存のsemantic-backfill workerに処理させます。これにより、原文と要約待ちを失わず、長時間のCodex CLI呼び出しがトランザクション切替を妨げません。
+
+時間範囲付きレポートでMemory无限を使う前に、`scripts/archive_waterline.py --cutoff <ISO-8601>`を実行します。レポート締切までの保持済みsourceが永続cursorで覆われていることを検証します。`--backfill`は明示的に指定し、遅延と判定された保持sourceだけに限定されます。最終結果が`covered`になるまでレポートを続行しません。
+
+日次アーカイブ棒グラフの高さは従来どおり文字数です。マウスでホバーするかキーボードでフォーカスすると、完全な日付、正確なアーカイブメッセージ数、正確な可視文字数を示すローカライズされたバブルが開きます。
 
 ## ChatGPT会話のインポート
 
@@ -204,7 +220,7 @@ python3 scripts/memory_cli.py import-chatgpt --export /path/to/chatgpt-export.zi
 
 ## WindowsでCodexを自動収集
 
-最初に環境ブートストラップを実行します。Pythonバージョンと、Python、Codex CLI、同梱コレクター、Codexセッションのパスを報告します。`-InstallMissing`は、互換性のある`>=3.9`ランタイムもCodex同梱Pythonもない場合だけPythonをインストールします。
+最初に環境ブートストラップを実行します。Pythonバージョンと、Python、Codex CLI、同梱コレクター、Codexセッションのパスを報告します。メインランタイムは Python 3.14.x のみをサポートします。`-InstallMissing`は、サポート対象ランタイムも互換性のあるCodex同梱Pythonもない場合だけ Python 3.14 をインストールします。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
@@ -229,7 +245,7 @@ python scripts/install_codex_autosync_windows.py `
 
 コレクターは16 MiB workerスタックを明示し、Windowsで大規模な初回全履歴を安全に解析・索引化します。
 
-既定設定では、メモリ変更成功のたびに主アーカイブ書込後、`~/Desktop/Memory無限-记忆归档备份/`へ完全スナップショットを作成し、マニフェストを検証して旧スナップショットを削除します。バックアップルートには最新復旧コピー1件と追記専用`backup-log.jsonl`が残ります。
+既定設定では、ネイティブのメモリ変更ごとに主アーカイブ書込後、`pending/backup-debt.json`をアトミックに更新します。低頻度の保守タスクが保留中の変更を1件の完全な検証済みスナップショットとして`~/Desktop/Memory無限-记忆归档备份/`へまとめ、成功後だけ債務を消去して旧スナップショットを削除します。コレクターはアーカイブ全体のコピーで起動や収集を停止しません。バックアップルートには最新復旧コピー1件と追記専用`backup-log.jsonl`が残り、より新しいスナップショットが保留中の場合はステータス画面が警告します。
 
 適用型再構築コマンドは以前の派生ファイルを`memory/archive/`に保存できます。内部復旧コピーは`backup.workspace_retention_count`に従い、既定で最新1件だけ保持します。開発編集は置換可能なコードバックアップ1件を使い、ライブ会話アーカイブを追加複製しません。
 
@@ -346,6 +362,8 @@ python3 scripts/install_cloud_sync.py \
 
 クラウドフォルダーは共有書込アーカイブではなく転送キューです。各ノードは自分のoutboxとackだけを書きます。取込み履歴は読取専用ピアレプリカに入り、`retrieve-global`はSSH・クラウドとも同じ検証ソース経路を使います。`cloud-disable`はアーカイブ、鍵、暗号化クラウドファイルを削除せず交換を停止します。
 
+macOSでは、OneDrive Files On-Demandのエンベロープがディレクトリに表示されても、まだローカルで読めない場合があります。Memory無限は復号前のプローブで有界な取得を開始し、一時的なFile Provider可用性エラーを破損ではなく再試行可能として扱います。`environment-v1`で送信側が過去のカーソルから広い範囲を再送した場合、永続化済みの接頭イベントがすべて完全一致するときだけ安全に続行し、競合する重複は引き続き失敗閉鎖で隔離します。
+
 1.6.1からこれらの操作はコンソール設定画面にもあります。クラウド同期スイッチは暗号化交換と5分タスクを同時に制御し、「今すぐ同期」は即時交換を1回実行します。設定済みフォルダーとタスク状態を表示するため、通常操作にAI会話や端末コマンドは不要です。
 
 ## Memory無限 2.0 の環境収束
@@ -361,6 +379,12 @@ python3 scripts/install_cloud_sync.py \
 持つ、署名済み・対象暗号化済み`environment-v1`ストリームだけを置きます。
 5分タスクはAIを使わず受信内容を決定論的に検証します。転送は更新を
 ステージングするだけで、Skillのインストールや規則の書換えは行いません。
+2.4.1以降、同一バッチ内の各登録項目は個別の安定したエクスポートIDを持ち、
+プロジェクト登録も同期されます。受信したプロジェクトは読み取り専用のpeer
+メタデータとして保存され、ローカルで自動作成・有効化されません。Skill
+パッケージは安全な完全YAMLパーサーを使用し、正当な入れ子構造、リスト、
+ブロック文字列を許可しつつ、重複キーと危険なタグを拒否します。インストーラー
+は必要なPyYAML 6.x依存関係を提供します。
 
 互換性のあるグローバル規則のfast-forwardは、そのポリシーを明示的に有効化
 した場合だけ登録できます。プロジェクト成果物、Skill、分岐、ID変更、権限拡大、
@@ -368,6 +392,18 @@ python3 scripts/install_cloud_sync.py \
 変更前にロールバック材料を永続化し、アトミック切替、インストール後検査、
 証拠レシート追記を行います。プロジェクト能力のグローバル昇格は、完全な
 プラットフォームマトリクス、出典証拠、明示承認を必要とする別の手順です。
+
+検証済みのローカルなアーキテクチャ知見は、不変のガバナンス提案として
+記録できます。ペアリング済みデバイスは同じ署名済み・対象暗号化済み
+Environmentストリームで提案を交換しますが、受信提案は読取専用の証拠の
+ままです。`work-system-governor`による分類と検証、明示承認が完了するまで、
+新しい規則やSkillリビジョンにはなりません。
+
+証拠に結び付いた製品進化記録は、範囲を限定した開発履歴、検証済みの現状、
+修正後の次回開発フロー、再利用可能な教訓候補を保存できます。交換後も
+読取専用（read-only）の証拠であり、製品修復やグローバルガバナンス受入れを自動実行
+しません。決定論的タスクが変更証拠を収集してキュー化し、AIは限定された
+意味レビューが必要な時だけ呼び出されます。
 
 ダッシュボードのEnvironmentビューでは、インベントリ、受信判定、競合、
 昇格候補、手動更新確認を表示します。2.0の完全なCLIコマンド群は次の通りです。
@@ -405,6 +441,50 @@ environment-conflict-resolve
 environment-promotion-propose
 environment-promotion-transition
 environment-promotions
+environment-governance-propose
+environment-governance-proposals
+environment-product-evolution-record
+environment-product-evolution-records
+environment-governance-ai-discover
+environment-governance-ai-status
+environment-governance-ai-enqueue
+environment-governance-ai-configure
+environment-governance-ai-tick
+```
+
+### 制限付きガバナンス AI
+
+Memory無限は、AI会話を常時起動せずに意味処理タスクをキューできます。
+スクリプトが5分ごとにモデルを使わず発見と期限判定を行い、互換性のある
+マイクロバッチが期限に達した場合だけ一回限りのCodex workerを起動します。
+製品バッチは3件または6時間（最大5件）、ガバナンス分類は同一ownerの5件
+または24時間（最大10件）で起動し、1バッチ80,000文字、1日6回を上限と
+します。緊急項目は件数と経過時間のしきい値を迂回できます。
+
+この機能は既定で無効です。製品タスクは発生元デバイスだけで実行し、
+グローバル分類には明示的な調整デバイスが必要です。すべての結果は厳密な
+schema検証を通した人間レビュー待ちの草案です。workerは規則の承認、
+Skillのインストール、製品修復、履歴書換えを実行できません。
+
+### 説明可能な設定とデバイス互換性
+
+Memory無限は既存YAMLを閉じた決定的なconfiguration-v1ビューへ
+コンパイルしますが、元ファイルを変更せず、アーカイブも初期化しません。
+各有効値は由来レイヤーを持ち、有効設定全体には安定したSHA-256があります。
+未知キー、重複キー、無効な型、範囲外の値は失敗として閉じます。
+
+`environment-capability-status`は製品、プラットフォーム、ランタイム、
+プロトコル、インターフェースの互換性だけを報告します。能力オファーのない
+旧デバイスは診断状態のまま既存同期を妨げません。互換判定がインストール、
+信頼、権限、同期権限を与えることはありません。コンソールの「システム」
+（System）
+タブも同じ読取専用情報を表示します。
+
+```bash
+python3 scripts/memory_cli.py configuration-compile
+python3 scripts/memory_cli.py configuration-explain
+python3 scripts/memory_cli.py environment-capability-status
+python3 scripts/memory_cli.py environment-capability-status --peer-offer /path/to/peer-offer.json
 ```
 
 ## プライバシーと統合境界
@@ -429,6 +509,19 @@ v1.7.5 以降、親プロセスが `PYTHONIOENCODING` で GBK などの旧式エ
 ディングを指定しても、Windows CLI のリダイレクト出力は常に UTF-8 です。
 旧式の対話コンソールでは未対応文字だけをエスケープし、メモリ操作は停止
 しません。
+
+v2.4.2以降、Windowsネイティブ状態画面ランチャーは未使用のループバック
+ポートをOSに要求し、実際に割り当てられたポートを開きます。8765を前提と
+しないため、別のローカルアプリが先に8765を使用してもMemory無限の画面を
+置き換えることはありません。
+
+v2.4.3以降、[`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md)を
+モジュール境界の唯一の正本とし、
+[`docs/module-architecture.json`](docs/module-architecture.json)を
+機械可読な所有権台帳とします。各本番ファイルは必ず一つのモジュールだけに
+所属し、`scripts/check_architecture_contract.py`は未登録、重複所有、および
+禁止依存を拒否します。WindowsとmacOSのパッケージにこれらのゲートが
+含まれない場合、リリースは失敗します。
 
 ```text
 init
@@ -467,6 +560,9 @@ cloud-sync
 cloud-status
 cloud-enable
 cloud-disable
+configuration-compile
+configuration-explain
+environment-capability-status
 ```
 
 セマンティック要約を手動復旧する場合は、さらに `semantic_worker.py` と
@@ -509,6 +605,32 @@ Memory無限は[MIT License](LICENSE.txt)で公開されています。
 `retrieval-evaluate` は可読 JSONL テストセットで recall-at-k、誤引用数、
 レイテンシを測定します。`semantic-index-build` の既定
 `local-hash-v1` は完全オフラインで、モデルをダウンロードせず外部サービスも
-利用しません。`semantic-retrieve` は raw SHA-256 を再検証し、会話・
+利用しません。多言語ニューラル検索を使う場合は
+`python scripts/install_multilingual_e5.py` を実行してから
+`semantic-index-build --provider multilingual-e5-small` を実行します。
+任意の 384 次元 `intfloat/multilingual-e5-small` ONNX モデルは不変リビジョンと
+正確な SHA-256 に固定され、隔離環境でリモートモデルコードを無効化し、
+推論を強制的にオフラインで行います。Windows の隔離環境は Python 3.12 に
+固定され、中国語を含む Skill、アーカイブ、worker、索引パスを扱えます。
+`semantic-retrieve` は raw SHA-256 を再検証し、会話・
 メッセージ ID、raw パス、正確な行範囲を返します。
 `semantic-index-clear` は再構築可能なベクトルだけを削除します。
+
+E5 インターフェースは、独立した Environment Registry に不変の
+`global-runtime-contract` として登録できます。
+
+```bash
+python scripts/memory_cli.py semantic-runtime-status
+python scripts/memory_cli.py environment-register-semantic-runtime \
+  --origin-node-id <node-id> --apply
+python scripts/memory_cli.py environment-realize-semantic-runtime
+python scripts/memory_cli.py environment-realize-semantic-runtime --apply
+```
+
+署名済み・対象暗号化済み `environment-v1` ストリームが、契約をペア済み
+デバイスへ転送します。契約はモデル revision、成果物ハッシュ、ランタイム
+パッケージ、query/passage プレフィックス、pooling、正規化、類似度、
+インストーラー入口を固定します。受信または受理だけではインストールや
+ダウンロードは行われません。各デバイスが受理済み契約を明示的にローカル
+実装し、モデル、仮想環境、認証情報、セマンティック索引はデバイス内に
+保持します。

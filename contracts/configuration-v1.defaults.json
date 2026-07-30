@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "contract_id": "memory-wuxian-configuration-defaults-v1",
+  "configuration": {
+    "memory": {
+      "root_directory": "./memory",
+      "timezone": "local"
+    },
+    "raw": {
+      "format": "markdown-json-records",
+      "split_by": "day",
+      "append_only": true,
+      "flush_after_each_message": true
+    },
+    "summaries": {
+      "level_1_trigger_rounds": 5,
+      "level_1_trigger_characters": 20000,
+      "automatic_semantic_jobs": true,
+      "higher_level_trigger_count": 10,
+      "maximum_summary_depth": 8,
+      "persist_all_levels": true,
+      "immutable": true
+    },
+    "ai_summary": {
+      "enabled": true,
+      "python_path": "/opt/homebrew/bin/python3",
+      "python_path_windows": "python.exe",
+      "worker_path": "scripts/semantic_worker.py",
+      "codex_cli_path": "/Applications/ChatGPT.app/Contents/Resources/codex",
+      "codex_cli_path_windows": "~/.codex/.sandbox-bin/codex.exe",
+      "timeout_seconds": 900,
+      "model": ""
+    },
+    "governance_ai": {
+      "enabled": false,
+      "mode": "automatic-drafts",
+      "coordinator_node_id": "",
+      "governor_skill_path": "~/.codex/skills/work-system-governor",
+      "codex_cli_path": "/Applications/ChatGPT.app/Contents/Resources/codex",
+      "codex_cli_path_windows": "~/.codex/.sandbox-bin/codex.exe",
+      "timeout_seconds": 900,
+      "model": "",
+      "product_min_items": 3,
+      "product_max_items": 5,
+      "product_max_wait_seconds": 21600,
+      "classification_min_items": 5,
+      "classification_max_items": 10,
+      "classification_max_wait_seconds": 86400,
+      "maximum_evidence_characters": 80000,
+      "maximum_ai_runs_per_day": 6,
+      "maximum_failed_retries": 2
+    },
+    "indexes": {
+      "timeline": true,
+      "concepts": true,
+      "machine_readable_jsonl": true
+    },
+    "retrieval": {
+      "verify_against_raw": true,
+      "context_messages_before": 3,
+      "context_messages_after": 3,
+      "maximum_initial_candidates": 10,
+      "log_queries": true
+    },
+    "heartbeat": {
+      "create_pending_jobs": true,
+      "retry_failed_jobs": true,
+      "validate_references": true,
+      "detect_overlapping_ranges": true
+    },
+    "integrity": {
+      "hash_algorithm": "sha256",
+      "verify_raw_records": true,
+      "verify_summary_sources": true,
+      "verify_summary_files": true
+    },
+    "backup": {
+      "enabled": true,
+      "directory": "~/Desktop/Memory無限-记忆归档备份",
+      "retention_count": 1,
+      "workspace_retention_count": 1
+    },
+    "codex": {
+      "sessions_root": "~/.codex/sessions",
+      "collector": "native-event-driven",
+      "debounce_milliseconds": 400
+    },
+    "federation": {
+      "enabled": false,
+      "replica_directory": "",
+      "transport": "offline",
+      "ssh_strict_host_key_checking": true
+    },
+    "cloud_transport": {
+      "enabled": false,
+      "directory": "",
+      "check_interval_seconds": 300,
+      "merge_window_seconds": 900,
+      "early_flush_bytes": 1048576,
+      "maximum_pending_seconds": 3600,
+      "acknowledged_retention_seconds": 2592000
+    },
+    "context_refresh": {
+      "enabled": true,
+      "round_interval": 10,
+      "utilization_low_percent": 65,
+      "utilization_high_percent": 80,
+      "compaction_drop_percent": 20,
+      "context_fraction_percent": 1,
+      "soft_max_tokens": 3000,
+      "absolute_max_tokens": 10000,
+      "recent_rounds": 3
+    },
+    "safety": {
+      "redact_secrets": true,
+      "atomic_writes": true,
+      "file_locking": true
+    }
+  }
+}

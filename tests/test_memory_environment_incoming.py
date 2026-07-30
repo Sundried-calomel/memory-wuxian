@@ -162,10 +162,88 @@ class EnvironmentIncomingProcessorTests(unittest.TestCase):
         result = self.processor().process(apply=True)
         self.assertEqual(result["results"][0]["decision"], "no-change")
         self.assertFalse(self.processor().decisions_root.exists())
+        self.assertFalse(self.processor().completed_root.exists())
+        self.assertFalse(self.processor().batch_root.exists())
+        self.assertEqual(self.processor().status()["staged_events"], 1)
+        self.assertEqual(self.processor().status()["processed_events"], 0)
+        second = self.processor().process(apply=True)
+        self.assertEqual(second["processed"], 0)
+        self.assertEqual(second["results"][0]["decision"], "no-change")
+
+    def test_no_change_entries_do_not_starve_newer_event(self):
+        current = self.revision("same\n", 1)
+        self.register(current, "same\n")
+        self.stage(current, "same\n")
+        newer = self.revision("newer\n", 2, base=current["revision_id"])
+        self.stage(newer, "newer\n")
+        first = self.processor().process(apply=True, maximum_events=1)
+        self.assertEqual(
+            [item["decision"] for item in first["results"]],
+            ["no-change", "ready-fast-forward"],
+        )
+        self.assertEqual(first["processed"], 1)
+        self.assertEqual(first["examined"], 2)
+        self.assertEqual(first["results"][1]["revision_id"], newer["revision_id"])
+        self.assertFalse(
+            (
+                self.processor().completed_root
+                / (
+                    hashlib.sha256(
+                        (
+                            self.registry.staging_dir
+                            / "incoming"
+                            / "node-a"
+                            / "00000000000000000001-shared.json"
+                        ).read_bytes()
+                    ).hexdigest()
+                    + ".json"
+                )
+            ).exists()
+        )
+
+    def test_batch_failure_persists_completed_item_evidence(self):
+        first = self.revision("first\n", 1)
+        first_path = self.stage(first, "first\n")
+        invalid_path = (
+            self.registry.staging_dir
+            / "incoming"
+            / "node-z"
+            / "00000000000000000002-invalid.json"
+        )
+        invalid_path.parent.mkdir(parents=True, exist_ok=True)
+        invalid_path.write_text("{", encoding="utf-8")
+        result = self.processor().process(apply=True)
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["processed"], 1)
+        self.assertIn("JSONDecodeError", result["error"])
+        evidence = Path(result["batch_evidence_path"])
+        self.assertTrue(evidence.is_file())
+        payload = json.loads(evidence.read_text(encoding="utf-8"))
+        self.assertEqual(
+            payload["completed_stage_sha256"],
+            [hashlib.sha256(first_path.read_bytes()).hexdigest()],
+        )
+        self.assertEqual(self.processor().status()["processed_events"], 1)
+
+    def test_zero_and_n_event_batches_are_deterministic(self):
+        empty = self.processor().process(apply=True)
+        self.assertEqual(empty["processed"], 0)
+        for version in range(1, 4):
+            content = f"remote-{version}\n"
+            self.stage(self.revision(content, version), content)
+        result = self.processor().process(apply=True, maximum_events=3)
+        self.assertEqual(result["processed"], 3)
+        self.assertEqual(
+            [item["event_sequence"] for item in result["results"]],
+            [1, 2, 3],
+        )
+        self.assertEqual(self.processor().status()["staged_events"], 0)
 
     def test_explicit_accept_registers_compatible_stage_without_installing(self):
         remote = self.revision("new\n", 1)
         path = self.stage(remote, "new\n")
+        processed = self.processor().process(apply=True)
+        self.assertEqual(processed["processed"], 1)
         stage_hash = hashlib.sha256(path.read_bytes()).hexdigest()
         preview = self.processor().accept(stage_hash)
         self.assertEqual(preview["status"], "preview")

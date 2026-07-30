@@ -48,35 +48,104 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     behavior must replace the platform launcher, preserve the active archive,
     bind the launcher version to the package version, and pass a live
     post-install self-check before the release is considered complete.
-36. Rebuild the Windows native-dashboard shortcut after every installer upgrade, using the preserved active archive root and the Python runtime validated by the current bootstrap.
-37. Persist top-level Codex `token_count` telemetry in a separate derived
+36. Keep `local-hash-v1` as the no-download semantic default. The optional
+    `multilingual-e5-small` provider must use the pinned installer, immutable
+    model revision, exact artifact SHA-256 verification, an isolated runtime,
+    offline inference, and disabled remote model code. Semantic vectors remain
+    disposable derived data and every returned hit must be verified against raw
+    history.
+37. Rebuild the Windows native-dashboard shortcut after every installer upgrade, using the preserved active archive root and the Python runtime validated by the current bootstrap.
+38. Persist top-level Codex `token_count` telemetry in a separate derived
     per-conversation ledger. Call it Codex-reported model usage, not billing
     usage. Treat cached input and reasoning output as included subfields, detect
     cumulative-counter resets, exclude subagents, and never place telemetry in
     raw dialogue or semantic summaries.
-38. Keep Environment Registry authority, locks, cursors, staging, and receipts
+39. Keep Environment Registry authority, locks, cursors, staging, and receipts
     independent from the 1.x conversation archive. Environment operations must
     never rewrite raw dialogue, summaries, or local archive ownership.
-39. Represent global Rules, project Rules, global Skills, and project Skills as
+40. Represent global Rules, project Rules, global Skills, and project Skills as
     immutable, content-addressed revisions with explicit node-local bindings.
     Synchronize managed rule blocks only; preserve all bytes outside those
     blocks.
-40. Exchange environment revisions through a separate signed and
+41. Exchange environment revisions through a separate signed and
     target-encrypted `environment-v1` stream. Each device keeps its own writable
     local state and receives remote conversation history only as read-only
     replicas.
-41. Let the five-minute cloud task validate and stage incoming Environment
+42. Let the five-minute cloud task validate and stage incoming Environment
     updates without AI. No-change must create no decision, receipt, backup, or
     model call.
-42. Never auto-install a Skill or project-scoped artifact. Divergence, identity
+43. Never auto-install a Skill or project-scoped artifact. Divergence, identity
     changes, permission expansion, persistent-component expansion, and
     incompatible runtimes require explicit review and fail closed.
-43. Install only a registered immutable revision through a verified binding.
+44. Install only a registered immutable revision through a verified binding.
     Validate package contents, platform and runtime contracts, preserve a
     rollback object before mutation, atomically switch, self-check, and append a
     receipt.
-44. Promote reusable project capability to global scope only through a separate
+45. Promote reusable project capability to global scope only through a separate
     evidence-bearing proposal, complete platform matrix, and explicit approval.
+46. Transport governance-insight proposals only as immutable, source-bound
+    evidence. Keep imported proposals in read-only peer replicas; transfer,
+    repetition, or arrival from another device never constitutes semantic
+    review, acceptance, Rule registration, or Skill installation.
+47. Keep governance-AI orchestration disabled until explicitly enabled.
+    Five-minute checks are model-free; invoke at most one ephemeral Codex
+    worker only when a bounded compatible batch is due.
+48. Keep product work on its source device and run cross-device governance
+    classification only on the explicitly configured coordinator.
+49. Treat every AI result as a schema-validated, reviewable draft. It must
+    never accept a Rule, install a Skill, remediate a product, rewrite history,
+    or mark itself human-reviewed.
+50. Validate evidence hashes before invocation. Retry a failed item at most
+    twice, then isolate it without blocking unrelated queue work.
+51. Assign every exported Environment Registry item a stable identity derived
+    from its transaction, operation, and immutable object identity. Batch
+    registration must export every artifact and project exactly once.
+52. Parse Skill metadata with a safe full YAML loader. Permit legal nested
+    mappings, lists, and block scalars; reject unsafe tags and duplicate keys.
+    Project registrations received from peers remain read-only replicas and
+    never create or activate a local project automatically.
+53. The native dashboard must bind an operating-system-assigned loopback port
+    and open the server's actual port. Never share or assume another local
+    application's fixed port.
+54. Treat `PRODUCT_ARCHITECTURE.md` as the canonical module-boundary owner and
+    `docs/module-architecture.json` as its machine-readable source-ownership
+    registry. Register each new production file under exactly one owner and
+    pass `scripts/check_architecture_contract.py` for every product change.
+    Unowned files, overlapping owners, and prohibited dependencies fail closed.
+55. Treat a visible cloud-provider placeholder that is not locally readable as
+    transient. Trigger bounded hydration before decrypting it and never
+    quarantine a Files On-Demand availability error as cryptographic damage.
+56. Recover an overlapping `environment-v1` range only after every persisted
+    prefix event matches exactly. Prefer the widest newest valid candidate for
+    one expected start, preserve exact replay for lost acknowledgements, and
+    keep archive and Environment status histories independent.
+57. Preserve stable executable entry paths in macOS background definitions.
+    Never resolve a Homebrew or managed-runtime symlink into a version-specific
+    installation directory, because a runtime upgrade would create a new macOS
+    privacy identity and can trigger repeated Desktop or Documents prompts.
+58. Apply an existing macOS installation only through the user-space candidate
+    transaction. Probe exact-message capture in an isolated archive before
+    cutover; after cutover verify a new live collector and the current
+    dashboard; on failure restore the previous Skill, plist, and collector.
+59. Publish collector telemetry on every monitoring interval, including idle
+    intervals. Keep source and archive watermarks separate, expose stale
+    telemetry and archive lag, and never infer archive freshness only from a
+    running PID.
+60. Before generating a report for a historical cutoff, run the deterministic
+    archive-waterline preflight. If retained source bytes through the cutoff
+    are not covered by persisted cursors, stop or perform the explicit bounded
+    backfill and verify again before using Memory無限 evidence.
+61. Synchronize semantic capability through an immutable
+    `global-runtime-contract`, not by copying a platform virtual environment.
+    Pin the model revision, artifact hashes, runtime packages, embedding
+    interface, and platform-neutral installer entry. Receiving or accepting a
+    contract never installs or downloads it; local realization requires an
+    explicit reviewed `--apply`, and semantic indexes remain device-local.
+62. On an existing macOS installation, routine stable-release updates must
+    verify the PKG checksum, extract only its Skill payload in a temporary
+    directory, and invoke `install_macos_transaction.py`. Do not open the
+    platform installer or request administrator credentials unless this is a
+    first install, recovery, or declared privileged-component migration.
 
 ## Operating workflow
 
@@ -126,6 +195,57 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     governance state. Resolve a conflict or advance a promotion only with
     explicit reviewer and evidence fields; never infer approval from recency or
     successful transfer.
+32. Validate a governance insight with `work-system-governor`, then use
+    `environment-governance-propose` to preview and persist the immutable local
+    envelope. Use `environment-governance-proposals` to inspect local and peer
+    proposals; acceptance remains a separate global Owner workflow.
+33. Validate product evolution reports with `work-system-governor`, then use
+    `environment-product-evolution-record` to preserve and exchange the
+    immutable evidence record. Peer records stay read-only and never trigger
+    product remediation or governance acceptance.
+34. Use `environment-governance-ai-discover` for model-free discovery,
+    `environment-governance-ai-status` for inspection, and
+    `environment-governance-ai-tick` for a bounded one-shot review. Configure
+    or enqueue only through preview-first CLI commands. Human review remains
+    mandatory before any downstream acceptance or installation.
+35. Before implementing a product change, identify its canonical owner in
+    `PRODUCT_ARCHITECTURE.md`. If it adds or relocates production code, update
+    `docs/module-architecture.json` first, then run the architecture contract
+    before focused behavioral tests.
+36. On macOS, run `scripts/install_macos_transaction.py` for an existing
+    installation. Treat its isolated candidate probe, live PID replacement,
+    telemetry freshness, dashboard self-check, and rollback proof as one
+    indivisible update contract.
+37. Before a time-bounded report reads Memory無限, run
+    `scripts/archive_waterline.py --cutoff <ISO-8601>`. Use `--backfill` only
+    for the exact lagging retained rollout files and require a final `covered`
+    result.
+38. During collector startup, persist any due semantic job but defer AI
+    execution to the independent semantic-backfill scheduler. Do not hold
+    collector readiness or update cutover open while a Codex CLI summary runs.
+39. Let native capture atomically record coalescing backup debt instead of
+    copying the complete archive inline. Let the maintenance worker create one
+    complete snapshot for all pending mutations, and clear the debt only after
+    that snapshot succeeds.
+40. Register the bundled E5 interface with
+    `environment-register-semantic-runtime --origin-node-id <node>`, let the
+    existing `environment-v1` stream transport it, and use
+    `environment-realize-semantic-runtime --apply` only after explicit review
+    on the receiving device. Use `semantic-runtime-status` to verify the
+    bundled contract, registered revision, model artifacts, and local runtime.
+41. Treat `configuration-compile`, `configuration-explain`, and
+    `environment-capability-status` as stateless read-only diagnostics. They
+    must not construct `MemoryStore`, initialize an archive, take an archive
+    lock, alter trust, grant permissions, install capabilities, or start
+    synchronization.
+42. Keep the v2.5 effective-configuration contract closed and deterministic.
+    Unknown or duplicate keys and invalid values fail closed. Preserve
+    `--root`, `MEMORY_WUXIAN_ROOT`, active-root pointer, then configured-root
+    precedence.
+43. Memory-sharing scopes are design-only until a separately approved
+    multi-user, third-party-write, partial-sharing, hosted-service,
+    non-shareable-data, or cross-identity requirement activates the review.
+    Do not add runtime scope fields or controls before that decision.
 
 ## Commands
 
@@ -149,6 +269,11 @@ python3 scripts/semantic_backfill.py --root memory --config config.yaml --max-jo
 python3 scripts/memory_cli.py ingest-summary --job memory/pending/<job>.json --summary-json <summary>.json
 python3 scripts/memory_cli.py retrieve --query "..."
 python3 scripts/memory_cli.py retrieve --query "..." --mode current-policy
+python3 scripts/memory_cli.py semantic-runtime-status
+python3 scripts/memory_cli.py environment-register-semantic-runtime --origin-node-id <node>
+python3 scripts/memory_cli.py environment-register-semantic-runtime --origin-node-id <node> --apply
+python3 scripts/memory_cli.py environment-realize-semantic-runtime
+python3 scripts/memory_cli.py environment-realize-semantic-runtime --apply
 python3 scripts/memory_cli.py conversation-tail --title "Codex conversation title" --exclude-conversation-id "codex:<active-task-id>" --messages 20
 python3 scripts/memory_cli.py register-title --conversation-id "codex:<task-id>" --title "Confirmed title"
 python3 scripts/memory_cli.py rebuild-state
@@ -185,6 +310,20 @@ python3 scripts/memory_cli.py environment-incoming-status
 python3 scripts/memory_cli.py environment-process-incoming
 python3 scripts/memory_cli.py environment-conflicts
 python3 scripts/memory_cli.py environment-promotions
+python3 scripts/memory_cli.py environment-governance-propose --proposal-json /path/to/proposal.json
+python3 scripts/memory_cli.py environment-governance-proposals
+python3 scripts/memory_cli.py environment-product-evolution-record --record-json /path/to/product-evolution.json
+python3 scripts/memory_cli.py environment-product-evolution-records
+python3 scripts/memory_cli.py environment-governance-ai-discover
+python3 scripts/memory_cli.py environment-governance-ai-status
+python3 scripts/memory_cli.py environment-governance-ai-enqueue --item-json /path/to/item.json
+python3 scripts/memory_cli.py environment-governance-ai-configure --policy-json /path/to/policy.json
+python3 scripts/memory_cli.py environment-governance-ai-tick --run-ai --maximum-batches 1
+python3 scripts/memory_cli.py configuration-compile
+python3 scripts/memory_cli.py configuration-explain
+python3 scripts/memory_cli.py environment-capability-status
+python3 scripts/memory_cli.py environment-capability-status --peer-offer /path/to/peer-offer.json
+python3 scripts/install_governance_ai.py --archive-root /path/to/memory --skill-root /path/to/memory-wuxian --python-executable /path/to/python --load
 scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
 powershell -ExecutionPolicy Bypass -File scripts/build_native_collector.ps1
@@ -208,6 +347,9 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 - Read [implementation.md](references/implementation.md) before changing storage formats, counters, summary hierarchy, retrieval behavior, state recovery, locking, privacy behavior, or client integration.
 - Read [schemas.md](references/schemas.md) when constructing or validating raw records, summary JSON, indexes, state, or retrieval output.
 - Read [decisions.md](references/decisions.md) before changing architectural behavior.
+- Read [deferred-memory-scope-design.md](references/deferred-memory-scope-design.md)
+  before proposing memory-sharing boundaries. It is a design trigger, not an
+  implemented privacy feature.
 - Read [release-rehearsal.md](references/release-rehearsal.md) before release
   claims. Run `scripts/run_release_rehearsal.py`; never describe unrun or
   evidence-free scenarios as passed.

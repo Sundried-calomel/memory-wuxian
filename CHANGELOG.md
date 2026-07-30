@@ -1,5 +1,238 @@
 # Changelog
 
+## 2.5.1 - 2026-07-31
+
+- Rebuilt the checked-in Windows collector from the current Rust sources so
+  its reported version matches the product version.
+- Restored a non-optional checked-in native-version regression test on
+  supported desktop platforms.
+- Made both installer jobs execute the freshly built collector and envelope
+  before packaging, and made the Windows job prove that all three native
+  executables are included in the installer payload.
+- Wait for newly published cloud envelopes to become visible through their
+  returned display path before reporting a successful sync.
+- Reserve Windows extended-path prefixes for paths near the legacy path-length
+  boundary, avoiding short-path file-provider rename anomalies while retaining
+  deep OneDrive folder support.
+- Return an operable native `path` for long Windows cloud envelopes while
+  retaining a prefix-free `display_path` for dashboards and logs.
+- Run the macOS symlink contract on macOS CI instead of requiring Windows
+  developer-mode symlink privileges during the Windows rehearsal.
+- Retained the stable-line dashboard SSE startup-race, Windows native cloud
+  path, and agent-rule newline fixes without merging the obsolete beta branch.
+
+## 2.5.0 - 2026-07-30
+
+- Restricted the supported main runtime to Python 3.14.x and removed the
+  redundant Python 3.9-3.14 full-suite compatibility matrix. macOS, Windows,
+  and Ubuntu release gates now validate the same Python 3.14 contract.
+- Kept the separately pinned Python 3.12 semantic-model environment unchanged;
+  it remains an isolated provider runtime rather than a supported main runtime.
+- Added a closed configuration-v1 compiler with deterministic hashes,
+  per-value source provenance, preserved archive-root precedence, and
+  fail-closed duplicate, unknown-key, type, range, and relationship checks.
+- Added stateless read-only CLI commands for effective configuration
+  compilation, source explanation, and device capability diagnostics without
+  archive initialization or locking.
+- Added closed path-free capability offers and deterministic compatibility
+  reason codes. Legacy peers continue through existing synchronization, and
+  negotiation grants no installation, trust, permission, or sync authority.
+- Added a localized read-only System dashboard view for configuration and
+  local capability diagnostics.
+- Recorded memory sharing scopes as a future decision trigger only; no runtime
+  fields, migration, filtering, enforcement, or dashboard controls were added.
+
+## 2.4.7 - 2026-07-30
+
+- Changed routine macOS updates to extract the verified Skill payload from the
+  published PKG and run the existing user-space transaction instead of waiting
+  for the privileged platform installer.
+- Kept full PKG installation for first install and recovery while preserving
+  active archives, device configuration, stable executable paths, isolated
+  candidate probing, live post-switch checks, and automatic rollback for
+  routine updates.
+- Made the auto-update LaunchAgent pass the stable Python entry path through to
+  the transaction, avoiding version-specific Homebrew Cellar identities.
+
+## 2.4.6 - 2026-07-30
+
+- Added a content-addressed `global-runtime-contract` Environment artifact for
+  the optional multilingual E5 capability. It synchronizes the pinned model,
+  artifact hashes, runtime packages, embedding interface, and installer entry
+  across macOS, Windows, and Linux without copying platform virtual
+  environments, credentials, models, or semantic indexes.
+- Added preview-first CLI flows to register, inspect, and explicitly realize
+  the shared semantic runtime contract. Incoming contracts remain
+  `pending-review`; registration and cloud transport never install or download
+  the model automatically.
+- Made the E5 installer, ONNX worker, installation validator, and semantic index
+  manifest consume one canonical contract, while preserving compatibility with
+  already verified local installations.
+- Reduced first-time semantic index construction from repeated whole-file raw
+  scans to one precomputed raw-pointer pass, with regression coverage proving
+  each raw file is read once.
+
+## 2.4.5 - 2026-07-30
+
+- Added recoverable Environment import transactions so incomplete bundles stay
+  invisible and interrupted cursor/receipt commits can be retried safely.
+- Serialized manual and scheduled cloud synchronization while keeping
+  Environment import/export locks scoped to their write transactions, avoiding
+  nested-lock deadlocks, and reporting both stream outcomes independently.
+- Made dashboard cross-origin rejection consume bounded request bodies before
+  returning JSON 403, preventing intermittent Windows connection-reset results.
+- Prevented no-change Environment items from starving newer incoming work and
+  preserved deterministic evidence for partial batch processing.
+- Unified product and native binary version reporting, tightened the Windows
+  PyYAML 6.x check, and repaired Windows legacy cloud-path rehearsal coverage.
+- Extended path-escape protection from symbolic links to Windows directory
+  junctions so ordinary-user reparse points fail closed across Registry,
+  binding, and Rule installation paths.
+- Expanded cross-platform release gates for version consistency, failure
+  injection, Python compatibility, bounded cloud-sync tests, and portable
+  version-bound rehearsal evidence whose hashes are revalidated before a pass
+  is reported.
+- Preserved stable macOS Python entry paths in every generated background
+  definition instead of resolving Homebrew symlinks to version-specific Cellar
+  executables that can repeatedly trigger Desktop and Documents permission
+  prompts after upgrades.
+- Added a user-space macOS update transaction that stages a candidate, proves
+  end-to-end capture in an isolated archive, switches only after the probe
+  passes, verifies the new collector and dashboard, and restores the previous
+  Skill, plist, and collector on any post-switch failure.
+- Prevented a due AI summary from blocking collector startup and transactional
+  cutover. Startup persists the source-locked summary job but leaves execution
+  to the existing semantic-backfill worker after the collector becomes ready.
+- Replaced synchronous full-archive backup copies in the native capture path
+  with an atomic, coalescing backup-debt record. The low-frequency maintenance
+  worker creates one complete verified snapshot for all pending mutations and
+  clears the debt only after success; the dashboard exposes pending debt.
+- Extended native collector telemetry with explicit `starting` and `ready`
+  phases, an idle heartbeat, and independent source and archive watermarks. The
+  dashboard now distinguishes live startup from stale telemetry, a stopped
+  collector, and retained source data ahead of the archive.
+- Added deterministic report-cutoff waterline verification and bounded native
+  backfill so reports can refuse stale archives before reading summaries.
+- Added an accessible localized hover and keyboard-focus bubble to each daily
+  archive bar showing its full date, exact archived-message count, and exact
+  visible-character count.
+
+## 2.4.4 - 2026-07-30
+
+- Fixed macOS OneDrive Files On-Demand handling for encrypted archive and
+  Environment envelopes. Visible but locally unavailable placeholders now
+  trigger bounded hydration and remain transient instead of being
+  misclassified as corrupt.
+- Added verified Environment overlap recovery for a sender that republishes a
+  wider range from an earlier cursor. The receiver advances only when every
+  persisted prefix event matches exactly; conflicting overlap still fails
+  closed.
+- Preferred the widest newest valid Environment envelope when duplicate
+  candidates share the expected start, while preserving exact replay for lost
+  acknowledgement recovery.
+- Isolated `environment-v1` status history from `archive-v1` logs so the
+  dashboard and CLI no longer report archive imports as Environment activity.
+
+## 2.4.3 - 2026-07-30
+
+- Added a machine-readable module ownership registry and fail-closed
+  architecture gate. Every production file must have exactly one canonical
+  owner, and declared prohibited dependencies now fail tests and release
+  rehearsal.
+- Required both Windows and macOS release packages to contain `SKILL.md`,
+  `AGENTS.md`, the canonical product architecture, the module ownership
+  registry, and the architecture checker.
+
+## 2.4.2 - 2026-07-30
+
+- Fixed Windows dashboard cross-application port capture. The native Memory
+  Wuxian launcher now asks Windows for an unused loopback port and opens the
+  actual assigned port instead of assuming `127.0.0.1:8765`.
+- Kept the storage-organizer audit console on its independent fixed API port;
+  launching either desktop application can no longer display the other
+  application's interface.
+- Added a launcher regression test that forbids restoring the fixed 8765 port.
+
+## 2.4.1 - 2026-07-30
+
+- Fixed batch Environment export so every artifact has a stable per-item
+  source identity instead of collapsing on a shared transaction event ID.
+  Existing 2.4 ledgers migrate without rewriting Registry history.
+- Added read-only transport for project registrations. Peer project metadata
+  never creates, binds, or activates a local project automatically.
+- Replaced scalar-only Skill metadata parsing with PyYAML's safe loader.
+  Nested mappings, lists, and block scalars are accepted; unsafe tags and
+  duplicate keys fail closed. `default_prompt` is optional.
+- Added PyYAML 6.x dependency checks and regression coverage for batch export,
+  old-ledger migration, project replication, and safe nested YAML.
+
+## 2.4.0 - 2026-07-29
+
+- Added the optional offline `intfloat/multilingual-e5-small` semantic provider
+  with 384-dimensional multilingual embeddings and retained `local-hash-v1` as
+  the no-download default.
+- Added a dedicated isolated ONNX runtime and installer pinned to an immutable
+  model revision, exact artifact sizes, and SHA-256 values. Inference is forced
+  offline and remote model code is disabled.
+- Bound the Windows E5 runtime to Python 3.12 so worker, model, and semantic
+  matrix paths remain Unicode-safe when the archive or Skill path is Chinese.
+- Added a three-language dashboard Memory search view with keyword, semantic,
+  and hybrid modes backed by the same verified retrieval engine as the CLI.
+  Results retain readable source text, titles, timestamps, raw line ranges,
+  and SHA-256 evidence; tool activity remains searchable but ranks below
+  matching user and assistant dialogue.
+- Kept semantic vectors disposable and outside human-readable metadata while
+  preserving message IDs, raw line ranges, and raw-record SHA-256 backlinks.
+- Built and verified the current local archive index without rewriting existing
+  raw conversation or summary bytes.
+
+## 2.3.0 - 2026-07-29
+
+- Added deterministic governance-AI discovery, micro-batching, and a one-shot
+  ephemeral Codex worker for product retrospectives, reusable-lesson
+  extraction, governance classification, and supersession review.
+- Added count/age/size limits, urgent bypass, daily run limits, evidence
+  hashes, source-device ownership, and an explicit cross-device coordinator.
+- Kept all AI outputs as schema-validated drafts requiring human review; the
+  worker cannot accept rules, install Skills, remediate products, or rewrite
+  archives.
+- Added CLI, separate scheduler, dashboard controls, retry isolation, tests,
+  and release-gate coverage. The feature remains disabled by default.
+
+## 2.2.0 - 2026-07-29
+
+- Added immutable product evolution records for bounded development history,
+  verified current state, corrected future flow, and reusable lesson candidates.
+- Added signed, encrypted Environment transport into read-only peer replicas;
+  receipt never implies remediation or governance acceptance.
+- Defined the deterministic scheduler versus bounded AI semantic-review
+  boundary for recurring product retrospectives.
+
+## 2.1.0 - 2026-07-29
+
+- Added immutable governance-insight proposal envelopes to the independent
+  `environment-v1` stream so verified local product lessons can be shared
+  across paired devices without being accepted or installed automatically.
+- Kept imported proposals in read-only peer replicas, separate from incoming
+  Rule and Skill installation staging.
+- Added explicit proposal preview, persistence, listing, origin, content-hash,
+  idempotency, conflict, and tamper checks.
+- Documented the boundary between Memory無限 transport and
+  `work-system-governor` classification, validation, and acceptance.
+
+## 2.0.5 - 2026-07-29
+
+- Correct the macOS release gate to expand the built package into a
+  not-yet-created destination before checking its relocation metadata.
+
+## 2.0.4 - 2026-07-29
+
+- Mark the packaged macOS dashboard bundle as non-relocatable so Installer
+  leaves it inside the Skill payload until the post-install transaction copies
+  the verified application to the user's Desktop.
+- Add release and regression gates that reject a macOS package when bundle
+  relocation is still enabled.
+
 ## 2.0.3 - 2026-07-29
 
 - Passed URL-safe signing public keys to the native envelope helper with an
