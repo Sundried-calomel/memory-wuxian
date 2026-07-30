@@ -12,6 +12,8 @@ import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
+from console_encoding import configure_unicode_stdio
+
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -21,6 +23,7 @@ def digest(path: Path) -> str:
 
 
 def main() -> int:
+    configure_unicode_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default=str(ROOT / "outputs/rehearsal/latest"))
     parser.add_argument("--scenario-shard-index", type=int)
