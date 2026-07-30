@@ -544,6 +544,13 @@ $HOME/.cargo/bin/cargo test --locked --manifest-path native-collector/Cargo.toml
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
+候选 CI 对功能分支只响应拉取请求，对 `push` 只响应 `main`。Ubuntu 和
+Windows 每个 job 只运行一次完整测试；macOS 在拉取请求中运行平台专属契约，
+在 `main` 上运行完整测试。已经由完整测试证明的彩排场景通过
+`--reuse-unittest-evidence` 保留各自的哈希证据引用，不再重复执行同一模块。
+安装包发布直接使用同一 SHA 的 `main` 成功结果。这个优化只消除重复工作，
+不会删除发布契约。
+
 架构决策和实现合同位于 [`PROJECT.md`](PROJECT.md) 与 [`references/`](references/)。变更记录位于 [`CHANGELOG.md`](CHANGELOG.md)。`README.md`、`README.zh-CN.md` 和 `README.ja.md` 作为同一份文档合同维护；文档所述行为变化时必须同时更新。
 
 从 v2.4.3 开始，[`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md)

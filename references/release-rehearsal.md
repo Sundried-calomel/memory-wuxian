@@ -3,10 +3,10 @@
 ## Lifecycle order
 
 Use a release-candidate branch before assigning an immutable formal version.
-Run targeted tests while the candidate changes, then run one complete local
-rehearsal and one three-platform candidate CI matrix after the changes
-stabilize. Repair failures in that candidate series without creating formal
-tags or published installers.
+Run targeted tests while the candidate changes, then run one three-platform
+candidate CI matrix after the changes stabilize. A separate complete local
+rehearsal is optional when the same commit and platform are already represented
+by that matrix. Repair failures without creating formal tags or installers.
 
 Only a candidate that has passed the required matrix, installer builds,
 package-content checks, and applicable live installation rehearsal may be
@@ -109,6 +109,11 @@ Every version uses a dedicated output directory such as
 release evidence.
 
 An unrun, skipped, interrupted, or evidence-free scenario is not a pass.
+When a full unittest suite has passed in the same CI job, focused scenarios may
+reuse its retained log through `--reuse-unittest-evidence`. Each scenario still
+receives its own hashed reference log containing the source evidence SHA-256.
+This is evidence deduplication, not a skipped scenario. Evidence from another
+commit, version, job, or platform is invalid.
 Platform-specific live installation checks must be recorded separately. A
 desktop-affecting release is not complete until the installed dashboard has
 been replaced, its version and launcher configuration have been verified, and

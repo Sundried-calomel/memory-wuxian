@@ -657,6 +657,14 @@ $HOME/.cargo/bin/cargo test --locked --manifest-path native-collector/Cargo.toml
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
+Candidate CI runs feature branches only through pull requests and runs pushes
+only on `main`. Ubuntu and Windows execute one full suite per job; macOS uses
+focused platform contracts on pull requests and the full suite on `main`.
+Rehearsal scenarios covered by a successful full suite keep individual hashed
+reference logs through `--reuse-unittest-evidence` instead of rerunning the
+same modules. Installer publication consumes the successful same-SHA `main`
+run. This reduces duplicate work without removing release contracts.
+
 Architecture decisions and implementation contracts are documented in [`PROJECT.md`](PROJECT.md) and [`references/`](references/). Changes are recorded in [`CHANGELOG.md`](CHANGELOG.md). `README.md`, `README.zh-CN.md`, and `README.ja.md` are maintained as one documentation contract and must be updated together when documented behavior changes.
 
 Since v2.4.3, [`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md) is the

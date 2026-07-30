@@ -28,10 +28,11 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         cls.test_source = TEST_WORKFLOW.read_text(encoding="utf-8")
 
     def test_stable_ci_pins_the_supported_windows_runner(self) -> None:
-        self.assertIn("os: [ubuntu-latest, macos-latest]", self.test_source)
         self.assertIn('python-version: "3.14"', self.test_source)
         self.assertNotIn("windows-latest", self.test_source)
-        self.assertEqual(self.test_source.count("runs-on: windows-2022"), 3)
+        self.assertEqual(self.test_source.count("runs-on: windows-2022"), 1)
+        self.assertIn("runs-on: ubuntu-latest", self.test_source)
+        self.assertIn("runs-on: macos-latest", self.test_source)
 
     def test_ci_does_not_repeat_the_suite_across_unsupported_python_versions(self) -> None:
         self.assertNotIn("python-compatibility:", self.test_source)
@@ -51,22 +52,28 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         postinstall = MACOS_POSTINSTALL.read_text(encoding="utf-8")
         self.assertIn("(3, 14) <= sys.version_info < (3, 15)", postinstall)
 
-    def test_windows_ci_preserves_complete_coverage_in_bounded_jobs(self) -> None:
-        self.assertIn("stage: [check, test]", self.test_source)
-        self.assertEqual(self.test_source.count("max-parallel: 1"), 3)
-        self.assertIn("needs: windows-native", self.test_source)
-        self.assertIn("needs: windows-python", self.test_source)
+    def test_ci_eliminates_duplicate_triggers_and_serial_windows_shards(self) -> None:
+        self.assertIn("branches: [main]", self.test_source)
+        self.assertIn("pull_request:", self.test_source)
+        self.assertIn("cancel-in-progress: true", self.test_source)
+        self.assertIn("windows-candidate:", self.test_source)
+        self.assertNotIn("windows-python:", self.test_source)
+        self.assertNotIn("windows-rehearsal:", self.test_source)
+        self.assertNotIn("max-parallel:", self.test_source)
+        self.assertNotIn("scenario-shard-count", self.test_source)
+
+    def test_candidate_jobs_reuse_full_unittest_evidence(self) -> None:
         self.assertEqual(
-            self.test_source.count("shard: [0, 1, 2, 3, 4, 5]"),
-            2,
+            self.test_source.count("python -m unittest discover -s tests -v"),
+            3,
         )
-        self.assertIn(
-            "python scripts/run_unittest_shard.py --index "
-            "${{ matrix.shard }} --count 6",
-            self.test_source,
+        self.assertEqual(
+            self.test_source.count("--reuse-unittest-evidence"),
+            3,
         )
         self.assertIn("--exclude-baseline", self.test_source)
-        self.assertIn("--scenario-shard-count 6", self.test_source)
+        self.assertIn("if: github.event_name == 'pull_request'", self.test_source)
+        self.assertIn("if: github.event_name == 'push'", self.test_source)
 
     def test_release_is_manual_and_serialized(self) -> None:
         self.assertIn("workflow_dispatch:", self.source)
@@ -82,6 +89,10 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn('run.event === "push"', block)
         self.assertIn('run.conclusion === "success"', block)
         self.assertIn("has no successful push run of test.yml", block)
+
+    def test_installer_workflow_does_not_repeat_candidate_suites(self) -> None:
+        self.assertNotIn("unittest discover", self.source)
+        self.assertNotIn("run_release_rehearsal.py", self.source)
 
     def test_release_gate_requires_metadata_and_candidate_proof(self) -> None:
         block = job_block(self.source, "release-gate")

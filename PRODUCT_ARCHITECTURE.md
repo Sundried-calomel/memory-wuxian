@@ -193,8 +193,10 @@ states:
 1. Accumulate related fixes on the candidate branch without creating a formal
    tag, GitHub Release, or published installer.
 2. During iteration, run the smallest tests that cover the affected contract.
-   Before publication, run one complete local rehearsal and one candidate CI
-   matrix against the same candidate series.
+   Before publication, run one complete candidate CI matrix against the exact
+   commit to be released. A local full rehearsal is optional when the same
+   platform and commit are covered by that matrix; local focused tests remain
+   required for changed behavior.
 3. Fix candidate-test, CI, packaging, and unpublished-artifact defects in the
    candidate series. These defects do not create a new product version.
 4. Freeze the version and documentation only after the candidate matrix,
@@ -202,6 +204,15 @@ states:
    rehearsal pass.
 5. Create the immutable formal tag once, then run one formal build and upload.
    A defect in an already published artifact requires a new patch version.
+
+The candidate matrix has three bounded platform jobs. Feature branches trigger
+it only through `pull_request`; only `main` triggers it through `push`, and a
+new commit cancels an older run for the same PR. A full unittest suite runs at
+most once per platform job. Rehearsal scenarios already covered by that suite
+retain individual hashed reference logs to the full-suite evidence instead of
+rerunning the same modules. Windows tests are not divided into serial shards.
+The installer workflow verifies and consumes one successful same-SHA `main`
+candidate run, then builds packages without repeating unit or rehearsal suites.
 
 Routine updates for an installed device use the verified user-space update
 transaction. They stage and validate changed product files, preserve the active

@@ -581,6 +581,14 @@ $HOME/.cargo/bin/cargo test --locked --manifest-path native-collector/Cargo.toml
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
+候補 CI は機能ブランチでは pull request のみ、`push` では `main` のみを
+実行します。Ubuntu と Windows は job ごとに完全テストを一度だけ実行し、
+macOS は pull request でプラットフォーム固有契約、`main` で完全テストを
+実行します。完全テストで証明済みのリハーサル項目は
+`--reuse-unittest-evidence` により個別のハッシュ付き参照ログを保持し、
+同じモジュールを再実行しません。インストーラー公開は同一 SHA の
+`main` 成功結果を使用します。契約を削除せず、重複実行だけを減らします。
+
 設計判断と実装契約は[`PROJECT.md`](PROJECT.md)と[`references/`](references/)に、変更履歴は[`CHANGELOG.md`](CHANGELOG.md)にあります。`README.md`、`README.zh-CN.md`、`README.ja.md`は一つの文書契約として管理し、記載動作が変わる場合は同時に更新します。
 
 ## ライセンス
