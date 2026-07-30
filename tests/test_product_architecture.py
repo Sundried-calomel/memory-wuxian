@@ -138,6 +138,37 @@ class ProductArchitectureContractTest(unittest.TestCase):
             "Create the immutable formal tag once", normalized_architecture
         )
         self.assertIn(
+            "rerun the smallest deterministic gate that covers the changed contract",
+            normalized_architecture,
+        )
+        self.assertIn(
+            "Do not rebuild installers, rerun unrelated full matrices, create tags, "
+            "or upload artifacts while diagnosing intermediate candidate defects",
+            normalized_architecture,
+        )
+        self.assertIn(
+            "Convert every confirmed release failure mode into a regression test",
+            normalized_architecture,
+        )
+        self.assertIn(
+            "Only a frozen candidate runs the complete release gate",
+            normalized_architecture,
+        )
+        self.assertIn(
+            "Build and publish the formal installers only from the exact commit "
+            "that passed the complete gate",
+            normalized_architecture,
+        )
+        self.assertIn(
+            "bounded deterministic shards on the pinned supported runner",
+            normalized_architecture,
+        )
+        self.assertIn(
+            "Do not collapse them into one long Windows job, launch a high-fan-out "
+            "Windows matrix, or skip tests",
+            normalized_architecture,
+        )
+        self.assertIn(
             "verified user-space update transaction", normalized_architecture
         )
         self.assertIn(
@@ -146,6 +177,19 @@ class ProductArchitectureContractTest(unittest.TestCase):
         )
         self.assertIn("release-candidate branch", rehearsal)
         self.assertIn("keep candidate iteration untagged", normalized_agents)
+        self.assertIn(
+            "classify each failure before rerunning only its affected gate",
+            normalized_agents,
+        )
+        self.assertIn(
+            "Do not rebuild installers or rerun unrelated full matrices for "
+            "intermediate fixes",
+            normalized_agents,
+        )
+        self.assertIn(
+            "Windows CI in bounded ordered serial shards with complete coverage",
+            normalized_agents,
+        )
 
 
 if __name__ == "__main__":
