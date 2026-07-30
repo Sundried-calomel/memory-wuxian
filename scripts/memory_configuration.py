@@ -15,6 +15,8 @@ from typing import Any, Mapping, Optional, Sequence, Tuple
 
 import yaml
 
+from console_encoding import configure_unicode_stdio
+
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULTS_PATH = ROOT / "contracts" / "configuration-v1.defaults.json"
@@ -443,6 +445,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    configure_unicode_stdio()
     args = _parser().parse_args(argv)
     try:
         compiled = compile_configuration(Path(args.config), root_argument=args.root)

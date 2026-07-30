@@ -60,6 +60,8 @@ def main() -> int:
                     "from pathlib import Path\n"
                     "version=tomllib.loads(Path('pyproject.toml').read_text('utf-8'))"
                     "['project']['version']\n"
+                    "if sys.platform not in ('darwin','win32'):\n"
+                    " raise SystemExit(0)\n"
                     "suffix='.exe' if sys.platform=='win32' else ''\n"
                     "for name in ('memory-wuxian-collector','memory-wuxian-envelope'):\n"
                     " path=Path('bin')/(name+suffix)\n"

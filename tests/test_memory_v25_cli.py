@@ -3,9 +3,9 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import re
 import sys
 import tempfile
-import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -103,9 +103,14 @@ class MemoryV25CliTests(unittest.TestCase):
         local_offer.assert_called_once()
 
     def test_capability_status_negotiates_explicit_peer_offer(self):
-        product_version = tomllib.loads(
-            (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        )["project"]["version"]
+        project_text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        version_match = re.search(
+            r'^version\s*=\s*"([^"]+)"',
+            project_text,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(version_match)
+        product_version = version_match.group(1)
         peer_offer = memory_environment_capabilities.local_device_capability_offer(
             product_version,
             memory_cli.local_platform_name(),
