@@ -116,10 +116,13 @@ Use Memory無限 to preserve conversation history outside the active context win
     change.
 61. Follow the release lifecycle owned by `PRODUCT_ARCHITECTURE.md`: keep
     candidate iteration untagged, use targeted tests during iteration, pass one
-    complete candidate gate before creating the single formal tag, and update
-    installed devices through the user-space transaction unless first install,
-    explicit recovery, or a declared privileged-component change requires the
-    full installer.
+    complete candidate gate before creating the single formal tag, and classify
+    each failure before rerunning only its affected gate. Do not rebuild
+    installers or rerun unrelated full matrices for intermediate fixes. Keep
+    Windows CI in bounded ordered serial shards with complete coverage, and
+    update installed devices through the user-space transaction unless first
+    install, explicit recovery, or a declared privileged-component change
+    requires the full installer.
 62. Register every new production file in
     `docs/module-architecture.json` under exactly one canonical module owner
     before implementation. Run `scripts/check_architecture_contract.py` for

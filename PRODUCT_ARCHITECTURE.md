@@ -196,6 +196,36 @@ states:
 5. Create the immutable formal tag once, then run one formal build and upload.
    A defect in an already published artifact requires a new patch version.
 
+Candidate iteration uses incremental validation:
+
+- Record the failing case and preserve its exact log before changing code.
+- Classify the failure as a product defect, test defect, packaging defect, or
+  external CI interruption. Infrastructure interruption is not product
+  evidence, and a product failure is not dismissed as infrastructure noise.
+- After a scoped fix, rerun the smallest deterministic gate that covers the
+  changed contract and the recorded regression. Do not rebuild installers,
+  rerun unrelated full matrices, create tags, or upload artifacts while
+  diagnosing intermediate candidate defects.
+- Convert every confirmed release failure mode into a regression test or
+  deterministic release check before the candidate can advance.
+
+Only a frozen candidate runs the complete release gate. That gate includes the
+architecture and documentation contracts, the full unit suite, the complete
+release rehearsal, the exact-candidate CI matrix, installer construction,
+package-content verification, and required live installation checks. If the
+candidate changes after any full-gate result, invalidate that result and rerun
+the affected gate; rerun the complete gate once after the replacement candidate
+is frozen. Build and publish the formal installers only from the exact commit
+that passed the complete gate.
+
+Windows CI must retain complete coverage in bounded deterministic shards on the
+pinned supported runner. Native checks, Python tests, and release rehearsals run
+as ordered stages with bounded serial matrix execution. Do not collapse them
+into one long Windows job, launch a high-fan-out Windows matrix, or skip tests to
+reduce elapsed time. A Windows-specific fix must pass its focused regression
+locally where possible and the corresponding Windows shard in CI before the
+candidate receives full-gate credit.
+
 Routine updates for an installed device use the verified user-space update
 transaction. They stage and validate changed product files, preserve the active
 archive and device configuration, atomically replace the installed version,
