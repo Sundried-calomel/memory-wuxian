@@ -608,6 +608,14 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 
 Architecture decisions and implementation contracts are documented in [`PROJECT.md`](PROJECT.md) and [`references/`](references/). Changes are recorded in [`CHANGELOG.md`](CHANGELOG.md). `README.md`, `README.zh-CN.md`, and `README.ja.md` are maintained as one documentation contract and must be updated together when documented behavior changes.
 
+Since v2.4.3, [`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md) is the
+canonical module-boundary contract and
+[`docs/module-architecture.json`](docs/module-architecture.json) is its
+machine-readable ownership registry. Every production file must have exactly
+one owner, and `scripts/check_architecture_contract.py` rejects unowned files,
+overlapping ownership, and declared prohibited dependencies. Windows and
+macOS package builds fail if these architecture-gate files are absent.
+
 ## License
 
 Memory無限 is released under the [MIT License](LICENSE.txt).

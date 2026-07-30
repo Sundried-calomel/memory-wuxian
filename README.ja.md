@@ -479,6 +479,14 @@ v2.4.2以降、Windowsネイティブ状態画面ランチャーは未使用の�
 しないため、別のローカルアプリが先に8765を使用してもMemory無限の画面を
 置き換えることはありません。
 
+v2.4.3以降、[`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md)を
+モジュール境界の唯一の正本とし、
+[`docs/module-architecture.json`](docs/module-architecture.json)を
+機械可読な所有権台帳とします。各本番ファイルは必ず一つのモジュールだけに
+所属し、`scripts/check_architecture_contract.py`は未登録、重複所有、および
+禁止依存を拒否します。WindowsとmacOSのパッケージにこれらのゲートが
+含まれない場合、リリースは失敗します。
+
 ```text
 init
 append

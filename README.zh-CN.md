@@ -512,6 +512,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 
 架构决策和实现合同位于 [`PROJECT.md`](PROJECT.md) 与 [`references/`](references/)。变更记录位于 [`CHANGELOG.md`](CHANGELOG.md)。`README.md`、`README.zh-CN.md` 和 `README.ja.md` 作为同一份文档合同维护；文档所述行为变化时必须同时更新。
 
+从 v2.4.3 开始，[`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md)
+是模块边界的唯一权威，
+[`docs/module-architecture.json`](docs/module-architecture.json)
+是机器可读的文件所有权清单。每个生产文件必须且只能属于一个模块；
+`scripts/check_architecture_contract.py` 会拒绝未归属文件、重复归属和已声明的
+禁止依赖。Windows 与 macOS 安装包如果缺少这些架构门禁文件，发布将直接失败。
+
 ## 许可证
 
 Memory無限 使用 [MIT License](LICENSE.txt) 发布。

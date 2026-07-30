@@ -1,6 +1,6 @@
 [project]
 name = "memory-wuxian"
-version = "2.4.2"
+version = "2.4.3"
 description = "File-backed hierarchical and verifiable conversation memory"
 requires-python = ">=3.9"
 dependencies = ["PyYAML>=6.0,<7"]

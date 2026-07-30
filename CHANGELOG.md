@@ -1,11 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2.4.3 - 2026-07-30
 
 - Added a machine-readable module ownership registry and fail-closed
   architecture gate. Every production file must have exactly one canonical
   owner, and declared prohibited dependencies now fail tests and release
   rehearsal.
+- Required both Windows and macOS release packages to contain `SKILL.md`,
+  `AGENTS.md`, the canonical product architecture, the module ownership
+  registry, and the architecture checker.
 
 ## 2.4.2 - 2026-07-30
 
