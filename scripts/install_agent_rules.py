@@ -32,7 +32,8 @@ def upsert_rules(agents_file: Path, template_file: Path) -> str:
         action = "installed"
 
     agents_file.parent.mkdir(parents=True, exist_ok=True)
-    agents_file.write_text(updated, encoding="utf-8", newline="\n")
+    with agents_file.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(updated)
     return action
 
 

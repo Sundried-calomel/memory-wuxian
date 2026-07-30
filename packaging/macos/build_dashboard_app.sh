@@ -10,6 +10,18 @@ trap 'rm -rf "$work_dir"' EXIT
 export CLANG_MODULE_CACHE_PATH="$work_dir/clang-module-cache"
 export SWIFT_MODULECACHE_PATH="$work_dir/swift-module-cache"
 
+bundle_short_version="$version"
+bundle_build_version="$version"
+if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)b([0-9]+)$ ]]; then
+  bundle_short_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+  bundle_build_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((10#${BASH_REMATCH[3]} * 100 + 10#${BASH_REMATCH[4]}))"
+fi
+if [[ ! "$bundle_short_version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] \
+  || [[ ! "$bundle_build_version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+  echo "Invalid macOS bundle version derived from product version: $version" >&2
+  exit 1
+fi
+
 rm -rf "$output_app"
 mkdir -p "$output_app/Contents/MacOS" "$output_app/Contents/Resources"
 
@@ -55,8 +67,9 @@ cat > "$output_app/Contents/Info.plist" <<PLIST
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Memory無限操作台</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>$version</string>
-  <key>CFBundleVersion</key><string>$version</string>
+  <key>CFBundleShortVersionString</key><string>$bundle_short_version</string>
+  <key>CFBundleVersion</key><string>$bundle_build_version</string>
+  <key>MemoryWuxianProductVersion</key><string>$version</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSAppTransportSecurity</key>
   <dict><key>NSAllowsLocalNetworking</key><true/></dict>
@@ -73,6 +86,6 @@ chmod +x "$output_app/Contents/MacOS/MemoryDashboard"
 codesign --force --deep --sign - "$output_app"
 codesign --verify --deep --strict "$output_app"
 actual_version="$(/usr/libexec/PlistBuddy \
-  -c 'Print :CFBundleShortVersionString' \
+  -c 'Print :MemoryWuxianProductVersion' \
   "$output_app/Contents/Info.plist")"
 [[ "$actual_version" == "$version" ]]

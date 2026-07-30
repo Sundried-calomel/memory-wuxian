@@ -24,7 +24,11 @@ const SIGNATURE_LENGTH: usize = 64;
 const MAX_METADATA_LENGTH: usize = 64 * 1024;
 
 #[derive(Parser, Debug)]
-#[command(version, about = "Encrypt and sign Memory Wuxian federation envelopes")]
+#[command(
+    name = "memory-wuxian-envelope",
+    version,
+    about = "Encrypt and sign Memory Wuxian federation envelopes"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,

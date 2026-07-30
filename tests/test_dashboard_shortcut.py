@@ -72,6 +72,9 @@ class DashboardShortcutTest(unittest.TestCase):
         package = (
             SKILL_ROOT / "packaging/macos/build_pkg.sh"
         ).read_text(encoding="utf-8")
+        dashboard_build = (
+            SKILL_ROOT / "packaging/macos/build_dashboard_app.sh"
+        ).read_text(encoding="utf-8")
         workflow = (
             SKILL_ROOT / ".github/workflows/release.yml"
         ).read_text(encoding="utf-8")
@@ -85,7 +88,10 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn("probe_candidate", transaction)
         self.assertIn("wait_for_collector", transaction)
         self.assertIn("build_dashboard_app.sh", package)
-        self.assertIn("CFBundleShortVersionString", package)
+        self.assertIn("CFBundleShortVersionString", dashboard_build)
+        self.assertIn("MemoryWuxianProductVersion", dashboard_build)
+        self.assertIn("MemoryWuxianProductVersion", package)
+        self.assertIn('package_version="$version"', package)
         self.assertIn("pkgbuild --analyze", package)
         self.assertIn("BundleIsRelocatable false", package)
         self.assertIn('--component-plist "$component_plist"', package)

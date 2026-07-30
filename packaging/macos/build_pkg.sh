@@ -7,6 +7,11 @@ output_dir="${2:-$repo_root/dist}"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 
+package_version="$version"
+if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)b([0-9]+)$ ]]; then
+  package_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((10#${BASH_REMATCH[3]} * 100 + 10#${BASH_REMATCH[4]}))"
+fi
+
 collector="$repo_root/bin/memory-wuxian-collector"
 envelope="$repo_root/bin/memory-wuxian-envelope"
 for binary in "$collector" "$envelope"; do
@@ -40,7 +45,7 @@ dashboard_app="$payload_skill/assets/macos/Memory無限操作台.app"
   "$version" "$dashboard_app" universal
 "$repo_root/scripts/install_dashboard_app_macos.py" --help >/dev/null
 dashboard_version="$(/usr/libexec/PlistBuddy \
-  -c 'Print :CFBundleShortVersionString' \
+  -c 'Print :MemoryWuxianProductVersion' \
   "$dashboard_app/Contents/Info.plist")"
 if [[ "$dashboard_version" != "$version" ]]; then
   echo "macOS dashboard version does not match package version." >&2
@@ -68,7 +73,7 @@ pkgbuild \
   --scripts "$repo_root/packaging/macos/scripts" \
   --component-plist "$component_plist" \
   --identifier "io.github.sundried-calomel.memory-wuxian" \
-  --version "$version" \
+  --version "$package_version" \
   --install-location / \
   "$output_dir/MemoryWuxian-$version-macOS-universal.pkg"
 

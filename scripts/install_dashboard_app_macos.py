@@ -46,7 +46,7 @@ def app_metadata(app: Path) -> tuple[Path, str]:
         raise ValueError(f"incomplete dashboard application: {app}")
     with plist.open("rb") as handle:
         payload = plistlib.load(handle)
-    return executable, str(payload.get("CFBundleShortVersionString", ""))
+    return executable, str(payload.get("MemoryWuxianProductVersion", ""))
 
 
 def launcher_payload(

@@ -49,6 +49,23 @@ function Install-Python {
     if ($process.ExitCode -ne 0) { throw "Python installer failed: $($process.ExitCode)" }
 }
 
+function Get-PyYamlStatus([string]$Executable) {
+    $probe = @'
+import json
+import re
+try:
+    import yaml
+    from importlib.metadata import version
+    installed = version('PyYAML')
+    importable = getattr(yaml, '__version__', None) == installed
+    stable_six = re.fullmatch(r'6\.\d+(?:\.\d+)?', installed) is not None
+    print(json.dumps({'ready': importable and stable_six, 'version': installed}))
+except Exception:
+    print(json.dumps({'ready': False, 'version': None}))
+'@
+    return (& $Executable -c $probe | ConvertFrom-Json)
+}
+
 $python = Find-Python
 if (-not $python -and $InstallMissing) {
     Install-Python
@@ -72,12 +89,17 @@ if (-not $SessionsRoot) { $SessionsRoot = Join-Path $env:USERPROFILE ".codex\ses
 $pythonVersion = if ($python) { & $python -c "import platform; print(platform.python_version())" } else { $null }
 $dashboardWindowReady = $false
 $yamlReady = $false
+$yamlVersion = $null
 if ($python) {
-    $yamlReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('yaml') else '0')") -eq "1"
+    $yamlInfo = Get-PyYamlStatus $python
+    $yamlReady = [bool]$yamlInfo.ready
+    $yamlVersion = $yamlInfo.version
     if (-not $yamlReady -and $InstallMissing) {
         & $python -m pip install --disable-pip-version-check "PyYAML>=6.0,<7"
         if ($LASTEXITCODE -ne 0) { throw "core YAML dependency installation failed: $LASTEXITCODE" }
-        $yamlReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('yaml') else '0')") -eq "1"
+        $yamlInfo = Get-PyYamlStatus $python
+        $yamlReady = [bool]$yamlInfo.ready
+        $yamlVersion = $yamlInfo.version
     }
     $dashboardWindowReady = (& $python -c "import importlib.util; print('1' if importlib.util.find_spec('webview') else '0')") -eq "1"
     if (-not $dashboardWindowReady -and $InstallMissing) {
@@ -114,6 +136,7 @@ $checks = [ordered]@{
     yaml = [ordered]@{
         ready = $yamlReady
         python_package = "PyYAML"
+        version = $yamlVersion
         version_range = ">=6.0,<7"
     }
 }

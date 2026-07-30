@@ -21,6 +21,7 @@ import yaml
 
 from memory_environment import EnvironmentRegistry
 from platform_lock import exclusive_lock
+from platform_paths import is_link_like
 
 
 MANIFEST_NAME = "skill-package-manifest.json"
@@ -317,7 +318,7 @@ class EnvironmentSkillInstaller:
         revision_id: str,
         target_binding: str,
     ) -> Dict[str, Any]:
-        if not package.exists() or package.is_symlink() or not package.is_file():
+        if not package.exists() or is_link_like(package) or not package.is_file():
             raise ValueError("Skill package must be an existing regular file")
         package_bytes = package.read_bytes()
         package_sha256 = _sha256(package_bytes)
@@ -570,7 +571,7 @@ class EnvironmentSkillInstaller:
             / f"{prepared['revision']['revision_id'].split(':', 1)[1]}.json"
         )
         if object_path.exists():
-            if object_path.is_symlink() or not object_path.is_file():
+            if is_link_like(object_path) or not object_path.is_file():
                 raise ValueError("Skill package object path is unsafe")
             if _sha256(object_path.read_bytes()) != package_hash:
                 raise ValueError("Skill package object hash mismatch")
@@ -682,17 +683,17 @@ class EnvironmentSkillInstaller:
         root_text = _string(binding.get("root"), "binding.root")
         relative = _safe_relative(binding.get("relative_path"), "binding.relative_path")
         root_supplied = Path(root_text).expanduser()
-        if root_supplied.is_symlink():
+        if is_link_like(root_supplied):
             raise ValueError("target binding root symlinks are forbidden")
         root = root_supplied.resolve(strict=True)
         if not root.is_dir():
             raise ValueError("target binding root must be a directory")
         target = root.joinpath(*PurePosixPath(relative).parts)
-        if target.is_symlink():
+        if is_link_like(target):
             raise ValueError("target Skill directory symlinks are forbidden")
         parent = target.parent
         while parent != root:
-            if parent.exists() and parent.is_symlink():
+            if parent.exists() and is_link_like(parent):
                 raise ValueError("target binding parent symlinks are forbidden")
             parent = parent.parent
         try:
@@ -1012,13 +1013,13 @@ class EnvironmentSkillInstaller:
         *,
         allow_hash_mismatch: bool = False,
     ) -> None:
-        if root.is_symlink() or not root.is_dir():
+        if is_link_like(root) or not root.is_dir():
             raise ValueError("Skill target must be a real directory")
         declared = {item["path"]: item for item in manifest["files"]}
         actual = set()
         folded = set()
         for path in root.rglob("*"):
-            if path.is_symlink():
+            if is_link_like(path):
                 raise ValueError("Skill tree contains a symlink")
             if path.is_dir():
                 continue
@@ -1375,14 +1376,14 @@ class EnvironmentSkillInstaller:
                         "terminal receipt and interrupted target disagree"
                     )
                 if committed_receipt["result"] == "installed" and displaced.exists():
-                    if displaced.is_symlink() or not displaced.is_dir():
+                    if is_link_like(displaced) or not displaced.is_dir():
                         raise SkillInstallationError(
                             "committed transaction displaced path is unsafe"
                         )
                     shutil.rmtree(displaced)
                 for transient in (sibling, staging):
                     if transient.exists():
-                        if transient.is_symlink() or not transient.is_dir():
+                        if is_link_like(transient) or not transient.is_dir():
                             raise SkillInstallationError(
                                 "committed transaction transient path is unsafe"
                             )
@@ -1395,10 +1396,10 @@ class EnvironmentSkillInstaller:
                 continue
             changed = False
             if displaced.exists():
-                if displaced.is_symlink() or not displaced.is_dir():
+                if is_link_like(displaced) or not displaced.is_dir():
                     raise SkillInstallationError("displaced recovery directory is unsafe")
                 if target.exists():
-                    if target.is_symlink() or not target.is_dir():
+                    if is_link_like(target) or not target.is_dir():
                         raise SkillInstallationError("interrupted target is unsafe")
                     shutil.rmtree(target)
                 os.replace(displaced, target)
@@ -1407,12 +1408,12 @@ class EnvironmentSkillInstaller:
                 previous_hash = value["previous_installed_sha256"]
                 current_hash = self._actual_tree_hash(target) if target.is_dir() else None
                 if current_hash != previous_hash:
-                    if not rollback.is_dir() or rollback.is_symlink():
+                    if not rollback.is_dir() or is_link_like(rollback):
                         raise SkillInstallationError(
                             "interrupted update has no verified rollback directory"
                         )
                     if target.exists():
-                        if target.is_symlink() or not target.is_dir():
+                        if is_link_like(target) or not target.is_dir():
                             raise SkillInstallationError("interrupted target is unsafe")
                         shutil.rmtree(target)
                     shutil.copytree(rollback, target, symlinks=False)
@@ -1420,7 +1421,7 @@ class EnvironmentSkillInstaller:
                         raise SkillInstallationError("crash rollback verification failed")
                     changed = True
             elif target.exists():
-                if target.is_symlink() or not target.is_dir():
+                if is_link_like(target) or not target.is_dir():
                     raise SkillInstallationError("interrupted new target is unsafe")
                 # A fresh install can be removed only when it matches the
                 # transaction's candidate; unrelated post-crash data fails closed.
@@ -1432,7 +1433,7 @@ class EnvironmentSkillInstaller:
                 changed = True
             for transient in (sibling, staging):
                 if transient.exists():
-                    if transient.is_symlink() or not transient.is_dir():
+                    if is_link_like(transient) or not transient.is_dir():
                         raise SkillInstallationError("transaction transient path is unsafe")
                     shutil.rmtree(transient)
             _fsync_directory(target.parent)
@@ -1532,7 +1533,7 @@ class EnvironmentSkillInstaller:
         resolved = self._resolve_target(binding)
         if resolved != target:
             raise ValueError("target binding changed during installation")
-        if target.exists() and (target.is_symlink() or not target.is_dir()):
+        if target.exists() and (is_link_like(target) or not target.is_dir()):
             raise ValueError("existing Skill target is not a real directory")
 
     def _after_switch(self, target: Path) -> None:
