@@ -117,6 +117,13 @@ def main() -> int:
             ],
         ),
         (
+            "macos-routine-auto-update-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_auto_update",
+            ],
+        ),
+        (
             "collector-startup-defers-semantic-worker-contract",
             [
                 python, "-c",

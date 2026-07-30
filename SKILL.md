@@ -141,6 +141,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     interface, and platform-neutral installer entry. Receiving or accepting a
     contract never installs or downloads it; local realization requires an
     explicit reviewed `--apply`, and semantic indexes remain device-local.
+62. On an existing macOS installation, routine stable-release updates must
+    verify the PKG checksum, extract only its Skill payload in a temporary
+    directory, and invoke `install_macos_transaction.py`. Do not open the
+    platform installer or request administrator credentials unless this is a
+    first install, recovery, or declared privileged-component migration.
 
 ## Operating workflow
 

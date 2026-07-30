@@ -105,9 +105,12 @@ Start with [`SKILL.md`](SKILL.md). Use an external archive root for real convers
 
 Official installers register a daily stable-release check. The updater ignores branches,
 drafts, and prereleases, downloads both the platform installer and its published SHA-256
-file, and refuses to stage an update unless the checksum and filename match. Windows
-installs a verified update silently at the next login; macOS keeps the verified PKG ready
-for the operating system's required installation authorization. Disable the check with
+file, and refuses an update unless the checksum and filename match. Windows
+installs a verified update silently at the next login. On an existing macOS
+installation, the updater extracts only the verified Skill payload and runs the
+rollback-capable user-space transaction without opening Installer or requesting
+an administrator password. The full PKG remains the first-install and recovery
+path. Disable the check with
 `python scripts/install_auto_update.py --uninstall`.
 
 Every Windows install or automatic upgrade preserves the archive named by

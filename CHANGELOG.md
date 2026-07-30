@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.4.7 - 2026-07-30
+
+- Changed routine macOS updates to extract the verified Skill payload from the
+  published PKG and run the existing user-space transaction instead of waiting
+  for the privileged platform installer.
+- Kept full PKG installation for first install and recovery while preserving
+  active archives, device configuration, stable executable paths, isolated
+  candidate probing, live post-switch checks, and automatic rollback for
+  routine updates.
+- Made the auto-update LaunchAgent pass the stable Python entry path through to
+  the transaction, avoiding version-specific Homebrew Cellar identities.
+
 ## 2.4.6 - 2026-07-30
 
 - Added a content-addressed `global-runtime-contract` Environment artifact for

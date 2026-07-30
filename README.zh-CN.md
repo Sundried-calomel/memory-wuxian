@@ -87,7 +87,7 @@ $skill-installer install https://github.com/Sundried-calomel/memory-wuxian
 
 先阅读 [`SKILL.md`](SKILL.md)。真实对话历史应使用仓库外部的档案根目录，避免源码检出或 Skill 更新与私人记忆数据混在一起。
 
-官方安装包会注册每日稳定版本检查。更新器忽略分支、草稿和预发布版本，同时下载平台安装包及其 SHA-256 文件；校验和或文件名不匹配时拒绝暂存更新。Windows 会在下次登录时静默安装已验证更新；macOS 会保留已验证 PKG，等待操作系统要求的安装授权。使用 `python scripts/install_auto_update.py --uninstall` 可关闭检查。
+官方安装包会注册每日稳定版本检查。更新器忽略分支、草稿和预发布版本，同时下载平台安装包及其 SHA-256 文件；校验和或文件名不匹配时拒绝更新。Windows 会在下次登录时静默安装已验证更新。已有安装的 macOS 会只展开已验证 PKG 中的 Skill payload，并运行具备自动回滚的用户级事务；不会打开系统安装器，也不需要管理员密码。完整 PKG 仅保留给首次安装和恢复。使用 `python scripts/install_auto_update.py --uninstall` 可关闭检查。
 
 Windows 每次安装或自动升级都会保留
 `~/.codex/memory-wuxian-active-root.txt` 指定的真实档案，检查或安装原生窗口

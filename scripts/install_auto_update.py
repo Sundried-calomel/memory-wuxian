@@ -67,7 +67,14 @@ def main() -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "Label": MACOS_LABEL,
-        "ProgramArguments": [str(python), str(updater), "--skill-root", str(skill_root)],
+        "ProgramArguments": [
+            str(python),
+            str(updater),
+            "--skill-root",
+            str(skill_root),
+            "--python-executable",
+            str(python),
+        ],
         "RunAtLoad": True,
         "StartInterval": 86400,
         "ProcessType": "Background",
