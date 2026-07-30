@@ -41,6 +41,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         stage: [check, test]
     runs-on: windows-2022
@@ -59,9 +60,11 @@ jobs:
         run: cargo build --locked --bins --manifest-path native-collector/Cargo.toml
 
   windows-python:
+    needs: windows-native
     timeout-minutes: 20
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         shard: [0, 1, 2, 3, 4, 5]
     runs-on: windows-2022
@@ -74,9 +77,11 @@ jobs:
       - run: python scripts/run_unittest_shard.py --index ${{ matrix.shard }} --count 6
 
   windows-rehearsal:
+    needs: windows-python
     timeout-minutes: 20
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         shard: [0, 1, 2, 3, 4, 5]
     runs-on: windows-2022

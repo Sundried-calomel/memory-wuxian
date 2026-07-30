@@ -31,6 +31,9 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
 
     def test_windows_ci_preserves_complete_coverage_in_bounded_jobs(self) -> None:
         self.assertIn("stage: [check, test]", self.test_source)
+        self.assertEqual(self.test_source.count("max-parallel: 1"), 3)
+        self.assertIn("needs: windows-native", self.test_source)
+        self.assertIn("needs: windows-python", self.test_source)
         self.assertEqual(
             self.test_source.count("shard: [0, 1, 2, 3, 4, 5]"),
             2,
