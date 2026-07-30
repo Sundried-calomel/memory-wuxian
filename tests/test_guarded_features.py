@@ -85,6 +85,31 @@ class GuardedFeaturesTest(unittest.TestCase):
         }
         self.assertEqual(raw_before, raw_after)
 
+    def test_semantic_pointer_index_reads_each_raw_file_once(self):
+        records = self.store.read_all_raw()
+        raw_path = self.store.root / records[0]["_path"]
+        original_read_text = Path.read_text
+        raw_reads = 0
+
+        def counted_read_text(path, *args, **kwargs):
+            nonlocal raw_reads
+            if path == raw_path:
+                raw_reads += 1
+            return original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", counted_read_text):
+            pointers = self.features.raw_pointer_index(records)
+
+        self.assertEqual(1, raw_reads)
+        self.assertEqual({("m1", 10, 13), ("m2", 15, 18)}, {
+            (
+                message_id,
+                pointer["raw_line_start"],
+                pointer["raw_line_end"],
+            )
+            for (_, message_id), pointer in pointers.items()
+        })
+
     def test_multilingual_e5_provider_keeps_vectors_out_of_readable_metadata(self):
         def fake_embed(texts, prefix, output, batch_size=8):
             self.assertEqual("passage", prefix)

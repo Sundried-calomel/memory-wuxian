@@ -299,6 +299,36 @@ class GuardedFeatures:
                     return {"raw_line_start": index + 1, "raw_line_end": index + 4}
         return {"raw_line_start": None, "raw_line_end": None}
 
+    def raw_pointer_index(
+        self, records: List[Dict[str, Any]]
+    ) -> Dict[tuple[str, str], Dict[str, Optional[int]]]:
+        requested: Dict[str, set[str]] = {}
+        for record in records:
+            relative = str(record.get("_path", ""))
+            message_id = str(record.get("message_id", ""))
+            if relative and message_id:
+                requested.setdefault(relative, set()).add(message_id)
+        pointers: Dict[tuple[str, str], Dict[str, Optional[int]]] = {}
+        for relative, message_ids in requested.items():
+            path = self.root / relative
+            if not path.is_file():
+                continue
+            lines = path.read_text(encoding="utf-8").splitlines()
+            for index, line in enumerate(lines):
+                if line != "<!-- memory-wuxian-record -->" or index + 2 >= len(lines):
+                    continue
+                try:
+                    candidate = json.loads(lines[index + 2])
+                except json.JSONDecodeError:
+                    continue
+                message_id = str(candidate.get("message_id", ""))
+                if message_id in message_ids:
+                    pointers[(relative, message_id)] = {
+                        "raw_line_start": index + 1,
+                        "raw_line_end": index + 4,
+                    }
+        return pointers
+
     def retrieval_evaluate(self, dataset: Path, top_k: int) -> Dict[str, Any]:
         cases = [
             json.loads(line) for line in dataset.read_text(encoding="utf-8").splitlines()
@@ -452,13 +482,18 @@ class GuardedFeatures:
         directory = self.store.index_dir / "semantic"
         records = []
         raw_records = self.store.read_all_raw()
+        pointer_index = self.raw_pointer_index(raw_records)
         for record in raw_records:
+            pointer = pointer_index.get(
+                (str(record.get("_path", "")), str(record.get("message_id", ""))),
+                {"raw_line_start": None, "raw_line_end": None},
+            )
             item = {
                 "message_id": record["message_id"],
                 "conversation_id": record["conversation_id"],
                 "raw_path": record["_path"],
                 "record_sha256": record["content_sha256"],
-                **self.raw_pointer(record),
+                **pointer,
                 "provider": provider,
             }
             if provider == "local-hash-v1":
