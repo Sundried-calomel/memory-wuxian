@@ -183,6 +183,7 @@ class EnvironmentDashboardCacheTest(unittest.TestCase):
                 "project-rule": 0,
                 "global-skill": 0,
                 "project-skill": 0,
+                "global-runtime-contract": 0,
             },
         )
         self.assertFalse(self.archive_root.exists())

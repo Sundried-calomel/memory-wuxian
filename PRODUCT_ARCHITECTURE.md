@@ -138,10 +138,17 @@ Current-policy and chronological retrieval remain distinct modes.
 
 ### 5. Environment Artifact Contract
 
-Each global Rule, project Rule, global Skill, and project Skill has a stable
-artifact identity and immutable revision. Revisions declare content, base,
-provenance, platform and runtime requirements, network access, persistence,
-and local binding requirements.
+Each global Rule, project Rule, global Skill, project Skill, and global runtime
+contract has a stable artifact identity and immutable revision. Revisions
+declare content, base, provenance, platform and runtime requirements, network
+access, persistence, and local binding requirements.
+
+A runtime contract synchronizes a portable capability interface rather than a
+platform binary environment. It may pin model identity, artifact hashes,
+runtime packages, input/output semantics, and installer entry points. Model
+files, virtual environments, credentials, and derived indexes remain local.
+Registration and transport do not authorize realization; realization is an
+explicit device-local installer transaction.
 
 ### 6. Installer Transaction Contract
 

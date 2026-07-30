@@ -21,7 +21,13 @@ from platform_lock import exclusive_lock
 from platform_paths import is_link_like
 
 SCHEMA_VERSION = 1
-OBJECT_CLASSES = {"global-rule", "project-rule", "global-skill", "project-skill"}
+OBJECT_CLASSES = {
+    "global-rule",
+    "project-rule",
+    "global-skill",
+    "project-skill",
+    "global-runtime-contract",
+}
 SCOPES = {"global", "project"}
 PLATFORMS = {"macos", "windows", "linux"}
 LIFECYCLE_STATES = {
@@ -896,12 +902,14 @@ class EnvironmentRegistry:
             "project-rules.json",
             "global-skills.json",
             "project-skills.json",
+            "global-runtime-contracts.json",
         )}
         name_by_class = {
             "global-rule": "global-rules.json",
             "project-rule": "project-rules.json",
             "global-skill": "global-skills.json",
             "project-skill": "project-skills.json",
+            "global-runtime-contract": "global-runtime-contracts.json",
         }
         for artifact_id, entry in registry["current_artifacts"].items():
             artifact = self._read_relative_json(entry["artifact_path"], "artifact_path")

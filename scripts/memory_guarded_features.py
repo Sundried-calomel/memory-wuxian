@@ -16,12 +16,13 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from semantic_runtime_contract import CONTRACT_PATH, load_contract
+
 
 AUTHORITATIVE_PREFIXES = ("raw/", "summaries/")
 AUTHORITATIVE_FILES = {"state.json"}
 IGNORED_MIGRATION_PARTS = {".locks", ".DS_Store"}
 E5_PROVIDER = "multilingual-e5-small"
-E5_REVISION = "614241f622f53c4eeff9890bdc4f31cfecc418b3"
 
 
 def sha256_file(path: Path) -> str:
@@ -372,16 +373,19 @@ class GuardedFeatures:
 
     @staticmethod
     def e5_paths() -> tuple[Path, Path]:
+        contract = load_contract()
         model_dir = (
-            Path.home()
-            / ".codex/models/memory-wuxian/multilingual-e5-small"
-            / E5_REVISION
+            Path(contract["installation"]["model_root"]).expanduser()
+            / contract["model"]["revision"]
         )
-        runtime_python = Path.home() / ".codex/runtimes/memory-wuxian-e5-py312"
+        runtime_python = Path(
+            contract["installation"]["runtime_root"]
+        ).expanduser()
         runtime_python /= "Scripts/python.exe" if os.name == "nt" else "bin/python"
         return model_dir, runtime_python
 
     def validate_e5_install(self) -> tuple[Path, Path]:
+        contract = load_contract()
         model_dir, runtime_python = self.e5_paths()
         manifest_path = model_dir / "model-manifest.json"
         if not runtime_python.exists() or not manifest_path.exists():
@@ -391,12 +395,21 @@ class GuardedFeatures:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if (
             manifest.get("format") != "memory-wuxian-e5-model-v1"
-            or manifest.get("model_id") != "intfloat/multilingual-e5-small"
-            or manifest.get("model_revision") != E5_REVISION
+            or manifest.get("model_id") != contract["model"]["id"]
+            or manifest.get("model_revision") != contract["model"]["revision"]
+            or manifest.get("runtime_packages") != contract["runtime"]["packages"]
             or manifest.get("offline_only") is not True
         ):
             raise ValueError("multilingual-e5-small manifest does not match the pinned provider")
-        for artifact in manifest.get("artifacts", []):
+        expected_artifacts = {
+            item["path"]: item for item in contract["model"]["artifacts"]
+        }
+        actual_artifacts = {
+            str(item.get("path")): item for item in manifest.get("artifacts", [])
+        }
+        if set(actual_artifacts) != set(expected_artifacts):
+            raise ValueError("multilingual-e5-small manifest artifact set is incomplete")
+        for artifact in expected_artifacts.values():
             path = model_dir / str(artifact["path"])
             if (
                 not path.is_file()
@@ -435,6 +448,7 @@ class GuardedFeatures:
                 [
                     str(runtime_python),
                     str(Path(__file__).with_name("semantic_e5_worker.py")),
+                    "--contract", str(CONTRACT_PATH),
                     "--model-dir", str(model_dir),
                     "--input", str(payload),
                     "--output", str(output),
@@ -461,6 +475,7 @@ class GuardedFeatures:
                 [
                     str(runtime_python),
                     str(Path(__file__).with_name("semantic_e5_worker.py")),
+                    "--contract", str(CONTRACT_PATH),
                     "--model-dir", str(model_dir),
                     "--input", str(payload),
                     "--output", str(output),
@@ -516,11 +531,13 @@ class GuardedFeatures:
         temporary = path.with_suffix(".tmp")
         temporary.write_text(text, encoding="utf-8")
         os.replace(temporary, path)
+        contract = load_contract() if provider == E5_PROVIDER else None
         atomic_json(directory / "manifest.json", {
             "format": "memory-wuxian-semantic-index-v1",
             "provider": provider,
-            "model_id": "intfloat/multilingual-e5-small" if provider == E5_PROVIDER else None,
-            "model_revision": E5_REVISION if provider == E5_PROVIDER else None,
+            "model_id": contract["model"]["id"] if contract else None,
+            "model_revision": contract["model"]["revision"] if contract else None,
+            "interface_version": contract["interface_version"] if contract else None,
             "vector_file": vector_path.name if vector_path else None,
             "record_count": len(records),
             "disposable": True,

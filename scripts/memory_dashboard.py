@@ -804,6 +804,7 @@ class EnvironmentDashboardCache:
         "project-rule",
         "global-skill",
         "project-skill",
+        "global-runtime-contract",
     )
     ACTIVITY_DIRECTORIES = (
         "conflicts",

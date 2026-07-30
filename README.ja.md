@@ -1,9 +1,9 @@
 # Memory無限
 
-> **2.4.5:** この安定版では、クラウド同期の並行制御、Environment の
-> 回復可能なインポート、Incoming キューの進行、ネイティブバージョンの整合性、
-> Windows ランタイム検証、macOS のトランザクション更新、アーカイブ水位検証、
-> ダッシュボードの日次アーカイブ量ツールチップを強化します。
+> **2.4.6:** この安定版では、デバイス間セマンティック・ランタイム契約、
+> 明示的なローカル E5 実装、初回セマンティック索引の線形 raw ポインタ生成を
+> 追加します。プラットフォームのランタイム、モデルキャッシュ、索引を
+> コピーせず、共通インターフェースと固定依存関係を同期します。
 >
 > Windows v1.7.8 セキュリティ注記：デスクトップのダッシュボードショートカットは、
 > コマンドライン引数なしで専用のコンソール非表示ネイティブランチャーだけを起動します。
@@ -591,3 +591,22 @@ Memory無限は[MIT License](LICENSE.txt)で公開されています。
 `semantic-retrieve` は raw SHA-256 を再検証し、会話・
 メッセージ ID、raw パス、正確な行範囲を返します。
 `semantic-index-clear` は再構築可能なベクトルだけを削除します。
+
+E5 インターフェースは、独立した Environment Registry に不変の
+`global-runtime-contract` として登録できます。
+
+```bash
+python scripts/memory_cli.py semantic-runtime-status
+python scripts/memory_cli.py environment-register-semantic-runtime \
+  --origin-node-id <node-id> --apply
+python scripts/memory_cli.py environment-realize-semantic-runtime
+python scripts/memory_cli.py environment-realize-semantic-runtime --apply
+```
+
+署名済み・対象暗号化済み `environment-v1` ストリームが、契約をペア済み
+デバイスへ転送します。契約はモデル revision、成果物ハッシュ、ランタイム
+パッケージ、query/passage プレフィックス、pooling、正規化、類似度、
+インストーラー入口を固定します。受信または受理だけではインストールや
+ダウンロードは行われません。各デバイスが受理済み契約を明示的にローカル
+実装し、モデル、仮想環境、認証情報、セマンティック索引はデバイス内に
+保持します。

@@ -14,22 +14,8 @@ import urllib.request
 import venv
 from pathlib import Path
 
+from semantic_runtime_contract import CONTRACT_PATH, load_contract
 
-MODEL_ID = "intfloat/multilingual-e5-small"
-MODEL_REVISION = "614241f622f53c4eeff9890bdc4f31cfecc418b3"
-FILES = (
-    ("config.json", 655, "69137736cab8b8903a07fe8afaafdda25aac55415a12a55d1bffa9f581abf959"),
-    ("sentencepiece.bpe.model", 5069051, "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865"),
-    ("special_tokens_map.json", 167, "d05497f1da52c5e09554c0cd874037a083e1dc1b9cfd48034d1c717f1afc07a7"),
-    ("tokenizer.json", 17082730, "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39"),
-    ("tokenizer_config.json", 443, "a1d6bc8734a6f635dc158508bef000f8e2e5a759c7d92f984b2c86e5ff53425b"),
-    (
-        "onnx/model_qint8_avx512_vnni.onnx",
-        118346824,
-        "dd476dd0c2514e9b9be83aeb3853fac0763e0bdf4a71645407587d77c48a2d88",
-    ),
-)
-RUNTIME_PACKAGES = ("onnxruntime==1.28.0", "transformers==4.57.6")
 
 
 def sha256(path: Path) -> str:
@@ -61,27 +47,43 @@ def runtime_python(runtime_dir: Path) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--contract", default=str(CONTRACT_PATH))
     parser.add_argument(
         "--model-root",
-        default=str(Path.home() / ".codex/models/memory-wuxian/multilingual-e5-small"),
+        default=None,
     )
     parser.add_argument(
         "--runtime-dir",
-        default=str(Path.home() / ".codex/runtimes/memory-wuxian-e5-py312"),
+        default=None,
     )
     args = parser.parse_args()
-    model_dir = Path(args.model_root).expanduser().resolve() / MODEL_REVISION
-    runtime_dir = Path(args.runtime_dir).expanduser().resolve()
+    contract = load_contract(args.contract)
+    model_id = contract["model"]["id"]
+    model_revision = contract["model"]["revision"]
+    model_root = args.model_root or contract["installation"]["model_root"]
+    runtime_root = args.runtime_dir or contract["installation"]["runtime_root"]
+    model_dir = Path(model_root).expanduser().resolve() / model_revision
+    runtime_dir = Path(runtime_root).expanduser().resolve()
     python = runtime_python(runtime_dir)
     if not python.exists():
         venv.EnvBuilder(with_pip=True, clear=False).create(runtime_dir)
     subprocess.run(
-        [str(python), "-m", "pip", "install", "--disable-pip-version-check", *RUNTIME_PACKAGES],
+        [
+            str(python),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            *contract["runtime"]["packages"],
+        ],
         check=True,
     )
     artifacts = []
-    for remote_name, expected_size, expected_sha256 in FILES:
-        local_name = Path(remote_name).name
+    for item in contract["model"]["artifacts"]:
+        remote_name = item["source"]
+        local_name = item["path"]
+        expected_size = item["size"]
+        expected_sha256 = item["sha256"]
         destination = model_dir / local_name
         valid = (
             destination.exists()
@@ -89,7 +91,10 @@ def main() -> int:
             and sha256(destination) == expected_sha256
         )
         if not valid:
-            url = f"https://huggingface.co/{MODEL_ID}/resolve/{MODEL_REVISION}/{remote_name}"
+            url = (
+                f"https://huggingface.co/{model_id}/resolve/"
+                f"{model_revision}/{remote_name}"
+            )
             download(url, destination)
         actual_size = destination.stat().st_size
         actual_sha256 = sha256(destination)
@@ -104,9 +109,11 @@ def main() -> int:
         })
     manifest = {
         "format": "memory-wuxian-e5-model-v1",
-        "model_id": MODEL_ID,
-        "model_revision": MODEL_REVISION,
-        "runtime_packages": list(RUNTIME_PACKAGES),
+        "contract_id": contract["contract_id"],
+        "interface_version": contract["interface_version"],
+        "model_id": model_id,
+        "model_revision": model_revision,
+        "runtime_packages": list(contract["runtime"]["packages"]),
         "offline_only": True,
         "artifacts": artifacts,
     }

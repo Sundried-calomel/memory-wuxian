@@ -135,6 +135,12 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     archive-waterline preflight. If retained source bytes through the cutoff
     are not covered by persisted cursors, stop or perform the explicit bounded
     backfill and verify again before using Memory無限 evidence.
+61. Synchronize semantic capability through an immutable
+    `global-runtime-contract`, not by copying a platform virtual environment.
+    Pin the model revision, artifact hashes, runtime packages, embedding
+    interface, and platform-neutral installer entry. Receiving or accepting a
+    contract never installs or downloads it; local realization requires an
+    explicit reviewed `--apply`, and semantic indexes remain device-local.
 
 ## Operating workflow
 
@@ -216,6 +222,12 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     copying the complete archive inline. Let the maintenance worker create one
     complete snapshot for all pending mutations, and clear the debt only after
     that snapshot succeeds.
+40. Register the bundled E5 interface with
+    `environment-register-semantic-runtime --origin-node-id <node>`, let the
+    existing `environment-v1` stream transport it, and use
+    `environment-realize-semantic-runtime --apply` only after explicit review
+    on the receiving device. Use `semantic-runtime-status` to verify the
+    bundled contract, registered revision, model artifacts, and local runtime.
 
 ## Commands
 
@@ -239,6 +251,11 @@ python3 scripts/semantic_backfill.py --root memory --config config.yaml --max-jo
 python3 scripts/memory_cli.py ingest-summary --job memory/pending/<job>.json --summary-json <summary>.json
 python3 scripts/memory_cli.py retrieve --query "..."
 python3 scripts/memory_cli.py retrieve --query "..." --mode current-policy
+python3 scripts/memory_cli.py semantic-runtime-status
+python3 scripts/memory_cli.py environment-register-semantic-runtime --origin-node-id <node>
+python3 scripts/memory_cli.py environment-register-semantic-runtime --origin-node-id <node> --apply
+python3 scripts/memory_cli.py environment-realize-semantic-runtime
+python3 scripts/memory_cli.py environment-realize-semantic-runtime --apply
 python3 scripts/memory_cli.py conversation-tail --title "Codex conversation title" --exclude-conversation-id "codex:<active-task-id>" --messages 20
 python3 scripts/memory_cli.py register-title --conversation-id "codex:<task-id>" --title "Confirmed title"
 python3 scripts/memory_cli.py rebuild-state

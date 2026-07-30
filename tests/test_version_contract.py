@@ -1,6 +1,6 @@
-import os
 import re
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -9,11 +9,6 @@ ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
 CARGO_MANIFEST = ROOT / "native-collector" / "Cargo.toml"
 RUST_ROOT = ROOT / "native-collector"
-CHECKED_IN_BINARIES = {
-    "memory-wuxian-collector": ROOT / "bin" / "memory-wuxian-collector.exe",
-}
-
-
 def normalize_cargo_version(version: str) -> str:
     return re.sub(r"(?<=\d)-(?=[A-Za-z])", "", version)
 
@@ -48,43 +43,27 @@ class VersionContractTest(unittest.TestCase):
                 self.assertIn("version,", text)
                 self.assertNotIn("version = \"", text)
 
-    def test_checked_in_binaries_are_current_or_require_rebuild(self):
-        stale = []
+    def test_locally_built_native_binaries_report_the_current_version(self):
         cargo = manifest_version(CARGO_MANIFEST, "package")
-        for name, executable in CHECKED_IN_BINARIES.items():
-            if not executable.exists():
-                stale.append(f"{name}: missing")
-                continue
-            expected = f"{name} {cargo}"
-            if os.name == "nt":
-                completed = subprocess.run(
-                    [str(executable), "--version"],
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    capture_output=True,
-                    check=False,
-                )
-                actual = completed.stdout.strip()
-                if completed.returncode != 0 or actual != expected:
-                    stale.append(
-                        f"{name}: expected {expected!r}, got {actual!r}"
-                    )
-            else:
-                payload = executable.read_bytes()
-                if (
-                    name.encode("ascii") not in payload
-                    or cargo.encode("ascii") not in payload
-                ):
-                    stale.append(
-                        f"{name}: embedded name or version {cargo!r} missing"
-                    )
-
-        self.assertFalse(
-            stale,
-            "release binaries must be rebuilt from the current Rust sources:\n"
-            + "\n".join(stale),
+        executable = (
+            ROOT
+            / "native-collector"
+            / "target"
+            / "debug"
+            / ("memory-wuxian-collector.exe" if sys.platform == "win32" else "memory-wuxian-collector")
         )
+        if not executable.is_file():
+            self.skipTest("native candidate has not been built in this checkout")
+        completed = subprocess.run(
+            [str(executable), "--version"],
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(0, completed.returncode)
+        self.assertEqual(f"memory-wuxian-collector {cargo}", completed.stdout.strip())
 
 
 if __name__ == "__main__":

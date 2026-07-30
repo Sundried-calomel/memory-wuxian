@@ -1,8 +1,8 @@
 # Memory無限
 
-> **2.4.5：**这个稳定版强化了云同步并发控制、Environment 可恢复导入、
-> Incoming 队列推进、原生程序版本一致性、Windows 运行时验证、macOS
-> 事务式更新、归档水位检查和操作台每日归档量悬停气泡。
+> **2.4.6：**这个稳定版增加了跨设备语义运行时合同、显式本机 E5 实现，
+> 并把首次语义建库的原文定位改为线性扫描。它同步统一接口和固定依赖，
+> 不复制平台运行时、模型缓存或语义索引。
 >
 > Windows v1.7.8 安全说明：桌面状态台快捷方式现在只指向无控制台的原生启动器，
 > 且不携带命令行参数。安装器把已验证的 Python 运行时与活动归档路径写入本机
@@ -561,3 +561,20 @@ raw 历史之外的只读副本区。
 会以 raw SHA-256 复核每条命中，并返回
 对话/消息 ID、原始路径和准确行范围。`semantic-index-clear` 只删除可重建向量，
 原始历史和关键词检索仍然可用。
+
+E5 接口也可以作为不可变的 `global-runtime-contract` 注册到独立的
+Environment Registry：
+
+```bash
+python scripts/memory_cli.py semantic-runtime-status
+python scripts/memory_cli.py environment-register-semantic-runtime \
+  --origin-node-id <node-id> --apply
+python scripts/memory_cli.py environment-realize-semantic-runtime
+python scripts/memory_cli.py environment-realize-semantic-runtime --apply
+```
+
+签名且面向目标加密的 `environment-v1` 流会把合同传给已配对设备。合同固定
+模型 revision、文件哈希、运行时包、query/passage 前缀、池化、归一化、
+相似度算法和安装入口。接收或接受合同不会自动安装或下载任何内容；每台设备
+都必须显式地在本机实现已接受的合同。模型文件、虚拟环境、凭据和语义索引
+始终保留在各自设备。

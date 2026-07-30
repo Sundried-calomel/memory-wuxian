@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.4.6 - 2026-07-30
+
+- Added a content-addressed `global-runtime-contract` Environment artifact for
+  the optional multilingual E5 capability. It synchronizes the pinned model,
+  artifact hashes, runtime packages, embedding interface, and installer entry
+  across macOS, Windows, and Linux without copying platform virtual
+  environments, credentials, models, or semantic indexes.
+- Added preview-first CLI flows to register, inspect, and explicitly realize
+  the shared semantic runtime contract. Incoming contracts remain
+  `pending-review`; registration and cloud transport never install or download
+  the model automatically.
+- Made the E5 installer, ONNX worker, installation validator, and semantic index
+  manifest consume one canonical contract, while preserving compatibility with
+  already verified local installations.
+- Reduced first-time semantic index construction from repeated whole-file raw
+  scans to one precomputed raw-pointer pass, with regression coverage proving
+  each raw file is read once.
+
 ## 2.4.5 - 2026-07-30
 
 - Added recoverable Environment import transactions so incomplete bundles stay

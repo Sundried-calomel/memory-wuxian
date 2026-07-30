@@ -11,6 +11,8 @@ import numpy as np
 import onnxruntime as ort
 from transformers import AutoTokenizer
 
+from semantic_runtime_contract import CONTRACT_PATH, load_contract
+
 
 def mean_pool(last_hidden_state: np.ndarray, attention_mask: np.ndarray) -> np.ndarray:
     mask = attention_mask[..., None].astype(np.float32)
@@ -26,6 +28,9 @@ def embed(
     texts: list[str],
     prefix: str,
     batch_size: int,
+    *,
+    model_file: str,
+    max_length: int,
 ) -> np.ndarray:
     tokenizer = AutoTokenizer.from_pretrained(
         model_dir,
@@ -33,7 +38,7 @@ def embed(
         trust_remote_code=False,
     )
     session = ort.InferenceSession(
-        str(model_dir / "model_qint8_avx512_vnni.onnx"),
+        str(model_dir / model_file),
         providers=["CPUExecutionProvider"],
     )
     input_names = {item.name for item in session.get_inputs()}
@@ -42,7 +47,7 @@ def embed(
         batch = [prefix + text for text in texts[start:start + batch_size]]
         encoded = tokenizer(
             batch,
-            max_length=512,
+            max_length=max_length,
             padding=True,
             truncation=True,
             return_tensors="np",
@@ -67,7 +72,9 @@ def main() -> int:
     parser.add_argument("--prefix", choices=["query", "passage"], required=True)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--matrix")
+    parser.add_argument("--contract", default=str(CONTRACT_PATH))
     args = parser.parse_args()
+    contract = load_contract(args.contract)
     payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
     texts = payload.get("texts")
     if not isinstance(texts, list) or not all(isinstance(item, str) for item in texts):
@@ -75,8 +82,14 @@ def main() -> int:
     vectors = embed(
         Path(args.model_dir).resolve(),
         texts,
-        f"{args.prefix}: ",
+        contract["embedding"][f"{args.prefix}_prefix"],
         max(1, args.batch_size),
+        model_file=next(
+            item["path"]
+            for item in contract["model"]["artifacts"]
+            if item["source"].endswith(".onnx")
+        ),
+        max_length=contract["embedding"]["max_length"],
     )
     output = Path(args.output)
     if args.matrix:

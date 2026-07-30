@@ -18,7 +18,13 @@
       "pattern": "^[a-z0-9][a-z0-9:._-]{2,191}$"
     },
     "object_class": {
-      "enum": ["global-rule", "project-rule", "global-skill", "project-skill"]
+      "enum": [
+        "global-rule",
+        "project-rule",
+        "global-skill",
+        "project-skill",
+        "global-runtime-contract"
+      ]
     },
     "scope": {"enum": ["global", "project"]},
     "project_id": {

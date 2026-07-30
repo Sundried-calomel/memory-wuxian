@@ -112,6 +112,17 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn("sha256", job_block(self.source, "windows-installer"))
         self.assertIn("dist/*", job_block(self.source, "publish"))
 
+    def test_release_rebuilds_native_binaries_before_each_installer(self) -> None:
+        mac = job_block(self.source, "macos-installer")
+        windows = job_block(self.source, "windows-installer")
+        self.assertIn("cargo build --release --locked --bins", mac)
+        self.assertIn("lipo -create", mac)
+        self.assertIn("cargo build --release --locked --bins", windows)
+        self.assertIn(
+            "Copy-Item native-collector/target/release/memory-wuxian-collector.exe",
+            windows,
+        )
+
     def test_both_installers_retain_the_architecture_hard_gate(self) -> None:
         required = [
             "SKILL.md",

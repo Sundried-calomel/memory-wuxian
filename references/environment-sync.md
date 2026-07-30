@@ -2,8 +2,9 @@
 
 ## Purpose
 
-Memory無限 2.0 synchronizes global rules, project rules, global Skills, and
-project Skills. It also provides a reviewed path for promoting
+Memory無限 2.0 synchronizes global rules, project rules, global Skills, project
+Skills, and portable global runtime contracts. It also provides a reviewed
+path for promoting
 project-independent capability cores into global Skills while retaining
 project-specific adapters.
 
@@ -24,6 +25,14 @@ project-specific adapters.
 | Project rule | registered project | project-relative path | safe update by class |
 | Global Skill | global Skill owner | Codex Skill directory | verified no-conflict |
 | Project Skill | project Skill owner | Skill directory + project binding | require project |
+| Global runtime contract | capability owner | device-local runtime | explicit realization |
+
+Runtime contracts carry pinned interfaces and reproducible installation
+descriptions. They never carry a macOS or Windows virtual environment, model
+cache, credential, or semantic index. Incoming contracts remain
+`pending-review`; acceptance registers the immutable contract, while a
+separate explicit local realization may download and verify its declared
+artifacts.
 
 ## Promotion lifecycle
 

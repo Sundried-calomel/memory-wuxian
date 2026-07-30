@@ -35,6 +35,14 @@ from memory_environment_rules import EnvironmentRuleInstaller
 from memory_environment_skills import EnvironmentSkillInstaller
 from memory_federation import FederationManager
 from memory_guarded_features import GuardedFeatures, atomic_json
+from semantic_runtime_contract import (
+    ARTIFACT_ID as SEMANTIC_RUNTIME_ARTIFACT_ID,
+    environment_manifest as semantic_runtime_environment_manifest,
+    load_contract as load_semantic_runtime_contract,
+    local_status as semantic_runtime_local_status,
+    realize as realize_semantic_runtime,
+    registered_contract as registered_semantic_runtime_contract,
+)
 from token_usage import (
     add_usage,
     aggregate_ledgers,
@@ -4501,6 +4509,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     semantic_retrieve.add_argument("--query", required=True)
     semantic_retrieve.add_argument("--top-k", type=int, default=10)
+    semantic_runtime_status = subparsers.add_parser(
+        "semantic-runtime-status",
+        help="Validate the shared E5 interface contract and inspect local realization",
+    )
+    semantic_runtime_status.add_argument(
+        "--artifact-id", default=SEMANTIC_RUNTIME_ARTIFACT_ID
+    )
+    semantic_runtime_register = subparsers.add_parser(
+        "environment-register-semantic-runtime",
+        help="Preview or register the bundled E5 interface contract in environment-v1",
+    )
+    semantic_runtime_register.add_argument("--origin-node-id", required=True)
+    semantic_runtime_register.add_argument("--apply", action="store_true")
+    semantic_runtime_realize = subparsers.add_parser(
+        "environment-realize-semantic-runtime",
+        help="Preview or explicitly realize one registered E5 interface contract locally",
+    )
+    semantic_runtime_realize.add_argument(
+        "--artifact-id", default=SEMANTIC_RUNTIME_ARTIFACT_ID
+    )
+    semantic_runtime_realize.add_argument("--model-root")
+    semantic_runtime_realize.add_argument("--runtime-dir")
+    semantic_runtime_realize.add_argument("--apply", action="store_true")
 
     subparsers.add_parser(
         "environment-init",
@@ -4522,7 +4553,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     environment_list.add_argument(
         "--object-class",
-        choices=("global-rule", "project-rule", "global-skill", "project-skill"),
+        choices=(
+            "global-rule",
+            "project-rule",
+            "global-skill",
+            "project-skill",
+            "global-runtime-contract",
+        ),
     )
     subparsers.add_parser(
         "environment-projects",
@@ -5182,6 +5219,48 @@ def dispatch_command(
         result = GuardedFeatures(store).semantic_clear()
     elif args.command == "semantic-retrieve":
         result = GuardedFeatures(store).semantic_retrieve(args.query, args.top_k)
+    elif args.command == "semantic-runtime-status":
+        contract = load_semantic_runtime_contract()
+        registered = None
+        try:
+            registered = registered_semantic_runtime_contract(
+                EnvironmentRegistry(store.root), args.artifact_id
+            )
+        except KeyError:
+            pass
+        selected = registered or contract
+        result = {
+            "status": "ok",
+            "artifact_id": args.artifact_id,
+            "registered": registered is not None,
+            "bundled_matches_registered": (
+                registered is None or registered == contract
+            ),
+            "local": semantic_runtime_local_status(
+                selected,
+                model_root=Path(selected["installation"]["model_root"]),
+                runtime_root=Path(selected["installation"]["runtime_root"]),
+            ),
+        }
+    elif args.command == "environment-register-semantic-runtime":
+        result = EnvironmentRegistry(store.root).register(
+            semantic_runtime_environment_manifest(args.origin_node_id),
+            apply=args.apply,
+        )
+    elif args.command == "environment-realize-semantic-runtime":
+        contract = registered_semantic_runtime_contract(
+            EnvironmentRegistry(store.root), args.artifact_id
+        )
+        result = realize_semantic_runtime(
+            contract,
+            model_root=Path(
+                args.model_root or contract["installation"]["model_root"]
+            ),
+            runtime_root=Path(
+                args.runtime_dir or contract["installation"]["runtime_root"]
+            ),
+            apply=args.apply,
+        )
     elif args.command == "environment-init":
         result = EnvironmentRegistry(store.root).init()
     elif args.command == "environment-scan":
@@ -5449,6 +5528,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "as-of",
             "decision-graph",
             "semantic-retrieve",
+            "semantic-runtime-status",
             "environment-scan",
             "environment-status",
             "environment-list",

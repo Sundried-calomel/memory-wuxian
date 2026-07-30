@@ -4,7 +4,8 @@
     {"path": "scripts", "extensions": [".py", ".ps1", ".sh"]},
     {"path": "native-collector/src", "extensions": [".rs"]},
     {"path": "dashboard", "extensions": [".html", ".css", ".js"]},
-    {"path": "schemas", "extensions": [".json"]}
+    {"path": "schemas", "extensions": [".json"]},
+    {"path": "contracts", "extensions": [".json"]}
   ],
   "modules": [
     {
@@ -47,7 +48,9 @@
       "architecture_owner": "Environment Plane",
       "patterns": [
         "scripts/memory_environment*.py",
-        "scripts/memory_governance_ai.py"
+        "scripts/memory_governance_ai.py",
+        "scripts/semantic_runtime_contract.py",
+        "contracts/**"
       ]
     },
     {

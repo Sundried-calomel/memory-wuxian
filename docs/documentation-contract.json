@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.4.5",
+  "reviewed_version": "2.4.6",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -98,6 +98,10 @@
     {
       "id": "retrieval-quality-and-local-semantics",
       "required_tokens": ["retrieval-evaluate", "semantic-index-build", "semantic-index-clear", "semantic-retrieve", "local-hash-v1", "multilingual-e5-small", "install_multilingual_e5.py"]
+    },
+    {
+      "id": "cross-device-semantic-runtime-contract",
+      "required_tokens": ["semantic-runtime-status", "environment-register-semantic-runtime", "environment-realize-semantic-runtime", "global-runtime-contract", "--apply"]
     },
     {
       "id": "codex-reported-token-ledger",

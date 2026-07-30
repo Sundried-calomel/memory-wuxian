@@ -1,9 +1,9 @@
 # Memory無限
 
-> **2.4.5:** This stable release hardens cloud-sync concurrency, recoverable
-> Environment imports, incoming-queue progress, native version consistency,
-> Windows runtime validation, macOS transactional updates, archive waterline
-> checks, and dashboard archive-volume tooltips.
+> **2.4.6:** This stable release adds a cross-device semantic runtime contract,
+> explicit local E5 realization, and linear-time raw-pointer construction for
+> first-time semantic indexing. It synchronizes the interface and pinned
+> dependencies without copying platform runtimes, model caches, or indexes.
 >
 > Windows v1.7.8 security note: the desktop dashboard shortcut now targets a
 > dedicated no-console native launcher with no command-line arguments. The
@@ -673,3 +673,22 @@ archive, worker, and index paths.
 conversation/message ID, raw path, and exact line range.
 `semantic-index-clear` removes only disposable vectors; raw history and keyword
 retrieval continue to work.
+
+The E5 interface can also be registered as an immutable
+`global-runtime-contract` in the independent Environment Registry:
+
+```bash
+python scripts/memory_cli.py semantic-runtime-status
+python scripts/memory_cli.py environment-register-semantic-runtime \
+  --origin-node-id <node-id> --apply
+python scripts/memory_cli.py environment-realize-semantic-runtime
+python scripts/memory_cli.py environment-realize-semantic-runtime --apply
+```
+
+The signed and target-encrypted `environment-v1` stream transports the
+contract to paired devices. It pins the model revision, artifact hashes,
+runtime packages, query/passage prefixes, pooling, normalization, similarity,
+and installer entry point. Receiving or accepting it does not install or
+download anything. Each device must explicitly realize the accepted contract
+into its own compatible local runtime. Model files, virtual environments,
+credentials, and semantic indexes remain device-local.

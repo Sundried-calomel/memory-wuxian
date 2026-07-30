@@ -32,7 +32,13 @@
     "event_sequence": {"type": "integer", "minimum": 1},
     "artifact_id": {"type": "string", "minLength": 3},
     "object_class": {
-      "enum": ["global-rule", "project-rule", "global-skill", "project-skill"]
+      "enum": [
+        "global-rule",
+        "project-rule",
+        "global-skill",
+        "project-skill",
+        "global-runtime-contract"
+      ]
     },
     "base_revision_id": {
       "type": ["string", "null"],

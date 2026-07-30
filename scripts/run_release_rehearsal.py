@@ -161,6 +161,15 @@ def main() -> int:
             ],
         ),
         (
+            "semantic-runtime-environment-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_semantic_runtime_contract",
+                "tests.test_guarded_features",
+                "tests.test_semantic_e5_worker",
+            ],
+        ),
+        (
             "environment-registry-contract",
             [
                 python, "-m", "unittest", "-v",

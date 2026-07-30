@@ -308,7 +308,11 @@ class EnvironmentIncomingProcessor:
                 reason = (
                     "skill-install-review"
                     if artifact["object_class"].endswith("-skill")
-                    else "project-binding-review"
+                    else (
+                        "runtime-contract-review"
+                        if artifact["object_class"] == "global-runtime-contract"
+                        else "project-binding-review"
+                    )
                 )
         else:
             assessment = self._conflict_assessment(artifact, revision, current)
@@ -430,7 +434,15 @@ class EnvironmentIncomingProcessor:
                 base_hash = base["content_sha256"]
             except (FileNotFoundError, ValueError, KeyError):
                 base_hash = None
-        block = "skill-tree" if artifact["object_class"].endswith("-skill") else "document"
+        block = (
+            "skill-tree"
+            if artifact["object_class"].endswith("-skill")
+            else (
+                "runtime-interface"
+                if artifact["object_class"] == "global-runtime-contract"
+                else "document"
+            )
+        )
         return {
             "artifact_id": artifact["artifact_id"],
             "object_class": artifact["object_class"],

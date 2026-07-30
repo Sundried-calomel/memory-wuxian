@@ -10,8 +10,8 @@
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Memory無限操作台</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>2.4.5</string>
-  <key>CFBundleVersion</key><string>2.4.5</string>
+  <key>CFBundleShortVersionString</key><string>2.4.6</string>
+  <key>CFBundleVersion</key><string>2.4.6</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSAppTransportSecurity</key>
   <dict><key>NSAllowsLocalNetworking</key><true/></dict>
