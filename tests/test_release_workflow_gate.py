@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
+TEST_WORKFLOW = ROOT / ".github" / "workflows" / "test.yml"
 
 
 def job_block(source: str, job_name: str) -> str:
@@ -21,6 +22,14 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.source = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        cls.test_source = TEST_WORKFLOW.read_text(encoding="utf-8")
+
+    def test_stable_ci_pins_the_supported_windows_runner(self) -> None:
+        self.assertIn(
+            "os: [ubuntu-latest, macos-latest, windows-2022]",
+            self.test_source,
+        )
+        self.assertNotIn("windows-latest", self.test_source)
 
     def test_release_is_manual_and_serialized(self) -> None:
         self.assertIn("workflow_dispatch:", self.source)
