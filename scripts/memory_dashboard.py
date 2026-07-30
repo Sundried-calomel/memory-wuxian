@@ -67,6 +67,35 @@ def background_subprocess_kwargs() -> dict[str, Any]:
     }
 
 
+def windows_process_running(pid: int, kernel32: Any | None = None) -> bool:
+    """Check a Windows process without sending a console-control signal."""
+    if pid <= 0:
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    api = kernel32 or ctypes.WinDLL("kernel32", use_last_error=True)
+    api.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    api.OpenProcess.restype = wintypes.HANDLE
+    api.GetExitCodeProcess.argtypes = [wintypes.HANDLE, wintypes.LPDWORD]
+    api.GetExitCodeProcess.restype = wintypes.BOOL
+    api.CloseHandle.argtypes = [wintypes.HANDLE]
+    api.CloseHandle.restype = wintypes.BOOL
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+    handle = api.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return False
+    try:
+        exit_code = wintypes.DWORD()
+        return bool(api.GetExitCodeProcess(handle, ctypes.byref(exit_code))) and (
+            exit_code.value == still_active
+        )
+    finally:
+        api.CloseHandle(handle)
+
+
 def cloud_scheduler_status() -> dict[str, Any]:
     if sys.platform == "darwin":
         plist = (
@@ -338,8 +367,12 @@ def collector_telemetry(root: Path) -> dict[str, Any] | None:
         import psutil
     except ImportError:
         try:
-            os.kill(int(telemetry["pid"]), 0)
-            telemetry["process_running"] = True
+            pid = int(telemetry["pid"])
+            if sys.platform == "win32":
+                telemetry["process_running"] = windows_process_running(pid)
+            else:
+                os.kill(pid, 0)
+                telemetry["process_running"] = True
         except (KeyError, TypeError, ValueError, OSError):
             pass
     else:
