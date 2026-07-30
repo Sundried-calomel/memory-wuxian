@@ -52,6 +52,9 @@ Use Memory無限 to preserve conversation history outside the active context win
     scenario matrix has actually run and produced a passing report with one
     hashed evidence log per scenario. Skipped, interrupted, inferred, or
     manually described scenarios are not passes.
+    A scenario may reference a same-job successful full-suite evidence file
+    instead of rerunning the same tests; the reference and source SHA-256 must
+    be recorded. Evidence reuse removes duplicate execution, never coverage.
 44. Treat the desktop dashboard as a release hard gate. Every install or
     upgrade that changes dashboard code, runtime paths, packaging, or launcher
     behavior must replace the installed platform dashboard, preserve the active
@@ -80,6 +83,10 @@ Use Memory無限 to preserve conversation history outside the active context win
 51. Every release requires its own clean commit, tag, documentation contract,
     full rehearsal directory, passing report, and published GitHub Release.
     Evidence from one version cannot count for another.
+    During iteration use focused tests. Feature branches run the PR workflow
+    only; branch pushes must not duplicate that matrix. `main` pushes run the
+    complete release-candidate gate once, and the installer workflow consumes
+    that same-SHA result without rerunning unit or rehearsal suites.
 52. Persist available top-level Codex `token_count` telemetry as a derived
     per-conversation ledger. Label it Codex-reported model usage rather than
     billing usage; exclude subagents, preserve counter-reset segments, and do
@@ -120,6 +127,11 @@ Use Memory無限 to preserve conversation history outside the active context win
     installed devices through the user-space transaction unless first install,
     explicit recovery, or a declared privileged-component change requires the
     full installer.
+    Do not split Windows tests into serial shards or run a focused unittest
+    scenario again after the full suite passed in the same job. Superseded PR
+    runs must be cancelled. Optimization may consolidate jobs and reference
+    hashed evidence, but may not remove a contract or mark an unrun contract
+    as passed.
 62. Register every new production file in
     `docs/module-architecture.json` under exactly one canonical module owner
     before implementation. Run `scripts/check_architecture_contract.py` for

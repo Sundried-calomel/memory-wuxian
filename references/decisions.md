@@ -377,3 +377,17 @@ compatibility contract remain backward compatible, publish the integrated
 result as the next 2.x version. Use 3.0 only after an explicit incompatible
 contract decision, migration matrix, legacy-reader path, and rollback evidence
 have passed the release gate.
+
+## D-044: Release evidence is deduplicated, not weakened
+
+Status: Accepted.
+
+Feature branches run one PR matrix and do not also run a branch-push matrix.
+Only `main` pushes run the complete same-SHA candidate gate. Each platform job
+runs its full unittest suite at most once; rehearsal contracts covered by that
+suite retain individual SHA-256-bound reference logs instead of rerunning the
+same modules. Windows uses bounded whole jobs rather than serial test shards,
+and superseded PR runs are cancelled. Installer publication consumes the
+successful same-SHA candidate proof and does not repeat unit or rehearsal
+suites. No optimization may delete a safety contract, reuse evidence across
+commits, versions, jobs, or platforms, or report an unproved scenario as passed.

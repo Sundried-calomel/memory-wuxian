@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.5.2 - 2026-07-31
+
+- Removed duplicate feature-branch push and pull-request CI matrices; only
+  `main` is validated on push, while feature branches use cancellable PR runs.
+- Replaced twelve serial Windows shard jobs with one bounded candidate job.
+- Run each platform's full unittest suite at most once and let rehearsal
+  scenarios retain SHA-256-bound references to that successful evidence.
+- Kept the full same-SHA `main` gate before installer publication while making
+  the installer workflow consume, rather than repeat, candidate validation.
+- Bound the optimized release lifecycle into Agent rules, Skill instructions,
+  product architecture, decisions, rehearsal documentation, and all localized
+  READMEs so it follows the repository across devices.
+
 ## 2.5.1 - 2026-07-31
 
 - Rebuilt the checked-in Windows collector from the current Rust sources so

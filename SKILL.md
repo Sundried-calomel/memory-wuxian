@@ -352,7 +352,12 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
   implemented privacy feature.
 - Read [release-rehearsal.md](references/release-rehearsal.md) before release
   claims. Run `scripts/run_release_rehearsal.py`; never describe unrun or
-  evidence-free scenarios as passed.
+  evidence-free scenarios as passed. During candidate CI, run the full
+  unittest suite once and pass its retained log with
+  `--reuse-unittest-evidence`; the rehearsal then emits one hashed reference
+  log per covered contract without executing those modules again. Feature
+  branches use PR CI only, `main` uses one complete same-SHA candidate gate,
+  and the release workflow builds installers from that proof.
 - Read [AGENTS.md](AGENTS.md) when integrating this skill into an Agent's persistent operating rules.
 - Use files in `templates/` as output contracts and files in `prompts/` as Agent prompts.
 

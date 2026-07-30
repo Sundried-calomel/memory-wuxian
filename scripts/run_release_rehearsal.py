@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import tomllib
@@ -22,6 +23,23 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def validate_unittest_evidence(path: Path) -> str:
+    if not path.is_file():
+        raise FileNotFoundError(f"Reusable unittest evidence is missing: {path}")
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text = raw.decode("utf-16")
+    else:
+        text = raw.decode("utf-8-sig", errors="replace")
+    if not re.search(r"(?m)^Ran [1-9][0-9]* tests? in ", text):
+        raise ValueError("Reusable unittest evidence has no completed test count")
+    if not re.search(r"(?m)^OK(?: \(|$)", text):
+        raise ValueError("Reusable unittest evidence has no final OK result")
+    if re.search(r"(?m)^FAILED(?: \(|$)", text):
+        raise ValueError("Reusable unittest evidence contains a failed result")
+    return digest(path)
+
+
 def main() -> int:
     configure_unicode_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
@@ -32,6 +50,13 @@ def main() -> int:
         "--exclude-baseline",
         action="store_true",
         help="Exclude full Python and Rust baselines proved by separate CI jobs.",
+    )
+    parser.add_argument(
+        "--reuse-unittest-evidence",
+        help=(
+            "Reference a successful full unittest evidence file instead of "
+            "rerunning focused unittest scenarios."
+        ),
     )
     args = parser.parse_args()
     if (args.scenario_shard_index is None) != (args.scenario_shard_count is None):
@@ -333,6 +358,11 @@ def main() -> int:
         "bundled-native-version",
         "python-regressions",
     }
+    unittest_scenario_ids = {
+        scenario_id
+        for scenario_id, command in scenarios
+        if len(command) >= 3 and command[1:3] == ["-m", "unittest"]
+    }
     if args.exclude_baseline:
         scenarios = [
             scenario for scenario in scenarios if scenario[0] not in baseline_ids
@@ -346,6 +376,28 @@ def main() -> int:
             parser.error("selected scenario shard is empty")
     results = []
     for scenario_id, command in scenarios:
+        if (
+            args.reuse_unittest_evidence
+            and scenario_id in unittest_scenario_ids
+        ):
+            reused_evidence = Path(args.reuse_unittest_evidence).resolve()
+            source_sha256 = validate_unittest_evidence(reused_evidence)
+            log = output / f"{scenario_id}.log"
+            log.write_text(
+                "Covered by the successful full unittest suite.\n"
+                f"source={reused_evidence}\n"
+                f"source_sha256={source_sha256}\n",
+                encoding="utf-8",
+            )
+            results.append({
+                "id": scenario_id,
+                "status": "passed",
+                "command": command,
+                "evidence": log.name,
+                "evidence_sha256": digest(log),
+                "reused_evidence_sha256": source_sha256,
+            })
+            continue
         completed = subprocess.run(
             command,
             cwd=ROOT,
