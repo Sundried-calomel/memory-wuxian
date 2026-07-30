@@ -675,7 +675,6 @@ class EnvironmentExchangeManager:
         peers = {item["node_id"]: item for item in self.peers()}
         if origin not in peers or not peers[origin].get("trusted"):
             raise ValueError("environment bundle peer is not trusted")
-        state = self.replica_state(origin)
         bundle_hash = bytes_sha256(bundle.read_bytes())
         receipt_path = (
             self._peer_root(origin) / "receipts" / f"{manifest['bundle_id']}.json"
@@ -687,6 +686,24 @@ class EnvironmentExchangeManager:
                 "origin_node_id": origin,
                 "to_event_sequence": manifest["to_event_sequence"],
             }
+        transaction_root = (
+            self._peer_root(origin) / "transactions" / str(manifest["bundle_id"])
+        )
+        marker_path = transaction_root / "transaction.json"
+        if marker_path.exists():
+            self._recover_import_transaction(
+                marker_path=marker_path,
+                receipt_path=receipt_path,
+                expected_bundle_id=str(manifest["bundle_id"]),
+            )
+            if receipt_path.exists():
+                return {
+                    "status": "no-change",
+                    "bundle_id": manifest["bundle_id"],
+                    "origin_node_id": origin,
+                    "to_event_sequence": manifest["to_event_sequence"],
+                }
+        state = self.replica_state(origin)
         current_sequence = int(state["last_event_sequence"])
         expected_sequence = current_sequence + 1
         from_sequence = int(manifest["from_event_sequence"])
@@ -709,7 +726,6 @@ class EnvironmentExchangeManager:
             if int(item["event_sequence"]) >= expected_sequence
         ]
         incoming = self.registry.staging_dir / "incoming" / origin
-        incoming.mkdir(parents=True, exist_ok=True)
         proposal_replica_root = (
             self._peer_root(origin) / "governance-proposals"
         )
@@ -719,12 +735,32 @@ class EnvironmentExchangeManager:
         staged_projects = 0
         staged_governance_proposals = 0
         staged_product_evolution_records = 0
+        prepared: List[Dict[str, Any]] = []
+
+        def prepare_json(path: Path, value: Dict[str, Any]) -> None:
+            payload = canonical_bytes(value) + b"\n"
+            if path.exists():
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError("environment import target path is unsafe")
+                if path.read_bytes() != payload:
+                    raise ValueError(
+                        "environment import target conflicts with existing content"
+                    )
+                return
+            relative = path.relative_to(self.registry.root).as_posix()
+            prepared.append(
+                {
+                    "relative_path": relative,
+                    "sha256": bytes_sha256(payload),
+                    "content_base64": base64.b64encode(payload).decode("ascii"),
+                }
+            )
+
         for item in new_records:
             if item.get("event_kind") == "governance-proposal":
                 envelope = self.governance.validate_envelope(
                     item["payload"], expected_origin=origin
                 )
-                proposal_replica_root.mkdir(parents=True, exist_ok=True)
                 proposal_id = envelope["proposal_id"]
                 digest = envelope["content_sha256"]
                 conflicts = sorted(
@@ -748,7 +784,7 @@ class EnvironmentExchangeManager:
                             "peer governance proposal ID conflicts with existing content"
                         )
                 else:
-                    atomic_write_json(
+                    prepare_json(
                         proposal_replica_root
                         / f"{proposal_id}-{digest}.json",
                         proposal_record,
@@ -759,7 +795,6 @@ class EnvironmentExchangeManager:
                 envelope = self.evolution.validate_envelope(
                     item["payload"], expected_origin=origin
                 )
-                evolution_replica_root.mkdir(parents=True, exist_ok=True)
                 record_id = envelope["record_id"]
                 digest = envelope["content_sha256"]
                 conflicts = sorted(
@@ -781,7 +816,7 @@ class EnvironmentExchangeManager:
                             "peer product evolution ID conflicts with existing content"
                         )
                 else:
-                    atomic_write_json(
+                    prepare_json(
                         evolution_replica_root / f"{record_id}-{digest}.json",
                         replica_record,
                     )
@@ -789,7 +824,6 @@ class EnvironmentExchangeManager:
                 continue
             if item.get("event_kind") == "project-registration":
                 project = self.registry._validate_project(item["payload"]["project"])
-                project_replica_root.mkdir(parents=True, exist_ok=True)
                 project_record = {
                     "schema_version": 1,
                     "stream_id": "environment-v1",
@@ -811,7 +845,7 @@ class EnvironmentExchangeManager:
                             "peer project registration conflicts with existing content"
                         )
                 else:
-                    atomic_write_json(project_path, project_record)
+                    prepare_json(project_path, project_record)
                 staged_projects += 1
                 continue
             payload = item["payload"]
@@ -836,11 +870,10 @@ class EnvironmentExchangeManager:
             )
             if stage_path.exists() and read_json(stage_path) != stage_record:
                 raise ValueError("staged Environment event conflicts with existing event")
-            atomic_write_json(stage_path, stage_record)
+            prepare_json(stage_path, stage_record)
             staged_artifacts += 1
         peer_root = self._peer_root(origin)
         peer_root.mkdir(parents=True, exist_ok=True)
-        self._persist_replica_events(origin, records)
         new_state = {
             "format_version": 1,
             "stream_id": "environment-v1",
@@ -850,18 +883,63 @@ class EnvironmentExchangeManager:
             "last_bundle_sha256": bundle_hash,
             "last_sync_at": now_iso(),
         }
-        atomic_write_json(peer_root / "replica-state.json", new_state)
-        atomic_write_json(
-            receipt_path,
-            {
-                "format_version": 1,
-                "stream_id": "environment-v1",
-                "bundle_sha256": bundle_hash,
-                "manifest": manifest,
-                "overlap_recovery": overlap_recovery,
-                "received_at": new_state["last_sync_at"],
-            },
-        )
+        marker = {
+            "format_version": 1,
+            "stream_id": "environment-v1",
+            "bundle_id": manifest["bundle_id"],
+            "bundle_sha256": bundle_hash,
+            "status": "prepared",
+            "previous_state": state,
+            "new_state": new_state,
+            "outputs": prepared,
+            "created_at": now_iso(),
+        }
+        atomic_write_json(marker_path, marker)
+        try:
+            for output in prepared:
+                target = self.registry.root / safe_relative_path(
+                    str(output["relative_path"])
+                )
+                payload = base64.b64decode(
+                    output["content_base64"], validate=True
+                )
+                if bytes_sha256(payload) != output["sha256"]:
+                    raise ValueError("environment transaction output hash mismatch")
+                atomic_write_bytes(target, payload)
+            marker["status"] = "outputs-written"
+            atomic_write_json(marker_path, marker)
+            atomic_write_json(peer_root / "replica-state.json", new_state)
+            marker["status"] = "state-written"
+            atomic_write_json(marker_path, marker)
+            atomic_write_json(
+                receipt_path,
+                {
+                    "format_version": 1,
+                    "stream_id": "environment-v1",
+                    "bundle_sha256": bundle_hash,
+                    "manifest": manifest,
+                    "overlap_recovery": overlap_recovery,
+                    "received_at": new_state["last_sync_at"],
+                },
+            )
+            self._persist_replica_events(origin, records)
+            marker["status"] = "committed"
+            marker["outputs"] = [
+                {
+                    "relative_path": output["relative_path"],
+                    "sha256": output["sha256"],
+                }
+                for output in prepared
+            ]
+            atomic_write_json(marker_path, marker)
+        except Exception:
+            committed = self._recover_import_transaction(
+                marker_path=marker_path,
+                receipt_path=receipt_path,
+                expected_bundle_id=str(manifest["bundle_id"]),
+            )
+            if not committed:
+                raise
         return {
             "status": "imported",
             "bundle_id": manifest["bundle_id"],
@@ -873,6 +951,53 @@ class EnvironmentExchangeManager:
             "staged_governance_proposals": staged_governance_proposals,
             "staged_product_evolution_records": staged_product_evolution_records,
         }
+
+    def _recover_import_transaction(
+        self,
+        *,
+        marker_path: Path,
+        receipt_path: Path,
+        expected_bundle_id: str,
+    ) -> bool:
+        marker = read_json(marker_path)
+        if (
+            marker.get("format_version") != 1
+            or marker.get("stream_id") != "environment-v1"
+            or marker.get("bundle_id") != expected_bundle_id
+            or not isinstance(marker.get("outputs"), list)
+        ):
+            raise ValueError("environment import transaction marker is invalid")
+        if receipt_path.exists():
+            return True
+        for output in marker["outputs"]:
+            relative = safe_relative_path(str(output["relative_path"]))
+            target = self.registry.root / relative
+            if not target.exists():
+                continue
+            if (
+                target.is_symlink()
+                or not target.is_file()
+                or bytes_sha256(target.read_bytes()) != output["sha256"]
+            ):
+                raise ValueError(
+                    "environment import transaction output changed during recovery"
+                )
+            target.unlink()
+        previous_state = marker.get("previous_state")
+        if not isinstance(previous_state, dict):
+            raise ValueError("environment import transaction previous state is invalid")
+        state_path = self._peer_root(
+            str(previous_state["origin_node_id"])
+        ) / "replica-state.json"
+        current_state = read_json(state_path) if state_path.exists() else None
+        if current_state == marker.get("new_state"):
+            atomic_write_json(state_path, previous_state)
+        marker_path.unlink(missing_ok=True)
+        try:
+            marker_path.parent.rmdir()
+        except OSError:
+            pass
+        return False
 
     def _peer_root(self, node_id: str) -> Path:
         return self.replica_root / "peers" / safe_node_id(node_id)

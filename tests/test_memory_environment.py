@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -11,6 +12,20 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from memory_environment import EnvironmentRegistry, revision_id_for
+
+
+def make_directory_link(link: Path, target: Path) -> None:
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode:
+            raise OSError(completed.stderr or completed.stdout)
+    else:
+        link.symlink_to(target, target_is_directory=True)
 
 
 def authority_hashes(root):
@@ -221,7 +236,7 @@ class EnvironmentRegistryTest(unittest.TestCase):
         content = "symlink content"
         digest = hashlib.sha256(content.encode()).hexdigest()
         link = self.registry.root / "objects" / "sha256" / digest[:2]
-        link.symlink_to(outside, target_is_directory=True)
+        make_directory_link(link, outside)
         revision = self.revision(content=content)
         with self.assertRaisesRegex(ValueError, "symlink|escapes"):
             self.registry.register(

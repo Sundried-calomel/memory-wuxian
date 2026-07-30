@@ -37,7 +37,7 @@ def filesystem_native_path(path: Path) -> str:
     return "\\\\?\\" + value
 
 
-def display_path(path: Path) -> str:
+def display_path(path: str | Path) -> str:
     value = str(path)
     if value.startswith("\\\\?\\UNC\\"):
         return "\\\\" + value[8:]
@@ -481,15 +481,18 @@ class CloudFolderTransport:
         value = str(self.config.get("exchange_root", "")).strip()
         if not value:
             raise ValueError("Cloud exchange_root is not configured")
-        root = self._provider_root(Path(value)) / "MemoryWuxianExchange" / "v1"
+        root = self._provider_root(value) / "MemoryWuxianExchange" / "v1"
         if self.stream_id is not None:
             root = root / self.stream_id
         return Path(filesystem_native_path(root)) if os.name == "nt" else root
 
     @staticmethod
-    def _provider_root(value: Path) -> Path:
+    def _provider_root(value: str | Path) -> Path:
         """Normalize either a provider root or the fixed queue directory."""
-        resolved = Path(value).expanduser().resolve()
+        # Persisted Windows paths may carry the native ``\\?\`` prefix. Strip
+        # it before inspecting the final component so legacy queue roots are
+        # not mistaken for provider roots and appended a second time.
+        resolved = Path(display_path(value)).expanduser().resolve()
         if resolved.name.casefold() == "memorywuxianexchange":
             return resolved.parent
         return resolved
@@ -1090,9 +1093,15 @@ class CloudFolderTransport:
                             raise ValueError(
                                 "Cloud envelope filename sequence mismatch"
                             )
-                        imported = self.manager.import_delta(
-                            bundle, expected_node_id=peer_id
+                        exchange_lock = getattr(
+                            self.manager,
+                            "exchange_lock_path",
+                            self.archive_root / ".locks" / "archive.lock",
                         )
+                        with exclusive_lock(exchange_lock):
+                            imported = self.manager.import_delta(
+                                bundle, expected_node_id=peer_id
+                            )
                         ack_path = self._write_ack(
                             peer_id,
                             peer["cloud_identity"],

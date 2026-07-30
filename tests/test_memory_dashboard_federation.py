@@ -3,8 +3,10 @@ import io
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import zipfile
+from contextlib import contextmanager
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
@@ -285,6 +287,154 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         self.assertEqual(payload["result"]["status"], "enabled")
         transport.set_enabled.assert_called_once_with(True)
         environment_transport.set_enabled.assert_called_once_with(True)
+
+    def test_cloud_sync_serializes_concurrent_dashboard_requests(self):
+        manager = Mock()
+        manager.status.return_value = {
+            "enabled": True,
+            "devices": [],
+            "recent_sync": [],
+        }
+        active = 0
+        maximum_active = 0
+        active_lock = threading.Lock()
+
+        def synchronized_result(*, force=False):
+            self.assertTrue(force)
+            nonlocal active, maximum_active
+            with active_lock:
+                active += 1
+                maximum_active = max(maximum_active, active)
+            time.sleep(0.1)
+            with active_lock:
+                active -= 1
+            return {"status": "ok"}
+
+        transport = Mock()
+        transport.status.return_value = {"configured": True, "enabled": True}
+        transport.sync.side_effect = synchronized_result
+        environment_transport = Mock()
+        environment_transport.status.return_value = {
+            "configured": True,
+            "enabled": True,
+            "stream_id": "environment-v1",
+        }
+        environment_transport.sync.return_value = {"status": "ok"}
+        with (
+            patch("memory_dashboard.FederationManager", return_value=manager),
+            patch(
+                "memory_dashboard.CloudFolderTransport",
+                return_value=transport,
+            ),
+            patch(
+                "memory_dashboard.environment_cloud_transport",
+                return_value=environment_transport,
+            ),
+            patch(
+                "memory_dashboard.cloud_scheduler_status",
+                return_value={"installed": True, "running": True},
+            ),
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", 0), make_handler(self.store)
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            barrier = threading.Barrier(3)
+            responses = []
+
+            def post_sync():
+                barrier.wait()
+                request = Request(
+                    f"http://127.0.0.1:{server.server_port}/api/cloud",
+                    data=json.dumps({"action": "sync"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(request, timeout=5) as response:
+                    responses.append((response.status, json.load(response)))
+
+            callers = [threading.Thread(target=post_sync) for _ in range(2)]
+            for caller in callers:
+                caller.start()
+            barrier.wait()
+            for caller in callers:
+                caller.join(timeout=5)
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertEqual(len(responses), 2)
+        self.assertEqual(maximum_active, 1)
+        self.assertTrue(all(status == 200 for status, _ in responses))
+        self.assertEqual(transport.sync.call_count, 2)
+
+    def test_cloud_sync_reports_partial_success_per_stream(self):
+        manager = Mock()
+        manager.status.return_value = {
+            "enabled": True,
+            "devices": [],
+            "recent_sync": [],
+        }
+        transport = Mock()
+        transport.status.return_value = {"configured": True, "enabled": True}
+        transport.sync.return_value = {"status": "ok", "published": ["bundle"]}
+        environment_transport = Mock()
+        environment_transport.status.return_value = {
+            "configured": True,
+            "enabled": True,
+            "stream_id": "environment-v1",
+        }
+        environment_transport.sync.side_effect = RuntimeError(
+            "environment unavailable"
+        )
+        with (
+            patch("memory_dashboard.FederationManager", return_value=manager),
+            patch(
+                "memory_dashboard.CloudFolderTransport",
+                return_value=transport,
+            ),
+            patch(
+                "memory_dashboard.environment_cloud_transport",
+                return_value=environment_transport,
+            ),
+            patch(
+                "memory_dashboard.cloud_scheduler_status",
+                return_value={"installed": True, "running": True},
+            ),
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", 0), make_handler(self.store)
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = Request(
+                    f"http://127.0.0.1:{server.server_port}/api/cloud",
+                    data=json.dumps({"action": "sync"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(request, timeout=5) as response:
+                    payload = json.load(response)
+                    self.assertEqual(response.status, 200)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+
+        self.assertEqual(payload["result"]["status"], "partial")
+        self.assertEqual(
+            payload["result"]["streams"]["archive"],
+            {
+                "status": "ok",
+                "result": {"status": "ok", "published": ["bundle"]},
+            },
+        )
+        self.assertEqual(
+            payload["result"]["streams"]["environment"],
+            {"status": "error", "error": "environment unavailable"},
+        )
 
     def test_cloud_api_rejects_cross_origin_requests(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.store))

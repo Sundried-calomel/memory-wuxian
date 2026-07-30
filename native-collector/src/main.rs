@@ -211,6 +211,7 @@ fn summarize_file_change(payload: &Value) -> Option<String> {
 
 #[derive(Parser, Debug)]
 #[command(
+    name = "memory-wuxian-collector",
     version,
     about = "Event-driven native Codex collector for Memory Wuxian"
 )]

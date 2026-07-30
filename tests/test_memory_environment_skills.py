@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -21,6 +22,20 @@ from memory_environment_skills import (
     skill_package_contract_bytes,
 )
 from platform_lock import exclusive_lock
+
+
+def make_directory_link(link: Path, target: Path) -> None:
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode:
+            raise OSError(completed.stderr or completed.stdout)
+    else:
+        link.symlink_to(target, target_is_directory=True)
 
 
 def sha256(value):
@@ -449,6 +464,21 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
         )
         package = self.package("substituted.zip", manifest, files)
         with self.assertRaisesRegex(ValueError, "contract does not match"):
+            self.installer().install(
+                package_path=package,
+                artifact_id=self.artifact_id,
+                revision_id=self.revision["revision_id"],
+                target_binding="global-demo",
+            )
+
+    def test_skill_binding_root_link_is_rejected(self):
+        manifest = self.manifest(self.revision["revision_id"])
+        package = self.package("linked-root.zip", manifest)
+        outside = self.base / "outside-global"
+        outside.mkdir()
+        self.global_root.rmdir()
+        make_directory_link(self.global_root, outside)
+        with self.assertRaisesRegex(ValueError, "root symlinks"):
             self.installer().install(
                 package_path=package,
                 artifact_id=self.artifact_id,

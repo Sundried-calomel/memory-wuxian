@@ -2,6 +2,24 @@
 
 ## 2.4.5 - 2026-07-30
 
+- Added recoverable Environment import transactions so incomplete bundles stay
+  invisible and interrupted cursor/receipt commits can be retried safely.
+- Serialized manual and scheduled cloud synchronization while keeping
+  Environment import/export locks scoped to their write transactions, avoiding
+  nested-lock deadlocks, and reporting both stream outcomes independently.
+- Made dashboard cross-origin rejection consume bounded request bodies before
+  returning JSON 403, preventing intermittent Windows connection-reset results.
+- Prevented no-change Environment items from starving newer incoming work and
+  preserved deterministic evidence for partial batch processing.
+- Unified product and native binary version reporting, tightened the Windows
+  PyYAML 6.x check, and repaired Windows legacy cloud-path rehearsal coverage.
+- Extended path-escape protection from symbolic links to Windows directory
+  junctions so ordinary-user reparse points fail closed across Registry,
+  binding, and Rule installation paths.
+- Expanded cross-platform release gates for version consistency, failure
+  injection, Python compatibility, bounded cloud-sync tests, and portable
+  version-bound rehearsal evidence whose hashes are revalidated before a pass
+  is reported.
 - Preserved stable macOS Python entry paths in every generated background
   definition instead of resolving Homebrew symlinks to version-specific Cellar
   executables that can repeatedly trigger Desktop and Documents permission

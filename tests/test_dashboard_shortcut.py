@@ -1,4 +1,5 @@
 import json
+import plistlib
 import shutil
 import subprocess
 import tempfile
@@ -72,6 +73,9 @@ class DashboardShortcutTest(unittest.TestCase):
         package = (
             SKILL_ROOT / "packaging/macos/build_pkg.sh"
         ).read_text(encoding="utf-8")
+        dashboard_build = (
+            SKILL_ROOT / "packaging/macos/build_dashboard_app.sh"
+        ).read_text(encoding="utf-8")
         workflow = (
             SKILL_ROOT / ".github/workflows/release.yml"
         ).read_text(encoding="utf-8")
@@ -85,7 +89,10 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn("probe_candidate", transaction)
         self.assertIn("wait_for_collector", transaction)
         self.assertIn("build_dashboard_app.sh", package)
-        self.assertIn("CFBundleShortVersionString", package)
+        self.assertIn("CFBundleShortVersionString", dashboard_build)
+        self.assertIn("MemoryWuxianProductVersion", dashboard_build)
+        self.assertIn("MemoryWuxianProductVersion", package)
+        self.assertIn('package_version="$version"', package)
         self.assertIn("pkgbuild --analyze", package)
         self.assertIn("BundleIsRelocatable false", package)
         self.assertIn('--component-plist "$component_plist"', package)
@@ -125,6 +132,20 @@ class DashboardShortcutTest(unittest.TestCase):
                 "archive_root": str(archive),
             },
         )
+
+    def test_macos_dashboard_metadata_accepts_standard_bundle_version(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            app = Path(temporary) / "Memory.app"
+            executable = app / "Contents/MacOS/MemoryDashboard"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b"dashboard")
+            with (app / "Contents/Info.plist").open("wb") as handle:
+                plistlib.dump({"CFBundleShortVersionString": "2.4.5"}, handle)
+
+            actual_executable, version = installer.app_metadata(app)
+
+        self.assertEqual(actual_executable, executable)
+        self.assertEqual(version, "2.4.5")
 
     def test_macos_dashboard_install_restores_all_artifacts_after_self_check_failure(self):
         with tempfile.TemporaryDirectory() as temporary:

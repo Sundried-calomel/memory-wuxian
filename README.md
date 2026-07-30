@@ -1,5 +1,11 @@
 # Memory無限
 
+> **2.4.4 Beta 1:** This prerelease hardens cloud-sync concurrency,
+> recoverable Environment imports, incoming-queue progress, native version
+> consistency, and Windows runtime validation. Stable-channel automatic
+> updates continue to ignore prereleases; install this Beta explicitly for
+> cross-device acceptance testing.
+>
 > Windows v1.7.8 security note: the desktop dashboard shortcut now targets a
 > dedicated no-console native launcher with no command-line arguments. The
 > installer stores the validated Python runtime and active archive path in a

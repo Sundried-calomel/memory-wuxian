@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,6 +15,20 @@ from memory_environment import EnvironmentRegistry, revision_id_for
 from memory_environment_bindings import EnvironmentBindingRegistry
 from memory_environment_rules import EnvironmentRuleInstaller
 from memory_environment_skills import EnvironmentSkillInstaller
+
+
+def make_directory_link(link: Path, target: Path) -> None:
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode:
+            raise OSError(completed.stderr or completed.stdout)
+    else:
+        link.symlink_to(target, target_is_directory=True)
 
 
 def authority_hashes(root):
@@ -305,7 +320,7 @@ class EnvironmentBindingRegistryTest(unittest.TestCase):
 
     def test_symlink_root_and_escaping_target_are_rejected(self):
         link = self.base / "rules-link"
-        link.symlink_to(self.rules_root, target_is_directory=True)
+        make_directory_link(link, self.rules_root)
         with self.assertRaisesRegex(ValueError, "symlink root"):
             self.bindings.register_root(
                 root_id="linked-rules",
@@ -325,12 +340,23 @@ class EnvironmentBindingRegistryTest(unittest.TestCase):
             self.bindings.register_rule_binding(
                 self.rule_binding(relative_path="../outside.md")
             )
-        outside = self.base / "outside.md"
-        outside.write_text("outside", encoding="utf-8")
-        (self.rules_root / "AGENTS.md").symlink_to(outside)
-        self.bindings.register_rule_binding(self.rule_binding(), apply=True)
-        with self.assertRaisesRegex(ValueError, "symlink target|escapes"):
-            self.bindings.get_rule_bindings()
+        outside_root = self.base / "outside-rules"
+        outside_root.mkdir()
+        (outside_root / "AGENTS.md").write_text("outside", encoding="utf-8")
+        if os.name == "nt":
+            self.rules_root.rmdir()
+            make_directory_link(self.rules_root, outside_root)
+            with self.assertRaisesRegex(ValueError, "symlink root"):
+                self.bindings.register_rule_binding(
+                    self.rule_binding(), apply=True
+                )
+        else:
+            (self.rules_root / "AGENTS.md").symlink_to(
+                outside_root / "AGENTS.md"
+            )
+            self.bindings.register_rule_binding(self.rule_binding(), apply=True)
+            with self.assertRaisesRegex(ValueError, "symlink target|escapes"):
+                self.bindings.get_rule_bindings()
 
     def test_project_root_and_bindings_have_one_authoritative_source(self):
         (self.project_root / "PROJECT_AGENTS.md").write_text(
@@ -629,8 +655,16 @@ class EnvironmentBindingRegistryTest(unittest.TestCase):
         outside = self.base / "outside-bindings.json"
         outside.write_text("{}\n", encoding="utf-8")
         self.bindings.bindings_dir.mkdir(parents=True)
-        self.bindings.path.symlink_to(outside)
-        with self.assertRaisesRegex(ValueError, "registry must not be a symlink"):
+        if os.name == "nt":
+            outside_dir = self.base / "outside-bindings"
+            outside_dir.mkdir()
+            self.bindings.bindings_dir.rmdir()
+            make_directory_link(self.bindings.bindings_dir, outside_dir)
+        else:
+            self.bindings.path.symlink_to(outside)
+        with self.assertRaisesRegex(
+            ValueError, "binding directory|registry must not be a symlink"
+        ):
             self.bindings.status()
 
 

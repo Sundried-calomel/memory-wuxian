@@ -8,7 +8,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: memory-wuxian-formal-release
+  group: memory-wuxian-release
   cancel-in-progress: false
 
 jobs:
@@ -17,6 +17,7 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -28,13 +29,20 @@ jobs:
         shell: bash
         run: |
           version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
-          tag="v$version"
+          if [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)b([0-9]+)$ ]]; then
+            tag="v${BASH_REMATCH[1]}-beta.${BASH_REMATCH[2]}"
+            prerelease="true"
+          else
+            tag="v$version"
+            prerelease="false"
+          fi
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
-            echo "Formal release tag already exists: $tag" >&2
+            echo "Release tag already exists: $tag" >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
   candidate-proof:
     runs-on: ubuntu-latest
@@ -207,3 +215,4 @@ jobs:
           target_commitish: ${{ github.sha }}
           files: dist/*
           generate_release_notes: true
+          prerelease: ${{ needs.metadata.outputs.prerelease }}

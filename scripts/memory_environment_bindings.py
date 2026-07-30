@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from memory_environment import EnvironmentRegistry
 from platform_lock import exclusive_lock
+from platform_paths import is_link_like
 
 
 SCHEMA_VERSION = 1
@@ -449,7 +450,7 @@ class EnvironmentBindingRegistry:
             return 0
         recovered = 0
         for marker_path in sorted(self.transactions_dir.glob("*.json")):
-            if marker_path.is_symlink():
+            if is_link_like(marker_path):
                 raise ValueError("binding transaction marker must not be a symlink")
             marker = _read_json(marker_path)
             self._validate_transaction(marker)
@@ -610,11 +611,11 @@ class EnvironmentBindingRegistry:
             (self.bindings_dir, "binding directory"),
             (self.transactions_dir, "binding transaction directory"),
         ):
-            if directory.exists() and directory.is_symlink():
+            if directory.exists() and is_link_like(directory):
                 raise ValueError(f"{label} must not be a symlink")
-        if self.path.exists() and self.path.is_symlink():
+        if self.path.exists() and is_link_like(self.path):
             raise ValueError("binding registry must not be a symlink")
-        if self.lock_path.exists() and self.lock_path.is_symlink():
+        if self.lock_path.exists() and is_link_like(self.lock_path):
             raise ValueError("binding lock file must not be a symlink")
 
     def _empty_state(self) -> Dict[str, Any]:
@@ -925,7 +926,7 @@ class EnvironmentBindingRegistry:
         if self.platform != _current_platform():
             return text
         path = Path(text)
-        if path.is_symlink():
+        if is_link_like(path):
             raise ValueError("symlink root is forbidden")
         if not path.is_dir():
             raise ValueError("root must be an existing directory")
@@ -937,17 +938,19 @@ class EnvironmentBindingRegistry:
         if self.platform != _current_platform():
             raise ValueError("foreign-platform target is inactive on this node")
         candidate = root.joinpath(*PurePosixPath(normalized).parts)
+        if is_link_like(root):
+            raise ValueError("symlink root is forbidden")
         root_resolved = root.resolve(strict=True)
         resolved = candidate.resolve(strict=False)
         try:
             resolved.relative_to(root_resolved)
         except ValueError as error:
             raise ValueError("target path escapes registered root") from error
-        if candidate.is_symlink():
+        if is_link_like(candidate):
             raise ValueError("symlink target is forbidden")
         parent = candidate.parent
         while parent != root and parent != parent.parent:
-            if parent.exists() and parent.is_symlink():
+            if parent.exists() and is_link_like(parent):
                 raise ValueError("symlink parent is forbidden")
             parent = parent.parent
         return candidate
@@ -956,7 +959,7 @@ class EnvironmentBindingRegistry:
         proposed, ambiguous, excluded = [], [], []
         for path in sorted(root.iterdir(), key=lambda item: item.name.casefold()):
             item = {"name": path.name, "path": str(path)}
-            if path.is_symlink():
+            if is_link_like(path):
                 excluded.append({**item, "reason": "symlink"})
             elif not path.is_file():
                 excluded.append({**item, "reason": "non-recursive"})
@@ -988,13 +991,13 @@ class EnvironmentBindingRegistry:
         proposed, ambiguous, excluded = [], [], []
         for child in sorted(root.iterdir(), key=lambda item: item.name.casefold()):
             item = {"name": child.name, "path": str(child)}
-            if child.is_symlink():
+            if is_link_like(child):
                 excluded.append({**item, "reason": "symlink"})
             elif not child.is_dir():
                 excluded.append({**item, "reason": "not-a-directory"})
             else:
                 skill_file = child / "SKILL.md"
-                if skill_file.is_symlink() or not skill_file.is_file():
+                if is_link_like(skill_file) or not skill_file.is_file():
                     excluded.append({**item, "reason": "missing-regular-SKILL.md"})
                     continue
                 frontmatter, frontmatter_bytes = self._read_skill_frontmatter(
@@ -1028,7 +1031,7 @@ class EnvironmentBindingRegistry:
         proposed, ambiguous, excluded = [], [], []
         for binding in project["rule_bindings"]:
             target = self._resolve_target(root, binding["relative_path"])
-            if target.is_symlink():
+            if is_link_like(target):
                 excluded.append(
                     {"binding_id": binding["binding_id"], "reason": "symlink"}
                 )
@@ -1073,7 +1076,7 @@ class EnvironmentBindingRegistry:
 
     @staticmethod
     def _hash_regular_file(path: Path) -> str:
-        if path.is_symlink() or not path.is_file():
+        if is_link_like(path) or not path.is_file():
             raise ValueError("discovery target must be a regular file")
         digest = hashlib.sha256()
         with path.open("rb") as handle:

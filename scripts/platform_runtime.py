@@ -20,4 +20,3 @@ def executable_entry_path(
     if platform_name == "darwin":
         return Path(os.path.abspath(os.fspath(expanded)))
     return expanded.resolve()
-

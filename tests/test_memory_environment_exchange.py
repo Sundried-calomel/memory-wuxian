@@ -6,6 +6,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -298,6 +299,75 @@ class EnvironmentExchangeTests(unittest.TestCase):
         self.assertEqual(
             json.loads(staged[0].read_text())["stream_id"], "environment-v1"
         )
+        marker = next(
+            (
+                self.b.registry.root
+                / "replicas"
+                / "peers"
+                / "node-a"
+                / "transactions"
+            ).glob("*/transaction.json")
+        )
+        marker_text = marker.read_text(encoding="utf-8")
+        self.assertIn('"status": "committed"', marker_text)
+        self.assertNotIn("content_base64", marker_text)
+
+    def test_uncommitted_transaction_is_invisible_to_incoming_processor(self):
+        self.register_rule()
+        bundle = self.base / "environment-uncommitted.mwxb"
+        self.a.export_delta(bundle, target_node_id="node-b")
+        original = __import__(
+            "memory_environment_exchange"
+        ).atomic_write_json
+
+        def fail_receipt(path, value):
+            if "receipts" in path.parts:
+                raise OSError("injected receipt failure")
+            return original(path, value)
+
+        with mock.patch(
+            "memory_environment_exchange.atomic_write_json",
+            side_effect=fail_receipt,
+        ):
+            with self.assertRaisesRegex(OSError, "injected receipt failure"):
+                self.b.import_delta(bundle, expected_node_id="node-a")
+        processor = EnvironmentIncomingProcessor(
+            self.store_b.root,
+            platform="macos",
+            runtime_versions={"python": "3.12.0"},
+        )
+        self.assertEqual(processor.status()["staged_events"], 0)
+        self.assertEqual(self.b.replica_state("node-a")["last_event_sequence"], 0)
+
+    def test_receipt_failure_can_be_retried_without_sequence_gap(self):
+        self.register_rule()
+        bundle = self.base / "environment-retry.mwxb"
+        self.a.export_delta(bundle, target_node_id="node-b")
+        original = __import__(
+            "memory_environment_exchange"
+        ).atomic_write_json
+        failed = False
+
+        def fail_once(path, value):
+            nonlocal failed
+            if "receipts" in path.parts and not failed:
+                failed = True
+                raise OSError("injected receipt failure")
+            return original(path, value)
+
+        with mock.patch(
+            "memory_environment_exchange.atomic_write_json",
+            side_effect=fail_once,
+        ):
+            with self.assertRaisesRegex(OSError, "injected receipt failure"):
+                self.b.import_delta(bundle, expected_node_id="node-a")
+        imported = self.b.import_delta(bundle, expected_node_id="node-a")
+        self.assertEqual(imported["status"], "imported")
+        self.assertEqual(self.b.replica_state("node-a")["last_event_sequence"], 1)
+        staged = list(
+            (self.b.registry.staging_dir / "incoming" / "node-a").glob("*.json")
+        )
+        self.assertEqual(len(staged), 1)
 
     def test_batch_registration_exports_every_artifact_with_unique_identity(self):
         self.a.registry.register(
@@ -326,6 +396,13 @@ class EnvironmentExchangeTests(unittest.TestCase):
             )["status"],
             "no-change",
         )
+
+    def test_zero_artifact_delta_remains_no_change(self):
+        result = self.a.export_delta(
+            self.base / "zero.mwxb",
+            target_node_id="node-b",
+        )
+        self.assertEqual(result["status"], "no-change")
 
     def test_legacy_transaction_key_exports_only_missing_batch_items(self):
         self.a.registry.register(
