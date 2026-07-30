@@ -22,11 +22,11 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.source = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
-    def test_formal_release_is_manual_and_serialized(self) -> None:
+    def test_release_is_manual_and_serialized(self) -> None:
         self.assertIn("workflow_dispatch:", self.source)
         self.assertNotIn("pull_request:", self.source)
         self.assertNotIn("tags:", self.source)
-        self.assertIn("group: memory-wuxian-formal-release", self.source)
+        self.assertIn("group: memory-wuxian-release", self.source)
         self.assertIn("cancel-in-progress: false", self.source)
 
     def test_candidate_proof_requires_successful_push_ci_for_same_sha(self) -> None:
@@ -67,10 +67,21 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
     def test_publish_creates_single_version_tag_after_installers(self) -> None:
         publish = job_block(self.source, "publish")
         metadata = job_block(self.source, "metadata")
-        self.assertIn("Formal release tag already exists", metadata)
+        self.assertIn("Release tag already exists", metadata)
         self.assertIn("tag_name: ${{ needs.metadata.outputs.tag }}", publish)
         self.assertIn("target_commitish: ${{ github.sha }}", publish)
         self.assertNotIn("startsWith(github.ref", publish)
+
+    def test_beta_versions_are_published_only_as_prereleases(self) -> None:
+        metadata = job_block(self.source, "metadata")
+        publish = job_block(self.source, "publish")
+        self.assertIn('^([0-9]+\\.[0-9]+\\.[0-9]+)b([0-9]+)$', metadata)
+        self.assertIn('-beta.${BASH_REMATCH[2]}', metadata)
+        self.assertIn('prerelease="true"', metadata)
+        self.assertIn(
+            "prerelease: ${{ needs.metadata.outputs.prerelease }}",
+            publish,
+        )
 
     def test_installer_checksums_are_retained(self) -> None:
         self.assertIn("Get-FileHash", job_block(self.source, "windows-installer"))

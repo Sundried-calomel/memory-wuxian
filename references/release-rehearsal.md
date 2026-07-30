@@ -23,7 +23,9 @@ privileged-component change that cannot be applied in user space.
 
 A release may be described as fully rehearsed only when
 `scripts/run_release_rehearsal.py` produces a report whose `status` is `passed`
-and every required scenario has its own evidence log and SHA-256.
+and every required scenario has its own report-relative evidence log and
+SHA-256. Relative evidence paths keep the report portable across devices and
+avoid locale-dependent corruption of absolute Windows paths.
 
 Required scenarios:
 

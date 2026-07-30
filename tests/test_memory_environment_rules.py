@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -18,6 +19,20 @@ from memory_environment_rules import (
     RuleInstallationError,
 )
 from platform_lock import exclusive_lock
+
+
+def make_directory_link(link: Path, target: Path) -> None:
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode:
+            raise OSError(completed.stderr or completed.stdout)
+    else:
+        link.symlink_to(target, target_is_directory=True)
 
 
 def digest(value: bytes) -> str:
@@ -819,9 +834,17 @@ class EnvironmentRuleInstallerTest(unittest.TestCase):
                 self.assertEqual(self.target.read_bytes(), before)
 
         self.target.unlink()
-        real_target = self.root / "real.md"
-        real_target.write_text(base, encoding="utf-8")
-        self.target.symlink_to(real_target)
+        if os.name == "nt":
+            outside_root = self.base / "outside-global"
+            outside_root.mkdir()
+            real_target = outside_root / "AGENTS.md"
+            real_target.write_text(base, encoding="utf-8")
+            self.root.rmdir()
+            make_directory_link(self.root, outside_root)
+        else:
+            real_target = self.root / "real.md"
+            real_target.write_text(base, encoding="utf-8")
+            self.target.symlink_to(real_target)
         binding = self.global_binding(base_revision)
         with self.assertRaises(RuleInstallationError):
             self.installer(binding).install(

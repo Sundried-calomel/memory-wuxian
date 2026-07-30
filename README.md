@@ -1,5 +1,10 @@
 # Memory無限
 
+> **2.4.5:** This stable release hardens cloud-sync concurrency, recoverable
+> Environment imports, incoming-queue progress, native version consistency,
+> Windows runtime validation, macOS transactional updates, archive waterline
+> checks, and dashboard archive-volume tooltips.
+>
 > Windows v1.7.8 security note: the desktop dashboard shortcut now targets a
 > dedicated no-console native launcher with no command-line arguments. The
 > installer stores the validated Python runtime and active archive path in a

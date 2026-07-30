@@ -2304,6 +2304,10 @@ summaries:
         self.assertTrue(result["ready"])
         version = tuple(map(int, result["checks"]["python"]["version"].split(".")))
         self.assertGreaterEqual(version, (3, 9))
+        yaml_version = result["checks"]["yaml"]["version"]
+        self.assertIsNotNone(yaml_version)
+        self.assertEqual(int(yaml_version.split(".", 1)[0]), 6)
+        self.assertTrue(result["checks"]["yaml"]["ready"])
 
     def test_agent_rules_installer_is_idempotent(self):
         agents_file = self.base / "workspace" / "AGENTS.md"

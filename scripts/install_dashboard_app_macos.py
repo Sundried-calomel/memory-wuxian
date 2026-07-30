@@ -46,7 +46,10 @@ def app_metadata(app: Path) -> tuple[Path, str]:
         raise ValueError(f"incomplete dashboard application: {app}")
     with plist.open("rb") as handle:
         payload = plistlib.load(handle)
-    return executable, str(payload.get("CFBundleShortVersionString", ""))
+    version = payload.get("MemoryWuxianProductVersion")
+    if not version:
+        version = payload.get("CFBundleShortVersionString", "")
+    return executable, str(version)
 
 
 def launcher_payload(
@@ -134,6 +137,19 @@ def replace_app(source: Path, destination: Path) -> None:
             os.replace(previous, destination)
         raise
     shutil.rmtree(previous, ignore_errors=True)
+
+
+def restore_app_in_place(source: Path, destination: Path) -> None:
+    ditto = Path("/usr/bin/ditto")
+    if ditto.is_file():
+        subprocess.run(
+            [str(ditto), str(source), str(destination)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return
+    shutil.copytree(source, destination, dirs_exist_ok=True, symlinks=True)
 
 
 def verify(
@@ -233,12 +249,7 @@ def install(
     except Exception:
         if rollback_app.exists():
             if destination.exists():
-                subprocess.run(
-                    ["/usr/bin/ditto", str(rollback_app), str(destination)],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
+                restore_app_in_place(rollback_app, destination)
             else:
                 os.replace(rollback_app, destination)
         else:

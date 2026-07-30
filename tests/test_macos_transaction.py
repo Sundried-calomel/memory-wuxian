@@ -1,4 +1,5 @@
 import json
+import os
 import plistlib
 import subprocess
 import sys
@@ -35,6 +36,7 @@ class FakeRunner:
         return subprocess.CompletedProcess(command, 0, "", "")
 
 
+@unittest.skipIf(os.name == "nt", "macOS transaction contract")
 class MacosTransactionTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

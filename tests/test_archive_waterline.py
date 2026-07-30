@@ -26,7 +26,7 @@ class ArchiveWaterlineTest(unittest.TestCase):
             json.dumps({"timestamp": "2026-07-30T01:00:00Z", "type": "event_msg"}) + "\n",
             json.dumps({"timestamp": "2026-07-30T03:00:00Z", "type": "event_msg"}) + "\n",
         ]
-        self.source.write_text("".join(self.lines), encoding="utf-8")
+        self.source.write_bytes("".join(self.lines).encode("utf-8"))
 
     def tearDown(self):
         self.temporary.cleanup()
