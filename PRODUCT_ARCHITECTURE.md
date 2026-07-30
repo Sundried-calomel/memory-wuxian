@@ -341,6 +341,12 @@ change, first amend an architecture decision and version the contract.
 
 ## Ordered Productization Roadmap
 
+The version-by-version execution companion is
+`references/version-roadmap-v2.5-to-v3.0.md`. It is the required planning
+reference for v2.6--v3.0 work: it defines the predecessor gates, bounded scope,
+acceptance evidence, rollback evidence, and the conditional rule for v3.0. This
+document remains the canonical owner of the architecture and ordered roadmap.
+
 ### Phase 1: 2.0.x Operational Stabilization
 
 Complete real macOS and Windows installation, bidirectional cloud exchange,

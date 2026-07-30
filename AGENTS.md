@@ -114,6 +114,10 @@ Use Memory無限 to preserve conversation history outside the active context win
     read that contract and preserve its phase order. Do not combine module
     extraction with a feature, format, protocol, default, or security-policy
     change.
+    For versioned v2.6--v3.0 planning or implementation, also read
+    `references/version-roadmap-v2.5-to-v3.0.md` and the directly affected
+    decisions. A listed later version is not authorization to bypass its
+    predecessor, candidate, recovery, or release gates.
 61. Follow the release lifecycle owned by `PRODUCT_ARCHITECTURE.md`: keep
     candidate iteration untagged, use targeted tests during iteration, pass one
     complete candidate gate before creating the single formal tag, and update

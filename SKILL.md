@@ -112,6 +112,9 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     registry. Register each new production file under exactly one owner and
     pass `scripts/check_architecture_contract.py` for every product change.
     Unowned files, overlapping owners, and prohibited dependencies fail closed.
+    Before any v2.6--v3.0 product work, also read
+    `references/version-roadmap-v2.5-to-v3.0.md`; preserve its predecessor,
+    scope, acceptance, rollback, and conditional-major-version gates.
 55. Treat a visible cloud-provider placeholder that is not locally readable as
     transient. Trigger bounded hydration before decrypting it and never
     quarantine a Files On-Demand availability error as cryptographic damage.

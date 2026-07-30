@@ -108,6 +108,18 @@ class ProductArchitectureContractTest(unittest.TestCase):
         positions = [architecture.index(phase) for phase in phases]
         self.assertEqual(positions, sorted(positions))
 
+    def test_versioned_execution_roadmap_is_routed_and_preserves_core_gates(self):
+        architecture = (ROOT / "PRODUCT_ARCHITECTURE.md").read_text(encoding="utf-8")
+        roadmap = (ROOT / "references/version-roadmap-v2.5-to-v3.0.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("references/version-roadmap-v2.5-to-v3.0.md", architecture)
+        self.assertIn("v2.6.0: index safety", roadmap)
+        self.assertIn("v2.9.0: unified read-only interfaces", roadmap)
+        self.assertIn("conditional major-version integration", roadmap)
+        self.assertIn("Python `>=3.14,<3.15`", roadmap)
+
     def test_refactoring_gate_forbids_mixed_contract_changes(self):
         architecture = (ROOT / "PRODUCT_ARCHITECTURE.md").read_text(encoding="utf-8")
 
