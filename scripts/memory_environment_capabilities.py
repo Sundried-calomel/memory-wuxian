@@ -58,7 +58,7 @@ AUTHORIZATION = {
     "synchronization": False,
 }
 MINIMUM_PEER_PRODUCT_VERSION = "2.5"
-MINIMUM_PYTHON_VERSION = "3.9"
+MINIMUM_PYTHON_VERSION = "3.14"
 IMPLEMENTED_PROTOCOLS = (
     "archive-v1",
     "environment-v1",

@@ -39,8 +39,8 @@ class DeviceCapabilityNegotiationTests(unittest.TestCase):
             "runtimes": [
                 {
                     "name": "python",
-                    "version": "3.12.4",
-                    "minimum_peer_version": "3.9",
+                    "version": "3.14.1",
+                    "minimum_peer_version": "3.14",
                     "required": True,
                 }
             ],
@@ -116,7 +116,7 @@ class DeviceCapabilityNegotiationTests(unittest.TestCase):
             validate_device_capability_offer(invalid)
 
     def test_local_offer_builder_emits_only_implemented_closed_capabilities(self):
-        offer = local_device_capability_offer("2.5.0", "macos", "3.12.4")
+        offer = local_device_capability_offer("2.5.0", "macos", "3.14.0")
         self.assertEqual(
             {
                 "schema_version",
@@ -134,6 +134,7 @@ class DeviceCapabilityNegotiationTests(unittest.TestCase):
             ["archive-v1", "configuration-v1", "environment-v1"],
             [item["name"] for item in offer["protocols"]],
         )
+        self.assertEqual("3.14", offer["runtimes"][0]["minimum_peer_version"])
         self.assertEqual([], offer["interfaces"])
         self.assertEqual(offer, validate_device_capability_offer(offer))
 
@@ -153,7 +154,7 @@ class DeviceCapabilityNegotiationTests(unittest.TestCase):
         offer = local_device_capability_offer(
             "2.5.0",
             "windows",
-            "3.12",
+            "3.14",
             semantic_runtime=True,
         )
         self.assertEqual(
@@ -171,18 +172,18 @@ class DeviceCapabilityNegotiationTests(unittest.TestCase):
             local_device_capability_offer(
                 "2.5.0",
                 "windows",
-                "3.12",
+                "3.14",
                 semantic_runtime=1,
             )
 
     def test_local_offer_builder_is_deterministic_and_non_authorizing(self):
-        first = local_device_capability_offer("2.5", "linux", "3.12.0")
-        second = local_device_capability_offer("2.5", "linux", "3.12")
+        first = local_device_capability_offer("2.5", "linux", "3.14.0")
+        second = local_device_capability_offer("2.5", "linux", "3.14")
         result = negotiate_device_capabilities(first, second)
         self.assertEqual(
             capability_offer_sha256(first),
             capability_offer_sha256(
-                local_device_capability_offer("2.5", "linux", "3.12.0")
+                local_device_capability_offer("2.5", "linux", "3.14.0")
             ),
         )
         self.assertEqual("compatible", result["status"])

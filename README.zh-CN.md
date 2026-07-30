@@ -209,7 +209,7 @@ python3 scripts/memory_cli.py import-chatgpt --export /path/to/chatgpt-export.zi
 
 ## Windows 自动采集 Codex
 
-先运行环境引导。它会报告 Python 版本，以及 Python、Codex CLI、随包采集器和 Codex 会话的路径。使用 `-InstallMissing` 时，只有在不存在兼容的 `>=3.9` 运行时或 Codex 自带 Python 时才安装 Python。
+先运行环境引导。它会报告 Python 版本，以及 Python、Codex CLI、随包采集器和 Codex 会话的路径。主程序只支持 Python 3.14.x。使用 `-InstallMissing` 时，只有在不存在受支持的运行时或兼容的 Codex 自带 Python 时才安装 Python 3.14。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1

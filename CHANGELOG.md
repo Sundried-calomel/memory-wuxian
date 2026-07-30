@@ -2,6 +2,11 @@
 
 ## 2.5.0 - 2026-07-30
 
+- Restricted the supported main runtime to Python 3.14.x and removed the
+  redundant Python 3.9-3.14 full-suite compatibility matrix. macOS, Windows,
+  and Ubuntu release gates now validate the same Python 3.14 contract.
+- Kept the separately pinned Python 3.12 semantic-model environment unchanged;
+  it remains an isolated provider runtime rather than a supported main runtime.
 - Added a closed configuration-v1 compiler with deterministic hashes,
   per-value source provenance, preserved archive-root precedence, and
   fail-closed duplicate, unknown-key, type, range, and relationship checks.

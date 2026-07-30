@@ -220,7 +220,7 @@ python3 scripts/memory_cli.py import-chatgpt --export /path/to/chatgpt-export.zi
 
 ## WindowsでCodexを自動収集
 
-最初に環境ブートストラップを実行します。Pythonバージョンと、Python、Codex CLI、同梱コレクター、Codexセッションのパスを報告します。`-InstallMissing`は、互換性のある`>=3.9`ランタイムもCodex同梱Pythonもない場合だけPythonをインストールします。
+最初に環境ブートストラップを実行します。Pythonバージョンと、Python、Codex CLI、同梱コレクター、Codexセッションのパスを報告します。メインランタイムは Python 3.14.x のみをサポートします。`-InstallMissing`は、サポート対象ランタイムも互換性のあるCodex同梱Pythonもない場合だけ Python 3.14 をインストールします。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1

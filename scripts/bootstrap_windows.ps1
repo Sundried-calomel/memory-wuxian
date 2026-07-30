@@ -9,11 +9,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 $SkillRoot = Split-Path -Parent $PSScriptRoot
-$MinimumPython = [version]"3.9"
+$MinimumPython = [version]"3.14"
+$MaximumPython = [version]"3.15"
 
 function Find-Python {
-    if ($PythonPath -and (Test-Path -LiteralPath $PythonPath)) { return (Resolve-Path $PythonPath).Path }
     $candidates = @()
+    if ($PythonPath -and (Test-Path -LiteralPath $PythonPath)) {
+        $candidates += (Resolve-Path $PythonPath).Path
+    }
     $command = Get-Command python.exe -ErrorAction SilentlyContinue
     if ($command) { $candidates += $command.Source }
     $runtimeRoot = Join-Path $env:USERPROFILE ".cache\codex-runtimes"
@@ -22,12 +25,15 @@ function Find-Python {
             Where-Object { $_.FullName -match '\\dependencies\\python\\python\.exe$' } |
             Select-Object -ExpandProperty FullName
     }
-    $candidates += Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
+    $candidates += Join-Path $env:LOCALAPPDATA "Programs\Python\Python314\python.exe"
     foreach ($candidate in $candidates | Select-Object -Unique) {
         if (-not (Test-Path -LiteralPath $candidate)) { continue }
         try {
             $versionText = & $candidate -c "import platform; print(platform.python_version())"
-            if ([version]$versionText -ge $MinimumPython) { return (Resolve-Path $candidate).Path }
+            $version = [version]$versionText
+            if ($version -ge $MinimumPython -and $version -lt $MaximumPython) {
+                return (Resolve-Path $candidate).Path
+            }
         } catch {}
     }
     return $null
@@ -36,11 +42,11 @@ function Find-Python {
 function Install-Python {
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
     if ($winget) {
-        & $winget.Source install --id Python.Python.3.12 --exact --scope user --silent --accept-package-agreements --accept-source-agreements
+        & $winget.Source install --id Python.Python.3.14 --exact --scope user --silent --accept-package-agreements --accept-source-agreements
         if ($LASTEXITCODE -ne 0) { throw "winget Python installation failed: $LASTEXITCODE" }
         return
     }
-    $version = "3.12.10"
+    $version = "3.14.0"
     $installer = Join-Path $env:TEMP "python-$version-amd64.exe"
     Invoke-WebRequest -Uri "https://www.python.org/ftp/python/$version/python-$version-amd64.exe" -OutFile $installer
     $process = Start-Process -FilePath $installer -ArgumentList @(

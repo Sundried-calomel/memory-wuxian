@@ -242,7 +242,7 @@ This feature is **experimental**. Automated tests cover synthetic ZIP and JSON f
 
 ## Automatic Codex capture on Windows
 
-Run the environment bootstrap first. It reports the detected Python version and paths for Python, Codex CLI, the bundled collector, and Codex sessions. With `-InstallMissing`, it installs Python only when no compatible `>=3.9` runtime or Codex-bundled Python exists.
+Run the environment bootstrap first. It reports the detected Python version and paths for Python, Codex CLI, the bundled collector, and Codex sessions. The only supported main runtime is Python 3.14.x. With `-InstallMissing`, it installs Python 3.14 only when no supported runtime or compatible Codex-bundled Python exists.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1

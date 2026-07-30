@@ -8,6 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 TEST_WORKFLOW = ROOT / ".github" / "workflows" / "test.yml"
+PYPROJECT = ROOT / "pyproject.toml"
+WINDOWS_BOOTSTRAP = ROOT / "scripts" / "bootstrap_windows.ps1"
+MACOS_POSTINSTALL = ROOT / "packaging" / "macos" / "scripts" / "postinstall"
 
 
 def job_block(source: str, job_name: str) -> str:
@@ -26,8 +29,27 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
 
     def test_stable_ci_pins_the_supported_windows_runner(self) -> None:
         self.assertIn("os: [ubuntu-latest, macos-latest]", self.test_source)
+        self.assertIn('python-version: "3.14"', self.test_source)
         self.assertNotIn("windows-latest", self.test_source)
         self.assertEqual(self.test_source.count("runs-on: windows-2022"), 3)
+
+    def test_ci_does_not_repeat_the_suite_across_unsupported_python_versions(self) -> None:
+        self.assertNotIn("python-compatibility:", self.test_source)
+        for version in ("3.9", "3.10", "3.11", "3.12", "3.13"):
+            self.assertNotIn(f'python-version: "{version}"', self.test_source)
+
+    def test_main_runtime_contract_is_python_314_only(self) -> None:
+        self.assertIn(
+            'requires-python = ">=3.14,<3.15"',
+            PYPROJECT.read_text(encoding="utf-8"),
+        )
+        bootstrap = WINDOWS_BOOTSTRAP.read_text(encoding="utf-8")
+        self.assertIn('$MinimumPython = [version]"3.14"', bootstrap)
+        self.assertIn('$MaximumPython = [version]"3.15"', bootstrap)
+        self.assertIn("Python.Python.3.14", bootstrap)
+        self.assertNotIn("Python.Python.3.13", bootstrap)
+        postinstall = MACOS_POSTINSTALL.read_text(encoding="utf-8")
+        self.assertIn("(3, 14) <= sys.version_info < (3, 15)", postinstall)
 
     def test_windows_ci_preserves_complete_coverage_in_bounded_jobs(self) -> None:
         self.assertIn("stage: [check, test]", self.test_source)
