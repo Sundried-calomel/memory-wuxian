@@ -25,11 +25,23 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         cls.test_source = TEST_WORKFLOW.read_text(encoding="utf-8")
 
     def test_stable_ci_pins_the_supported_windows_runner(self) -> None:
+        self.assertIn("os: [ubuntu-latest, macos-latest]", self.test_source)
+        self.assertNotIn("windows-latest", self.test_source)
+        self.assertEqual(self.test_source.count("runs-on: windows-2022"), 3)
+
+    def test_windows_ci_preserves_complete_coverage_in_bounded_jobs(self) -> None:
+        self.assertIn("stage: [check, test]", self.test_source)
+        self.assertEqual(
+            self.test_source.count("shard: [0, 1, 2, 3, 4, 5]"),
+            2,
+        )
         self.assertIn(
-            "os: [ubuntu-latest, macos-latest, windows-2022]",
+            "python scripts/run_unittest_shard.py --index "
+            "${{ matrix.shard }} --count 6",
             self.test_source,
         )
-        self.assertNotIn("windows-latest", self.test_source)
+        self.assertIn("--exclude-baseline", self.test_source)
+        self.assertIn("--scenario-shard-count 6", self.test_source)
 
     def test_release_is_manual_and_serialized(self) -> None:
         self.assertIn("workflow_dispatch:", self.source)

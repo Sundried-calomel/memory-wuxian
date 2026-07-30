@@ -77,7 +77,8 @@
         "scripts/check_architecture_contract.py",
         "scripts/check_documentation_changes.py",
         "scripts/check_documentation_contract.py",
-        "scripts/run_release_rehearsal.py"
+        "scripts/run_release_rehearsal.py",
+        "scripts/run_unittest_shard.py"
       ]
     }
   ],

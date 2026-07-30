@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-2022]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -36,6 +36,67 @@ jobs:
         with:
           name: rehearsal-${{ matrix.os }}
           path: outputs/rehearsal/${{ matrix.os }}
+
+  windows-native:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        stage: [check, test]
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - if: matrix.stage == 'check'
+        run: cargo fmt --check --manifest-path native-collector/Cargo.toml
+      - if: matrix.stage == 'check'
+        run: cargo check --locked --all-targets --manifest-path native-collector/Cargo.toml
+      - if: matrix.stage == 'test'
+        run: cargo test --locked --manifest-path native-collector/Cargo.toml
+      - if: matrix.stage == 'test'
+        run: cargo build --locked --bins --manifest-path native-collector/Cargo.toml
+
+  windows-python:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check "PyYAML>=6.0,<7"
+      - run: python scripts/run_unittest_shard.py --index ${{ matrix.shard }} --count 6
+
+  windows-rehearsal:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check "PyYAML>=6.0,<7"
+      - run: >-
+          python scripts/run_release_rehearsal.py
+          --output outputs/rehearsal/windows-2022-${{ matrix.shard }}
+          --exclude-baseline
+          --scenario-shard-index ${{ matrix.shard }}
+          --scenario-shard-count 6
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: rehearsal-windows-2022-${{ matrix.shard }}
+          path: outputs/rehearsal/windows-2022-${{ matrix.shard }}
 
   python-compatibility:
     runs-on: ubuntu-latest

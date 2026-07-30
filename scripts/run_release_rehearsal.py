@@ -23,7 +23,21 @@ def digest(path: Path) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default=str(ROOT / "outputs/rehearsal/latest"))
+    parser.add_argument("--scenario-shard-index", type=int)
+    parser.add_argument("--scenario-shard-count", type=int)
+    parser.add_argument(
+        "--exclude-baseline",
+        action="store_true",
+        help="Exclude full Python and Rust baselines proved by separate CI jobs.",
+    )
     args = parser.parse_args()
+    if (args.scenario_shard_index is None) != (args.scenario_shard_count is None):
+        parser.error("scenario shard index and count must be supplied together")
+    if args.scenario_shard_count is not None and (
+        args.scenario_shard_count < 1
+        or not 0 <= args.scenario_shard_index < args.scenario_shard_count
+    ):
+        parser.error("require count >= 1 and 0 <= index < count")
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     python = sys.executable
@@ -229,6 +243,24 @@ def main() -> int:
         ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
+    baseline_ids = {
+        "python-compile",
+        "native-format",
+        "native-check",
+        "native-tests",
+        "python-regressions",
+    }
+    if args.exclude_baseline:
+        scenarios = [
+            scenario for scenario in scenarios if scenario[0] not in baseline_ids
+        ]
+    total_scenarios = len(scenarios)
+    if args.scenario_shard_count is not None:
+        scenarios = scenarios[
+            args.scenario_shard_index :: args.scenario_shard_count
+        ]
+        if not scenarios:
+            parser.error("selected scenario shard is empty")
     results = []
     for scenario_id, command in scenarios:
         completed = subprocess.run(
@@ -266,6 +298,10 @@ def main() -> int:
         "status": "passed" if all(item["status"] == "passed" for item in results) else "failed",
         "required_scenarios": len(scenarios),
         "completed_scenarios": len(results),
+        "scenario_catalog_size": total_scenarios,
+        "scenario_shard_index": args.scenario_shard_index,
+        "scenario_shard_count": args.scenario_shard_count,
+        "baseline_excluded": args.exclude_baseline,
         "scenarios": results,
     }
     report_path = output / "report.json"
