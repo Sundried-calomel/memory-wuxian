@@ -1151,13 +1151,20 @@ def make_handler(store: MemoryStore):
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("ETag", etag)
             elif path == "/api/events":
+                event_path = store.root / "dashboard/events.jsonl"
+                try:
+                    stat = event_path.stat()
+                    last_stamp: tuple[int, int] = (
+                        stat.st_size,
+                        stat.st_mtime_ns,
+                    )
+                except OSError:
+                    last_stamp = (0, 0)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream; charset=utf-8")
                 self.send_header("Cache-Control", "no-cache")
                 self.send_header("Connection", "keep-alive")
                 self.end_headers()
-                event_path = store.root / "dashboard/events.jsonl"
-                last_stamp: tuple[int, int] | None = None
                 last_heartbeat = 0.0
                 try:
                     while True:
@@ -1166,9 +1173,7 @@ def make_handler(store: MemoryStore):
                             stamp = (stat.st_size, stat.st_mtime_ns)
                         except OSError:
                             stamp = (0, 0)
-                        if last_stamp is None:
-                            last_stamp = stamp
-                        elif stamp != last_stamp:
+                        if stamp != last_stamp:
                             last_stamp = stamp
                             payload = snapshot_cache.get()
                             event_id = str(int(time.time() * 1000))
