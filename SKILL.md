@@ -146,6 +146,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     directory, and invoke `install_macos_transaction.py`. Do not open the
     platform installer or request administrator credentials unless this is a
     first install, recovery, or declared privileged-component migration.
+63. Report memory evidence recovery and refresh acknowledgement as independent
+    outcomes. A failed `ack-context-refresh` write does not invalidate a
+    successful read-only retrieval or capsule load, and must never be described
+    as loss of access to archived history.
 
 ## Operating workflow
 
@@ -154,8 +158,16 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 3. Append each user and assistant message with `append`; one user message plus its assistant response forms a completed round.
 4. Let the native collector mark a summary due after 5 completed rounds or 20,000 visible characters. A character threshold reached during an answer is acted on only after that answer's `final_answer` closes the round.
 5. Let the one-shot semantic worker generate and ingest the AI summary, then exit. Use `make-summary-job` and [summary prompt](prompts/summarize.md) for manual recovery.
-6. Use `retrieve` for earlier topics. Let it search indexes first and raw records second. Retrieval is read-only and does not require the archive write lock; query logging is skipped automatically when the caller lacks write permission.
-7. Base answers on the recovered raw segment and report the returned verification level.
+6. Use `retrieve`, `retrieve --mode current-policy`, `conversation-tail`,
+   `retrieve-global`, or `semantic-retrieve` for historical evidence as
+   applicable. These are read-only operations and do not require the archive
+   write lock; query logging is skipped automatically when the caller lacks
+   write permission.
+7. Base answers on the recovered raw segment and report the returned
+   verification level. Keep three statuses separate when context refresh is
+   involved: historical retrieval, capsule/status read, and acknowledgement
+   write. Never report all memory access as failed merely because the third
+   status failed.
 8. Run `heartbeat` for validation and recovery. Keep count-based events as primary triggers.
 9. Preview `rebuild-state`, `rebuild-conversations`, or `rebuild-indexes` before applying a recovery operation.
 10. Use the native collector for automatic Codex import. Use `sync-codex` only as a manual compatibility and recovery adapter. Both paths must remain idempotent and storage-compatible.
@@ -163,7 +175,17 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 12. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
 13. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
 14. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
-15. At the start of each user turn, run `context-refresh-status`. When due, load `context-capsule` into the current reasoning context and run `ack-context-refresh` only after the capsule was read. Do not quote the capsule to the user unless requested, and never archive it as a source message.
+15. At the start of each user turn, run `context-refresh-status`. Both it and
+    `context-capsule` are read-only and must remain usable while another process
+    holds `memory/.locks/archive.lock`. When due, load the capsule into the
+    current reasoning context, then run `ack-context-refresh`; acknowledgement
+    writes only rebuildable local refresh state and therefore waits for the
+    archive write lock. If sandbox permission or lock access blocks that write,
+    preserve the loaded capsule, continue from the retrieved evidence, report
+    `acknowledgement=pending`, and request one bounded write approval only when
+    persistent acknowledgement is required. Do not claim acknowledgement,
+    archive failure, or retrieval failure. Do not quote the capsule unless
+    requested, and never archive it as a source message.
 16. When the user names another or historical Codex conversation and asks to continue it or restore its latest messages, run `conversation-tail --title "..." --exclude-conversation-id "codex:<active-task-id>" --messages N`. Resolve the title after excluding the active task and before selecting messages. Never substitute the latest conversation when the title is missing or ambiguous. When the user confirms a title-to-task relationship, persist it with `register-title` so later retrieval does not depend on mutable client title metadata.
 17. Let the dashboard render its last successful browser-local response immediately. Serve `memory/dashboard/status-snapshot.json` without blocking the first paint, rebuild it from authoritative records in the background, and animate changed values when the refreshed snapshot arrives. On Windows, dashboard status reads must not create visible console subprocesses.
 18. For federation, run `init-node` once, register only explicitly trusted peers, and use `export-delta`, `inspect-bundle`, and `import-delta` for offline exchange.
@@ -328,6 +350,10 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 ## Load supporting material selectively
 
 - Read [implementation.md](references/implementation.md) before changing storage formats, counters, summary hierarchy, retrieval behavior, state recovery, locking, privacy behavior, or client integration.
+- Read the retrieval and runtime-context-refresh sections of
+  [implementation.md](references/implementation.md) before diagnosing a memory
+  permission failure or reporting whether another conversation can read
+  archived history.
 - Read [schemas.md](references/schemas.md) when constructing or validating raw records, summary JSON, indexes, state, or retrieval output.
 - Read [decisions.md](references/decisions.md) before changing architectural behavior.
 - Read [release-rehearsal.md](references/release-rehearsal.md) before release

@@ -2372,9 +2372,51 @@ summaries:
         self.assertEqual(unlocked_capsule.returncode, 0, unlocked_capsule.stderr)
         self.assertTrue(json.loads(unlocked_status.stdout)["due"])
         self.assertIn("# Memory无限运行时记忆胶囊", unlocked_capsule.stdout)
-        acknowledged = self.run_cli("ack-context-refresh")
-        self.assertEqual(acknowledged["status"], "acknowledged")
+        with exclusive_lock(archive_lock):
+            acknowledgement = subprocess.Popen(
+                [
+                    sys.executable,
+                    str(CLI),
+                    "--root",
+                    str(self.root),
+                    "--config",
+                    str(self.config),
+                    "ack-context-refresh",
+                ],
+                text=True,
+                encoding="utf-8",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            )
+            time.sleep(0.2)
+            self.assertIsNone(acknowledgement.poll())
+        stdout, stderr = acknowledgement.communicate(timeout=10)
+        self.assertEqual(acknowledgement.returncode, 0, stderr)
+        self.assertEqual(json.loads(stdout)["status"], "acknowledged")
         self.assertFalse(self.run_cli("context-refresh-status")["due"])
+
+    def test_skill_documents_read_and_acknowledgement_as_independent_outcomes(self):
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        implementation = (SKILL_ROOT / "references/implementation.md").read_text(
+            encoding="utf-8"
+        )
+        normalized_skill = " ".join(skill.split())
+        normalized_implementation = " ".join(implementation.split())
+
+        self.assertIn(
+            "A failed `ack-context-refresh` write does not invalidate a "
+            "successful read-only retrieval",
+            normalized_skill,
+        )
+        self.assertIn("acknowledgement=pending", normalized_skill)
+        self.assertIn(
+            "Retrieval permission and outcome contract", normalized_implementation
+        )
+        self.assertIn(
+            "`retrieval=verified`, `capsule=loaded`, `acknowledgement=pending`",
+            normalized_implementation,
+        )
 
 
 if __name__ == "__main__":

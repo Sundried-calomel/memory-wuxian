@@ -162,6 +162,12 @@ New summary files persist `source_sha256` in frontmatter. Summary indexes and re
 
 `context-refresh-status` reports the selected top-level session, due reasons, latest token usage, utilization, compaction count, and capsule budget. `context-capsule` emits derived Markdown plus machine-readable metadata. It prefers higher-level summaries over their covered children and is not a raw-message record.
 
+Status and capsule generation are read-only. `ack-context-refresh` is the only
+operation in this three-step flow that writes this state file and therefore
+requires the archive lock. Failure to update this derived file means
+`acknowledgement=pending`; it does not change the confidence or availability of
+history already retrieved from raw records.
+
 ## Federation node
 
 `federation/node.json` conforms to `schemas/device-node.schema.json` and records

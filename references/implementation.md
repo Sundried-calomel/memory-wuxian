@@ -156,6 +156,27 @@ Answer factual historical questions from verified text. Distinguish quoted recol
 
 For a title-targeted historical continuation, exclude the active conversation ID before title matching. A missing or ambiguous result is a hard stop. Persist a user-confirmed title alias in the local title index rather than editing Codex client databases.
 
+### 5.1 Retrieval permission and outcome contract
+
+Treat archive evidence reads and optional bookkeeping writes as separate
+operations:
+
+| Operation | Authority | Archive write lock | Failure meaning |
+| --- | --- | --- | --- |
+| `retrieve`, `retrieve --mode current-policy`, `conversation-tail` | local raw history and indexes | not required | requested evidence was not recovered |
+| `retrieve-global` | verified read-only peer replicas | not required | requested peer evidence was not recovered |
+| `semantic-retrieve` | disposable semantic index with raw backlinks | not required | semantic route failed; keyword/raw retrieval remains available |
+| `context-refresh-status`, `context-capsule` | rollout telemetry and derived summaries | not required | refresh status or capsule could not be read |
+| `ack-context-refresh` | rebuildable local refresh state | required | acknowledgement was not persisted; previously read evidence remains valid |
+
+Report these outcomes independently. A correct result may therefore be:
+`retrieval=verified`, `capsule=loaded`, `acknowledgement=pending`. Do not
+collapse that state into “Memory无限 failed”, “the archive is unreadable”, or
+“the other conversation cannot access memory”. Ask for write permission only
+for the failed write, never retroactively for a completed read. If
+acknowledgement remains pending, the next turn may offer the same capsule again;
+that duplication risk is the only expected continuity effect.
+
 ## 6. Heartbeat, idempotency, and recovery
 
 Use completed rounds and summary counts as primary triggers. Use heartbeat to:
@@ -244,6 +265,14 @@ Create one snapshot per successful synchronization batch or other logical mutati
 Keep context refresh derived and rebuildable under `retrieval/context-refresh-state.json`; it is not authoritative conversation history and does not require an archive snapshot. At the start of an Agent turn, inspect the newest top-level rollout for its latest `token_count` event and compare completed rounds with the last acknowledgement. Mark refresh due after the configured round interval, when utilization first crosses 65% or 80%, or when usage drops by at least 20 percentage points after reaching the low threshold, which indicates client compaction.
 
 Render a capsule from the highest available semantic summary levels, omit child summaries already covered by a selected parent, append uncovered newer summaries, and finish with a bounded recent-task tail. Cap the estimated budget at the smallest of 1% of the rollout-reported effective context window, 3,000 tokens, and 10,000 tokens. Load the capsule as tool context and acknowledge only after it was read. Never append the capsule to raw history or submit it as semantic-summary source.
+
+`context-refresh-status` and `context-capsule` are read-only and bypass the
+archive write lock. `ack-context-refresh` atomically writes only
+`retrieval/context-refresh-state.json` under the archive lock. It does not
+modify raw messages, summaries, policy events, or retrieval confidence, and it
+does not create an archive backup. A denied or unavailable acknowledgement
+leaves the capsule usable and historical analysis unchanged; report the
+acknowledgement as pending rather than retrying permission requests repeatedly.
 
 ## 15. Dashboard status cache
 
