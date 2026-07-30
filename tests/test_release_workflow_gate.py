@@ -144,6 +144,18 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
             "Copy-Item native-collector/target/release/memory-wuxian-collector.exe",
             windows,
         )
+        self.assertIn("Unexpected native version", mac)
+        self.assertIn("Unexpected native version", windows)
+        self.assertIn('(& "bin\\$binary.exe" --version).Trim()', windows)
+
+    def test_windows_installer_proves_all_native_executables_are_packaged(self) -> None:
+        windows = job_block(self.source, "windows-installer")
+        for executable in (
+            "bin\\memory-wuxian-collector.exe",
+            "bin\\memory-wuxian-envelope.exe",
+            "bin\\memory-wuxian-dashboard-launcher.exe",
+        ):
+            self.assertIn(executable, windows)
 
     def test_both_installers_retain_the_architecture_hard_gate(self) -> None:
         required = [

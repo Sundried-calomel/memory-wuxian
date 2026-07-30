@@ -12,6 +12,8 @@ from platform_runtime import executable_entry_path
 
 class PlatformRuntimeTest(unittest.TestCase):
     def test_macos_preserves_stable_symlink_entry(self):
+        if sys.platform != "darwin":
+            self.skipTest("macOS symlink contract runs on the macOS CI job")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             versioned = root / "Cellar" / "python3.14"

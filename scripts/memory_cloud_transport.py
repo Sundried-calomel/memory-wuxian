@@ -30,7 +30,11 @@ from memory_federation import (
 
 def filesystem_native_path(path: Path) -> str:
     value = str(path.resolve())
-    if os.name != "nt" or value.startswith("\\\\?\\"):
+    if (
+        os.name != "nt"
+        or value.startswith("\\\\?\\")
+        or len(value) < 240
+    ):
         return value
     if value.startswith("\\\\"):
         return "\\\\?\\UNC\\" + value[2:]
@@ -682,6 +686,17 @@ class CloudFolderTransport:
                 filesystem_native_path(partial),
                 filesystem_native_path(destination),
             )
+            published_path = Path(filesystem_native_path(destination))
+            visibility_deadline = time.monotonic() + 1.0
+            while (
+                not published_path.is_file()
+                or published_path.stat().st_size == 0
+            ):
+                if time.monotonic() >= visibility_deadline:
+                    raise RuntimeError(
+                        f"Published cloud envelope is not visible: {destination}"
+                    )
+                time.sleep(0.01)
             try:
                 directory_descriptor = os.open(
                     str(destination.parent), getattr(os, "O_DIRECTORY", 0)
@@ -859,7 +874,8 @@ class CloudFolderTransport:
                     {"peer": peer_id, "type": "ack-scan", "reason": str(exc)}
                 )
                 continue
-            for path in paths:
+            for discovered_path in paths:
+                path = Path(filesystem_native_path(discovered_path))
                 if ".partial" in path.name:
                     result["transient"].append(
                         {"peer": peer_id, "type": "ack", "path": display_path(path)}
@@ -990,7 +1006,8 @@ class CloudFolderTransport:
             current_sequence = int(replica_state.get("last_event_sequence", 0))
             expected_sequence = current_sequence + 1
             candidates = []
-            for path in paths:
+            for discovered_path in paths:
+                path = Path(filesystem_native_path(discovered_path))
                 if ".partial" in path.name:
                     result["transient"].append(
                         {"peer": peer_id, "type": "bundle", "path": display_path(path)}
@@ -1216,8 +1233,9 @@ class CloudFolderTransport:
                 self._envelope_kind("bundle"),
                 peer_id,
             )
+        native_destination = filesystem_native_path(destination)
         state["outstanding"] = {
-            "path": display_path(destination),
+            "path": native_destination,
             "bundle_id": exported["bundle_id"],
             "bundle_sha256": exported["sha256"],
             "from_event_sequence": int(exported["from_event_sequence"]),
@@ -1227,7 +1245,8 @@ class CloudFolderTransport:
         result["published"].append(
             {
                 "peer": peer_id,
-                "path": display_path(destination),
+                "path": native_destination,
+                "display_path": display_path(destination),
                 "bundle_id": exported["bundle_id"],
                 "from_event_sequence": int(exported["from_event_sequence"]),
                 "to_event_sequence": int(exported["to_event_sequence"]),

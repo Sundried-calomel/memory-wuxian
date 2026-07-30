@@ -1,6 +1,8 @@
 import base64
 import hashlib
 import json
+import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -13,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from memory_cli import MemoryStore, load_simple_yaml
-from memory_cloud_transport import CloudFolderTransport
+from memory_cloud_transport import CloudFolderTransport, filesystem_native_path
 from memory_environment import revision_id_for
 from memory_environment_exchange import EnvironmentExchangeManager
 from memory_environment_incoming import EnvironmentIncomingProcessor
@@ -46,6 +48,10 @@ class EnvironmentExchangeTests(unittest.TestCase):
         self.b = EnvironmentExchangeManager(self.store_b)
 
     def tearDown(self):
+        native_base = str(self.base.resolve())
+        if os.name == "nt":
+            native_base = "\\\\?\\" + native_base
+        shutil.rmtree(native_base, ignore_errors=True)
         self.temporary.cleanup()
 
     def register_rule(self):
@@ -588,7 +594,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         cloud_b.configure(exchange, key_b, enabled=True)
         self.register_rule()
         published = cloud_a.sync(force=True, now=1000)
-        self.assertEqual(len(published["published"]), 1)
+        self.assertEqual(len(published["published"]), 1, published)
         envelope = Path(published["published"][0]["path"])
         self.assertIn("environment-v1", str(envelope))
         self.assertNotIn("shared rule", envelope.read_text(encoding="utf-8"))
@@ -644,6 +650,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         cloud_b.configure(exchange, key_b, enabled=True)
         self.register_rule()
         first = cloud_a.sync(force=True, now=2000)
+        self.assertEqual(len(first["published"]), 1, first)
         first_envelope = Path(first["published"][0]["path"])
         cloud_b.sync(force=True, now=2001)
         first_cursor = self.b.replica_state("node-a")["last_event_sequence"]
@@ -679,6 +686,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
                 "environment-v1-bundle",
                 "node-b",
             )
+            overlap_envelope = Path(filesystem_native_path(overlap_envelope))
         first_envelope.touch()
         overlap_envelope.touch()
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.5.1 - 2026-07-31
+
+- Rebuilt the checked-in Windows collector from the current Rust sources so
+  its reported version matches the product version.
+- Restored a non-optional checked-in native-version regression test on
+  supported desktop platforms.
+- Made both installer jobs execute the freshly built collector and envelope
+  before packaging, and made the Windows job prove that all three native
+  executables are included in the installer payload.
+- Wait for newly published cloud envelopes to become visible through their
+  returned display path before reporting a successful sync.
+- Reserve Windows extended-path prefixes for paths near the legacy path-length
+  boundary, avoiding short-path file-provider rename anomalies while retaining
+  deep OneDrive folder support.
+- Return an operable native `path` for long Windows cloud envelopes while
+  retaining a prefix-free `display_path` for dashboards and logs.
+- Run the macOS symlink contract on macOS CI instead of requiring Windows
+  developer-mode symlink privileges during the Windows rehearsal.
+- Retained the stable-line dashboard SSE startup-race, Windows native cloud
+  path, and agent-rule newline fixes without merging the obsolete beta branch.
+
 ## 2.5.0 - 2026-07-30
 
 - Restricted the supported main runtime to Python 3.14.x and removed the

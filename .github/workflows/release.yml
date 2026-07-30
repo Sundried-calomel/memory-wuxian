@@ -112,6 +112,15 @@ jobs:
             packaging/macos/build_dashboard_app.sh \
             packaging/macos/scripts/postinstall \
             scripts/install_dashboard_app_macos.py
+          version="${{ needs.metadata.outputs.version }}"
+          for binary in memory-wuxian-collector memory-wuxian-envelope; do
+            actual="$(bin/$binary --version)"
+            expected="$binary $version"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "Unexpected native version: $actual != $expected" >&2
+              exit 1
+            fi
+          done
       - name: Build PKG
         shell: bash
         run: |
@@ -161,6 +170,14 @@ jobs:
           Copy-Item native-collector/target/release/memory-wuxian-collector.exe bin/memory-wuxian-collector.exe -Force
           Copy-Item native-collector/target/release/memory-wuxian-envelope.exe bin/memory-wuxian-envelope.exe -Force
           Copy-Item native-collector/target/release/memory-wuxian-dashboard-launcher.exe bin/memory-wuxian-dashboard-launcher.exe -Force
+          $version = "${{ needs.metadata.outputs.version }}"
+          foreach ($binary in @("memory-wuxian-collector", "memory-wuxian-envelope")) {
+            $actual = (& "bin\$binary.exe" --version).Trim()
+            $expected = "$binary $version"
+            if ($LASTEXITCODE -ne 0 -or $actual -ne $expected) {
+              throw "Unexpected native version: $actual != $expected"
+            }
+          }
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --yes --no-progress
@@ -183,7 +200,10 @@ jobs:
             "AGENTS.md",
             "PRODUCT_ARCHITECTURE.md",
             "docs\module-architecture.json",
-            "scripts\check_architecture_contract.py"
+            "scripts\check_architecture_contract.py",
+            "bin\memory-wuxian-collector.exe",
+            "bin\memory-wuxian-envelope.exe",
+            "bin\memory-wuxian-dashboard-launcher.exe"
           )) {
             $sourcePath = Join-Path $PWD $required
             if (-not $buildLog.Contains("Compressing: $sourcePath")) {

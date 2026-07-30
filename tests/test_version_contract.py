@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
 CARGO_MANIFEST = ROOT / "native-collector" / "Cargo.toml"
 RUST_ROOT = ROOT / "native-collector"
+
+
 def normalize_cargo_version(version: str) -> str:
     return re.sub(r"(?<=\d)-(?=[A-Za-z])", "", version)
 
@@ -64,6 +66,31 @@ class VersionContractTest(unittest.TestCase):
         )
         self.assertEqual(0, completed.returncode)
         self.assertEqual(f"memory-wuxian-collector {cargo}", completed.stdout.strip())
+
+    def test_bundled_native_binaries_report_the_current_version(self):
+        cargo = manifest_version(CARGO_MANIFEST, "package")
+        if sys.platform == "win32":
+            binaries = ("memory-wuxian-collector.exe",)
+        elif sys.platform == "darwin":
+            binaries = ("memory-wuxian-collector", "memory-wuxian-envelope")
+        else:
+            self.skipTest("desktop bundled binaries are not shipped on this platform")
+
+        for filename in binaries:
+            executable = ROOT / "bin" / filename
+            self.assertTrue(executable.is_file(), f"missing bundled executable: {executable}")
+            completed = subprocess.run(
+                [str(executable), "--version"],
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                check=False,
+            )
+            name = filename.removesuffix(".exe")
+            with self.subTest(name=name):
+                self.assertEqual(0, completed.returncode, completed.stderr)
+                self.assertEqual(f"{name} {cargo}", completed.stdout.strip())
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ from memory_cloud_transport import (
     CloudFolderTransport,
     CommandCrypto,
     TransientCloudArtifactError,
+    display_path,
     filesystem_native_path,
 )
 from memory_federation import FederationManager, read_json
@@ -640,12 +641,12 @@ safety:
         )
         self.assertEqual(
             [
-                path.resolve()
+                display_path(path.resolve())
                 for path in self.own_outbox(
                     "node-alpha", "node-beta"
                 ).glob("*.mwxe")
             ],
-            [envelope.resolve()],
+            [display_path(envelope.resolve())],
         )
 
     def test_out_of_order_waits_and_partial_and_zero_files_are_transient(self):
@@ -746,7 +747,10 @@ safety:
         self.assertEqual(before_grace["cleaned"], [])
         at_grace = self.transport_a.sync(force=False, now=6100)
         self.assertFalse(envelope.exists())
-        self.assertEqual(at_grace["cleaned"], [str(envelope)])
+        self.assertEqual(
+            at_grace["cleaned"],
+            [display_path(envelope)],
+        )
 
         foreign = (
             self.exchange
