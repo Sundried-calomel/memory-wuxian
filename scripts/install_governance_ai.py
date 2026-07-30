@@ -21,6 +21,10 @@ from install_cloud_sync import (
     powershell_quote,
     windows_system_executable,
 )
+try:
+    from platform_runtime import executable_entry_path
+except ModuleNotFoundError:
+    from scripts.platform_runtime import executable_entry_path
 
 
 MACOS_LABEL = "com.openai.codex.memory-wuxian-governance-ai"
@@ -119,7 +123,7 @@ def main() -> int:
     args = parser.parse_args()
     archive = Path(args.archive_root).expanduser().resolve()
     skill = Path(args.skill_root).expanduser().resolve()
-    python = Path(args.python_executable).expanduser().resolve()
+    python = executable_entry_path(args.python_executable)
     if args.uninstall:
         if sys.platform == "darwin":
             output = Path.home() / "Library/LaunchAgents" / f"{MACOS_LABEL}.plist"

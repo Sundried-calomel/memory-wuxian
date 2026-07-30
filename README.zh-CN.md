@@ -173,13 +173,21 @@ python3 scripts/install_codex_autosync.py \
 
 LaunchAgent 保持一个优化后的 Rust 进程，接收操作系统文件变化通知，并使用自适应大小/mtime 检查补充深层目录中遗漏的事件。活跃时每 5 秒补检，空闲 2 分钟后降为 30 秒，空闲 15 分钟后降为 5 分钟；原生事件会立即唤醒。采集器保存用户消息、可见助手 commentary/final，以及顶层 Codex 时间线中可见的轻量工具活动。工具活动在可用时保留工具名、嵌套工具名和命令文本；工具输出、系统指令、隐藏推理和子代理会话不归档。顶层 rollout 中可用的 `token_count` 遥测单独写入每个对话的派生账本，标记为“Codex 报告模型用量”而非账单用量。累计计数器重置时封存上一段再累加；重复快照不重复计为请求；缓存输入与推理输出是已包含分项，不能再次加入 `total_tokens`。仍保留的 rollout 可精确回填；已经删除的遥测、ChatGPT 网页对话和官方导出包不能恢复实际模型用量。逐会话游标和稳定来源 ID 保证重试幂等。
 
-原生采集器直接负责事件驱动 JSONL 解析、原文追加、逐对话全文更新、确定性路由索引、游标写入、到期一级摘要任务和桌面快照。成功的 Codex 文件修改会记录路径、变更类型、移动目标、增删行数、hunk 行范围及精确统一 diff。一般工具输出和隐藏推理继续排除。已有安装会对历史 patch 事件执行一次回填。任务到期时，采集器运行一个 Python wrapper，调用一次临时 Codex CLI 摘要进程，导入后退出。Python CLI 继续负责低频维护、检索、重建和摘要导入。
+原生采集器直接负责事件驱动 JSONL 解析、原文追加、逐对话全文更新、确定性路由索引、游标写入、到期一级摘要任务和原子备份债务登记。成功的 Codex 文件修改会记录路径、变更类型、移动目标、增删行数、hunk 行范围及精确统一 diff。一般工具输出和隐藏推理继续排除。已有安装会对历史 patch 事件执行一次回填。任务到期时，采集器运行一个 Python wrapper，调用一次临时 Codex CLI 摘要进程，导入后退出。Python CLI 继续负责低频维护、检索、重建、备份维护和摘要导入。
 
 每个导入对话还会单独写入 `memory/conversations/`。每份全文只包含一个 conversation ID，同时保留精确机器记录和可读消息。独立索引位于 `memory/indexes/by-conversation/<conversation>/`。`raw/` 下不可变文件仍是权威来源；逐对话全文和索引都是可重建的确定性视图。
 
-当档案或备份位于受保护的 `Documents` 或 `Desktop` 时，在 macOS 中应向 `bin/memory-wuxian-collector` 授予完全磁盘访问权限。声称自动采集有效前，应核对生成 plist 中的实际可执行文件。
+当档案或备份位于受保护的 `Documents` 或 `Desktop` 时，在 macOS 中应向 `bin/memory-wuxian-collector` 授予完全磁盘访问权限。声称自动采集有效前，应核对生成 plist 中的实际可执行文件。后台定义保留 `/opt/homebrew/bin/python3` 这类稳定 Python 入口，不把它解析成带版本号的 Homebrew Cellar 路径；因此普通 Python 升级不会产生新的隐私身份，也不会再次反复请求桌面或文稿权限。
 
-采集器在 `imports/codex/collector-telemetry.json` 发布轻量运行遥测。状态台显示活跃、空闲或深度空闲模式、当前补检间隔、最近文件事件、最近归档写入、一小时唤醒次数以及 CPU/内存。遥测仅在发生活动或模式转换时写入。
+采集器在 `imports/codex/collector-telemetry.json` 发布轻量运行遥测。状态台显示活跃、空闲或深度空闲模式、当前补检间隔、最近文件事件、最近归档写入、一小时唤醒次数以及 CPU/内存。新进程先报告 `phase=starting` 和 `ready=false`，只有初始同步成功后才进入 `phase=ready`。即使空闲，遥测也会在每个监测周期续写，并分别记录来源水位与归档水位。启动仍在进行、遥测过期、采集器停止或来源水位领先归档水位时，状态台会明确告警。
+
+macOS 既有安装通过 `scripts/install_macos_transaction.py` 更新。它先暂存候选版，在隔离档案中证明候选采集器能够精确写入合成的用户与助手消息，通过后才切换；切换后还要验证采集器 PID 已替换、遥测新鲜且当前操作台自检通过。任何切换后失败都会恢复旧 Skill、旧 LaunchAgent 和旧采集器。日常更新使用该用户级事务，不需要重新运行完整安装器，也不需要管理员密码。
+
+采集器首次同步不会等待 AI 摘要。如果启动追赶过程达到摘要阈值，系统会持久化不可变的摘要任务，并在采集器进入 ready 后交给既有 semantic-backfill worker 处理。这样既不丢失原文和摘要债务，也不会让一次较长的 Codex CLI 调用阻塞事务切换。
+
+按时间范围生成报告前，先运行 `scripts/archive_waterline.py --cutoff <ISO-8601>`。它核对报告截止时间之前保留的来源是否已被持久化游标覆盖。`--backfill` 必须显式调用，并且只处理被判定为滞后的保留来源文件；只有最终结果为 `covered` 时，报告才可继续使用 Memory无限。
+
+每日归档量柱状图继续以字符数决定柱高。鼠标悬停或键盘聚焦任一柱时，会显示本地化气泡，列出完整日期、精确归档消息数和精确可见字符数。
 
 ## 导入 ChatGPT 对话
 
@@ -222,7 +230,7 @@ python scripts/install_codex_autosync_windows.py `
 
 采集器使用明确的 16 MiB worker 栈，使 Windows 上首次全历史导入可以安全解析和索引大型 Codex rollout 集合。
 
-默认配置下，每次成功修改记忆都会在主档案写入完成后，在 `~/Desktop/Memory無限-记忆归档备份/` 下创建完整新快照、验证清单并移除旧快照。因此备份根目录包含一份最新恢复副本和只追加的 `backup-log.jsonl` 操作历史。
+默认配置下，每次原生记忆修改都会在主档案写入完成后原子更新 `pending/backup-debt.json`。低频维护任务把所有待处理修改合并成 `~/Desktop/Memory無限-记忆归档备份/` 下的一份完整验证快照，成功后才清除债务并移除旧快照。采集器不会因为复制整份档案而阻塞启动或采集。备份根目录保留一份最新恢复副本和只追加的 `backup-log.jsonl` 操作历史；存在更新的待生成快照时，状态台会明确告警。
 
 应用重建命令可先把旧派生文件保存在 `memory/archive/`。内部恢复副本使用 `backup.workspace_retention_count`，默认同样只保留最新一份。开发编辑使用一份可替换代码备份，不额外复制实时对话档案。
 

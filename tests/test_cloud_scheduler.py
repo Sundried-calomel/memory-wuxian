@@ -79,7 +79,7 @@ class CloudSchedulerTest(unittest.TestCase):
         self.assertEqual(
             payload["ProgramArguments"],
             [
-                str(self.python.resolve()),
+                str(self.python.absolute()),
                 str((self.skill / "scripts" / "memory_cli.py").resolve()),
                 "--root",
                 str(self.archive.resolve()),

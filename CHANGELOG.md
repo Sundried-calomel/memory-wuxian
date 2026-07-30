@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.4.5 - 2026-07-30
+
+- Preserved stable macOS Python entry paths in every generated background
+  definition instead of resolving Homebrew symlinks to version-specific Cellar
+  executables that can repeatedly trigger Desktop and Documents permission
+  prompts after upgrades.
+- Added a user-space macOS update transaction that stages a candidate, proves
+  end-to-end capture in an isolated archive, switches only after the probe
+  passes, verifies the new collector and dashboard, and restores the previous
+  Skill, plist, and collector on any post-switch failure.
+- Prevented a due AI summary from blocking collector startup and transactional
+  cutover. Startup persists the source-locked summary job but leaves execution
+  to the existing semantic-backfill worker after the collector becomes ready.
+- Replaced synchronous full-archive backup copies in the native capture path
+  with an atomic, coalescing backup-debt record. The low-frequency maintenance
+  worker creates one complete verified snapshot for all pending mutations and
+  clears the debt only after success; the dashboard exposes pending debt.
+- Extended native collector telemetry with explicit `starting` and `ready`
+  phases, an idle heartbeat, and independent source and archive watermarks. The
+  dashboard now distinguishes live startup from stale telemetry, a stopped
+  collector, and retained source data ahead of the archive.
+- Added deterministic report-cutoff waterline verification and bounded native
+  backfill so reports can refuse stale archives before reading summaries.
+- Added an accessible localized hover and keyboard-focus bubble to each daily
+  archive bar showing its full date, exact archived-message count, and exact
+  visible-character count.
+
 ## 2.4.4 - 2026-07-30
 
 - Fixed macOS OneDrive Files On-Demand handling for encrypted archive and

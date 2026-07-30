@@ -65,6 +65,26 @@ Required scenarios:
     independent from cloud synchronization.
 16. The machine-readable architecture contract proves every production file
     has exactly one module owner and no declared prohibited dependency.
+17. macOS runtime-path tests prove generated background definitions retain a
+    stable Python entry path and contain no version-specific Homebrew Cellar
+    executable.
+18. macOS update-transaction tests prove candidate capture before cutover,
+    no cutover on probe failure, live collector replacement after success, and
+    restoration of the prior Skill, plist, and process after a post-switch
+    failure.
+19. Collector-health tests prove idle heartbeat renewal, stale-telemetry
+    detection, independent source/archive watermarks, and archive-lag warning.
+20. Report-preflight tests prove both a covered cutoff and a lagging cutoff,
+    with bounded backfill restricted to the exact retained source files.
+21. Dashboard interaction tests prove every daily archive bar exposes the
+    localized full date, exact message count, and exact character count by
+    mouse hover and keyboard focus without changing the bar metric.
+22. Collector-startup tests prove initial catch-up persists summary work without
+    invoking or awaiting the semantic worker before ready telemetry.
+23. Coalesced-backup tests prove native capture records durable debt without
+    copying the full archive, maintenance creates one complete snapshot even
+    when no summary job is due, debt clears only after success, and the
+    dashboard exposes pending debt.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

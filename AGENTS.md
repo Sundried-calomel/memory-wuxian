@@ -126,6 +126,22 @@ Use Memory無限 to preserve conversation history outside the active context win
     every feature, fix, refactor, installer, dashboard, schema, or runtime
     change. Do not accept unowned files, overlapping owners, or a prohibited
     dependency as temporary release debt.
+63. On macOS, preserve stable executable entry paths in every LaunchAgent.
+    Existing installations update through the isolated candidate transaction:
+    prove capture before cutover, verify the replacement collector and
+    dashboard afterward, and restore the prior Skill, plist, and process on
+    failure. A Homebrew Cellar version path is not a stable background entry.
+64. A report with a historical cutoff must pass
+    `scripts/archive_waterline.py --cutoff <ISO-8601>` before Memory無限 is
+    treated as complete through that time. A running process or recent summary
+    alone is not archive-waterline evidence.
+65. Collector startup may persist due semantic-summary jobs, but it must not run
+    or wait for the AI worker before publishing ready telemetry. The independent
+    semantic-backfill scheduler owns queued execution after capture readiness.
+66. Native capture must not synchronously copy the complete archive. Every
+    backup-eligible mutation atomically records coalescing backup debt; the
+    independent maintenance worker creates one complete snapshot for the batch
+    and clears the debt only after successful verification.
 
 ## Authority order
 

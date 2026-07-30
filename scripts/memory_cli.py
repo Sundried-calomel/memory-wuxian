@@ -1009,6 +1009,25 @@ class MemoryStore:
             self.prune_backup_snapshots(backup_root, [final_path])
         return final_path
 
+    @property
+    def backup_debt_path(self) -> Path:
+        return self.pending_dir / "backup-debt.json"
+
+    def drain_backup_debt(self) -> Optional[Path]:
+        if not self.backup_debt_path.exists():
+            return None
+        with exclusive_lock(self.locks_dir / "archive.lock"):
+            if not self.backup_debt_path.exists():
+                return None
+            debt = json.loads(self.backup_debt_path.read_text(encoding="utf-8"))
+            backup = self.create_backup_snapshot(
+                "coalesced-archive-mutations",
+                {"backup_debt": debt},
+            )
+            if backup is not None:
+                self.backup_debt_path.unlink()
+            return backup
+
     def codex_session_metadata(self, path: Path) -> Dict[str, Any]:
         with path.open("r", encoding="utf-8") as handle:
             for line in handle:

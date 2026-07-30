@@ -9,6 +9,7 @@ import tempfile
 import time
 import unittest
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,7 +20,9 @@ from platform_lock import exclusive_lock
 from memory_dashboard import (
     DashboardSnapshotCache,
     archive_storage_bytes,
+    collector_telemetry,
     dashboard_data,
+    dashboard_health,
     estimate_context_tokens,
 )
 from memory_cli import resolve_root
@@ -30,7 +33,7 @@ from semantic_worker import (
     unpack_source_records,
     unpack_source_summaries,
 )
-from semantic_backfill import ordered_pending_jobs
+from semantic_backfill import ordered_pending_jobs, run_backfill
 
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
@@ -173,6 +176,31 @@ safety:
             ["job-high.json", "job-low.json"],
         )
 
+    def test_semantic_backfill_drains_coalesced_backup_debt_without_summary_jobs(self):
+        backup_root = self.base / "desktop-backups"
+        with self.config.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f'backup:\n  enabled: true\n  directory: "{backup_root}"\n'
+                "  retention_count: 1\n"
+            )
+        debt_path = self.root / "pending/backup-debt.json"
+        debt_path.write_text(
+            json.dumps({
+                "format_version": 1,
+                "status": "pending",
+                "mutation_count": 3,
+                "latest_reason": "codex-native-sync",
+            }),
+            encoding="utf-8",
+        )
+
+        result = run_backfill(self.root, self.config, max_jobs=1, dry_run=False)
+
+        self.assertEqual(result["completed_jobs"], 0)
+        self.assertTrue(result["backup_debt_drained"])
+        self.assertFalse(debt_path.exists())
+        self.assertTrue(Path(result["backup"]).is_dir())
+
     def test_overlap_audit_uses_direct_sources_for_each_summary_level(self):
         from memory_cli import MemoryStore
 
@@ -236,9 +264,12 @@ safety:
         windows_uninstall = (SKILL_ROOT / "packaging/windows/uninstall.ps1").read_text(encoding="utf-8")
         inno_setup = (SKILL_ROOT / "packaging/windows/MemoryWuxian.iss").read_text(encoding="utf-8")
         release_workflow = (SKILL_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        mac_transaction = (SKILL_ROOT / "scripts/install_macos_transaction.py").read_text(encoding="utf-8")
 
         self.assertIn("MemoryWuxianArchive", mac_postinstall)
-        self.assertIn("preserved_config", mac_postinstall)
+        self.assertIn("install_macos_transaction.py", mac_postinstall)
+        self.assertIn('current / "config.yaml"', mac_transaction)
+        self.assertIn('candidate / "config.yaml"', mac_transaction)
         self.assertIn("--python-executable", mac_postinstall)
         self.assertIn("init-node --display-name", mac_postinstall)
         self.assertIn("MemoryWuxianArchive", windows_install)
@@ -453,6 +484,59 @@ safety:
         self.assertEqual(result["collector"]["fallback_interval_seconds"], 30)
         self.assertEqual(result["collector"]["wakeups_last_hour"], 4)
 
+    def test_dashboard_health_reports_collector_freshness_alerts(self):
+        self.assertEqual(
+            dashboard_health({}, {"alerts": ["collector-telemetry-stale"]}),
+            "attention",
+        )
+        self.assertEqual(dashboard_health({}, {"alerts": []}), "ok")
+
+    def test_dashboard_reports_live_collector_startup_phase(self):
+        telemetry_path = self.root / "imports/codex/collector-telemetry.json"
+        telemetry_path.parent.mkdir(parents=True, exist_ok=True)
+        telemetry_path.write_text(
+            json.dumps(
+                {
+                    "format_version": 2,
+                    "pid": os.getpid(),
+                    "phase": "starting",
+                    "ready": False,
+                    "fallback_interval_seconds": 5,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = collector_telemetry(self.root)
+        self.assertTrue(result["process_running"])
+        self.assertTrue(result["startup_pending"])
+        self.assertIn("collector-starting", result["alerts"])
+
+    def test_dashboard_reports_pending_coalesced_backup(self):
+        telemetry_path = self.root / "imports/codex/collector-telemetry.json"
+        telemetry_path.parent.mkdir(parents=True, exist_ok=True)
+        telemetry_path.write_text(
+            json.dumps(
+                {
+                    "format_version": 2,
+                    "pid": os.getpid(),
+                    "phase": "ready",
+                    "ready": True,
+                    "fallback_interval_seconds": 5,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ),
+            encoding="utf-8",
+        )
+        debt_path = self.root / "pending/backup-debt.json"
+        debt_path.write_text(
+            json.dumps({"format_version": 1, "mutation_count": 2}),
+            encoding="utf-8",
+        )
+        result = collector_telemetry(self.root)
+        self.assertIn("backup-pending", result["alerts"])
+        self.assertEqual(result["backup_debt"]["mutation_count"], 2)
+
     def test_dashboard_separates_archived_conversations_and_groups_projects(self):
         for conversation_id, text in (
             ("codex:active-thread", "ACTIVE"),
@@ -511,6 +595,12 @@ safety:
         self.assertIn("Codex 报告累计用量", html)
         self.assertIn("load().then(refreshColdSnapshot)", html)
         self.assertIn("fetch('/api/status?refresh=1'", html)
+        self.assertIn('class="chart-tooltip"', html)
+        self.assertIn('tabindex="0"', html)
+        self.assertIn("dailyTip:", html)
+        self.assertIn(".bar-wrap:first-child .chart-tooltip{left:0", html)
+        self.assertIn(".bar-wrap:last-child .chart-tooltip{left:auto;right:0", html)
+        self.assertIn("collector-telemetry-stale", html)
         self.assertIn("id:`conversation-rounds-${rounds}`", html)
         self.assertIn("id:`project-conversations-${count}`", html)
         self.assertIn("id:`project-characters-${characters}`", html)
@@ -1678,6 +1768,7 @@ summaries:
             text=True,
             capture_output=True,
             check=False,
+            env={**os.environ, "CODEX_HOME": str(self.base / "codex-home")},
         )
         self.assertEqual(initialized.returncode, 0, initialized.stderr)
         sessions_root = self.base / "native-sessions"
@@ -2129,6 +2220,7 @@ summaries:
             text=True,
             capture_output=True,
             check=False,
+            env={**os.environ, "CODEX_HOME": str(self.base / "codex-home")},
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         with plist_path.open("rb") as handle:
@@ -2138,6 +2230,12 @@ summaries:
         self.assertNotIn("StartInterval", payload)
         self.assertEqual(payload["EnvironmentVariables"], {"RUST_BACKTRACE": "1"})
         self.assertNotIn("kickstart", INSTALLER.read_text(encoding="utf-8"))
+        self.assertEqual(
+            (
+                self.base / "codex-home" / "memory-wuxian-active-root.txt"
+            ).read_text(encoding="utf-8").strip(),
+            str(self.root.resolve()),
+        )
 
     def test_windows_installer_writes_direct_no_console_command_manifest(self):
         sessions_root = self.base / "sessions"

@@ -11,6 +11,10 @@ import sys
 from pathlib import Path
 
 from platform_process import no_window_kwargs
+try:
+    from platform_runtime import executable_entry_path
+except ModuleNotFoundError:
+    from scripts.platform_runtime import executable_entry_path
 
 
 WINDOWS_TASK = "MemoryWuxianAutoUpdate"
@@ -26,7 +30,7 @@ def main() -> int:
     parser.add_argument("--uninstall", action="store_true")
     args = parser.parse_args()
     skill_root = Path(args.skill_root).expanduser().resolve()
-    python = Path(args.python_executable).expanduser().resolve()
+    python = executable_entry_path(args.python_executable)
     updater = skill_root / "scripts/auto_update.py"
     if os.name == "nt":
         if args.uninstall:

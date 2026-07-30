@@ -1,7 +1,12 @@
-import unittest
+import json
+import shutil
+import subprocess
 import tempfile
+import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from scripts import install_dashboard_app_macos as installer
 from scripts.install_dashboard_app_macos import launcher_payload
 
 
@@ -72,7 +77,13 @@ class DashboardShortcutTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("memory-wuxian-active-root.txt", postinstall)
         self.assertIn("preserved_archive_root", postinstall)
-        self.assertIn("install_dashboard_app_macos.py", postinstall)
+        transaction = (
+            SKILL_ROOT / "scripts/install_macos_transaction.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("install_macos_transaction.py", postinstall)
+        self.assertIn("install_dashboard_app_macos.py", transaction)
+        self.assertIn("probe_candidate", transaction)
+        self.assertIn("wait_for_collector", transaction)
         self.assertIn("build_dashboard_app.sh", package)
         self.assertIn("CFBundleShortVersionString", package)
         self.assertIn("pkgbuild --analyze", package)
@@ -114,6 +125,85 @@ class DashboardShortcutTest(unittest.TestCase):
                 "archive_root": str(archive),
             },
         )
+
+    def test_macos_dashboard_install_restores_all_artifacts_after_self_check_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.app"
+            destination = root / "installed.app"
+            executable = destination / "Contents/MacOS/MemoryDashboard"
+            source.mkdir()
+            destination.mkdir()
+            (destination / "old-marker").write_text("old", encoding="utf-8")
+            config = root / "launcher.json"
+            installation = root / "installation.json"
+            config.write_text('{"version":"old"}\n', encoding="utf-8")
+            installation.write_text('{"version":"old"}\n', encoding="utf-8")
+
+            def synthetic_replace(_source, target):
+                (target / "Contents/MacOS").mkdir(parents=True)
+                (target / "Contents/MacOS/MemoryDashboard").write_text(
+                    "new", encoding="utf-8"
+                )
+
+            with (
+                patch.object(installer, "replace_app", side_effect=synthetic_replace),
+                patch.object(
+                    installer,
+                    "app_metadata",
+                    return_value=(executable, "2.4.5"),
+                ),
+                patch.object(installer, "sha256", return_value="abc"),
+                patch.object(
+                    installer,
+                    "verify",
+                    side_effect=RuntimeError("synthetic self-check failure"),
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "synthetic self-check failure"):
+                    installer.install(
+                        source=source,
+                        destination=destination,
+                        config_path=config,
+                        installation_path=installation,
+                        python_executable=root / "python3",
+                        skill_root=root / "skill",
+                        archive_root=root / "archive",
+                        version="2.4.5",
+                    )
+
+            self.assertEqual((destination / "old-marker").read_text(), "old")
+            self.assertEqual(json.loads(config.read_text()), {"version": "old"})
+            self.assertEqual(json.loads(installation.read_text()), {"version": "old"})
+
+    def test_macos_dashboard_replace_uses_in_place_ditto_when_desktop_rename_is_denied(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.app"
+            destination = root / "destination.app"
+            for app, marker in ((source, "new"), (destination, "old")):
+                executable = app / "Contents/MacOS/MemoryDashboard"
+                executable.parent.mkdir(parents=True)
+                executable.write_text(marker, encoding="utf-8")
+
+            def synthetic_run(command, **kwargs):
+                if command[0] == "/usr/bin/ditto":
+                    shutil.copytree(
+                        Path(command[1]), Path(command[2]), dirs_exist_ok=True
+                    )
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with (
+                patch.object(installer.os, "replace", side_effect=PermissionError(13)),
+                patch.object(installer.subprocess, "run", side_effect=synthetic_run),
+            ):
+                installer.replace_app(source, destination)
+
+            self.assertEqual(
+                (destination / "Contents/MacOS/MemoryDashboard").read_text(),
+                "new",
+            )
 
 
 if __name__ == "__main__":

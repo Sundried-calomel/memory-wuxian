@@ -119,8 +119,10 @@ Hidden reasoning, system prompts, and general tool output remain excluded.
 ### 2. Archive Transaction Contract
 
 One mutation owns raw append, transcript and index updates, cursor updates,
-trigger evaluation, and backup handoff in the prescribed order under the
-archive lock. Failure must not expose a partially committed state.
+trigger evaluation, and an atomic coalescing backup-debt handoff in the
+prescribed order under the archive lock. Failure must not expose a partially
+committed state. Complete external snapshot creation is an independent
+maintenance transaction; it clears debt only after the snapshot succeeds.
 
 ### 3. Summary Job Contract
 
@@ -205,6 +207,26 @@ permission or privileged component change cannot be completed in user space.
 Such an upgrade must explain the privileged change before requesting approval.
 Formal releases may continue to publish complete installers for new devices;
 their existence does not require an already installed device to run them.
+
+On macOS, the transaction must preserve a stable executable entry path rather
+than a version-specific Homebrew Cellar target. Before cutover it must prove
+exact user and assistant capture with the candidate collector in an isolated
+archive. After cutover it must prove that the previous collector PID was
+replaced, telemetry is fresh, and the current dashboard passes its live
+self-check. Any failure after cutover restores the previous Skill tree,
+LaunchAgent bytes, and collector process before reporting failure.
+Initial synchronization may create a source-locked semantic-summary job, but it
+must not execute or await the AI worker before collector readiness. The job
+remains durable for the independent semantic-backfill scheduler. Raw capture,
+cursor advancement, deterministic indexes, and atomic backup-debt registration
+complete before the startup watermark becomes ready. Full snapshot copying must
+not hold collector readiness or transactional cutover open.
+
+Archive freshness is a two-watermark contract. The source watermark records the
+newest retained rollout state observed by the collector; the archive watermark
+advances only after the corresponding archive transaction succeeds. Reporting
+for a historical cutoff must verify persisted source cursors through that
+cutoff, and may backfill only the exact retained files found to be lagging.
 
 ### 11. Governance Insight Contract
 

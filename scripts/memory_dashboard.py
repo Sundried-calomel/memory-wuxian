@@ -332,18 +332,75 @@ def collector_telemetry(root: Path) -> dict[str, Any] | None:
         return None
     telemetry["cpu_percent"] = None
     telemetry["memory_bytes"] = None
+    telemetry["process_running"] = False
     try:
         import psutil
     except ImportError:
-        telemetry["process_running"] = None
-        return telemetry
+        try:
+            os.kill(int(telemetry["pid"]), 0)
+            telemetry["process_running"] = True
+        except (KeyError, TypeError, ValueError, OSError):
+            pass
+    else:
+        try:
+            process = psutil.Process(int(telemetry["pid"]))
+            telemetry["cpu_percent"] = round(process.cpu_percent(interval=0.05), 1)
+            telemetry["memory_bytes"] = int(process.memory_info().rss)
+            telemetry["process_running"] = process.is_running()
+        except (psutil.Error, KeyError, TypeError, ValueError, OSError):
+            pass
+
+    now = datetime.now(timezone.utc)
+
+    def parsed(value: Any) -> datetime | None:
+        try:
+            text = str(value)
+            return datetime.fromisoformat(text[:-1] + "+00:00" if text.endswith("Z") else text)
+        except (TypeError, ValueError):
+            return None
+
+    updated = parsed(telemetry.get("updated_at"))
+    interval = max(1, int(telemetry.get("fallback_interval_seconds") or 5))
+    telemetry_age = max(0.0, (now - updated).total_seconds()) if updated else None
+    telemetry["telemetry_age_seconds"] = (
+        round(telemetry_age, 1) if telemetry_age is not None else None
+    )
+    telemetry["telemetry_stale"] = bool(
+        telemetry["process_running"]
+        and (telemetry_age is None or telemetry_age > max(90, interval * 2 + 30))
+    )
+
+    source_watermark = parsed(telemetry.get("source_watermark"))
+    archive_watermark = parsed(telemetry.get("archive_watermark"))
+    lag = (
+        max(0.0, (source_watermark - archive_watermark).total_seconds())
+        if source_watermark and archive_watermark
+        else None
+    )
+    telemetry["archive_lag_seconds"] = round(lag, 1) if lag is not None else None
+    telemetry["archive_lagging"] = bool(lag is not None and lag > 1)
+    telemetry["startup_pending"] = bool(
+        int(telemetry.get("format_version") or 0) >= 2
+        and not bool(telemetry.get("ready"))
+    )
+    alerts = []
+    if telemetry["process_running"] and telemetry["startup_pending"]:
+        alerts.append("collector-starting")
+    if telemetry["process_running"] and telemetry["telemetry_stale"]:
+        alerts.append("collector-telemetry-stale")
+    if telemetry["archive_lagging"]:
+        alerts.append("archive-watermark-lag")
+    if not telemetry["process_running"]:
+        alerts.append("collector-not-running")
+    backup_debt_path = root / "pending/backup-debt.json"
     try:
-        process = psutil.Process(int(telemetry["pid"]))
-        telemetry["cpu_percent"] = round(process.cpu_percent(interval=0.05), 1)
-        telemetry["memory_bytes"] = int(process.memory_info().rss)
-        telemetry["process_running"] = process.is_running()
-    except (psutil.Error, KeyError, TypeError, ValueError, OSError):
-        telemetry["process_running"] = False
+        backup_debt = json.loads(backup_debt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        backup_debt = None
+    telemetry["backup_debt"] = backup_debt
+    if backup_debt is not None:
+        alerts.append("backup-pending")
+    telemetry["alerts"] = alerts
     return telemetry
 
 
@@ -387,7 +444,10 @@ def verified_retrieval_stats(store: MemoryStore) -> dict[str, int]:
     }
 
 
-def dashboard_health(status: dict[str, Any]) -> str:
+def dashboard_health(
+    status: dict[str, Any],
+    collector: dict[str, Any] | None = None,
+) -> str:
     actionable_fields = (
         "integrity_issues",
         "issues",
@@ -397,7 +457,10 @@ def dashboard_health(status: dict[str, Any]) -> str:
     )
     return (
         "attention"
-        if any(status.get(field) for field in actionable_fields)
+        if (
+            any(status.get(field) for field in actionable_fields)
+            or bool((collector or {}).get("alerts"))
+        )
         else "ok"
     )
 
@@ -503,11 +566,12 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
     measured_codex_conversations = len(
         codex_conversation_ids.intersection(usage_by_conversation)
     )
+    collector = collector_telemetry(store.root)
     return {
         "generated_at": now.isoformat(),
         "archive_root": str(store.root),
-        "health": dashboard_health(status),
-        "collector": collector_telemetry(store.root),
+        "health": dashboard_health(status, collector),
+        "collector": collector,
         "totals": {
             "conversations": len(conversations),
             "active_conversations": len(active_conversations),
@@ -653,6 +717,8 @@ class DashboardSnapshotCache:
                 self._signature = signature
         response = dict(payload)
         response["collector"] = collector_telemetry(self.store.root)
+        if (response["collector"] or {}).get("alerts"):
+            response["health"] = "attention"
         response["served_at"] = datetime.now(timezone.utc).isoformat()
         response["snapshot"] = {
             "source_signature": signature,
@@ -672,6 +738,8 @@ class DashboardSnapshotCache:
             if isinstance(payload, dict):
                 response = dict(payload)
                 response["collector"] = collector_telemetry(self.store.root)
+                if (response["collector"] or {}).get("alerts"):
+                    response["health"] = "attention"
                 response["served_at"] = datetime.now(timezone.utc).isoformat()
                 response["snapshot"] = {"persisted": True, "refreshing": True}
                 if not self._refreshing:

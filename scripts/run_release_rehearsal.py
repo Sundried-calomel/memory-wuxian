@@ -88,6 +88,58 @@ def main() -> int:
             ],
         ),
         (
+            "macos-stable-runtime-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_platform_runtime",
+                "tests.test_cloud_scheduler.CloudSchedulerTest.test_macos_plist_is_one_shot_and_uses_exact_paths",
+            ],
+        ),
+        (
+            "macos-update-transaction-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_macos_transaction",
+            ],
+        ),
+        (
+            "collector-startup-defers-semantic-worker-contract",
+            [
+                python, "-c",
+                (
+                    "from pathlib import Path;"
+                    "s=Path('native-collector/src/main.rs').read_text('utf-8');"
+                    "assert 'fn sync_startup_batch' in s;"
+                    "assert 'self.sync_batch_with_semantic_worker(paths, false)' in s;"
+                    "assert 'store.sync_startup_batch(initial_paths)?' in s;"
+                    "assert '.arg(\"--no-backup\")' in s"
+                ),
+            ],
+        ),
+        (
+            "collector-coalesced-backup-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_cli.MemoryCliTest.test_semantic_backfill_drains_coalesced_backup_debt_without_summary_jobs",
+                "tests.test_memory_cli.MemoryCliTest.test_dashboard_reports_pending_coalesced_backup",
+            ],
+        ),
+        (
+            "collector-health-and-waterline-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_archive_waterline",
+                "tests.test_memory_cli.MemoryCliTest.test_dashboard_health_reports_collector_freshness_alerts",
+            ],
+        ),
+        (
+            "daily-archive-tooltip-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_cli.MemoryCliTest.test_dashboard_achievement_settings_are_local_and_hide_empty_levels",
+            ],
+        ),
+        (
             "environment-schema-contract",
             [
                 python, "-m", "unittest", "-v",

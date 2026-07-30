@@ -119,6 +119,22 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     prefix event matches exactly. Prefer the widest newest valid candidate for
     one expected start, preserve exact replay for lost acknowledgements, and
     keep archive and Environment status histories independent.
+57. Preserve stable executable entry paths in macOS background definitions.
+    Never resolve a Homebrew or managed-runtime symlink into a version-specific
+    installation directory, because a runtime upgrade would create a new macOS
+    privacy identity and can trigger repeated Desktop or Documents prompts.
+58. Apply an existing macOS installation only through the user-space candidate
+    transaction. Probe exact-message capture in an isolated archive before
+    cutover; after cutover verify a new live collector and the current
+    dashboard; on failure restore the previous Skill, plist, and collector.
+59. Publish collector telemetry on every monitoring interval, including idle
+    intervals. Keep source and archive watermarks separate, expose stale
+    telemetry and archive lag, and never infer archive freshness only from a
+    running PID.
+60. Before generating a report for a historical cutoff, run the deterministic
+    archive-waterline preflight. If retained source bytes through the cutoff
+    are not covered by persisted cursors, stop or perform the explicit bounded
+    backfill and verify again before using Memory無限 evidence.
 
 ## Operating workflow
 
@@ -185,6 +201,21 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     `PRODUCT_ARCHITECTURE.md`. If it adds or relocates production code, update
     `docs/module-architecture.json` first, then run the architecture contract
     before focused behavioral tests.
+36. On macOS, run `scripts/install_macos_transaction.py` for an existing
+    installation. Treat its isolated candidate probe, live PID replacement,
+    telemetry freshness, dashboard self-check, and rollback proof as one
+    indivisible update contract.
+37. Before a time-bounded report reads Memory無限, run
+    `scripts/archive_waterline.py --cutoff <ISO-8601>`. Use `--backfill` only
+    for the exact lagging retained rollout files and require a final `covered`
+    result.
+38. During collector startup, persist any due semantic job but defer AI
+    execution to the independent semantic-backfill scheduler. Do not hold
+    collector readiness or update cutover open while a Codex CLI summary runs.
+39. Let native capture atomically record coalescing backup debt instead of
+    copying the complete archive inline. Let the maintenance worker create one
+    complete snapshot for all pending mutations, and clear the debt only after
+    that snapshot succeeds.
 
 ## Commands
 

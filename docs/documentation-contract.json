@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.4.4",
+  "reviewed_version": "2.4.5",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -25,7 +25,15 @@
     },
     {
       "id": "native-codex-capture",
-      "required_tokens": ["memory-wuxian-collector", "install_codex_autosync.py", "install_codex_autosync_windows.py"]
+      "required_tokens": ["memory-wuxian-collector", "install_codex_autosync.py", "install_codex_autosync_windows.py", "collector-telemetry.json"]
+    },
+    {
+      "id": "transactional-macos-update",
+      "required_tokens": ["install_macos_transaction.py", "LaunchAgent"]
+    },
+    {
+      "id": "archive-waterline",
+      "required_tokens": ["archive_waterline.py", "--cutoff", "--backfill"]
     },
     {
       "id": "local-dashboard",
@@ -73,7 +81,7 @@
     },
     {
       "id": "event-driven-dashboard",
-      "required_tokens": ["/api/events", "project-filter", "source-filter", "device-filter"]
+      "required_tokens": ["/api/events", "project-filter", "source-filter", "device-filter", "collector-telemetry.json"]
     },
     {
       "id": "auditable-release-rehearsal",
