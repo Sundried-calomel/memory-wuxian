@@ -4822,10 +4822,15 @@ def dispatch_stateless_read_only_command(args: argparse.Namespace) -> Optional[i
             else memory_configuration.explain_configuration(compiled)
         )
     elif args.command == "environment-capability-status":
-        import tomllib
-
-        with (SKILL_ROOT / "pyproject.toml").open("rb") as handle:
-            product_version = str(tomllib.load(handle)["project"]["version"])
+        project_text = (SKILL_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        version_match = re.search(
+            r'^version\s*=\s*"([^"]+)"',
+            project_text,
+            re.MULTILINE,
+        )
+        if version_match is None:
+            raise ValueError("pyproject.toml does not declare a project version")
+        product_version = version_match.group(1)
         local_offer = memory_environment_capabilities.local_device_capability_offer(
             product_version,
             local_platform_name(),
