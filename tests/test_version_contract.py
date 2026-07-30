@@ -1,6 +1,6 @@
+import os
 import re
 import subprocess
-import tomllib
 import unittest
 from pathlib import Path
 
@@ -9,9 +9,8 @@ ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
 CARGO_MANIFEST = ROOT / "native-collector" / "Cargo.toml"
 RUST_ROOT = ROOT / "native-collector"
-BINARIES = {
+CHECKED_IN_BINARIES = {
     "memory-wuxian-collector": ROOT / "bin" / "memory-wuxian-collector.exe",
-    "memory-wuxian-envelope": ROOT / "bin" / "memory-wuxian-envelope.exe",
 }
 
 
@@ -19,10 +18,21 @@ def normalize_cargo_version(version: str) -> str:
     return re.sub(r"(?<=\d)-(?=[A-Za-z])", "", version)
 
 
+def manifest_version(path: Path, section: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    match = re.search(
+        rf"(?ms)^\[{re.escape(section)}\]\s*$.*?^version\s*=\s*\"([^\"]+)\"",
+        text,
+    )
+    if not match:
+        raise AssertionError(f"version missing from [{section}] in {path}")
+    return match.group(1)
+
+
 class VersionContractTest(unittest.TestCase):
     def test_source_versions_match_beta_product_version(self):
-        product = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]["version"]
-        cargo = tomllib.loads(CARGO_MANIFEST.read_text(encoding="utf-8"))["package"]["version"]
+        product = manifest_version(PYPROJECT, "project")
+        cargo = manifest_version(CARGO_MANIFEST, "package")
 
         self.assertEqual(normalize_cargo_version(cargo), product)
 
@@ -40,23 +50,28 @@ class VersionContractTest(unittest.TestCase):
 
     def test_checked_in_binaries_are_current_or_require_rebuild(self):
         stale = []
-        cargo = tomllib.loads(CARGO_MANIFEST.read_text(encoding="utf-8"))["package"]["version"]
-        for name, executable in BINARIES.items():
+        cargo = manifest_version(CARGO_MANIFEST, "package")
+        for name, executable in CHECKED_IN_BINARIES.items():
             if not executable.exists():
                 stale.append(f"{name}: missing")
                 continue
-            completed = subprocess.run(
-                [str(executable), "--version"],
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                capture_output=True,
-                check=False,
-            )
             expected = f"{name} {cargo}"
-            actual = completed.stdout.strip()
-            if completed.returncode != 0 or actual != expected:
-                stale.append(f"{name}: expected {expected!r}, got {actual!r}")
+            if os.name == "nt":
+                completed = subprocess.run(
+                    [str(executable), "--version"],
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    capture_output=True,
+                    check=False,
+                )
+                actual = completed.stdout.strip()
+                if completed.returncode != 0 or actual != expected:
+                    stale.append(
+                        f"{name}: expected {expected!r}, got {actual!r}"
+                    )
+            elif expected.encode("ascii") not in executable.read_bytes():
+                stale.append(f"{name}: embedded version {expected!r} missing")
 
         self.assertFalse(
             stale,

@@ -406,23 +406,22 @@ safety:
         queue_directory.mkdir(exist_ok=True)
         transport = CloudFolderTransport(self.manager_a, crypto=self.crypto)
         transport.configure(self.exchange, self.key_a, enabled=True)
-        with patch("memory_cloud_transport.os.name", "nt"):
-            transport.config["exchange_root"] = filesystem_native_path(
-                queue_directory
-            )
-            transport.save_config()
-            reloaded = CloudFolderTransport(self.manager_a, crypto=self.crypto)
+        transport.config["exchange_root"] = (
+            "\\\\?\\" + str(queue_directory.resolve())
+        )
+        transport.save_config()
+        reloaded = CloudFolderTransport(self.manager_a, crypto=self.crypto)
 
-            self.assertEqual(
-                reloaded._exchange_root(),
-                Path(
-                    filesystem_native_path(
-                        self.exchange.resolve()
-                        / "MemoryWuxianExchange"
-                        / "v1"
-                    )
-                ),
-            )
+        self.assertEqual(
+            reloaded._exchange_root(),
+            Path(
+                filesystem_native_path(
+                    self.exchange.resolve()
+                    / "MemoryWuxianExchange"
+                    / "v1"
+                )
+            ),
+        )
 
     def test_existing_outstanding_envelope_migrates_to_canonical_outbox(self):
         self.append_round(self.node_a, "MIGRATE")
