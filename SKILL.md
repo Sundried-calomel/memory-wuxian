@@ -112,6 +112,13 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     registry. Register each new production file under exactly one owner and
     pass `scripts/check_architecture_contract.py` for every product change.
     Unowned files, overlapping owners, and prohibited dependencies fail closed.
+55. Treat a visible cloud-provider placeholder that is not locally readable as
+    transient. Trigger bounded hydration before decrypting it and never
+    quarantine a Files On-Demand availability error as cryptographic damage.
+56. Recover an overlapping `environment-v1` range only after every persisted
+    prefix event matches exactly. Prefer the widest newest valid candidate for
+    one expected start, preserve exact replay for lost acknowledgements, and
+    keep archive and Environment status histories independent.
 
 ## Operating workflow
 

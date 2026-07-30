@@ -99,6 +99,29 @@ class EnvironmentExchangeManager:
 
     def status(self) -> Dict[str, Any]:
         base = self.federation.status()
+        recent_sync = []
+        for record in read_jsonl(self.sync_log_path)[-20:]:
+            details = record.get("details")
+            if not isinstance(details, dict):
+                details = {}
+            recent_sync.append(
+                {
+                    "timestamp": record.get("timestamp"),
+                    "event": record.get("event"),
+                    "node_id": record.get("node_id"),
+                    "published": int(
+                        record.get("published", details.get("published", 0))
+                    ),
+                    "imported": int(
+                        record.get("imported", details.get("imported", 0))
+                    ),
+                    "acknowledged": int(
+                        record.get(
+                            "acknowledged", details.get("acknowledged", 0)
+                        )
+                    ),
+                }
+            )
         base.update(
             {
                 "stream_id": "environment-v1",
@@ -109,22 +132,27 @@ class EnvironmentExchangeManager:
                     ),
                     default=0,
                 ),
+                "recent_sync": recent_sync,
             }
         )
         return base
 
     def log_sync(self, event: str, node_id: str, details: Dict[str, Any]) -> None:
         self.init_layout()
-        rows = read_jsonl(self.sync_log_path)
-        rows.append(
-            {
-                "timestamp": now_iso(),
-                "event": event,
-                "node_id": safe_node_id(node_id),
-                "details": details,
-            }
-        )
-        atomic_write_jsonl(self.sync_log_path, rows)
+        record = {
+            "timestamp": now_iso(),
+            "event": event,
+            "node_id": safe_node_id(node_id),
+            **details,
+        }
+        with self.sync_log_path.open(
+            "a", encoding="utf-8", newline="\n"
+        ) as handle:
+            handle.write(
+                json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
+            )
+            handle.flush()
+            os.fsync(handle.fileno())
 
     def exchange_observation(self, _timestamp: float) -> Dict[str, Any]:
         registry = (
@@ -537,6 +565,99 @@ class EnvironmentExchangeManager:
                 "last_sync_at": None,
             }
 
+    def _replica_events_path(self, node_id: str) -> Path:
+        return self._peer_root(node_id) / "replica-events.jsonl"
+
+    def _legacy_replica_event_matches(
+        self, origin: str, item: Dict[str, Any]
+    ) -> bool:
+        sequence = int(item["event_sequence"])
+        peer_root = self._peer_root(origin)
+        event_kind = item.get("event_kind")
+        if event_kind == "governance-proposal":
+            candidates = (peer_root / "governance-proposals").glob("*.json")
+            return any(
+                int(record.get("event_sequence", -1)) == sequence
+                and record.get("proposal") == item["payload"]
+                for record in map(read_json, candidates)
+            )
+        if event_kind == "product-evolution":
+            candidates = (peer_root / "product-evolution").glob("*.json")
+            return any(
+                int(record.get("event_sequence", -1)) == sequence
+                and record.get("product_evolution") == item["payload"]
+                for record in map(read_json, candidates)
+            )
+        if event_kind == "project-registration":
+            candidates = (peer_root / "projects").glob("*.json")
+            return any(
+                int(record.get("event_sequence", -1)) == sequence
+                and record.get("project") == item["payload"]["project"]
+                for record in map(read_json, candidates)
+            )
+        candidates = (
+            self.registry.staging_dir / "incoming" / origin
+        ).glob(f"{sequence:020d}-*.json")
+        records = list(map(read_json, candidates))
+        if len(records) != 1:
+            return False
+        stored = records[0]
+        payload = item["payload"]
+        return all(
+            (
+                stored.get("artifact") == payload.get("artifact"),
+                stored.get("revision") == payload.get("revision"),
+                stored.get("content_base64") == payload.get("content_base64"),
+                stored.get("package_attachment")
+                == payload.get("package_attachment"),
+            )
+        )
+
+    def _verify_overlap_records(
+        self,
+        origin: str,
+        records: List[Dict[str, Any]],
+        current_sequence: int,
+    ) -> None:
+        persisted = {
+            int(item["event_sequence"]): item
+            for item in read_jsonl(self._replica_events_path(origin))
+        }
+        for item in records:
+            sequence = int(item["event_sequence"])
+            if sequence > current_sequence:
+                break
+            existing = persisted.get(sequence)
+            if existing is not None:
+                matches = canonical_sha256(existing) == canonical_sha256(item)
+            else:
+                matches = self._legacy_replica_event_matches(origin, item)
+            if not matches:
+                raise ValueError(
+                    "environment overlap conflicts with persisted replica event"
+                )
+
+    def _persist_replica_events(
+        self, origin: str, records: List[Dict[str, Any]]
+    ) -> None:
+        path = self._replica_events_path(origin)
+        persisted = {
+            int(item["event_sequence"]): item
+            for item in read_jsonl(path)
+        }
+        for item in records:
+            sequence = int(item["event_sequence"])
+            existing = persisted.get(sequence)
+            if (
+                existing is not None
+                and canonical_sha256(existing) != canonical_sha256(item)
+            ):
+                raise ValueError(
+                    "environment replica event ledger conflicts with import"
+                )
+            persisted[sequence] = item
+        atomic_write_jsonl(path, [persisted[key] for key in sorted(persisted)])
+
     def import_delta(
         self, bundle: Path, expected_node_id: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -566,14 +687,27 @@ class EnvironmentExchangeManager:
                 "origin_node_id": origin,
                 "to_event_sequence": manifest["to_event_sequence"],
             }
-        expected_sequence = int(state["last_event_sequence"]) + 1
-        if int(manifest["from_event_sequence"]) != expected_sequence:
+        current_sequence = int(state["last_event_sequence"])
+        expected_sequence = current_sequence + 1
+        from_sequence = int(manifest["from_event_sequence"])
+        to_sequence = int(manifest["to_event_sequence"])
+        if from_sequence > expected_sequence:
             raise ValueError("environment replica sequence gap")
-        if state["last_event_sequence"]:
+        overlap_recovery = from_sequence < expected_sequence <= to_sequence
+        if to_sequence < expected_sequence:
+            raise ValueError("environment bundle is older than replica cursor")
+        if overlap_recovery:
+            self._verify_overlap_records(origin, records, current_sequence)
+        elif current_sequence:
             if manifest["previous_bundle_sha256"] != state["last_bundle_sha256"]:
                 raise ValueError("environment predecessor bundle mismatch")
         elif manifest["previous_bundle_sha256"] is not None:
             raise ValueError("initial environment import names a predecessor")
+        new_records = [
+            item
+            for item in records
+            if int(item["event_sequence"]) >= expected_sequence
+        ]
         incoming = self.registry.staging_dir / "incoming" / origin
         incoming.mkdir(parents=True, exist_ok=True)
         proposal_replica_root = (
@@ -585,7 +719,7 @@ class EnvironmentExchangeManager:
         staged_projects = 0
         staged_governance_proposals = 0
         staged_product_evolution_records = 0
-        for item in records:
+        for item in new_records:
             if item.get("event_kind") == "governance-proposal":
                 envelope = self.governance.validate_envelope(
                     item["payload"], expected_origin=origin
@@ -706,6 +840,7 @@ class EnvironmentExchangeManager:
             staged_artifacts += 1
         peer_root = self._peer_root(origin)
         peer_root.mkdir(parents=True, exist_ok=True)
+        self._persist_replica_events(origin, records)
         new_state = {
             "format_version": 1,
             "stream_id": "environment-v1",
@@ -723,6 +858,7 @@ class EnvironmentExchangeManager:
                 "stream_id": "environment-v1",
                 "bundle_sha256": bundle_hash,
                 "manifest": manifest,
+                "overlap_recovery": overlap_recovery,
                 "received_at": new_state["last_sync_at"],
             },
         )
@@ -731,6 +867,7 @@ class EnvironmentExchangeManager:
             "bundle_id": manifest["bundle_id"],
             "origin_node_id": origin,
             "to_event_sequence": manifest["to_event_sequence"],
+            "overlap_recovery": overlap_recovery,
             "staged_artifacts": staged_artifacts,
             "staged_projects": staged_projects,
             "staged_governance_proposals": staged_governance_proposals,

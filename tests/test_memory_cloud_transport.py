@@ -19,6 +19,7 @@ from memory_cli import MemoryStore, load_simple_yaml
 from memory_cloud_transport import (
     CloudFolderTransport,
     CommandCrypto,
+    TransientCloudArtifactError,
     filesystem_native_path,
 )
 from memory_federation import FederationManager, read_json
@@ -54,6 +55,27 @@ class CommandCryptoArgumentTest(unittest.TestCase):
             command,
         )
         self.assertNotIn("--signing-public-key", command)
+
+    def test_open_classifies_file_provider_deadlock_as_transient(self):
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr="read input: Resource deadlock avoided (os error 11)",
+        )
+        crypto = CommandCrypto(Path("memory-wuxian-envelope"))
+
+        with patch("memory_cloud_transport.subprocess.run", return_value=completed):
+            with self.assertRaises(TransientCloudArtifactError):
+                crypto.open(
+                    Path("placeholder.mwxe"),
+                    Path("output.mwxb"),
+                    Path("identity.json"),
+                    "signing-key",
+                    "environment-v1-bundle",
+                    "node-alpha",
+                    "node-beta",
+                )
 
 
 class FakeCrypto:
@@ -637,6 +659,24 @@ safety:
         self.assertTrue(gap.exists())
         self.assertTrue(zero.exists())
         self.assertTrue(partial.exists())
+
+    def test_unreadable_cloud_placeholder_is_transient_not_quarantined(self):
+        self.append_round(self.node_a, "PLACEHOLDER")
+        sent = self.transport_a.sync(force=True, now=3500)
+        envelope = Path(sent["published"][0]["path"])
+
+        with patch.object(
+            self.transport_b,
+            "_materialize_candidate",
+            side_effect=TransientCloudArtifactError("provider placeholder"),
+        ):
+            result = self.transport_b.sync(force=False, now=3510)
+
+        self.assertEqual(result["imports"], [])
+        self.assertEqual(result["quarantined"], [])
+        self.assertEqual(len(result["transient"]), 1)
+        self.assertEqual(result["transient"][0]["type"], "bundle")
+        self.assertTrue(envelope.exists())
 
     def test_tampered_bundle_is_quarantined_without_moving_peer_file(self):
         self.append_round(self.node_a, "TAMPER")

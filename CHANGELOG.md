@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.4.4 - 2026-07-30
+
+- Fixed macOS OneDrive Files On-Demand handling for encrypted archive and
+  Environment envelopes. Visible but locally unavailable placeholders now
+  trigger bounded hydration and remain transient instead of being
+  misclassified as corrupt.
+- Added verified Environment overlap recovery for a sender that republishes a
+  wider range from an earlier cursor. The receiver advances only when every
+  persisted prefix event matches exactly; conflicting overlap still fails
+  closed.
+- Preferred the widest newest valid Environment envelope when duplicate
+  candidates share the expected start, while preserving exact replay for lost
+  acknowledgement recovery.
+- Isolated `environment-v1` status history from `archive-v1` logs so the
+  dashboard and CLI no longer report archive imports as Environment activity.
+
 ## 2.4.3 - 2026-07-30
 
 - Added a machine-readable module ownership registry and fail-closed

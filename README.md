@@ -412,6 +412,13 @@ continues to live in read-only peer replicas, and `retrieve-global` follows the
 same verified source path for SSH and cloud deliveries. Use `cloud-disable` to
 stop exchange without deleting archives, keys, or encrypted cloud files.
 
+On macOS, OneDrive Files On-Demand envelopes may initially appear as directory
+entries without readable local bytes. Memory Wuxian probes them to trigger
+bounded hydration and treats temporary File Provider availability failures as
+retryable, not corrupt. For `environment-v1`, a wider retry that overlaps an
+already verified prefix is accepted only when every persisted prefix event
+matches exactly; conflicting overlap remains quarantined.
+
 Version 1.6.1 also exposes these operations in the dashboard Settings panel.
 The Cloud sync switch enables or disables encrypted exchange together with its
 five-minute scheduler. Sync now performs one immediate encrypted exchange pass.

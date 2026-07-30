@@ -98,3 +98,16 @@ remediate, or rewrite anything.
 10. Complete dashboard controls
 11. macOS and Windows bidirectional rehearsal
 12. 2.0 installers, migration guidance, and verified release
+
+## Cloud placeholder and overlap recovery
+
+Cloud-provider directory visibility is not proof that an envelope has local
+bytes. The transport probes each stable candidate before decryption. A
+temporary Files On-Demand or File Provider read failure remains transient and
+must not create a corruption quarantine record.
+
+`environment-v1` may recover a wider bundle whose start precedes the current
+cursor only when every overlapping event is byte-semantically identical to the
+persisted replica event. New suffix events are then staged normally and the
+receipt records overlap recovery. Missing or conflicting prefix evidence fails
+closed. This recovery does not apply to `archive-v1`.

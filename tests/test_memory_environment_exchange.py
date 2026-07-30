@@ -525,6 +525,163 @@ class EnvironmentExchangeTests(unittest.TestCase):
             0,
         )
 
+    def test_cloud_stream_recovers_verified_overlapping_prefix(self):
+        exchange = self.base / "cloud-overlap"
+        exchange.mkdir()
+        key_a = self.base / "overlap-a.identity"
+        key_b = self.base / "overlap-b.identity"
+        key_a.write_text("a", encoding="utf-8")
+        key_b.write_text("b", encoding="utf-8")
+        identity_a = {
+            "encryption_public_key": "age-overlap-a",
+            "signing_public_key": "ed25519-overlap-a",
+            "fingerprint": "c" * 64,
+        }
+        identity_b = {
+            "encryption_public_key": "age-overlap-b",
+            "signing_public_key": "ed25519-overlap-b",
+            "fingerprint": "d" * 64,
+        }
+        crypto = FakeCrypto({key_a: identity_a, key_b: identity_b})
+        for manager, peer_id, identity in (
+            (FederationManager(self.store_a), "node-b", identity_b),
+            (FederationManager(self.store_b), "node-a", identity_a),
+        ):
+            peer_path = manager.peer_path(peer_id)
+            peer = json.loads(peer_path.read_text())
+            peer["cloud_identity"] = identity
+            peer_path.write_text(json.dumps(peer), encoding="utf-8")
+        cloud_a = CloudFolderTransport(
+            self.a,
+            crypto=crypto,
+            config_path=self.a.metadata_root / "overlap-cloud.json",
+            stream_id="environment-v1",
+        )
+        cloud_b = CloudFolderTransport(
+            self.b,
+            crypto=crypto,
+            config_path=self.b.metadata_root / "overlap-cloud.json",
+            stream_id="environment-v1",
+        )
+        cloud_a.configure(exchange, key_a, enabled=True)
+        cloud_b.configure(exchange, key_b, enabled=True)
+        self.register_rule()
+        first = cloud_a.sync(force=True, now=2000)
+        first_envelope = Path(first["published"][0]["path"])
+        cloud_b.sync(force=True, now=2001)
+        first_cursor = self.b.replica_state("node-a")["last_event_sequence"]
+        self.b._replica_events_path("node-a").unlink()
+
+        self.a.registry.register(
+            {
+                "schema_version": 1,
+                "artifacts": [self.rule_item("second")],
+                "projects": [],
+            },
+            apply=True,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / "overlap.mwxb"
+            exported = self.a.export_delta(
+                bundle,
+                after_event_sequence=0,
+                target_node_id="node-b",
+            )
+            overlap_envelope = cloud_a._outbox("node-b") / (
+                f"{int(exported['from_event_sequence']):020d}-"
+                f"{int(exported['to_event_sequence']):020d}-"
+                f"{exported['bundle_id']}-{exported['sha256']}.mwxe"
+            )
+            cloud_a._atomic_seal(
+                bundle,
+                overlap_envelope,
+                [
+                    identity_a["encryption_public_key"],
+                    identity_b["encryption_public_key"],
+                ],
+                "environment-v1-bundle",
+                "node-b",
+            )
+        first_envelope.touch()
+        overlap_envelope.touch()
+
+        recovered = cloud_b.sync(force=False, now=2010)
+
+        self.assertGreater(exported["to_event_sequence"], first_cursor)
+        self.assertEqual(recovered["quarantined"], [])
+        self.assertTrue(
+            any(
+                item["status"] == "imported"
+                and item["bundle_id"] == exported["bundle_id"]
+                for item in recovered["imports"]
+            )
+        )
+        self.assertEqual(
+            self.b.replica_state("node-a")["last_event_sequence"],
+            exported["to_event_sequence"],
+        )
+        receipt = json.loads(
+            (
+                self.b._peer_root("node-a")
+                / "receipts"
+                / f"{exported['bundle_id']}.json"
+            ).read_text()
+        )
+        self.assertTrue(receipt["overlap_recovery"])
+
+    def test_overlap_recovery_rejects_conflicting_persisted_prefix(self):
+        self.register_rule()
+        first_bundle = self.base / "first.mwxb"
+        self.a.export_delta(first_bundle, target_node_id="node-b")
+        self.b.import_delta(first_bundle, expected_node_id="node-a")
+        self.b._replica_events_path("node-a").unlink()
+        staged = next(
+            (
+                self.b.registry.staging_dir / "incoming" / "node-a"
+            ).glob("*.json")
+        )
+        staged_record = json.loads(staged.read_text())
+        staged_record["content_base64"] = base64.b64encode(
+            b"conflicting local prefix\n"
+        ).decode("ascii")
+        staged.write_text(json.dumps(staged_record), encoding="utf-8")
+        self.a.registry.register(
+            {
+                "schema_version": 1,
+                "artifacts": [self.rule_item("second-conflict")],
+                "projects": [],
+            },
+            apply=True,
+        )
+        overlap_bundle = self.base / "overlap-conflict.mwxb"
+        self.a.export_delta(
+            overlap_bundle,
+            after_event_sequence=0,
+            target_node_id="node-b",
+        )
+
+        with self.assertRaisesRegex(ValueError, "overlap conflicts"):
+            self.b.import_delta(overlap_bundle, expected_node_id="node-a")
+
+    def test_status_uses_environment_sync_log_not_archive_log(self):
+        FederationManager(self.store_a).log_sync(
+            "cloud-folder-sync",
+            "node-b",
+            {"published": 9, "imported": 8, "acknowledged": 7},
+        )
+        self.a.log_sync(
+            "cloud-folder-sync",
+            "node-b",
+            {"published": 1, "imported": 2, "acknowledged": 3},
+        )
+
+        recent = self.a.status()["recent_sync"]
+
+        self.assertEqual(len(recent), 1)
+        self.assertEqual(recent[0]["published"], 1)
+        self.assertEqual(recent[0]["imported"], 2)
+        self.assertEqual(recent[0]["acknowledged"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

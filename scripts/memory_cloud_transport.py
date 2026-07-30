@@ -98,6 +98,10 @@ class CryptoAdapter(Protocol):
         ...
 
 
+class TransientCloudArtifactError(RuntimeError):
+    """A synchronized artifact is visible but not locally readable yet."""
+
+
 class CommandCrypto:
     """Adapter for the memory-wuxian-envelope command-line helper."""
 
@@ -125,6 +129,15 @@ class CommandCrypto:
                 f"memory-wuxian-envelope failed with exit code "
                 f"{completed.returncode}: {detail}"
             )
+            if invalid_envelope_on_failure and any(
+                marker in detail.casefold()
+                for marker in (
+                    "resource deadlock avoided",
+                    "temporarily unavailable",
+                    "operation would block",
+                )
+            ):
+                raise TransientCloudArtifactError(error)
             if invalid_envelope_on_failure:
                 raise ValueError(error)
             raise RuntimeError(error)
@@ -782,12 +795,25 @@ class CloudFolderTransport:
         except OSError:
             return False
 
+    @staticmethod
+    def _materialize_candidate(path: Path) -> None:
+        """Trigger cloud-provider hydration without reading the whole envelope."""
+        try:
+            with path.open("rb") as handle:
+                if not handle.read(1):
+                    raise OSError("Cloud artifact is empty")
+        except OSError as exc:
+            raise TransientCloudArtifactError(
+                f"Cloud artifact is not locally readable yet: {exc}"
+            ) from exc
+
     def _read_ack(
         self,
         path: Path,
         peer_node_id: str,
         peer_identity: Dict[str, str],
     ) -> Dict[str, Any]:
+        self._materialize_candidate(path)
         with tempfile.TemporaryDirectory(prefix="memory-wuxian-cloud-ack-") as temp:
             plaintext = Path(temp) / "ack.json"
             self.crypto.open(
@@ -957,9 +983,10 @@ class CloudFolderTransport:
                     {"peer": peer_id, "type": "bundle-scan", "reason": str(exc)}
                 )
                 continue
-            expected_sequence = int(
-                self.manager.replica_state(peer_id).get("last_event_sequence", 0)
-            ) + 1
+            replica_state = self.manager.replica_state(peer_id)
+            current_sequence = int(replica_state.get("last_event_sequence", 0))
+            expected_sequence = current_sequence + 1
+            candidates = []
             for path in paths:
                 if ".partial" in path.name:
                     result["transient"].append(
@@ -975,6 +1002,55 @@ class CloudFolderTransport:
                     )
                     continue
                 from_sequence = int(match.group("from_sequence"))
+                if from_sequence < expected_sequence:
+                    overlaps_expected = (
+                        self.stream_id == "environment-v1"
+                        and
+                        int(match.group("to_sequence")) >= expected_sequence
+                    )
+                    is_current_replay = (
+                        int(match.group("to_sequence")) == current_sequence
+                        and match.group("bundle_id")
+                        == replica_state.get("last_bundle_id")
+                        and match.group("bundle_sha256")
+                        == replica_state.get("last_bundle_sha256")
+                    )
+                    if not is_current_replay and not overlaps_expected:
+                        continue
+                else:
+                    is_current_replay = False
+                candidates.append(
+                    (
+                        from_sequence,
+                        int(match.group("to_sequence")),
+                        path.stat().st_mtime_ns,
+                        is_current_replay,
+                        path,
+                        match,
+                    )
+                )
+            candidates.sort(
+                key=lambda item: (
+                    item[0],
+                    -item[1],
+                    -item[2],
+                    item[4].name,
+                )
+            )
+            for (
+                from_sequence,
+                _to_sequence,
+                _mtime_ns,
+                is_current_replay,
+                path,
+                match,
+            ) in candidates:
+                if (
+                    from_sequence < expected_sequence
+                    and not is_current_replay
+                    and _to_sequence < expected_sequence
+                ):
+                    continue
                 if from_sequence > expected_sequence:
                     result["transient"].append(
                         {
@@ -986,6 +1062,7 @@ class CloudFolderTransport:
                     )
                     continue
                 try:
+                    self._materialize_candidate(path)
                     with tempfile.TemporaryDirectory(
                         prefix="memory-wuxian-cloud-bundle-"
                     ) as temp:
