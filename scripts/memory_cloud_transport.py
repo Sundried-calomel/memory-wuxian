@@ -489,7 +489,10 @@ class CloudFolderTransport:
     @staticmethod
     def _provider_root(value: Path) -> Path:
         """Normalize either a provider root or the fixed queue directory."""
-        resolved = Path(value).expanduser().resolve()
+        # Persisted Windows paths may carry the native ``\\?\`` prefix. Strip
+        # it before inspecting the final component so legacy queue roots are
+        # not mistaken for provider roots and appended a second time.
+        resolved = Path(display_path(Path(value))).expanduser().resolve()
         if resolved.name.casefold() == "memorywuxianexchange":
             return resolved.parent
         return resolved
@@ -1090,9 +1093,15 @@ class CloudFolderTransport:
                             raise ValueError(
                                 "Cloud envelope filename sequence mismatch"
                             )
-                        imported = self.manager.import_delta(
-                            bundle, expected_node_id=peer_id
+                        exchange_lock = getattr(
+                            self.manager,
+                            "exchange_lock_path",
+                            self.archive_root / ".locks" / "archive.lock",
                         )
+                        with exclusive_lock(exchange_lock):
+                            imported = self.manager.import_delta(
+                                bundle, expected_node_id=peer_id
+                            )
                         ack_path = self._write_ack(
                             peer_id,
                             peer["cloud_identity"],

@@ -44,6 +44,7 @@ from memory_environment_promotions import PromotionStore
 from memory_federation import FederationManager
 from memory_governance_ai import GovernanceAIQueue
 from memory_guarded_features import GuardedFeatures
+from platform_lock import exclusive_lock
 from platform_process import no_window_kwargs
 from token_usage import aggregate_ledgers, normalize_usage, token_usage_ledgers
 
@@ -1104,6 +1105,14 @@ def make_handler(store: MemoryStore):
             except (BrokenPipeError, ConnectionResetError):
                 return
 
+        def discard_request_body(self, maximum: int = 65536) -> None:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return
+            if 0 < length <= maximum:
+                self.rfile.read(length)
+
         def cloud_payload(self) -> dict[str, Any]:
             federation_manager = FederationManager(store)
             devices = federation_manager.status()
@@ -1228,6 +1237,8 @@ def make_handler(store: MemoryStore):
                 return
             origin = self.headers.get("Origin")
             if origin and urlparse(origin).netloc != self.headers.get("Host"):
+                self.discard_request_body()
+                self.close_connection = True
                 self.send_json(403, {"error": "origin-not-allowed"})
                 return
             if path == "/api/import-chatgpt":
@@ -1340,9 +1351,35 @@ def make_handler(store: MemoryStore):
                         raise ValueError(
                             "environment cloud transport is disabled"
                         )
+                    streams: dict[str, dict[str, Any]] = {}
+                    with exclusive_lock(
+                        store.root / ".locks" / "federation.lock"
+                    ):
+                        for name, stream_transport in (
+                            ("archive", transport),
+                            ("environment", environment_transport),
+                        ):
+                            try:
+                                stream_result = stream_transport.sync(force=True)
+                                streams[name] = {
+                                    "status": "ok",
+                                    "result": stream_result,
+                                }
+                            except Exception as exc:
+                                streams[name] = {
+                                    "status": "error",
+                                    "error": str(exc),
+                                }
+                    successful = sum(
+                        stream["status"] == "ok" for stream in streams.values()
+                    )
                     result = {
-                        "archive": transport.sync(force=True),
-                        "environment": environment_transport.sync(force=True),
+                        "status": (
+                            "ok"
+                            if successful == len(streams)
+                            else "partial" if successful else "failed"
+                        ),
+                        "streams": streams,
                     }
                 else:
                     raise ValueError("unsupported cloud action")

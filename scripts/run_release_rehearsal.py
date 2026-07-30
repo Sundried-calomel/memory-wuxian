@@ -199,9 +199,14 @@ def main() -> int:
             "status": "passed" if completed.returncode == 0 else "failed",
             "exit_code": completed.returncode,
             "command": command,
-            "evidence": str(log),
+            "evidence": log.name,
             "evidence_sha256": digest(log),
         })
+    for result in results:
+        evidence = output / result["evidence"]
+        if not evidence.is_file() or digest(evidence) != result["evidence_sha256"]:
+            result["status"] = "failed"
+            result["evidence_error"] = "missing or mismatched rehearsal evidence"
     report = {
         "format_version": 1,
         "release_version": version,
