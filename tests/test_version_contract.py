@@ -70,8 +70,15 @@ class VersionContractTest(unittest.TestCase):
                     stale.append(
                         f"{name}: expected {expected!r}, got {actual!r}"
                     )
-            elif expected.encode("ascii") not in executable.read_bytes():
-                stale.append(f"{name}: embedded version {expected!r} missing")
+            else:
+                payload = executable.read_bytes()
+                if (
+                    name.encode("ascii") not in payload
+                    or cargo.encode("ascii") not in payload
+                ):
+                    stale.append(
+                        f"{name}: embedded name or version {cargo!r} missing"
+                    )
 
         self.assertFalse(
             stale,
