@@ -249,6 +249,41 @@ reviews it as `duplicate`, `extension`, `conflict`, `new_domain`,
 `project-only`, or `rejected`. Only an explicitly accepted `extension` or
 `new_domain` may start a separate Rule or Skill revision lifecycle.
 
+### 12. Configuration Resolution Contract
+
+Configuration resolution compiles a closed default contract and explicit input
+layers into one canonical effective configuration. Every effective value names
+its source layer, and the canonical value set has a stable SHA-256. Compilation
+and explanation are read-only and never mutate a source configuration,
+archive, Environment Registry, scheduler, or dashboard setting. Unknown keys,
+duplicate keys, invalid types, and invalid ranges fail closed.
+
+### 13. Device Capability Negotiation Contract
+
+A device capability offer declares only product, platform, runtime, protocol,
+and interface support needed for compatibility decisions. It contains no local
+paths, usernames, hostnames, credentials, complete configuration, or memory
+content. Negotiation produces diagnostic reason codes and never grants trust,
+installation authority, permission expansion, or synchronization authority.
+Legacy devices without an offer remain `unknown-legacy` and continue through
+the existing archive and Environment contracts.
+
+When capability offers are later exchanged between devices, they must use a
+target-encrypted sidecar independent from the ordered `archive-v1` and
+`environment-v1` streams. The v2.5 contract provides local offer generation and
+explicit peer-file diagnostics only; it does not publish or transport offers.
+Transport remains opaque and does not interpret compatibility policy.
+
+### 14. Deferred Memory-Scope Design
+
+Memory sharing scopes are intentionally not a runtime product capability. The
+current single-user product treats retained memory as shareable among the
+user's explicitly trusted devices. Reconsider scopes before multi-user access,
+third-party AI write access, partial project sharing, hosted memory service,
+explicitly non-shareable data, or cross-identity shared memory is introduced.
+Until then, do not add scope fields, filters, migration, enforcement, or
+dashboard controls.
+
 ## Intended Package Boundaries
 
 `docs/module-architecture.json` is the machine-readable ownership registry for

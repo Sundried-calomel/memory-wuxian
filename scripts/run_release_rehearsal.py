@@ -51,6 +51,45 @@ def main() -> int:
         ("native-check", ["cargo", "check", "--manifest-path", "native-collector/Cargo.toml"]),
         ("native-tests", ["cargo", "test", "--manifest-path", "native-collector/Cargo.toml"]),
         (
+            "bundled-native-version",
+            [
+                python,
+                "-c",
+                (
+                    "import subprocess,sys,tomllib\n"
+                    "from pathlib import Path\n"
+                    "version=tomllib.loads(Path('pyproject.toml').read_text('utf-8'))"
+                    "['project']['version']\n"
+                    "suffix='.exe' if sys.platform=='win32' else ''\n"
+                    "for name in ('memory-wuxian-collector','memory-wuxian-envelope'):\n"
+                    " path=Path('bin')/(name+suffix)\n"
+                    " assert path.is_file(), f'missing bundled executable: {path}'\n"
+                    " result=subprocess.run([str(path),'--version'],text=True,"
+                    "capture_output=True)\n"
+                    " assert result.returncode==0, result.stderr\n"
+                    " assert result.stdout.strip()==f'{name} {version}', "
+                    "f'{path}: {result.stdout.strip()} != {name} {version}'\n"
+                ),
+            ],
+        ),
+        (
+            "macos-bundled-dashboard-signature",
+            [
+                python,
+                "-c",
+                (
+                    "import subprocess,sys\n"
+                    "from pathlib import Path\n"
+                    "app=Path('assets/macos/Memory無限操作台.app')\n"
+                    "if sys.platform=='darwin':\n"
+                    " assert app.is_dir(), f'missing bundled dashboard: {app}'\n"
+                    " result=subprocess.run(['codesign','--verify','--deep','--strict',"
+                    "'--verbose=2',str(app)],text=True,capture_output=True)\n"
+                    " assert result.returncode==0, result.stderr or result.stdout\n"
+                ),
+            ],
+        ),
+        (
             "python-regressions",
             [
                 python, "-m", "unittest", "discover", "-s", "tests", "-v",
@@ -93,6 +132,28 @@ def main() -> int:
         (
             "architecture-contract",
             [python, "scripts/check_architecture_contract.py"],
+        ),
+        (
+            "configuration-v1-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_configuration",
+                "tests.test_memory_v25_cli",
+            ],
+        ),
+        (
+            "device-capability-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_environment_capabilities",
+            ],
+        ),
+        (
+            "dashboard-system-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_dashboard_system",
+            ],
         ),
         (
             "desktop-dashboard-contract",
@@ -264,6 +325,7 @@ def main() -> int:
         "native-format",
         "native-check",
         "native-tests",
+        "bundled-native-version",
         "python-regressions",
     }
     if args.exclude_baseline:

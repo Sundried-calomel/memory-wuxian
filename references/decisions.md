@@ -309,3 +309,71 @@ conflict in one stream must not advance or block the other stream. Preserve
 target-specific encryption, origin signatures, explicit peer trust, and the
 prohibition on replica recirculation. Core-rule overwrite and capability
 promotion are never automatic by default.
+
+## D-038: Effective configuration is compiled and explainable
+
+Status: Accepted.
+
+Compile one canonical effective configuration from a closed versioned default
+contract and explicitly declared input layers. Record the source of every
+effective value and a canonical SHA-256. Read-only compilation and explanation
+must not create archive, Environment, scheduler, or dashboard state. Preserve
+the existing root precedence and operational defaults until a separately
+versioned decision changes them. Unknown keys, duplicate keys, invalid types,
+and invalid ranges fail closed.
+
+## D-039: Device capability negotiation is diagnostic, not authority
+
+Status: Accepted.
+
+Publish a minimal path-free and credential-free technical capability offer and
+derive compatibility from two validated offers. A successful result never
+authorizes installation, trust, permission expansion, or synchronization.
+Missing legacy offers yield `unknown-legacy` and do not block the existing
+`archive-v1` or `environment-v1` behavior. Capability exchange uses an
+independent target-encrypted sidecar so older clients can ignore it without
+rejecting an existing event stream.
+
+## D-040: Memory sharing scopes remain a deferred design
+
+Status: Accepted as design only.
+
+The current product remains a single-user system in which all retained memory
+may be shared among the user's trusted devices. Do not add runtime scope
+fields, filtering, policy enforcement, migration, or dashboard controls.
+Reopen this decision before multi-user access, third-party AI write access,
+partial project sharing, hosted memory service, explicitly non-shareable data,
+or shared memory across identity domains is introduced.
+
+## D-041: Content addressing is exact-byte shadow storage
+
+Status: Accepted for the future v2.8 implementation.
+
+Content addressing may reuse an object only when its persisted bytes and
+cryptographic digest are identical. Do not normalize text, reserialize JSON,
+merge similar records, or use AI or vectors for deduplication. Initial
+operation is shadow-only, outside the authoritative archive, with no source
+deletion and no garbage collection. Every file manifest preserves ordered
+objects, byte length, and whole-file SHA-256, and reconstruction must reproduce
+the source bytes exactly.
+
+## D-042: External memory access is read-only by default
+
+Status: Accepted for the future v2.9 implementation.
+
+Expose stable application services through thin CLI, loopback HTTP, and MCP
+stdio adapters. The default service surface is read-only, bounded, path-safe,
+and unable to create query logs or initialize missing state. The dashboard's
+mutable HTTP server is not the external read-only API. Any future write surface
+requires a separate contract and explicit authority.
+
+## D-043: Major version follows compatibility, not roadmap completion
+
+Status: Accepted.
+
+Completing the planned integration does not by itself justify version 3.0. If
+the public CLI, persisted formats, protocols, extension API, and supported
+compatibility contract remain backward compatible, publish the integrated
+result as the next 2.x version. Use 3.0 only after an explicit incompatible
+contract decision, migration matrix, legacy-reader path, and rollback evidence
+have passed the release gate.

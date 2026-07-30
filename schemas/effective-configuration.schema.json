@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/effective-configuration.schema.json",
+  "title": "Memory Wuxian effective configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "effective_configuration",
+    "effective_configuration_sha256",
+    "source",
+    "defaults",
+    "root_resolution",
+    "value_sources"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "contract_id": {"const": "memory-wuxian-effective-configuration-v1"},
+    "effective_configuration": {
+      "allOf": [
+        {"$ref": "configuration-source.schema.json"},
+        {
+          "required": [
+            "memory",
+            "raw",
+            "summaries",
+            "ai_summary",
+            "governance_ai",
+            "indexes",
+            "retrieval",
+            "heartbeat",
+            "integrity",
+            "backup",
+            "codex",
+            "federation",
+            "cloud_transport",
+            "context_refresh",
+            "safety"
+          ]
+        }
+      ]
+    },
+    "effective_configuration_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source": {"$ref": "#/$defs/fileSource"},
+    "defaults": {"$ref": "#/$defs/fileSource"},
+    "root_resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "layer", "source"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "layer": {
+          "enum": [
+            "explicit-root",
+            "environment",
+            "active-root-pointer",
+            "configuration-source",
+            "defaults-v1"
+          ]
+        },
+        "source": {"type": "string", "minLength": 1}
+      }
+    },
+    "value_sources": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^/"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["layer", "source"],
+        "properties": {
+          "layer": {"enum": ["configuration-source", "defaults-v1"]},
+          "source": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "fileSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

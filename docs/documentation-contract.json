@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.4.7",
+  "reviewed_version": "2.5.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -130,6 +130,10 @@
     {
       "id": "bounded-governance-ai",
       "required_tokens": ["environment-governance-ai-discover", "environment-governance-ai-status", "environment-governance-ai-tick", "AI"]
+    },
+    {
+      "id": "explainable-configuration-and-capabilities",
+      "required_tokens": ["configuration-compile", "configuration-explain", "environment-capability-status", "configuration-v1", "System"]
     }
   ]
 }

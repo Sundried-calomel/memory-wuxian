@@ -28,6 +28,7 @@
       "patterns": [
         "scripts/archive_waterline.py",
         "scripts/governance_ai_worker.py",
+        "scripts/memory_configuration.py",
         "scripts/semantic_backfill.py",
         "scripts/semantic_e5_worker.py",
         "scripts/semantic_worker.py"

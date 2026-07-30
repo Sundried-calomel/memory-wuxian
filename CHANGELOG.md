@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.5.0 - 2026-07-30
+
+- Added a closed configuration-v1 compiler with deterministic hashes,
+  per-value source provenance, preserved archive-root precedence, and
+  fail-closed duplicate, unknown-key, type, range, and relationship checks.
+- Added stateless read-only CLI commands for effective configuration
+  compilation, source explanation, and device capability diagnostics without
+  archive initialization or locking.
+- Added closed path-free capability offers and deterministic compatibility
+  reason codes. Legacy peers continue through existing synchronization, and
+  negotiation grants no installation, trust, permission, or sync authority.
+- Added a localized read-only System dashboard view for configuration and
+  local capability diagnostics.
+- Recorded memory sharing scopes as a future decision trigger only; no runtime
+  fields, migration, filtering, enforcement, or dashboard controls were added.
+
 ## 2.4.7 - 2026-07-30
 
 - Changed routine macOS updates to extract the verified Skill payload from the

@@ -549,6 +549,27 @@ while global classification requires one explicit coordinator. Every result is
 a schema-validated draft requiring human review. The worker cannot accept
 rules, install Skills, remediate products, or rewrite archives.
 
+### Explainable configuration and device compatibility
+
+Memory Wuxian compiles the existing YAML into a closed, deterministic
+configuration-v1 view without changing the source file or initializing an
+archive. Every effective value reports its source and the effective value set
+has a stable SHA-256. Unknown keys, duplicate keys, invalid types, and invalid
+ranges fail closed.
+
+`environment-capability-status` reports only product, platform, runtime,
+protocol, and interface compatibility. A missing legacy offer remains
+diagnostic and does not interrupt existing synchronization. Compatibility
+never grants installation, trust, permissions, or synchronization authority.
+The dashboard System tab presents the same read-only information.
+
+```bash
+python3 scripts/memory_cli.py configuration-compile
+python3 scripts/memory_cli.py configuration-explain
+python3 scripts/memory_cli.py environment-capability-status
+python3 scripts/memory_cli.py environment-capability-status --peer-offer /path/to/peer-offer.json
+```
+
 ## Privacy and integration boundary
 
 - Use `--root` outside the repository for private archives.
@@ -615,6 +636,9 @@ cloud-sync
 cloud-status
 cloud-enable
 cloud-disable
+configuration-compile
+configuration-explain
+environment-capability-status
 ```
 
 Manual semantic-summary recovery additionally uses `semantic_worker.py` and

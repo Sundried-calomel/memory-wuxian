@@ -466,6 +466,27 @@ Memory無限は、AI会話を常時起動せずに意味処理タスクをキュ
 schema検証を通した人間レビュー待ちの草案です。workerは規則の承認、
 Skillのインストール、製品修復、履歴書換えを実行できません。
 
+### 説明可能な設定とデバイス互換性
+
+Memory無限は既存YAMLを閉じた決定的なconfiguration-v1ビューへ
+コンパイルしますが、元ファイルを変更せず、アーカイブも初期化しません。
+各有効値は由来レイヤーを持ち、有効設定全体には安定したSHA-256があります。
+未知キー、重複キー、無効な型、範囲外の値は失敗として閉じます。
+
+`environment-capability-status`は製品、プラットフォーム、ランタイム、
+プロトコル、インターフェースの互換性だけを報告します。能力オファーのない
+旧デバイスは診断状態のまま既存同期を妨げません。互換判定がインストール、
+信頼、権限、同期権限を与えることはありません。コンソールの「システム」
+（System）
+タブも同じ読取専用情報を表示します。
+
+```bash
+python3 scripts/memory_cli.py configuration-compile
+python3 scripts/memory_cli.py configuration-explain
+python3 scripts/memory_cli.py environment-capability-status
+python3 scripts/memory_cli.py environment-capability-status --peer-offer /path/to/peer-offer.json
+```
+
 ## プライバシーと統合境界
 
 - 個人アーカイブはリポジトリ外の`--root`を使います。
@@ -539,6 +560,9 @@ cloud-sync
 cloud-status
 cloud-enable
 cloud-disable
+configuration-compile
+configuration-explain
+environment-capability-status
 ```
 
 セマンティック要約を手動復旧する場合は、さらに `semantic_worker.py` と

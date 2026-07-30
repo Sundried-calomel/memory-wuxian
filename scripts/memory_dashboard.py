@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+from auto_update import current_version
 from conversation_titles import (
     archive_conversation_titles,
     codex_thread_metadata,
@@ -37,7 +38,9 @@ from memory_cli import (
     read_jsonl,
 )
 from memory_cloud_transport import CloudFolderTransport
+from memory_configuration import compile_configuration, explain_configuration
 from memory_environment import EnvironmentRegistry
+from memory_environment_capabilities import local_device_capability_offer
 from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_incoming import EnvironmentIncomingProcessor
 from memory_environment_promotions import PromotionStore
@@ -1080,7 +1083,33 @@ class EnvironmentDashboardCache:
         return payload
 
 
-def make_handler(store: MemoryStore):
+def system_dashboard_data(
+    store: MemoryStore,
+    configuration_path: Path | None = None,
+) -> dict[str, Any]:
+    """Build the read-only configuration and local-capability view."""
+
+    config_path = Path(configuration_path or SKILL_ROOT / "config.yaml")
+    compiled = compile_configuration(
+        config_path.expanduser().resolve(),
+        root_argument=str(store.root),
+    )
+    runtimes = local_runtime_versions([])
+    return {
+        "schema_version": 1,
+        "configuration": explain_configuration(compiled),
+        "capabilities": local_device_capability_offer(
+            product_version=current_version(SKILL_ROOT),
+            platform=local_platform_name(),
+            python_version=runtimes["python"],
+        ),
+    }
+
+
+def make_handler(
+    store: MemoryStore,
+    configuration_path: Path | None = None,
+):
     snapshot_cache = DashboardSnapshotCache(store)
     environment_cache = EnvironmentDashboardCache(store.root)
 
@@ -1305,6 +1334,18 @@ def make_handler(store: MemoryStore):
                 body = json.dumps(
                     environment_cache.get(), ensure_ascii=False
                 ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+            elif path == "/api/system":
+                try:
+                    body = json.dumps(
+                        system_dashboard_data(store, configuration_path),
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                except Exception as exc:
+                    self.send_json(500, {"error": str(exc)})
+                    return
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -1644,7 +1685,10 @@ def main() -> int:
     parser.add_argument("--window", action="store_true", help="Open a native WebView2 application window")
     args = parser.parse_args()
     store = MemoryStore(Path(args.root).expanduser().resolve(), load_simple_yaml(Path(args.config).expanduser().resolve()))
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(store))
+    server = ThreadingHTTPServer(
+        (args.host, args.port),
+        make_handler(store, Path(args.config).expanduser().resolve()),
+    )
     url = f"http://{args.host}:{server.server_port}/"
     if args.window:
         print(json.dumps({"status": "opening-window", "url": url}, ensure_ascii=False), flush=True)

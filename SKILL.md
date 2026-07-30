@@ -233,6 +233,19 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     `environment-realize-semantic-runtime --apply` only after explicit review
     on the receiving device. Use `semantic-runtime-status` to verify the
     bundled contract, registered revision, model artifacts, and local runtime.
+41. Treat `configuration-compile`, `configuration-explain`, and
+    `environment-capability-status` as stateless read-only diagnostics. They
+    must not construct `MemoryStore`, initialize an archive, take an archive
+    lock, alter trust, grant permissions, install capabilities, or start
+    synchronization.
+42. Keep the v2.5 effective-configuration contract closed and deterministic.
+    Unknown or duplicate keys and invalid values fail closed. Preserve
+    `--root`, `MEMORY_WUXIAN_ROOT`, active-root pointer, then configured-root
+    precedence.
+43. Memory-sharing scopes are design-only until a separately approved
+    multi-user, third-party-write, partial-sharing, hosted-service,
+    non-shareable-data, or cross-identity requirement activates the review.
+    Do not add runtime scope fields or controls before that decision.
 
 ## Commands
 
@@ -306,6 +319,10 @@ python3 scripts/memory_cli.py environment-governance-ai-status
 python3 scripts/memory_cli.py environment-governance-ai-enqueue --item-json /path/to/item.json
 python3 scripts/memory_cli.py environment-governance-ai-configure --policy-json /path/to/policy.json
 python3 scripts/memory_cli.py environment-governance-ai-tick --run-ai --maximum-batches 1
+python3 scripts/memory_cli.py configuration-compile
+python3 scripts/memory_cli.py configuration-explain
+python3 scripts/memory_cli.py environment-capability-status
+python3 scripts/memory_cli.py environment-capability-status --peer-offer /path/to/peer-offer.json
 python3 scripts/install_governance_ai.py --archive-root /path/to/memory --skill-root /path/to/memory-wuxian --python-executable /path/to/python --load
 scripts/build_native_collector.sh
 python3 scripts/install_codex_autosync.py --archive-root /path/to/memory --load
@@ -330,6 +347,9 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 - Read [implementation.md](references/implementation.md) before changing storage formats, counters, summary hierarchy, retrieval behavior, state recovery, locking, privacy behavior, or client integration.
 - Read [schemas.md](references/schemas.md) when constructing or validating raw records, summary JSON, indexes, state, or retrieval output.
 - Read [decisions.md](references/decisions.md) before changing architectural behavior.
+- Read [deferred-memory-scope-design.md](references/deferred-memory-scope-design.md)
+  before proposing memory-sharing boundaries. It is a design trigger, not an
+  implemented privacy feature.
 - Read [release-rehearsal.md](references/release-rehearsal.md) before release
   claims. Run `scripts/run_release_rehearsal.py`; never describe unrun or
   evidence-free scenarios as passed.

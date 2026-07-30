@@ -22,8 +22,10 @@ from console_encoding import configure_unicode_stdio
 from platform_lock import exclusive_lock
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
 from memory_cloud_transport import CloudFolderTransport
+import memory_configuration
 from memory_environment import EnvironmentRegistry
 from memory_environment_bindings import EnvironmentBindingRegistry
+import memory_environment_capabilities
 from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_evolution import ProductEvolutionStore
 from memory_environment_governance import GovernanceProposalStore
@@ -4225,6 +4227,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="Configuration YAML path")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    subparsers.add_parser(
+        "configuration-compile",
+        help="Compile and print the effective configuration without creating state",
+    )
+    subparsers.add_parser(
+        "configuration-explain",
+        help="Explain effective configuration sources without creating state",
+    )
+    capability_status = subparsers.add_parser(
+        "environment-capability-status",
+        help="Show local device capability compatibility without creating state",
+    )
+    capability_status.add_argument(
+        "--peer-offer",
+        help="Optional peer device capability offer JSON",
+    )
     subparsers.add_parser("init", help="Initialize an archive without overwriting existing records")
     append_parser = subparsers.add_parser("append", help="Append one exact dialogue message")
     append_parser.add_argument("--speaker", required=True, choices=["user", "assistant", "system", "tool"])
@@ -4790,6 +4808,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show governance AI queue, coordinator, limits, and draft counters",
     )
     return parser
+
+
+def dispatch_stateless_read_only_command(args: argparse.Namespace) -> Optional[int]:
+    if args.command in {"configuration-compile", "configuration-explain"}:
+        compiled = memory_configuration.compile_configuration(
+            Path(args.config),
+            root_argument=args.root,
+        )
+        result = (
+            compiled
+            if args.command == "configuration-compile"
+            else memory_configuration.explain_configuration(compiled)
+        )
+    elif args.command == "environment-capability-status":
+        import tomllib
+
+        with (SKILL_ROOT / "pyproject.toml").open("rb") as handle:
+            product_version = str(tomllib.load(handle)["project"]["version"])
+        local_offer = memory_environment_capabilities.local_device_capability_offer(
+            product_version,
+            local_platform_name(),
+            local_runtime_versions([])["python"],
+        )
+        peer_offer = (
+            read_json(Path(args.peer_offer).expanduser().resolve())
+            if args.peer_offer
+            else None
+        )
+        result = memory_environment_capabilities.negotiate_device_capabilities(
+            local_offer,
+            peer_offer,
+        )
+    else:
+        return None
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
 
 
 def dispatch_command(
@@ -5510,6 +5564,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        stateless_result = dispatch_stateless_read_only_command(args)
+        if stateless_result is not None:
+            return stateless_result
         config = resolve_config(Path(args.config))
         store = MemoryStore(resolve_root(args.root, config), config)
         if args.command == "token-usage-backfill" and not args.apply:

@@ -87,6 +87,22 @@ Required scenarios:
     copying the full archive, maintenance creates one complete snapshot even
     when no summary job is due, debt clears only after success, and the
     dashboard exposes pending debt.
+24. Configuration-v1 tests prove closed defaults, duplicate and unknown-key
+    rejection, stable canonical hashes, unchanged root precedence, source
+    provenance for every effective leaf, and read-only CLI diagnostics on every
+    supported platform.
+25. Device-capability tests prove closed path-free offers, deterministic
+    compatibility reason codes, legacy-peer continuity, and zero installation,
+    trust, permission, or synchronization authority.
+26. Dashboard System tests prove the supplied configuration path is used,
+    `/api/system` is read-only, no archive state is initialized, and localized
+    desktop and mobile views expose configuration and capability diagnostics.
+27. Bundled-native tests prove both final `bin/` executables exist and report
+    the exact current product version, preventing newly versioned source from
+    shipping stale collector or envelope binaries.
+28. On macOS, bundled-dashboard signature tests run deep strict verification
+    against the exact `.app` candidate so version metadata changes cannot reach
+    the update transaction with a stale signature.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

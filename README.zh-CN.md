@@ -444,6 +444,23 @@ worker。产品批次按 3 项或 6 小时触发（最多 5 项），治理分�
 协调设备执行。所有结果都是通过严格 schema 校验、等待人工审批的草案。
 worker 无权接受规则、安装 Skill、修复产品或改写历史档案。
 
+### 可解释配置与设备兼容性
+
+Memory无限会把现有 YAML 编译成封闭、确定性的 configuration-v1 视图，
+但不修改源文件，也不初始化档案。每个有效值都会标明来源层，完整有效配置
+具有稳定 SHA-256。未知键、重复键、无效类型和越界值都会直接失败。
+
+`environment-capability-status` 只报告产品、平台、运行时、协议和接口兼容性。
+旧设备没有能力声明时只标记为诊断状态，不会中断现有同步。兼容结果绝不授予
+安装、信任、权限或同步权。状态台的“系统”（System）页显示同一份只读信息。
+
+```bash
+python3 scripts/memory_cli.py configuration-compile
+python3 scripts/memory_cli.py configuration-explain
+python3 scripts/memory_cli.py environment-capability-status
+python3 scripts/memory_cli.py environment-capability-status --peer-offer /path/to/peer-offer.json
+```
+
 ## 隐私与集成边界
 
 - 私人档案应使用仓库外部的 `--root`。
@@ -506,6 +523,9 @@ cloud-sync
 cloud-status
 cloud-enable
 cloud-disable
+configuration-compile
+configuration-explain
+environment-capability-status
 ```
 
 手动恢复语义摘要时还会使用 `semantic_worker.py` 和
