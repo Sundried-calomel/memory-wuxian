@@ -276,6 +276,7 @@ class MemoryConfigurationTests(unittest.TestCase):
                 ],
                 cwd=ROOT,
                 text=True,
+                encoding="utf-8",
                 capture_output=True,
                 check=False,
                 env={**os.environ, "CODEX_HOME": str(self.base / "codex-home")},
