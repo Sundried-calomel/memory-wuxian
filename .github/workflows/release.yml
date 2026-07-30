@@ -161,10 +161,15 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           $version = "${{ needs.metadata.outputs.version }}"
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DSourceRoot=$PWD" "/DAppVersion=$version" packaging/windows/MemoryWuxian.iss
+          $buildLog = (
+            & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+              "/DSourceRoot=$PWD" `
+              "/DAppVersion=$version" `
+              packaging/windows/MemoryWuxian.iss 2>&1
+          ) -join "`n"
+          Write-Host $buildLog
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
           $installer = Get-Item "dist\MemoryWuxian-$version-Windows-x64-Setup.exe"
-          $listing = (& 7z l $installer.FullName) -join "`n"
           foreach ($required in @(
             "SKILL.md",
             "AGENTS.md",
@@ -172,7 +177,8 @@ jobs:
             "docs\module-architecture.json",
             "scripts\check_architecture_contract.py"
           )) {
-            if (-not $listing.Contains($required)) {
+            $sourcePath = Join-Path $PWD $required
+            if (-not $buildLog.Contains("Compressing: $sourcePath")) {
               throw "Windows package is missing architecture gate file: $required"
             }
           }
