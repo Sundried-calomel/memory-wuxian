@@ -370,6 +370,30 @@ def main() -> int:
                 "tests.test_memory_cloud_transport",
             ],
         ),
+        (
+            "v27-job-recovery-contract",
+            [python, "-m", "unittest", "-v", "tests.test_memory_jobs"],
+        ),
+        (
+            "v27-capture-independence-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_jobs.MaintenanceQueueTests.test_mw27_capture_001_service_telemetry_advances_while_job_quarantined",
+                "tests.test_memory_cli.MemoryCliTest.test_native_collector_matches_python_storage_contract",
+            ],
+        ),
+        (
+            "v27-diagnostic-redaction-contract",
+            [python, "-m", "unittest", "-v", "tests.test_memory_diagnostics"],
+        ),
+        (
+            "v27-no-ai-side-effect-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_semantic_dispatch",
+                "tests.test_memory_jobs.MaintenanceQueueTests.test_mw27_round_boundary_and_no_side_effect_001_only_marks_semantic_ready",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     baseline_ids = {

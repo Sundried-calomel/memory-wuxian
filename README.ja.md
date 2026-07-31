@@ -659,6 +659,23 @@ python scripts/memory_cli.py environment-realize-semantic-runtime
 python scripts/memory_cli.py environment-realize-semantic-runtime --apply
 ```
 
+## v2.7 バックグラウンド自律処理と診断
+
+Memory無限は、モデルを呼び出さない保守処理を、安定した冪等キー、リース、回数制限付き
+再試行、再起動復旧、`quarantined` 隔離状態を備えた閉じた永続キューに保存します。
+`maintenance-status` は collector と worker の期待状態と実状態を比較し、
+`maintenance-diagnostics` は原文会話、認証情報、ローカルユーザーパスを含まない
+秘匿化診断バンドルを生成します。完全な会話境界が `semantic_dispatch.py` により
+`semantic-ready` になった場合だけ、既存の一回限りの AI worker が実行されます。
+機械的 tick は AI を呼び出さず、要約失敗はネイティブ収集を停止しません。
+
+```powershell
+python scripts/memory_cli.py maintenance-enqueue --kind archive-health --idempotency-key health:manual
+python scripts/memory_cli.py maintenance-status
+python scripts/memory_cli.py maintenance-tick --maximum-jobs 20
+python scripts/memory_cli.py maintenance-diagnostics
+```
+
 署名済み・対象暗号化済み `environment-v1` ストリームが、契約をペア済み
 デバイスへ転送します。契約はモデル revision、成果物ハッシュ、ランタイム
 パッケージ、query/passage プレフィックス、pooling、正規化、類似度、

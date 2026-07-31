@@ -746,6 +746,24 @@ python scripts/memory_cli.py environment-realize-semantic-runtime
 python scripts/memory_cli.py environment-realize-semantic-runtime --apply
 ```
 
+## v2.7 background autonomy and diagnostics
+
+Memory Wuxian now persists model-free maintenance work in a closed queue with
+stable idempotency keys, leases, bounded retries, restart recovery, and
+`quarantined` failure state. `maintenance-status` compares desired and actual
+collector/worker state; `maintenance-diagnostics` writes a redacted bundle
+without raw dialogue, credentials, or local user paths. A completed dialogue
+boundary must first become `semantic-ready` through `semantic_dispatch.py`
+before the existing one-shot AI worker may run. Mechanical ticks invoke no AI,
+and summary failure does not stop native capture.
+
+```bash
+python scripts/memory_cli.py maintenance-enqueue --kind archive-health --idempotency-key health:manual
+python scripts/memory_cli.py maintenance-status
+python scripts/memory_cli.py maintenance-tick --maximum-jobs 20
+python scripts/memory_cli.py maintenance-diagnostics
+```
+
 The signed and target-encrypted `environment-v1` stream transports the
 contract to paired devices. It pins the model revision, artifact hashes,
 runtime packages, query/passage prefixes, pooling, normalization, similarity,

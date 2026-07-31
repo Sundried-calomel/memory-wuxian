@@ -1434,6 +1434,51 @@ summaries:
         self.assertEqual(activated["active_generation_id"], generation_id)
         self.assertTrue(pointer.is_file())
 
+    def test_rebuild_indexes_apply_retains_desktop_backup_contract(self):
+        backup_root = self.base / "rebuild-index-backups"
+        with self.config.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f'''backup:
+  enabled: true
+  directory: "{backup_root}"
+'''
+            )
+        self.append_round(1)
+        result = self.run_cli("rebuild-indexes", "--apply")
+        self.assertTrue(result["changed"])
+        self.assertTrue(Path(result["desktop_backup"]).is_dir())
+
+    def test_maintenance_cli_is_bounded_model_free_and_redacted(self):
+        payload = self.base / "semantic-eligibility.json"
+        payload.write_text(
+            json.dumps(
+                {
+                    "conversation_id": "codex:maintenance",
+                    "completed_round": 1,
+                    "round_complete": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+        queued = self.run_cli(
+            "maintenance-enqueue",
+            "--kind",
+            "semantic-summary-eligibility",
+            "--idempotency-key",
+            "codex:maintenance:round:1",
+            "--payload-json",
+            str(payload),
+        )
+        self.assertTrue(queued["created"])
+        tick = self.run_cli("maintenance-tick", "--maximum-jobs", "1")
+        self.assertEqual(tick["ai_invocations"], 0)
+        self.assertEqual(tick["processed"][0]["state"], "semantic-ready")
+        status = self.run_cli("maintenance-status")
+        self.assertEqual(status["queue"]["counts"]["semantic-ready"], 1)
+        diagnostic = self.run_cli("maintenance-diagnostics")
+        self.assertFalse(diagnostic["contains_raw_dialogue"])
+        self.assertTrue(Path(diagnostic["path"]).is_file())
+
     def test_summary_hash_drift_is_not_auto_repaired(self):
         self.append_round(1)
         self.append_round(2)
@@ -1909,6 +1954,7 @@ summaries:
                 "  enabled: true\n"
                 f"  python_path: {json.dumps(sys.executable)}\n"
                 f"  worker_path: {json.dumps(str(fake_worker))}\n"
+                f"  dispatcher_path: {json.dumps(str(SKILL_ROOT / 'scripts' / 'semantic_dispatch.py'))}\n"
             )
         python_result = self.run_cli("sync-codex", "--session-file", str(session))
         native_args = [

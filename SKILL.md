@@ -78,6 +78,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     changes, permission expansion, persistent-component expansion, and
     incompatible runtimes require explicit review and fail closed.
 44. Install only a registered immutable revision through a verified binding.
+45. Keep mechanical maintenance model-free and persistent. Use stable
+    idempotency keys, leases, bounded retries, and quarantine; promote semantic
+    work only after a complete dialogue boundary, then run at most one
+    explicitly leased one-shot AI worker attempt.
     Validate package contents, platform and runtime contracts, preserve a
     rollback object before mutation, atomically switch, self-check, and append a
     receipt.
@@ -279,6 +283,10 @@ python3 scripts/memory_cli.py backup
 python3 scripts/memory_cli.py make-summary-job
 python3 scripts/semantic_worker.py --root memory --config config.yaml --job memory/pending/<job>.json
 python3 scripts/semantic_backfill.py --root memory --config config.yaml --max-jobs 20
+python3 scripts/memory_cli.py maintenance-enqueue --kind archive-health --idempotency-key health:manual
+python3 scripts/memory_cli.py maintenance-status
+python3 scripts/memory_cli.py maintenance-tick --maximum-jobs 20
+python3 scripts/memory_cli.py maintenance-diagnostics
 python3 scripts/memory_cli.py ingest-summary --job memory/pending/<job>.json --summary-json <summary>.json
 python3 scripts/memory_cli.py retrieve --query "..."
 python3 scripts/memory_cli.py retrieve --query "..." --mode current-policy
@@ -382,7 +390,7 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 
 ## Client integration boundary
 
-Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or Windows scheduled task. Both keep only the Rust collector alive, use immediate native filesystem events plus an adaptive 5-second, 30-second, and 5-minute metadata fallback, and share the same archive contract. They import user messages, visible assistant commentary/final answers, lightweight task-timeline tool activity, and successful structured file-change diffs from top-level sessions; they exclude subagent sessions, system prompts, hidden reasoning, and general tool output. When a complete-round boundary makes a summary due, the collector runs one ephemeral Codex CLI summary worker and waits for it to exit. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.
+Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or Windows scheduled task. Both keep only the Rust collector alive, use immediate native filesystem events plus an adaptive 5-second, 30-second, and 5-minute metadata fallback, and share the same archive contract. They import user messages, visible assistant commentary/final answers, lightweight task-timeline tool activity, and successful structured file-change diffs from top-level sessions; they exclude subagent sessions, system prompts, hidden reasoning, and general tool output. When a complete-round boundary makes a summary due, the collector persists a model-free eligibility record and invokes the one-shot semantic dispatcher. The dispatcher leases the explicit job, runs one ephemeral Codex CLI summary worker, and records completion, retry, or quarantine before exiting. Worker failure does not stop native capture. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.
 
 Federation is a separate low-frequency layer and does not change collector
 ownership of the local archive. By default, imported replicas live in the

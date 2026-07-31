@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.7.0",
+  "candidate_id": "v2.7.0-source-candidate",
+  "artifact_profile": "automation",
+  "classification": "extension",
+  "owner_id": "control-plane",
+  "target": "A persistent model-free maintenance queue, explicit desired-versus-actual service state, bounded retries and quarantine, and redacted diagnostics that preserve independent capture.",
+  "primary_semantics": "Mechanical maintenance becomes observable, idempotent, bounded, and restart-safe while AI remains a one-shot worker for explicitly eligible completed-round semantic jobs.",
+  "invariants": [
+    "Native raw capture continues independently of summary or maintenance failures.",
+    "Mechanical eligibility, retry, quarantine, and diagnostics invoke no AI or external service.",
+    "A semantic job cannot become runnable before a complete user-assistant round boundary.",
+    "Retries are bounded and duplicate delivery cannot duplicate a completed mutation.",
+    "Diagnostics exclude secrets, credentials, raw dialogue text, and absolute user paths."
+  ],
+  "allowed_changes": [
+    "Add a closed maintenance-job schema and durable queue state machine.",
+    "Add desired-versus-actual service status and redacted diagnostic bundles.",
+    "Route existing semantic-backfill and backup-debt maintenance through bounded queue claims.",
+    "Expose read-only status and explicit repair CLI adapters.",
+    "Add fixed MW27 crash, restart, duplicate, permission, stale-lock, capture, round-boundary, redaction, and no-side-effect cases."
+  ],
+  "prohibited_changes": [
+    "Continuously invoke AI, infer user intent, or split an incomplete dialogue round.",
+    "Activate incoming Rules, Skills, Environment items, or permissions.",
+    "Add or alter archive-v1, environment-v1, SSH, or cloud transport protocols.",
+    "Rewrite raw history, v2.6 index generations, or existing summary content."
+  ],
+  "before_after_checks": [
+    "Hash raw history before and after queue crash, retry, quarantine, and diagnostics.",
+    "Restart after each durable state transition and prove idempotent recovery.",
+    "Inject duplicate delivery, permission failure, and stale lock without duplicate mutation.",
+    "Prove capture telemetry advances while semantic work is failed or quarantined.",
+    "Scan every diagnostic bundle for configured secret and path fixtures."
+  ],
+  "required_evidence": [
+    "source-audit",
+    "targeted-tests",
+    "integration-rehearsal",
+    "idempotency-test",
+    "lifecycle-check",
+    "restart-rehearsal",
+    "failure-recovery",
+    "rehearsal-matrix",
+    "restart-recovery",
+    "failure-injection",
+    "no-ai-side-effect-proof",
+    "windows-candidate",
+    "macos-candidate",
+    "rollback-proof",
+    "promotion-review"
+  ],
+  "lifecycle_state": "staged"
+}

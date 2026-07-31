@@ -6,8 +6,7 @@ import json
 from pathlib import Path
 
 from memory_cli import MemoryStore, load_simple_yaml, now_iso
-from platform_lock import exclusive_lock
-from semantic_worker import run_job
+from semantic_dispatch import dispatch_job
 
 
 def ordered_pending_jobs(store: MemoryStore) -> list[Path]:
@@ -35,22 +34,21 @@ def run_backfill(
     store.init()
     completed = []
 
-    with exclusive_lock(root / ".locks/semantic-worker.lock"):
-        while max_jobs == 0 or len(completed) < max_jobs:
-            pending = ordered_pending_jobs(store)
-            job_path = pending[0] if pending else store.make_summary_job()
-            if job_path is None:
-                break
-            result = run_job(
-                root,
-                config_path,
-                job_path,
-                dry_run=dry_run,
-                create_backup=False,
-            )
-            completed.append(result)
-            if dry_run:
-                break
+    while max_jobs == 0 or len(completed) < max_jobs:
+        pending = ordered_pending_jobs(store)
+        job_path = pending[0] if pending else store.make_summary_job()
+        if job_path is None:
+            break
+        result = dispatch_job(
+            root,
+            config_path,
+            job_path,
+            dry_run=dry_run,
+            create_backup=False,
+        )
+        completed.append(result)
+        if dry_run or result.get("status") in {"deferred", "quarantined"}:
+            break
 
     backup = None
     backup_debt_drained = False

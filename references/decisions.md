@@ -420,3 +420,15 @@ the previous generation for pointer-only rollback. Creation timestamps and the
 previous-pointer metadata do not participate in generation identity. Source
 drift, payload tampering, incomplete generations, and unexplained retrieval
 deltas fail closed without modifying raw history or semantic indexes.
+
+## D-047: Background maintenance is persistent, bounded, and model-free
+
+Status: Accepted and implemented in v2.7.
+
+Persist mechanical maintenance as closed-schema jobs with stable idempotency
+keys, explicit leases, bounded attempts, restart recovery, and quarantine.
+Summary eligibility may advance only after an existing immutable summary job
+identifies a complete dialogue boundary. AI is never part of the queue tick; an
+explicit one-shot dispatcher leases only a `semantic-ready` job and records its
+completion or bounded failure. Queue, diagnostic, or semantic failure must not
+stop native capture or mutate authoritative raw history.

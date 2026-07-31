@@ -44,6 +44,7 @@
         "python_path": {"type": "string", "minLength": 1},
         "python_path_windows": {"type": "string", "minLength": 1},
         "worker_path": {"type": "string", "minLength": 1},
+        "dispatcher_path": {"type": "string", "minLength": 1},
         "codex_cli_path": {"type": "string", "minLength": 1},
         "codex_cli_path_windows": {"type": "string", "minLength": 1},
         "timeout_seconds": {"type": "integer", "minimum": 1},

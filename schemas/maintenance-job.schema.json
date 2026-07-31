@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/maintenance-job.schema.json",
+  "title": "Memory Wuxian maintenance job v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "job_id", "kind", "idempotency_key", "payload", "state", "attempts", "max_attempts", "available_at", "created_at", "updated_at", "lease_owner", "lease_expires_at", "last_error", "result_sha256"],
+  "properties": {
+    "format": {"const": "memory-wuxian-maintenance-job-v1"},
+    "job_id": {"type": "string", "pattern": "^job-[0-9a-f]{64}$"},
+    "kind": {"enum": ["backup-debt", "semantic-summary-eligibility", "archive-health"]},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 512},
+    "payload": {"type": "object"},
+    "state": {"enum": ["queued", "running", "retry", "semantic-ready", "completed", "quarantined"]},
+    "attempts": {"type": "integer", "minimum": 0, "maximum": 20},
+    "max_attempts": {"type": "integer", "minimum": 1, "maximum": 20},
+    "available_at": {"type": "string", "format": "date-time"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "lease_owner": {"type": ["string", "null"]},
+    "lease_expires_at": {"type": ["string", "null"], "format": "date-time"},
+    "last_error": {"type": ["string", "null"], "maxLength": 500},
+    "result_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+  }
+}

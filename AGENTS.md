@@ -167,6 +167,12 @@ Use Memory無限 to preserve conversation history outside the active context win
     activation or rollback, preserve the previous generation, and reject any
     source-hash mismatch or unexplained retrieval delta without changing raw
     history.
+69. Route background maintenance through the persistent model-free queue.
+    Require stable idempotency keys, explicit leases, bounded retries,
+    quarantine, and redacted diagnostics. A semantic task may become
+    `semantic-ready` only after a completed dialogue boundary; only an explicit
+    one-shot dispatcher may invoke AI, and its failure must never stop or roll
+    back native raw capture.
 
 ## Authority order
 

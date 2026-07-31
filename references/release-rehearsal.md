@@ -114,6 +114,16 @@ Required scenarios:
     active-versus-shadow deltas.
 32. v2.6 CLI tests prove shadow build and status are distinct from activation,
     while activation and rollback remain preview-only until explicit apply.
+33. v2.7 queue tests prove durable closed states, duplicate idempotency, bounded
+    retries, restart recovery, stale-lease recovery, permission-failure safety,
+    and explicit quarantine.
+34. v2.7 capture-independence tests prove collector telemetry and raw capture
+    continue while semantic or maintenance work is failed or quarantined.
+35. v2.7 diagnostic tests prove bundles omit raw dialogue, redact secrets and
+    local user paths, and leave authoritative raw bytes unchanged.
+36. v2.7 semantic-dispatch tests prove mechanical eligibility invokes no AI,
+    incomplete rounds fail before queueing, and a complete boundary permits at
+    most one explicitly leased worker attempt.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid
