@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.7.0",
+  "reviewed_version": "2.8.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -142,6 +142,10 @@
     {
       "id": "bounded-background-autonomy",
       "required_tokens": ["maintenance-enqueue", "maintenance-status", "maintenance-tick", "maintenance-diagnostics", "semantic_dispatch.py", "semantic-ready", "quarantined"]
+    },
+    {
+      "id": "lossless-shadow-sync",
+      "required_tokens": ["content-shadow-build", "content-shadow-status", "content-shadow-verify", "content-shadow-reconstruct", "content-shadow-disable", "content-transfer", "exact-byte", "checkpoint"]
     },
     {
       "id": "immutable-index-generations",

@@ -638,6 +638,24 @@ python scripts/memory_cli.py maintenance-tick --maximum-jobs 20
 python scripts/memory_cli.py maintenance-diagnostics
 ```
 
+## v2.8 无损旁路存储与断点续传
+
+可选的 `exact-byte` 旁路存储在 `shadow-content-v1` 中写入按内容寻址的对象和封闭、
+有序的清单。每个条目保留稳定来源身份、相对路径、字节长度和整文件 SHA-256。
+构建、重建、停用和传输默认仅预览。各领域独立的 `checkpoint` 只允许连续且已验证的
+范围继续；重复投递保持幂等，缺段、重叠、损坏、篡改和目标冲突都会带明确说明地
+失败关闭。删除整个旁路目录不会改变原始历史，也不会改变既有的 `archive-v1` 和
+`environment-v1` 数据流。
+
+```powershell
+python scripts/memory_cli.py content-shadow-build --source-root C:\snapshot --source-id node:snapshot --file raw/a.md
+python scripts/memory_cli.py content-shadow-status
+python scripts/memory_cli.py content-shadow-verify --manifest-id <manifest-id> --source-root C:\snapshot
+python scripts/memory_cli.py content-shadow-reconstruct --manifest-id <manifest-id> --destination C:\restore
+python scripts/memory_cli.py content-shadow-disable
+python scripts/memory_cli.py content-transfer --manifest-id <manifest-id> --target-archive-root C:\target --domain archive --target-id <node> --start 0 --count 100
+```
+
 签名且面向目标加密的 `environment-v1` 流会把合同传给已配对设备。合同固定
 模型 revision、文件哈希、运行时包、query/passage 前缀、池化、归一化、
 相似度算法和安装入口。接收或接受合同不会自动安装或下载任何内容；每台设备

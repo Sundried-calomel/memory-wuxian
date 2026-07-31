@@ -124,6 +124,14 @@ Required scenarios:
 36. v2.7 semantic-dispatch tests prove mechanical eligibility invokes no AI,
     incomplete rounds fail before queueing, and a complete boundary permits at
     most one explicitly leased worker attempt.
+37. v2.8 content-store tests prove stable ordered manifest identity, exact-byte
+    objects and reconstruction, source-drift and corruption rejection,
+    destination conflict explanation, path safety, and removable rollback.
+38. v2.8 transfer tests prove fixed-checkpoint interruption and restart,
+    idempotent replay, gap and overlap rejection, corrupt-segment failure,
+    checkpoint tamper rejection, and archive/environment failure isolation.
+39. v2.8 CLI tests prove build, reconstruction, disable, and transfer remain
+    preview-only until explicit apply and never overwrite conflicting targets.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.8.0",
+  "work_item_id": "memory-wuxian-v2.8.0",
+  "candidate_id": "v2.8.0-source-candidate",
+  "owner_id": "memory-plane-exchange-plane",
+  "source_revision": "feature/v2.8-lossless-sync",
+  "product_evolution_record_id": "memory-wuxian-v2.8.0-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "Exact-byte shadow storage and stream checkpoints implement the existing product decisions D-041 and D-048; they do not add a new cross-product governance rule.",
+  "evidence_refs": [
+    "outputs/rehearsal/v2.8.0/windows/report.json",
+    "references/decisions.md#d-041",
+    "references/decisions.md#d-048"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-07-31T18:00:00Z"
+}

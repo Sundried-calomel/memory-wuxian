@@ -347,7 +347,7 @@ or shared memory across identity domains is introduced.
 
 ## D-041: Content addressing is exact-byte shadow storage
 
-Status: Accepted for the future v2.8 implementation.
+Status: Accepted and implemented in v2.8.
 
 Content addressing may reuse an object only when its persisted bytes and
 cryptographic digest are identical. Do not normalize text, reserialize JSON,
@@ -432,3 +432,15 @@ identifies a complete dialogue boundary. AI is never part of the queue tick; an
 explicit one-shot dispatcher leases only a `semantic-ready` job and records its
 completion or bounded failure. Queue, diagnostic, or semantic failure must not
 stop native capture or mutate authoritative raw history.
+
+## D-048: Resumable transfer is contiguous and domain-isolated
+
+Status: Accepted and implemented in v2.8.
+
+Track each archive or environment shadow stream with an independent durable
+checkpoint bound to source identity, target identity, manifest identity, and
+the exact ordered hash prefix already accepted. Duplicate ranges are
+idempotent only when their hashes match; gaps, crossing overlaps, corruption,
+and checkpoint tampering fail closed with explicit source and target context.
+Completion requires exact object verification and never grants authority over
+the target device's raw archive or changes the existing transport codecs.

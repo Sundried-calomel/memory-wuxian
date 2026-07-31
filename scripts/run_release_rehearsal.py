@@ -394,6 +394,21 @@ def main() -> int:
                 "tests.test_memory_jobs.MaintenanceQueueTests.test_mw27_round_boundary_and_no_side_effect_001_only_marks_semantic_ready",
             ],
         ),
+        (
+            "v28-exact-byte-content-contract",
+            [python, "-m", "unittest", "-v", "tests.test_memory_content_store"],
+        ),
+        (
+            "v28-resumable-transfer-contract",
+            [python, "-m", "unittest", "-v", "tests.test_memory_resumable_sync"],
+        ),
+        (
+            "v28-preview-rollback-cli-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_cli.MemoryCliTest.test_content_shadow_cli_is_preview_first_and_resumable",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     baseline_ids = {

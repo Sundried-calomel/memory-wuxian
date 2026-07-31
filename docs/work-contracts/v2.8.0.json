@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.8.0",
+  "candidate_id": "v2.8.0-source-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-exchange-plane",
+  "target": "An exact-byte shadow content store plus ordered manifests, resumable per-stream checkpoints, explicit conflict explanations, and verified reconstruction.",
+  "primary_semantics": "Derived shadow storage and transfer helpers prove exact byte identity and resumability without replacing, rewriting, merging, deleting, or granting remote authority over source archives.",
+  "invariants": [
+    "Raw history, summaries, archive-v1, environment-v1, their cursors, ledgers, and failure semantics remain unchanged.",
+    "Object identity is SHA-256 over exact persisted bytes; no normalization, reserialization, semantic deduplication, AI, or vectors participate.",
+    "Every manifest is closed, ordered, path-safe, and records source identity, byte length, and file hash.",
+    "A stream is complete only after ordered reconstruction matches every object and the whole-file hash.",
+    "Deleting or disabling the shadow store leaves every authoritative source byte readable and unchanged."
+  ],
+  "allowed_changes": [
+    "Add a removable shadow object store and immutable ordered source manifests.",
+    "Add independent per-stream transfer checkpoints and bounded segment staging.",
+    "Add duplicate, replay, overlap, missing, corrupt, and conflict diagnostics.",
+    "Expose preview-first local CLI adapters for build, verify, transfer, reconstruct, and disable.",
+    "Add fixed MW28 exact-byte, interruption, replay, isolation, and rollback cases."
+  ],
+  "prohibited_changes": [
+    "Rewrite, normalize, compact, merge, delete, or garbage-collect source archives or shadow objects.",
+    "Resolve conflicts automatically or infer semantic equivalence.",
+    "Grant one device write authority over another device's raw archive.",
+    "Replace or modify archive-v1 or environment-v1 payload codecs, cursors, ledgers, acknowledgements, or failure semantics."
+  ],
+  "before_after_checks": [
+    "Hash immutable source fixtures before shadow build, transfer failures, reconstruction, disable, and shadow removal.",
+    "Compare every manifest entry byte length and SHA-256 with its source and reconstructed bytes.",
+    "Interrupt each stream at fixed checkpoints, restart, replay ranges, and prove exact final equality.",
+    "Inject overlap, missing, corrupt, wrong-source, wrong-target, and conflicting segment cases.",
+    "Disable and remove the shadow path, then prove original archive readability and unchanged hashes."
+  ],
+  "required_evidence": [
+    "source-audit",
+    "targeted-tests",
+    "integration-rehearsal",
+    "invariant-check",
+    "exact-byte-manifest",
+    "interruption-recovery",
+    "duplicate-replay",
+    "corruption-failure",
+    "domain-isolation",
+    "rollback-proof",
+    "rehearsal-matrix",
+    "windows-candidate",
+    "macos-candidate",
+    "promotion-review"
+  ],
+  "lifecycle_state": "staged"
+}

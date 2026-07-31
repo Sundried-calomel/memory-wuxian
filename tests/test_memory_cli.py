@@ -1479,6 +1479,57 @@ summaries:
         self.assertFalse(diagnostic["contains_raw_dialogue"])
         self.assertTrue(Path(diagnostic["path"]).is_file())
 
+    def test_content_shadow_cli_is_preview_first_and_resumable(self):
+        source = self.base / "content-source"
+        source.mkdir()
+        (source / "a.txt").write_bytes(b"alpha\r\n")
+        (source / "b.bin").write_bytes(b"\x00\xff")
+        preview = self.run_cli(
+            "content-shadow-build",
+            "--source-root", str(source),
+            "--source-id", "fixture:cli",
+            "--file", "a.txt",
+            "--file", "b.bin",
+        )
+        self.assertEqual(preview["status"], "preview")
+        self.assertFalse((self.root / "shadow-content-v1").exists())
+        built = self.run_cli(
+            "content-shadow-build",
+            "--source-root", str(source),
+            "--source-id", "fixture:cli",
+            "--file", "a.txt",
+            "--file", "b.bin",
+            "--apply",
+        )
+        self.assertTrue(built["applied"])
+        manifest_id = built["manifest_id"]
+        verified = self.run_cli(
+            "content-shadow-verify", "--manifest-id", manifest_id,
+            "--source-root", str(source),
+        )
+        self.assertEqual(verified["status"], "verified")
+        restored = self.base / "content-restored"
+        reconstruction = self.run_cli(
+            "content-shadow-reconstruct", "--manifest-id", manifest_id,
+            "--destination", str(restored),
+        )
+        self.assertEqual(reconstruction["status"], "preview")
+        self.assertFalse(restored.exists())
+        target = self.base / "target-archive"
+        transfer_preview = self.run_cli(
+            "content-transfer", "--manifest-id", manifest_id,
+            "--target-archive-root", str(target), "--domain", "archive",
+            "--target-id", "node-b", "--start", "0", "--count", "2",
+        )
+        self.assertEqual(transfer_preview["status"], "preview")
+        self.assertFalse(target.exists())
+        transfer = self.run_cli(
+            "content-transfer", "--manifest-id", manifest_id,
+            "--target-archive-root", str(target), "--domain", "archive",
+            "--target-id", "node-b", "--start", "0", "--count", "2", "--apply",
+        )
+        self.assertEqual(transfer["status"], "completed")
+
     def test_summary_hash_drift_is_not_auto_repaired(self):
         self.append_round(1)
         self.append_round(2)

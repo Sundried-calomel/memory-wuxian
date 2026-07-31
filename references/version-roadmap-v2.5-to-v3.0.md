@@ -76,8 +76,8 @@ For every versioned work item:
 | --- | --- | --- | --- |
 | v2.5.0 | Published | none | Configuration and capability foundation; Python 3.14 main-runtime contract. |
 | v2.6.0 | Released | v2.5.0 | Index safety and retrieval evaluation. |
-| v2.7.0 | Candidate | v2.6.0 | Background autonomy and diagnostics. |
-| v2.8.0 | Planned | v2.7.0 | Lossless storage and sync protocol hardening. |
+| v2.7.0 | Released | v2.6.0 | Background autonomy and diagnostics. |
+| v2.8.0 | Candidate | v2.7.0 | Lossless storage and sync protocol hardening. |
 | v2.9.0 | Planned | v2.8.0 | Unified read-only interfaces and update governance. |
 | v2.10.0 | Planned | v2.9.0 | Personal Environment inventory, comparison, and review-first convergence. |
 | v3.0.0 | Conditional | v2.10.0 plus an accepted incompatibility decision | Cross-platform integration only when a real breaking public contract requires a major version. |
