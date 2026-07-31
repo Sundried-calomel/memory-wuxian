@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.9.0",
+  "candidate_id": "v2.9.0-contract-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "product-shell-control-plane",
+  "target": "Equivalent bounded read-only CLI, loopback HTTP, and MCP memory access plus explicit update-channel and summary-budget governance.",
+  "primary_semantics": "All public readers share one provenance-aware query service; update selection and summary eligibility are deterministic, reviewable, and unable to install software or invoke AI by themselves.",
+  "invariants": [
+    "Raw history and derived memory artifacts remain unchanged by every read interface and scheduler eligibility check.",
+    "CLI, HTTP, and MCP use the same request validation, result bounds, confidence labels, provenance fields, and raw verification path.",
+    "HTTP binds only to loopback and MCP exposes only allow-listed read methods.",
+    "Downloaded updates remain staged evidence until a separate explicit user approval invokes an existing installer.",
+    "The summary scheduler may enqueue one-shot semantic work only at a completed dialogue-round boundary and never invokes AI itself."
+  ],
+  "allowed_changes": [
+    "Add a shared bounded read-only query service and thin CLI, loopback HTTP, and MCP adapters.",
+    "Add stable, beta, and development update metadata selection with verified delta-to-full fallback.",
+    "Add deterministic summary-budget eligibility and queue dispatch.",
+    "Add provenance, malformed-request, unavailable-source, stale-index, fallback, and boundary tests."
+  ],
+  "prohibited_changes": [
+    "Expose write, delete, pairing, installation, remote-control, arbitrary filesystem, or arbitrary command methods through CLI, HTTP, or MCP.",
+    "Install or execute a downloaded update without a separate explicit approval action.",
+    "Represent an index-only or summary-only match as an exact quotation.",
+    "Invoke AI during query validation, update selection, or mechanical summary eligibility checks."
+  ],
+  "before_after_checks": [
+    "Hash raw fixtures before and after every CLI, HTTP, MCP, and scheduler case.",
+    "Compare normalized success and error payloads across all three read adapters.",
+    "Inject malformed, over-broad, stale-index, and missing-raw cases and verify fail-closed confidence.",
+    "Exercise stable, beta, development, signature/hash failure, delta failure, full fallback, and rollback metadata.",
+    "Exercise every summary threshold immediately before, at, and after a completed-round boundary without an AI call."
+  ],
+  "required_evidence": [
+    "source-audit",
+    "targeted-tests",
+    "integration-rehearsal",
+    "invariant-check",
+    "interface-parity",
+    "provenance-verification",
+    "update-fallback",
+    "scheduler-boundaries",
+    "rehearsal-matrix",
+    "windows-candidate",
+    "macos-candidate",
+    "promotion-review"
+  ],
+  "lifecycle_state": "draft"
+}
