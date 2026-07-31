@@ -146,6 +146,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     directory, and invoke `install_macos_transaction.py`. Do not open the
     platform installer or request administrator credentials unless this is a
     first install, recovery, or declared privileged-component migration.
+63. Before assigning or implementing v2.6 or later, read
+    `references/version-roadmap-v2.5-to-v3.0.md`. Preserve its version order,
+    predecessor gates, non-goals, evidence matrix, and rollback contract.
+    Personal Environment convergence is v2.10 after v2.9; v3.0 is conditional,
+    and an untagged future-version branch is not a release.
 
 ## Operating workflow
 
@@ -246,6 +251,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     multi-user, third-party-write, partial-sharing, hosted-service,
     non-shareable-data, or cross-identity requirement activates the review.
     Do not add runtime scope fields or controls before that decision.
+44. For v2.6-or-later work, report the target version, predecessor evidence,
+    canonical owner, changed contracts, preserved invariants, test gates, and
+    rollback path from `references/version-roadmap-v2.5-to-v3.0.md` before
+    implementation or handoff.
 
 ## Commands
 
