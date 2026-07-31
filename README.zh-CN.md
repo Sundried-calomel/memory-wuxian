@@ -73,6 +73,8 @@ Memory無限 是一个基于文件的 Codex Skill，用于在活动上下文窗�
 
 从 GitHub 目录安装后重启 Codex：
 
+Skill ZIP 校验只在 `/var`、`/tmp` 或 `/etc` 解析到其准确的 `/private` 目标时接受固定 macOS system path aliases；其他包路径链接和 junction 仍会被拒绝。
+
 ```text
 $skill-installer install https://github.com/Sundried-calomel/memory-wuxian
 ```

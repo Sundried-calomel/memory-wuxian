@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed macOS Skill ZIP verification so Apple's fixed `/var`, `/tmp`, and
+  `/etc` aliases are accepted only when they resolve to their exact `/private`
+  targets; arbitrary package-path links remain rejected.
+
 ## 2.10.0 - 2026-08-01
 
 - Added deterministic, path-free personal Environment profiles for explicit

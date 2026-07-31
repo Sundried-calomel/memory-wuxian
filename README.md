@@ -85,6 +85,10 @@ history in place. Public builds are unsigned unless the release workflow is supp
 with platform code-signing credentials, so the operating system may request an explicit
 security confirmation.
 
+Skill ZIP verification accepts fixed macOS system path aliases only when
+`/var`, `/tmp`, or `/etc` resolves to its exact `/private` target. Arbitrary
+package-path links and junctions remain rejected.
+
 ### Codex Skill installer
 
 Install the Skill from its GitHub directory, then restart Codex so it can discover the new Skill:
