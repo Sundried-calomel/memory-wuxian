@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.6.0",
+  "candidate_id": "v2.6.0-unfrozen",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane",
+  "target": "Immutable shadow index generations, exact source manifests, atomic active-generation switching, pointer-only rollback, and a fixed retrieval-v2.6 benchmark.",
+  "primary_semantics": "Derived indexes become generation-scoped and auditable while raw history, existing CLI behavior, semantic indexes, and source authority remain unchanged.",
+  "invariants": [
+    "Raw conversation and summary sources remain append-only and byte-identical.",
+    "Every indexed source is verified by exact SHA-256 before a generation can become active.",
+    "The previous valid generation remains available for pointer-only rollback.",
+    "An unexplained retrieval delta prevents activation and release.",
+    "The exact main SHA must pass Windows and macOS candidate gates before publication."
+  ],
+  "allowed_changes": [
+    "Register and add Memory Plane indexing and Platform Foundation transaction modules.",
+    "Add immutable generation manifests, a shadow build path, and an atomic active pointer.",
+    "Add fixed cases MW26-GEN-001, MW26-GEN-002, MW26-RET-001, MW26-RET-002, MW26-DELTA-001, MW26-SWITCH-001, and MW26-ROLLBACK-001.",
+    "Add thin CLI adapters, synchronized documentation, release evidence, and version metadata for v2.6.0."
+  ],
+  "prohibited_changes": [
+    "Modify, normalize, compact, merge, delete, or garbage-collect raw history.",
+    "Change semantic model providers or semantic index formats.",
+    "Add v2.7 background queue behavior, transport changes, Environment activation, or automatic installation.",
+    "Combine behavior-changing storage migration with the preliminary ownership-only extraction."
+  ],
+  "before_after_checks": [
+    "Compare pre-extraction and post-extraction index bytes and retrieval results on the same fixture.",
+    "Compare active and shadow benchmark results and classify every delta.",
+    "Hash authoritative raw and summary sources before and after build, switch, and rollback.",
+    "Interrupt pointer replacement and prove the prior complete pointer remains readable.",
+    "Restore the prior generation without reprocessing source records."
+  ],
+  "required_evidence": [
+    "source-audit",
+    "targeted-tests",
+    "integration-rehearsal",
+    "invariant-check",
+    "rehearsal-matrix",
+    "windows-candidate",
+    "macos-candidate",
+    "rollback-proof",
+    "promotion-review"
+  ],
+  "lifecycle_state": "contracted"
+}

@@ -39,6 +39,7 @@
       "architecture_owner": "Memory Plane",
       "patterns": [
         "scripts/conversation_titles.py",
+        "scripts/memory_indexing.py",
         "scripts/memory_guarded_features.py",
         "scripts/token_usage.py",
         "native-collector/src/main.rs"
@@ -68,6 +69,7 @@
       "architecture_owner": "Platform Foundation",
       "patterns": [
         "scripts/console_encoding.py",
+        "scripts/platform_transaction.py",
         "scripts/platform_*.py",
         "schemas/**"
       ]
