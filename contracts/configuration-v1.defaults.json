@@ -15,6 +15,7 @@
     "summaries": {
       "level_1_trigger_rounds": 5,
       "level_1_trigger_characters": 20000,
+      "level_1_trigger_tokens": 6667,
       "automatic_semantic_jobs": true,
       "higher_level_trigger_count": 10,
       "maximum_summary_depth": 8,

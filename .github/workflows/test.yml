@@ -31,9 +31,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p outputs/baseline
+          source_hash="$(python scripts/run_release_rehearsal.py --print-source-content-sha256)"
+          printf 'SOURCE_CONTENT_SHA256=%s\n' "$source_hash" > outputs/baseline/unittest.log
           set -o pipefail
           python -m unittest discover -s tests -v 2>&1 \
-            | tee outputs/baseline/unittest.log
+            | tee -a outputs/baseline/unittest.log
       - name: Build rehearsal evidence without rerunning unittest modules
         run: >-
           python scripts/run_release_rehearsal.py
@@ -66,8 +68,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force outputs/baseline | Out-Null
+          $sourceHash = (& python scripts/run_release_rehearsal.py --print-source-content-sha256).Trim()
+          Set-Content -LiteralPath outputs/baseline/unittest.log -Value "SOURCE_CONTENT_SHA256=$sourceHash" -Encoding utf8
           & python -m unittest discover -s tests -v *>&1 |
-            Tee-Object outputs/baseline/unittest.log
+            Tee-Object -Append outputs/baseline/unittest.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build rehearsal evidence without rerunning unittest modules
         run: >-
@@ -112,9 +116,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p outputs/baseline
+          source_hash="$(python scripts/run_release_rehearsal.py --print-source-content-sha256)"
+          printf 'SOURCE_CONTENT_SHA256=%s\n' "$source_hash" > outputs/baseline/unittest.log
           set -o pipefail
           python -m unittest discover -s tests -v 2>&1 \
-            | tee outputs/baseline/unittest.log
+            | tee -a outputs/baseline/unittest.log
       - name: Run complete macOS rehearsal on main
         if: github.event_name == 'push'
         run: >-

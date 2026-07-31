@@ -359,7 +359,7 @@ the source bytes exactly.
 
 ## D-042: External memory access is read-only by default
 
-Status: Accepted for the future v2.9 implementation.
+Status: Accepted and implemented in v2.9.
 
 Expose stable application services through thin CLI, loopback HTTP, and MCP
 stdio adapters. The default service surface is read-only, bounded, path-safe,
@@ -444,3 +444,14 @@ idempotent only when their hashes match; gaps, crossing overlaps, corruption,
 and checkpoint tampering fail closed with explicit source and target context.
 Completion requires exact object verification and never grants authority over
 the target device's raw archive or changes the existing transport codecs.
+
+## D-049: Update and summary eligibility are mechanical approval gates
+
+Status: Accepted and implemented in v2.9.
+
+Select stable, beta, and development updates from closed metadata, verify every
+downloaded artifact, and stage it as inert evidence. A failed verified delta may
+fall back to a verified full package, but neither path executes or installs
+without a separate explicit user approval. Evaluate summary budgets from closed
+numeric metrics only at a completed dialogue boundary; the scheduler may enqueue
+one idempotent semantic job but cannot invoke AI itself.

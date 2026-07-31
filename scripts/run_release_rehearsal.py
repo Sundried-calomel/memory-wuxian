@@ -23,7 +23,31 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def validate_unittest_evidence(path: Path) -> str:
+def source_identity() -> tuple[str, bool, str]:
+    revision = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, encoding="utf-8"
+    ).strip()
+    status = subprocess.check_output(
+        ["git", "status", "--porcelain=v1"], cwd=ROOT
+    )
+    digest_state = hashlib.sha256(revision.encode("ascii") + b"\0")
+    digest_state.update(subprocess.check_output(["git", "diff", "--binary", "HEAD"], cwd=ROOT))
+    untracked = subprocess.check_output(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=ROOT
+    ).split(b"\0")
+    for encoded_path in sorted(path for path in untracked if path):
+        relative = encoded_path.decode("utf-8", errors="surrogateescape")
+        path = ROOT / relative
+        digest_state.update(encoded_path + b"\0")
+        if path.is_symlink():
+            digest_state.update(str(path.readlink()).encode("utf-8", errors="surrogateescape"))
+        elif path.is_file():
+            digest_state.update(path.read_bytes())
+        digest_state.update(b"\0")
+    return revision, not bool(status), digest_state.hexdigest()
+
+
+def validate_unittest_evidence(path: Path, expected_source_content_sha256: str) -> str:
     if not path.is_file():
         raise FileNotFoundError(f"Reusable unittest evidence is missing: {path}")
     raw = path.read_bytes()
@@ -37,6 +61,11 @@ def validate_unittest_evidence(path: Path) -> str:
         raise ValueError("Reusable unittest evidence has no final OK result")
     if re.search(r"(?m)^FAILED(?: \(|$)", text):
         raise ValueError("Reusable unittest evidence contains a failed result")
+    marker = re.search(r"(?m)^SOURCE_CONTENT_SHA256=([0-9a-f]{64})\r?$", text)
+    if marker is None or marker.group(1) != expected_source_content_sha256:
+        raise ValueError("Reusable unittest evidence does not match the candidate source content")
+    if not re.search(r"(?m)^test_mw29_signature_001_metadata_authenticity_fails_closed .* \.\.\. ok\r?$", text):
+        raise ValueError("Reusable unittest evidence does not prove the mandatory update-signature case")
     return digest(path)
 
 
@@ -58,7 +87,11 @@ def main() -> int:
             "rerunning focused unittest scenarios."
         ),
     )
+    parser.add_argument("--print-source-content-sha256", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.print_source_content_sha256:
+        print(source_identity()[2])
+        return 0
     if (args.scenario_shard_index is None) != (args.scenario_shard_count is None):
         parser.error("scenario shard index and count must be supplied together")
     if args.scenario_shard_count is not None and (
@@ -68,6 +101,7 @@ def main() -> int:
         parser.error("require count >= 1 and 0 <= index < count")
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=True)
+    initial_revision, initial_source_clean, initial_source_content_sha256 = source_identity()
     python = sys.executable
     version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     scenarios = [
@@ -409,6 +443,18 @@ def main() -> int:
                 "tests.test_memory_cli.MemoryCliTest.test_content_shadow_cli_is_preview_first_and_resumable",
             ],
         ),
+        (
+            "v29-readonly-interface-parity-contract",
+            [python, "-m", "unittest", "-v", "tests.test_readonly_interfaces"],
+        ),
+        (
+            "v29-update-governance-contract",
+            [python, "-m", "unittest", "-v", "tests.test_update_governance", "tests.test_auto_update"],
+        ),
+        (
+            "v29-summary-budget-contract",
+            [python, "-m", "unittest", "-v", "tests.test_summary_budget"],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     baseline_ids = {
@@ -442,7 +488,7 @@ def main() -> int:
             and scenario_id in unittest_scenario_ids
         ):
             reused_evidence = Path(args.reuse_unittest_evidence).resolve()
-            source_sha256 = validate_unittest_evidence(reused_evidence)
+            source_sha256 = validate_unittest_evidence(reused_evidence, initial_source_content_sha256)
             log = output / f"{scenario_id}.log"
             log.write_text(
                 "Covered by the successful full unittest suite.\n"
@@ -487,9 +533,15 @@ def main() -> int:
         if not evidence.is_file() or digest(evidence) != result["evidence_sha256"]:
             result["status"] = "failed"
             result["evidence_error"] = "missing or mismatched rehearsal evidence"
+    revision, source_clean, source_content_sha256 = source_identity()
+    if source_content_sha256 != initial_source_content_sha256:
+        raise ValueError("candidate source changed during release rehearsal")
     report = {
         "format_version": 1,
         "release_version": version,
+        "source_revision": initial_revision,
+        "source_clean": initial_source_clean,
+        "source_content_sha256": source_content_sha256,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "status": "passed" if all(item["status"] == "passed" for item in results) else "failed",
         "required_scenarios": len(scenarios),

@@ -179,6 +179,13 @@ Use Memory無限 to preserve conversation history outside the active context win
     Never normalize, semantically deduplicate, merge, overwrite, delete, or
     garbage-collect source history, and never replace the independent
     `archive-v1` or `environment-v1` protocol contracts.
+71. Route external memory reads through the shared bounded read-only service.
+    CLI, loopback HTTP, and MCP must retain equivalent validation, confidence,
+    provenance, and raw-verification behavior and expose no write, deletion,
+    pairing, installation, arbitrary path, command, or remote-control method.
+    Update metadata must pass the pinned signer contract; downloaded updates
+    remain inert until a separate artifact-bound explicit approval, and
+    summary-budget checks may enqueue only completed-round work without AI.
 
 ## Authority order
 

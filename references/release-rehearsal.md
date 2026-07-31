@@ -132,6 +132,14 @@ Required scenarios:
     checkpoint tamper rejection, and archive/environment failure isolation.
 39. v2.8 CLI tests prove build, reconstruction, disable, and transfer remain
     preview-only until explicit apply and never overwrite conflicting targets.
+40. v2.9 interface-parity tests prove CLI, loopback HTTP, and MCP share bounded
+    request validation, result payloads, confidence, provenance, raw-source
+    verification, stale-index fallback, and unchanged raw bytes.
+41. v2.9 update tests prove explicit channel selection, artifact hashing,
+    failed-delta fallback to a verified full package, corruption rollback, and
+    no execution or installation before separate user approval.
+42. v2.9 summary-budget tests prove before/at/after thresholds, completed-round
+    gating, idempotent queue creation, and zero AI calls during eligibility.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

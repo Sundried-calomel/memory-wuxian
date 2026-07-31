@@ -27,11 +27,27 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skill-root", default=str(Path(__file__).resolve().parent.parent))
     parser.add_argument("--python-executable", default=sys.executable)
+    parser.add_argument("--channel", choices=("stable", "beta", "development"), default="stable")
+    parser.add_argument("--update-metadata-json")
+    parser.add_argument("--base-package")
     parser.add_argument("--uninstall", action="store_true")
     args = parser.parse_args()
     skill_root = Path(args.skill_root).expanduser().resolve()
     python = executable_entry_path(args.python_executable)
     updater = skill_root / "scripts/auto_update.py"
+    if args.channel != "stable" and not args.update_metadata_json:
+        raise SystemExit("beta and development channels require --update-metadata-json")
+    updater_arguments = [
+        str(updater),
+        "--skill-root",
+        str(skill_root),
+        "--channel",
+        args.channel,
+    ]
+    if args.update_metadata_json:
+        updater_arguments.extend(["--update-metadata-json", str(Path(args.update_metadata_json).expanduser().resolve())])
+    if args.base_package:
+        updater_arguments.extend(["--base-package", str(Path(args.base_package).expanduser().resolve())])
     if os.name == "nt":
         if args.uninstall:
             subprocess.run(["schtasks.exe", "/Delete", "/TN", WINDOWS_TASK, "/F"], check=False, **no_window_kwargs())
@@ -41,7 +57,7 @@ def main() -> int:
         if not pythonw.is_file():
             pythonw = python
         command = subprocess.list2cmdline(
-            [str(pythonw), str(updater), "--skill-root", str(skill_root)]
+            [str(pythonw), *updater_arguments]
         )
         task = subprocess.run(
             ["schtasks.exe", "/Create", "/TN", WINDOWS_TASK, "/SC", "DAILY", "/ST", "03:00",
@@ -69,9 +85,7 @@ def main() -> int:
         "Label": MACOS_LABEL,
         "ProgramArguments": [
             str(python),
-            str(updater),
-            "--skill-root",
-            str(skill_root),
+            *updater_arguments,
             "--python-executable",
             str(python),
         ],

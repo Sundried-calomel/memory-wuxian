@@ -279,6 +279,8 @@ struct SummaryConfig {
     level_1_trigger_rounds: u64,
     #[serde(default = "default_l1_character_trigger")]
     level_1_trigger_characters: u64,
+    #[serde(default = "default_l1_token_trigger")]
+    level_1_trigger_tokens: u64,
     #[serde(default)]
     automatic_semantic_jobs: bool,
     #[serde(default = "default_higher_level_trigger")]
@@ -292,6 +294,7 @@ impl Default for SummaryConfig {
         Self {
             level_1_trigger_rounds: default_l1_trigger(),
             level_1_trigger_characters: default_l1_character_trigger(),
+            level_1_trigger_tokens: default_l1_token_trigger(),
             automatic_semantic_jobs: false,
             higher_level_trigger_count: default_higher_level_trigger(),
             maximum_summary_depth: default_maximum_summary_depth(),
@@ -335,6 +338,9 @@ fn default_l1_trigger() -> u64 {
 }
 fn default_l1_character_trigger() -> u64 {
     20_000
+}
+fn default_l1_token_trigger() -> u64 {
+    6_667
 }
 
 fn default_higher_level_trigger() -> usize {
@@ -1674,6 +1680,8 @@ impl Store {
                 if bucket.len() >= self.config.summaries.level_1_trigger_rounds as usize
                     || bucket_characters
                         >= self.config.summaries.level_1_trigger_characters as usize
+                    || bucket_characters.div_ceil(3)
+                        >= self.config.summaries.level_1_trigger_tokens as usize
                 {
                     let index = self.deterministic_level_one_record(&conversation_id, &bucket)?;
                     level_one_by_conversation
@@ -1802,6 +1810,7 @@ impl Store {
             "levels": counts,
             "level_1_round_trigger": self.config.summaries.level_1_trigger_rounds,
             "level_1_character_trigger": self.config.summaries.level_1_trigger_characters,
+            "level_1_token_trigger": self.config.summaries.level_1_trigger_tokens,
         }))
     }
 
@@ -1921,6 +1930,8 @@ impl Store {
                         >= self.config.summaries.level_1_trigger_rounds as usize
                         || selected_characters
                             >= self.config.summaries.level_1_trigger_characters as usize
+                        || selected_characters.div_ceil(3)
+                            >= self.config.summaries.level_1_trigger_tokens as usize
                     {
                         break;
                     }
@@ -1930,6 +1941,8 @@ impl Store {
                         < self.config.summaries.level_1_trigger_rounds as usize
                         && selected_characters
                             < self.config.summaries.level_1_trigger_characters as usize)
+                        && selected_characters.div_ceil(3)
+                            < self.config.summaries.level_1_trigger_tokens as usize
                 {
                     continue;
                 }

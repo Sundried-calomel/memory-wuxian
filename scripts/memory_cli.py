@@ -36,13 +36,17 @@ from memory_environment_promotions import PromotionStore
 from memory_environment_rules import EnvironmentRuleInstaller
 from memory_environment_skills import EnvironmentSkillInstaller
 from memory_federation import FederationManager
-from memory_guarded_features import GuardedFeatures, atomic_json
+from memory_guarded_features import GuardedFeatures, atomic_json, raw_record_sha256 as guarded_raw_record_sha256
 import memory_indexing
 from memory_content_store import ContentStore
 from memory_diagnostics import create_diagnostic_bundle
 from memory_jobs import KINDS as MAINTENANCE_JOB_KINDS, MaintenanceQueue, run_model_free_tick
 from memory_resumable_sync import ResumableTransfer
+from memory_readonly_http import create_server as create_readonly_server
+from memory_readonly_mcp import serve_lines as serve_readonly_mcp
+from memory_readonly_service import ReadOnlyMemoryService, ReadRequestError, error_payload
 from memory_service_state import service_state
+from memory_summary_budget import evaluate_summary_budget
 from semantic_runtime_contract import (
     ARTIFACT_ID as SEMANTIC_RUNTIME_ARTIFACT_ID,
     environment_manifest as semantic_runtime_environment_manifest,
@@ -297,12 +301,7 @@ def file_sha256(path: Path) -> str:
 
 
 def raw_record_sha256(record: Dict[str, Any]) -> str:
-    payload = {
-        key: value
-        for key, value in record.items()
-        if key not in {"_path", "content_sha256"}
-    }
-    return canonical_sha256(payload)
+    return guarded_raw_record_sha256(record)
 
 
 def raw_source_sha256(records: Iterable[Dict[str, Any]]) -> str:
@@ -443,6 +442,12 @@ class MemoryStore:
     def level_1_character_trigger(self) -> int:
         return int(
             nested_get(self.config, ["summaries", "level_1_trigger_characters"], 20_000)
+        )
+
+    @property
+    def level_1_token_trigger(self) -> int:
+        return int(
+            nested_get(self.config, ["summaries", "level_1_trigger_tokens"], 6_667)
         )
 
     @property
@@ -1823,6 +1828,7 @@ class MemoryStore:
                 if (
                     len(bucket) >= self.level_1_trigger
                     or bucket_characters >= self.level_1_character_trigger
+                    or (bucket_characters + 2) // 3 >= self.level_1_token_trigger
                 ):
                     record = self.deterministic_level_one_record(conversation_id, bucket)
                     levels[1].append(record)
@@ -1947,15 +1953,24 @@ class MemoryStore:
                     selected_characters += sum(
                         len(str(record.get("text", ""))) for record in round_records
                     )
-                    if (
-                        len(selected_rounds) >= self.level_1_trigger
-                        or selected_characters >= self.level_1_character_trigger
-                    ):
+                    decision = evaluate_summary_budget(
+                        {
+                            "conversation_id": conversation_id,
+                            "completed_rounds": len(selected_rounds),
+                            "summarized_rounds": 0,
+                            "unsummarized_characters": selected_characters,
+                            "estimated_unsummarized_tokens": (selected_characters + 2) // 3,
+                            "round_complete": True,
+                        },
+                        {
+                            "minimum_completed_rounds": self.level_1_trigger,
+                            "character_threshold": self.level_1_character_trigger,
+                            "token_threshold": self.level_1_token_trigger,
+                        },
+                    )
+                    if decision["due"]:
                         break
-                if not selected_rounds or (
-                    len(selected_rounds) < self.level_1_trigger
-                    and selected_characters < self.level_1_character_trigger
-                ):
+                if not selected_rounds or not decision["due"]:
                     continue
                 start_round = int(selected_rounds[0][0]["round_number"])
                 end_round = int(selected_rounds[-1][0]["round_number"])
@@ -4102,6 +4117,29 @@ def build_parser() -> argparse.ArgumentParser:
         default="historical",
         help="Use current-policy to include explicit policy validity and later matching evidence",
     )
+    readonly_parser = subparsers.add_parser(
+        "readonly-query",
+        help="Run the bounded provenance-aware query shared by CLI, HTTP, and MCP",
+    )
+    readonly_parser.add_argument("--query")
+    readonly_parser.add_argument("--mode", default="hybrid")
+    readonly_parser.add_argument("--limit", default="20")
+    readonly_http = subparsers.add_parser(
+        "readonly-http",
+        help="Serve the bounded read-only query API on loopback only",
+    )
+    readonly_http.add_argument("--host", default="127.0.0.1")
+    readonly_http.add_argument("--port", type=int, default=8766)
+    subparsers.add_parser(
+        "readonly-mcp",
+        help="Serve the allow-listed read-only memory.query JSON-RPC method on stdio",
+    )
+    summary_budget = subparsers.add_parser(
+        "summary-budget-status",
+        help="Evaluate deterministic summary eligibility without invoking AI",
+    )
+    summary_budget.add_argument("--metrics-json", required=True)
+    summary_budget.add_argument("--policy-json", required=True)
     tail_parser = subparsers.add_parser(
         "conversation-tail",
         help="Resolve an archived conversation by title and return its latest visible messages",
@@ -4838,6 +4876,35 @@ def dispatch_command(
         output, _ = store.retrieve(args.query, args.mode)
         print(output, end="")
         return 0
+    elif args.command == "readonly-query":
+        service = ReadOnlyMemoryService(store)
+        result = service.query(service.from_cli_parameters(args.query, args.mode, args.limit))
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+        return 0
+    elif args.command == "readonly-http":
+        server = create_readonly_server(
+            args.host,
+            args.port,
+            ReadOnlyMemoryService(store),
+        )
+        print(json.dumps({
+            "status": "serving",
+            "host": args.host,
+            "port": server.server_port,
+            "read_only": True,
+        }, ensure_ascii=False), flush=True)
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
+        return 0
+    elif args.command == "readonly-mcp":
+        serve_readonly_mcp(ReadOnlyMemoryService(store), sys.stdin, sys.stdout)
+        return 0
+    elif args.command == "summary-budget-status":
+        metrics = json.loads(Path(args.metrics_json).read_text(encoding="utf-8"))
+        policy = json.loads(Path(args.policy_json).read_text(encoding="utf-8"))
+        result = evaluate_summary_budget(metrics, policy)
     elif args.command == "conversation-tail":
         output, _ = store.conversation_tail(
             args.title,
@@ -5528,7 +5595,13 @@ def dispatch_command(
 def main(argv: Optional[Sequence[str]] = None) -> int:
     configure_unicode_stdio()
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args, unknown = parser.parse_known_args(argv)
+    if unknown:
+        if args.command == "readonly-query":
+            exc = ReadRequestError("malformed-request", "unknown read-only CLI parameter")
+            print(json.dumps(error_payload(exc), ensure_ascii=False, sort_keys=True), file=sys.stderr)
+            return 1
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
     try:
         stateless_result = dispatch_stateless_read_only_command(args)
         if stateless_result is not None:
@@ -5539,6 +5612,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return dispatch_command(args, parser, store)
         if args.command in {
             "retrieve",
+            "readonly-query",
+            "readonly-http",
+            "readonly-mcp",
+            "summary-budget-status",
             "conversation-tail",
             "context-refresh-status",
             "context-capsule",
@@ -5602,6 +5679,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 return dispatch_command(args, parser, store)
         with exclusive_lock(store.root / ".locks" / "archive.lock"):
             return dispatch_command(args, parser, store)
+    except ReadRequestError as exc:
+        print(json.dumps(error_payload(exc), ensure_ascii=False, sort_keys=True), file=sys.stderr)
+        return 1
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         print(f"memory-wuxian: {exc}", file=sys.stderr)
         return 1

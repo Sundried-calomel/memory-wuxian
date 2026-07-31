@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/update-metadata.schema.json",
+  "title": "Memory Wuxian governed update metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "releases"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "releases": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "channel", "full", "deltas"],
+        "properties": {
+          "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:(?:-beta\\.|b)[0-9]+)?$"},
+          "channel": {"enum": ["stable", "beta", "development"]},
+          "full": {"$ref": "#/$defs/artifact"},
+          "deltas": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from_version", "artifact"],
+              "properties": {
+                "from_version": {"type": "string"},
+                "artifact": {"$ref": "#/$defs/artifact"}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "sha256", "filename"],
+      "properties": {
+        "url": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "filename": {"type": "string", "pattern": "^[^/\\\\]+$"}
+      }
+    }
+  }
+}

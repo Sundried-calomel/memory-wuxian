@@ -785,6 +785,32 @@ python scripts/memory_cli.py content-shadow-disable
 python scripts/memory_cli.py content-transfer --manifest-id <manifest-id> --target-archive-root /target --domain archive --target-id <node> --start 0 --count 100
 ```
 
+## v2.9 unified read-only access and governed updates
+
+`readonly-query`, `readonly-http`, and `readonly-mcp` use one bounded service
+and the same `memory.query` contract. Results include confidence, exact raw
+provenance, SHA-256, and verification state. HTTP accepts GET only and binds to
+loopback; MCP advertises one read tool and no write, installation, pairing,
+path, command, or remote-control tool. Hybrid mode falls back to verified
+keyword search when a semantic index is stale or unavailable.
+
+```bash
+python scripts/memory_cli.py readonly-query --query "prior decision" --mode hybrid --limit 20
+python scripts/memory_cli.py readonly-http --host 127.0.0.1 --port 8766
+python scripts/memory_cli.py readonly-mcp
+python scripts/memory_cli.py summary-budget-status --metrics-json metrics.json --policy-json policy.json
+```
+
+Update metadata distinguishes stable, beta, and development channels. A failed
+verified delta falls back to a verified full package. Downloads remain
+`staged-awaiting-user-approval`; only a second command with `--approve-install`,
+`--expected-version`, and `--expected-sha256` may invoke the existing installer.
+Governed beta/development or delta metadata is supplied with `--channel` and
+`--update-metadata-json`. Release metadata is authenticated with a detached
+Ed25519 SSH signature against the pinned `keys/update-allowed-signers` identity
+before channel selection or download. Summary-budget checks are deterministic and model-free,
+and can enqueue one idempotent completed-round job without invoking AI.
+
 The signed and target-encrypted `environment-v1` stream transports the
 contract to paired devices. It pins the model revision, artifact hashes,
 runtime packages, query/passage prefixes, pooling, normalization, similarity,

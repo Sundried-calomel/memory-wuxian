@@ -26,7 +26,7 @@ from memory_configuration import (  # noqa: E402
 
 class MemoryConfigurationTests(unittest.TestCase):
     REPOSITORY_EFFECTIVE_SHA256 = (
-        "99d731c7811d256d7901a300dde7c13da62863611edee8f955d01f752f380570"
+        "de45c5cb2999595c100f81ea179f7a31d4300a96c2c09c406dc19f80d5482f05"
     )
 
     def setUp(self):

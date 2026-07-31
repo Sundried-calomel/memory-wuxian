@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.8.0",
+  "reviewed_version": "2.9.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -69,7 +69,7 @@
     },
     {
       "id": "automatic-release-updates",
-      "required_tokens": ["install_auto_update.py", "auto_update.py", "--check-only"]
+      "required_tokens": ["install_auto_update.py", "auto_update.py", "--check-only", "--approve-install", "--expected-version", "--expected-sha256"]
     },
     {
       "id": "platform-installers",
@@ -150,6 +150,10 @@
     {
       "id": "immutable-index-generations",
       "required_tokens": ["index-generation-build", "index-generation-status", "index-generation-activate", "index-generation-rollback", "SHA-256"]
+    },
+    {
+      "id": "unified-readonly-governance",
+      "required_tokens": ["readonly-query", "readonly-http", "readonly-mcp", "memory.query", "summary-budget-status", "staged-awaiting-user-approval", "--update-metadata-json", "update-allowed-signers"]
     }
   ]
 }

@@ -225,10 +225,60 @@ jobs:
     needs: [metadata, release-gate, macos-installer, windows-installer]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+      - name: Build and sign governed update metadata
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.MEMORY_WUXIAN_UPDATE_SIGNING_KEY }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ needs.metadata.outputs.prerelease }}
+        shell: bash
+        run: |
+          test -n "$UPDATE_SIGNING_KEY"
+          key_file="$(mktemp)"
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          dist = Path("dist")
+          version = os.environ["RELEASE_VERSION"]
+          tag = os.environ["RELEASE_TAG"]
+          channel = "beta" if os.environ["RELEASE_PRERELEASE"] == "true" else "stable"
+          base = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}"
+          assets = {
+              "windows": f"MemoryWuxian-{version}-Windows-x64-Setup.exe",
+              "macos": f"MemoryWuxian-{version}-macOS-universal.pkg",
+          }
+          for platform_name, filename in assets.items():
+              path = dist / filename
+              if not path.is_file():
+                  raise SystemExit(f"missing installer for metadata: {path}")
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              payload = {
+                  "schema_version": 1,
+                  "releases": [{
+                      "version": version,
+                      "channel": channel,
+                      "full": {"url": f"{base}/{filename}", "sha256": digest, "filename": filename},
+                      "deltas": [],
+                  }],
+              }
+              output = dist / f"memory-wuxian-update-{platform_name}-v1.json"
+              output.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+          PY
+          for metadata in dist/memory-wuxian-update-*-v1.json; do
+            ssh-keygen -Y sign -f "$key_file" -n memory-wuxian-update-v1 "$metadata"
+          done
+          ssh-keygen -y -f "$key_file" | grep -F 'AAAAC3NzaC1lZDI1NTE5AAAAIE8w5dUIf1OCrgKeWP+aMgbWvBimOr+b/hqaJNBd3XaL' >/dev/null
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.metadata.outputs.tag }}

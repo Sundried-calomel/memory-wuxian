@@ -145,6 +145,16 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn("sha256", job_block(self.source, "windows-installer"))
         self.assertIn("dist/*", job_block(self.source, "publish"))
 
+    def test_publish_signs_closed_update_metadata_with_repository_secret(self) -> None:
+        publish = job_block(self.source, "publish")
+        self.assertIn("MEMORY_WUXIAN_UPDATE_SIGNING_KEY", publish)
+        self.assertIn('"windows": f"MemoryWuxian-', publish)
+        self.assertIn('"macos": f"MemoryWuxian-', publish)
+        self.assertIn("memory-wuxian-update-{platform_name}-v1.json", publish)
+        self.assertIn("ssh-keygen -Y sign", publish)
+        self.assertIn("memory-wuxian-update-v1", publish)
+        self.assertIn("deltas\": []", publish)
+
     def test_release_rebuilds_native_binaries_before_each_installer(self) -> None:
         mac = job_block(self.source, "macos-installer")
         windows = job_block(self.source, "windows-installer")

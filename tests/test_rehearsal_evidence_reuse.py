@@ -10,6 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "run_release_rehearsal.py"
+sys.path.insert(0, str(ROOT / "scripts"))
+from run_release_rehearsal import source_identity
 
 
 class RehearsalEvidenceReuseTests(unittest.TestCase):
@@ -18,6 +20,8 @@ class RehearsalEvidenceReuseTests(unittest.TestCase):
             root = Path(temporary)
             evidence = root / "unittest.log"
             evidence.write_text(
+                f"SOURCE_CONTENT_SHA256={source_identity()[2]}\n"
+                "test_mw29_signature_001_metadata_authenticity_fails_closed (tests.test_update_governance.UpdateGovernanceTests.test_mw29_signature_001_metadata_authenticity_fails_closed) ... ok\n"
                 "Ran 353 tests in 12.345s\n\nOK (skipped=7)\n",
                 encoding="utf-8",
             )
@@ -111,6 +115,27 @@ class RehearsalEvidenceReuseTests(unittest.TestCase):
                 "Reusable unittest evidence has no final OK result",
                 completed.stderr,
             )
+
+    def test_required_signature_skip_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "unittest.log"
+            evidence.write_text(
+                f"SOURCE_CONTENT_SHA256={source_identity()[2]}\n"
+                "test_mw29_signature_001_metadata_authenticity_fails_closed (tests.test_update_governance.UpdateGovernanceTests.test_mw29_signature_001_metadata_authenticity_fails_closed) ... skipped 'missing'\n"
+                "Ran 1 test in 0.001s\n\nOK (skipped=1)\n",
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT), "--output", str(root / "rehearsal"), "--exclude-baseline", "--reuse-unittest-evidence", str(evidence)],
+                cwd=ROOT,
+                text=True,
+                encoding="utf-8",
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, completed.returncode)
+            self.assertIn("does not prove the mandatory update-signature case", completed.stderr)
 
 
 if __name__ == "__main__":

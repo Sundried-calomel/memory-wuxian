@@ -19,6 +19,9 @@
         "scripts/install_*.ps1",
         "scripts/memory_cli.py",
         "scripts/memory_dashboard.py",
+        "scripts/memory_readonly_http.py",
+        "scripts/memory_readonly_mcp.py",
+        "scripts/memory_update_governance.py",
         "native-collector/src/bin/memory-wuxian-dashboard-launcher.rs"
       ]
     },
@@ -31,7 +34,9 @@
         "scripts/memory_configuration.py",
         "scripts/memory_diagnostics.py",
         "scripts/memory_jobs.py",
+        "scripts/memory_readonly_service.py",
         "scripts/memory_service_state.py",
+        "scripts/memory_summary_budget.py",
         "scripts/semantic_backfill.py",
         "scripts/semantic_dispatch.py",
         "scripts/semantic_e5_worker.py",

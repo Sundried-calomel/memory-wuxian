@@ -695,6 +695,33 @@ python scripts/memory_cli.py content-shadow-disable
 python scripts/memory_cli.py content-transfer --manifest-id <manifest-id> --target-archive-root C:\target --domain archive --target-id <node> --start 0 --count 100
 ```
 
+## v2.9 統一読み取り専用アクセスと更新ガバナンス
+
+`readonly-query`、`readonly-http`、`readonly-mcp` は、同じ有界サービスと
+`memory.query` 契約を共有します。結果には信頼度、正確な raw 出典、SHA-256、
+raw 検証状態が含まれます。HTTP は GET のみを受け付け、ループバックだけに
+バインドします。MCP が公開するのは一つの読み取りツールだけで、書き込み、
+インストール、ペアリング、任意パス、コマンド、遠隔操作は公開しません。
+セマンティック索引が古い、または利用不能な場合、hybrid は raw 検証済みの
+キーワード検索へフォールバックします。
+
+```powershell
+python scripts/memory_cli.py readonly-query --query "以前の決定" --mode hybrid --limit 20
+python scripts/memory_cli.py readonly-http --host 127.0.0.1 --port 8766
+python scripts/memory_cli.py readonly-mcp
+python scripts/memory_cli.py summary-budget-status --metrics-json metrics.json --policy-json policy.json
+```
+
+更新メタデータは stable、beta、development を明示します。検証済み delta が
+失敗した場合は検証済み full package に戻ります。ダウンロードは
+`staged-awaiting-user-approval` のままで、既存インストーラーを呼べるのは明示的な
+二つ目のコマンドで `--approve-install`、`--expected-version`、
+`--expected-sha256` を同時に指定した場合だけです。beta/development または delta
+メタデータは `--channel` と `--update-metadata-json` で指定します。チャンネル選択や
+ダウンロードの前に、リリースメタデータの Ed25519 SSH 分離署名を固定された
+`keys/update-allowed-signers` ID で検証します。要約予算判定は決定的かつモデル非依存で、完了ラウンド
+について一つの冪等ジョブを登録できますが、AI は呼び出しません。
+
 署名済み・対象暗号化済み `environment-v1` ストリームが、契約をペア済み
 デバイスへ転送します。契約はモデル revision、成果物ハッシュ、ランタイム
 パッケージ、query/passage プレフィックス、pooling、正規化、類似度、
