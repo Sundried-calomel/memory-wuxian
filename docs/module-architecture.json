@@ -44,6 +44,7 @@
       "patterns": [
         "scripts/conversation_titles.py",
         "scripts/memory_indexing.py",
+        "scripts/memory_content_store.py",
         "scripts/memory_guarded_features.py",
         "scripts/token_usage.py",
         "native-collector/src/main.rs"
@@ -65,6 +66,7 @@
       "patterns": [
         "scripts/memory_cloud_transport.py",
         "scripts/memory_federation.py",
+        "scripts/memory_resumable_sync.py",
         "native-collector/src/bin/memory-wuxian-envelope.rs"
       ]
     },
