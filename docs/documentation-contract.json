@@ -73,7 +73,7 @@
     },
     {
       "id": "platform-installers",
-      "required_tokens": ["MemoryWuxian-<version>-macOS-universal.pkg", "MemoryWuxian-<version>-Windows-x64-Setup.exe"]
+      "required_tokens": ["MemoryWuxian-<version>-macOS-universal.pkg", "MemoryWuxian-<version>-Windows-x64-Setup.exe", "macOS system path aliases"]
     },
     {
       "id": "windows-unicode-console",

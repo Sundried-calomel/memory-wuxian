@@ -79,6 +79,8 @@ Memory無限は、アクティブなコンテキストウィンドウを越え�
 
 GitHubディレクトリからSkillをインストールし、Codexを再起動します。
 
+Skill ZIP 検証では、`/var`、`/tmp`、`/etc` が正確な `/private` 側の対象へ解決される場合に限り、固定 macOS system path aliases を許可します。それ以外のパッケージパスのリンクや junction は拒否します。
+
 ```text
 $skill-installer install https://github.com/Sundried-calomel/memory-wuxian
 ```
