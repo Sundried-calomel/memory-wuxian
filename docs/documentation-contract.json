@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.5.2",
+  "reviewed_version": "2.6.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -138,6 +138,10 @@
     {
       "id": "versioned-execution-roadmap",
       "required_tokens": ["version-roadmap-v2.5-to-v3.0.md", "v2.10", "v3.0"]
+    },
+    {
+      "id": "immutable-index-generations",
+      "required_tokens": ["index-generation-build", "index-generation-status", "index-generation-activate", "index-generation-rollback", "SHA-256"]
     }
   ]
 }

@@ -617,6 +617,10 @@ register-title
 rebuild-state
 rebuild-conversations
 rebuild-indexes
+index-generation-build
+index-generation-status
+index-generation-activate
+index-generation-rollback
 heartbeat
 rebuild-deterministic-indexes
 init-node
@@ -684,6 +688,18 @@ work contract, an exact-candidate macOS and Windows gate, and a proven rollback
 before publication. Personal Environment convergence is reserved for v2.10;
 v3.0 remains conditional on a separately accepted incompatible public-contract
 decision.
+
+### v2.6 index safety
+
+`index-generation-build` creates an immutable shadow generation from an exact,
+SHA-256-verified raw and summary source manifest without changing active index
+files. `index-generation-status` verifies its closed manifest and payload.
+`index-generation-activate --generation-id <id>` is preview-only until
+`--apply` is supplied, and `index-generation-rollback` likewise previews the
+previous pointer before an atomic pointer-only rollback. The fixed v2.6
+retrieval benchmark records its corpus hash, policy lineage and exact
+disambiguation cases, and rejects unexplained result deltas. None of these
+operations modifies raw history or automatically activates a received index.
 
 ## License
 

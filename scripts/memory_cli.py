@@ -4129,6 +4129,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rebuild_indexes_parser = subparsers.add_parser("rebuild-indexes", help="Preview or apply derived-index reconstruction")
     rebuild_indexes_parser.add_argument("--apply", action="store_true", help="Back up and replace derived indexes")
+    subparsers.add_parser(
+        "index-generation-build",
+        help="Build and verify an immutable shadow index generation without activating it",
+    )
+    generation_status_parser = subparsers.add_parser(
+        "index-generation-status",
+        help="Verify the active or selected immutable index generation",
+    )
+    generation_status_parser.add_argument("--generation-id")
+    generation_activate_parser = subparsers.add_parser(
+        "index-generation-activate",
+        help="Preview or atomically activate one verified index generation",
+    )
+    generation_activate_parser.add_argument("--generation-id", required=True)
+    generation_activate_parser.add_argument("--apply", action="store_true")
+    generation_rollback_parser = subparsers.add_parser(
+        "index-generation-rollback",
+        help="Preview or atomically restore the previous index-generation pointer",
+    )
+    generation_rollback_parser.add_argument("--apply", action="store_true")
     heartbeat_parser = subparsers.add_parser("heartbeat", help="Validate archive state and recover due work")
     heartbeat_parser.add_argument("--no-create-jobs", action="store_true")
     heartbeat_parser.add_argument("--check-only", action="store_true", help="Validate without creating jobs or repairing files")
@@ -4783,6 +4803,42 @@ def dispatch_command(
             result["desktop_backup"] = str(backup) if backup else None
     elif args.command == "rebuild-indexes":
         result = store.rebuild_indexes(args.apply)
+    elif args.command == "index-generation-build":
+        result = memory_indexing.build_shadow_generation(store)
+    elif args.command == "index-generation-status":
+        result = memory_indexing.inspect_generation_status(
+            store,
+            args.generation_id,
+            verify_sources=bool(args.generation_id),
+        )
+    elif args.command == "index-generation-activate":
+        candidate = memory_indexing.inspect_generation_status(
+            store,
+            args.generation_id,
+            verify_sources=True,
+        )
+        result = (
+            memory_indexing.activate_generation(store, args.generation_id)
+            if args.apply
+            else {
+                **candidate,
+                "mode": "preview",
+                "would_activate": args.generation_id,
+            }
+        )
+    elif args.command == "index-generation-rollback":
+        current = memory_indexing.inspect_generation_status(store)
+        if not current.get("previous_generation_id"):
+            raise RuntimeError("No previous index generation is available")
+        result = (
+            memory_indexing.rollback_generation(store)
+            if args.apply
+            else {
+                **current,
+                "mode": "preview",
+                "would_activate": current["previous_generation_id"],
+            }
+        )
         if args.apply and result.get("changed"):
             backup = store.create_backup_snapshot("indexes-rebuilt")
             result["desktop_backup"] = str(backup) if backup else None

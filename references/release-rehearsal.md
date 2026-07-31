@@ -103,6 +103,17 @@ Required scenarios:
 28. On macOS, bundled-dashboard signature tests run deep strict verification
     against the exact `.app` candidate so version metadata changes cannot reach
     the update transaction with a stale signature.
+29. v2.6 index-generation tests prove deterministic identity, exact verified
+    source manifests, closed schema validation, immutable payloads, and source
+    hash rejection without changing raw history.
+30. v2.6 switch and rollback tests inject an interrupted atomic replacement,
+    preserve the prior pointer, retain both complete generations, and restore
+    the previous pointer without source reprocessing.
+31. v2.6 retrieval tests use the fixed corpus to prove policy-lineage and exact
+    disambiguation cases, bind the corpus SHA-256, and reject unexplained
+    active-versus-shadow deltas.
+32. v2.6 CLI tests prove shadow build and status are distinct from activation,
+    while activation and rollback remain preview-only until explicit apply.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

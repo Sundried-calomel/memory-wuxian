@@ -12,6 +12,7 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 import memory_indexing
 from memory_cli import MemoryStore
+from platform_transaction import read_index_generation, validate_index_generation
 
 
 class IndexOwnershipExtractionTest(unittest.TestCase):
@@ -155,6 +156,159 @@ class IndexOwnershipExtractionTest(unittest.TestCase):
         with patch("memory_cli.memory_indexing.rebuild_indexes", return_value=expected) as call:
             self.assertIs(store.rebuild_indexes(False), expected)
         call.assert_called_once_with(store, False)
+
+    def test_mw26_gen_001_deterministic_immutable_shadow_generation(self):
+        store = self._store(self.fixture_root)
+        authoritative_before = self._authoritative_snapshot(self.fixture_root)
+        active_indexes_before = self._derived_snapshot(self.fixture_root)
+
+        first = memory_indexing.build_shadow_generation(store)
+        generation_root = (
+            store.index_dir / "generations" / first["generation_id"]
+        )
+        generation_before = self._snapshot(generation_root)
+        manifest = read_index_generation(generation_root / "manifest.json")
+        payload_root = generation_root / "payload"
+        payload_bytes = self._snapshot(payload_root)
+        legacy_root = self.base / "legacy-byte-parity"
+        shutil.copytree(self.fixture_root, legacy_root)
+        legacy_store = self._store(legacy_root)
+        memory_indexing.rebuild_indexes(legacy_store, True)
+        legacy_bytes = {
+            relative: (legacy_root / relative).read_bytes()
+            for relative in payload_bytes
+        }
+        second = memory_indexing.build_shadow_generation(store)
+
+        self.assertIs(manifest, validate_index_generation(manifest))
+        schema = json.loads(
+            (SKILL_ROOT / "schemas" / "index-generation.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(set(schema["required"]), set(manifest))
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(schema["properties"]["format"]["const"], manifest["format"])
+        self.assertEqual(
+            schema["properties"]["format_version"]["const"],
+            manifest["format_version"],
+        )
+        self.assertEqual(
+            set(schema["properties"]["source_manifest"]["required"]),
+            set(manifest["source_manifest"]),
+        )
+        self.assertTrue(
+            all(
+                set(item) == set(schema["$defs"]["exactFile"]["required"])
+                for item in manifest["source_manifest"]["entries"]
+                + manifest["files"]
+            )
+        )
+        self.assertTrue(first["created"])
+        self.assertFalse(second["created"])
+        self.assertEqual(first["generation_id"], second["generation_id"])
+        self.assertEqual(payload_bytes, legacy_bytes)
+        self.assertEqual(self._snapshot(generation_root), generation_before)
+        self.assertEqual(
+            {
+                key: value
+                for key, value in self._derived_snapshot(self.fixture_root).items()
+                if not key.replace("\\", "/").startswith("indexes/generations/")
+            },
+            active_indexes_before,
+        )
+        self.assertEqual(
+            self._authoritative_snapshot(self.fixture_root), authoritative_before
+        )
+
+    def test_mw26_gen_002_rejects_source_hash_drift(self):
+        store = self._store(self.fixture_root)
+        generation = memory_indexing.build_shadow_generation(store)
+        raw_path = next(store.raw_dir.rglob("*.md"))
+        raw_bytes = raw_path.read_bytes()
+        self.assertEqual(raw_bytes[-1:], b"\n")
+        raw_path.write_bytes(raw_bytes[:-1] + b" ")
+        pointer = store.index_dir / "active-generation.json"
+
+        with self.assertRaisesRegex(RuntimeError, "source SHA-256 mismatch"):
+            memory_indexing.activate_generation(store, generation["generation_id"])
+
+        self.assertFalse(pointer.exists())
+
+    def test_mw26_switch_001_atomic_activation_rejects_tampering(self):
+        store = self._store(self.fixture_root)
+        first = memory_indexing.build_shadow_generation(store)
+        memory_indexing.activate_generation(store, first["generation_id"])
+        self._append(store, "user", "switch index question", "05")
+        self._append(store, "assistant", "switch index answer", "06")
+        second = memory_indexing.build_shadow_generation(store)
+        authoritative_before = self._authoritative_snapshot(self.fixture_root)
+        pointer_path = store.index_dir / "active-generation.json"
+        pointer_before = pointer_path.read_bytes()
+
+        original_atomic_write = memory_indexing.atomic_write_canonical_json
+
+        def interrupted_write(path, value):
+            def interrupt(_temporary, _target):
+                raise RuntimeError("MW26-SWITCH-001 injected interruption")
+
+            return original_atomic_write(path, value, before_replace=interrupt)
+
+        with patch(
+            "memory_indexing.atomic_write_canonical_json",
+            side_effect=interrupted_write,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "MW26-SWITCH-001"):
+                memory_indexing.activate_generation(store, second["generation_id"])
+
+        self.assertEqual(pointer_path.read_bytes(), pointer_before)
+        activated = memory_indexing.activate_generation(store, second["generation_id"])
+        self.assertEqual(activated["active_generation_id"], second["generation_id"])
+        self.assertEqual(activated["previous_generation_id"], first["generation_id"])
+        payload = next(
+            path
+            for path in (
+                store.index_dir / "generations" / second["generation_id"] / "payload"
+            ).rglob("*")
+            if path.is_file()
+        )
+        payload.write_bytes(payload.read_bytes() + b"tampered")
+
+        with self.assertRaisesRegex(RuntimeError, "payload"):
+            memory_indexing.inspect_generation_status(store, second["generation_id"])
+
+        self.assertEqual(
+            self._authoritative_snapshot(self.fixture_root), authoritative_before
+        )
+
+    def test_mw26_rollback_001_pointer_only_preserves_generations_and_raw(self):
+        store = self._store(self.fixture_root)
+        first = memory_indexing.build_shadow_generation(store)
+        memory_indexing.activate_generation(store, first["generation_id"])
+        first_root = store.index_dir / "generations" / first["generation_id"]
+        first_before = self._snapshot(first_root)
+
+        self._append(store, "user", "third index question", "05")
+        self._append(store, "assistant", "third index answer", "06")
+        second = memory_indexing.build_shadow_generation(store)
+        memory_indexing.activate_generation(store, second["generation_id"])
+        second_root = store.index_dir / "generations" / second["generation_id"]
+        second_before = self._snapshot(second_root)
+        authoritative_before = self._authoritative_snapshot(self.fixture_root)
+
+        with patch(
+            "memory_indexing.compute_source_manifest",
+            side_effect=AssertionError("rollback must not process sources"),
+        ):
+            result = memory_indexing.rollback_generation(store)
+
+        self.assertEqual(result["active_generation_id"], first["generation_id"])
+        self.assertEqual(result["previous_generation_id"], second["generation_id"])
+        self.assertEqual(self._snapshot(first_root), first_before)
+        self.assertEqual(self._snapshot(second_root), second_before)
+        self.assertEqual(
+            self._authoritative_snapshot(self.fixture_root), authoritative_before
+        )
 
 
 if __name__ == "__main__":

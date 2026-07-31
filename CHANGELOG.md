@@ -9,6 +9,19 @@
 - Kept v3.0 conditional on a separately accepted incompatible public-contract
   decision rather than roadmap completion.
 
+## 2.6.0 - 2026-08-01
+
+- Added immutable shadow index generations with deterministic identities,
+  exact source manifests, closed schemas, and payload hash verification.
+- Added preview-first atomic activation and pointer-only rollback while
+  retaining prior generations and leaving raw history byte-identical.
+- Added a fixed versioned retrieval benchmark for policy lineage, exact
+  disambiguation, corpus hashing, and unexplained-delta rejection.
+- Extracted deterministic index reconstruction into the Memory Plane without
+  changing the existing rebuild CLI or persisted index bytes.
+- Added dedicated Windows/macOS release-rehearsal contracts for generation
+  integrity, retrieval evaluation, CLI preview behavior, and rollback.
+
 ## 2.5.2 - 2026-07-31
 
 - Removed duplicate feature-branch push and pull-request CI matrices; only

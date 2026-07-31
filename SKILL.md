@@ -255,6 +255,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     canonical owner, changed contracts, preserved invariants, test gates, and
     rollback path from `references/version-roadmap-v2.5-to-v3.0.md` before
     implementation or handoff.
+45. Build v2.6 shadow indexes with `index-generation-build`, verify them with
+    `index-generation-status`, and keep activation and rollback preview-first.
+    Never use an index generation to rewrite raw history, and never activate a
+    received generation without an explicit `--apply` operation.
 
 ## Commands
 
@@ -291,6 +295,12 @@ python3 scripts/memory_cli.py rebuild-conversations
 python3 scripts/memory_cli.py rebuild-conversations --apply
 python3 scripts/memory_cli.py rebuild-indexes
 python3 scripts/memory_cli.py rebuild-indexes --apply
+python3 scripts/memory_cli.py index-generation-build
+python3 scripts/memory_cli.py index-generation-status --generation-id <id>
+python3 scripts/memory_cli.py index-generation-activate --generation-id <id>
+python3 scripts/memory_cli.py index-generation-activate --generation-id <id> --apply
+python3 scripts/memory_cli.py index-generation-rollback
+python3 scripts/memory_cli.py index-generation-rollback --apply
 python3 scripts/memory_cli.py rebuild-deterministic-indexes
 python3 scripts/memory_cli.py heartbeat --check-only
 python3 scripts/memory_cli.py heartbeat

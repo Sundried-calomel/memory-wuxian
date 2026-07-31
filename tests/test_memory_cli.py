@@ -1402,6 +1402,38 @@ summaries:
         self.assertEqual(len(workspace_backups), 1)
         self.assertTrue(workspace_backups[0].name.startswith("index-rebuild-"))
 
+    def test_index_generation_cli_is_preview_first_for_activation(self):
+        self.append_round(1)
+        generation = self.run_cli("index-generation-build")
+        generation_id = generation["generation_id"]
+        pointer = self.root / "indexes" / "active-generation.json"
+
+        selected = self.run_cli(
+            "index-generation-status",
+            "--generation-id",
+            generation_id,
+        )
+        self.assertEqual(selected["status"], "complete")
+        self.assertFalse(pointer.exists())
+
+        preview = self.run_cli(
+            "index-generation-activate",
+            "--generation-id",
+            generation_id,
+        )
+        self.assertEqual(preview["mode"], "preview")
+        self.assertEqual(preview["would_activate"], generation_id)
+        self.assertFalse(pointer.exists())
+
+        activated = self.run_cli(
+            "index-generation-activate",
+            "--generation-id",
+            generation_id,
+            "--apply",
+        )
+        self.assertEqual(activated["active_generation_id"], generation_id)
+        self.assertTrue(pointer.is_file())
+
     def test_summary_hash_drift_is_not_auto_repaired(self):
         self.append_round(1)
         self.append_round(2)

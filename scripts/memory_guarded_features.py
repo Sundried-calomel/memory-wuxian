@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -331,19 +332,127 @@ class GuardedFeatures:
         return pointers
 
     def retrieval_evaluate(self, dataset: Path, top_k: int) -> Dict[str, Any]:
-        cases = [
-            json.loads(line) for line in dataset.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
+        dataset_bytes = dataset.read_bytes()
+        records = []
+        for line_number, line in enumerate(
+            dataset_bytes.decode("utf-8").splitlines(), start=1
+        ):
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"Retrieval corpus line {line_number} is not valid JSON: {error.msg}"
+                ) from error
+            if not isinstance(record, dict):
+                raise ValueError(
+                    f"Retrieval corpus line {line_number} must be a JSON object"
+                )
+            records.append(record)
+
+        fixed_corpus = bool(
+            records
+            and records[0].get("format") == "memory-wuxian-retrieval-corpus-v2"
+        )
+        corpus_header: Optional[Dict[str, Any]] = None
+        cases = records
+        if fixed_corpus:
+            corpus_header = records[0]
+            if corpus_header.get("version") != "2.6":
+                raise ValueError("Fixed retrieval corpus version must be '2.6'")
+            cases = records[1:]
+            if not cases:
+                raise ValueError("Fixed retrieval corpus must contain at least one case")
+            if any("format" in case for case in cases):
+                raise ValueError("Fixed retrieval corpus may contain only one header record")
+
+            seen_ids = set()
+            allowed_confidence = {
+                "verified", "summary-supported", "index-only", "unverified",
+            }
+            for case in cases:
+                case_id = case.get("id")
+                if not isinstance(case_id, str) or not re.fullmatch(
+                    r"MW26-(?:RET|DELTA)-\d{3}", case_id
+                ):
+                    raise ValueError(f"Malformed fixed retrieval case ID: {case_id!r}")
+                if case_id in seen_ids:
+                    raise ValueError(f"Duplicate fixed retrieval case ID: {case_id}")
+                seen_ids.add(case_id)
+                if not isinstance(case.get("query"), str) or not case["query"].strip():
+                    raise ValueError(f"Fixed retrieval case {case_id} has an empty query")
+                if case.get("mode", "historical") not in {
+                    "historical", "current-policy",
+                }:
+                    raise ValueError(f"Fixed retrieval case {case_id} has an invalid mode")
+                confidence = case.get("expected_confidence")
+                if confidence is not None and confidence not in allowed_confidence:
+                    raise ValueError(
+                        f"Fixed retrieval case {case_id} has an invalid expected_confidence"
+                    )
+                for field in ("expected_message_ids", "expected_policy_event_ids"):
+                    values = case.get(field, [])
+                    if not isinstance(values, list) or any(
+                        not isinstance(value, str) or not value for value in values
+                    ):
+                        raise ValueError(
+                            f"Fixed retrieval case {case_id} field {field} must be a string array"
+                        )
+                validity = case.get("expected_policy_validity", {})
+                if not isinstance(validity, dict) or any(
+                    not isinstance(key, str)
+                    or not key
+                    or not isinstance(value, str)
+                    or not value
+                    for key, value in validity.items()
+                ):
+                    raise ValueError(
+                        f"Fixed retrieval case {case_id} expected_policy_validity must be an object"
+                    )
+                expected_policy_ids = set(case.get("expected_policy_event_ids", []))
+                if not set(validity).issubset(expected_policy_ids):
+                    raise ValueError(
+                        f"Fixed retrieval case {case_id} validity references an unexpected policy event"
+                    )
+                disambiguation = case.get("expected_disambiguation")
+                if disambiguation is not None and not isinstance(disambiguation, dict):
+                    raise ValueError(
+                        f"Fixed retrieval case {case_id} expected_disambiguation must be an object"
+                    )
+                comparison = case.get("comparison")
+                if comparison is not None:
+                    if not isinstance(comparison, dict):
+                        raise ValueError(
+                            f"Fixed retrieval case {case_id} comparison must be an object"
+                        )
+                    for field in (
+                        "baseline_message_ids",
+                        "intended_added_message_ids",
+                        "intended_removed_message_ids",
+                    ):
+                        values = comparison.get(field, [])
+                        if not isinstance(values, list) or any(
+                            not isinstance(value, str) or not value for value in values
+                        ):
+                            raise ValueError(
+                                f"Fixed retrieval case {case_id} comparison field {field} "
+                                "must be a string array"
+                            )
+
         results = []
         started = time.perf_counter()
         for case in cases:
             case_started = time.perf_counter()
-            _, metadata = self.store.retrieve(str(case["query"]))
+            mode = str(case.get("mode", "historical"))
+            if fixed_corpus:
+                _, metadata = self.store.retrieve(str(case["query"]), mode)
+            else:
+                _, metadata = self.store.retrieve(str(case["query"]))
             actual = [item["message_id"] for item in metadata["raw_matches"][:top_k]]
             expected = set(map(str, case.get("expected_message_ids", [])))
             hits = len(expected.intersection(actual))
-            results.append({
+            result = {
                 "id": case.get("id"),
                 "query": case["query"],
                 "expected_message_ids": sorted(expected),
@@ -351,7 +460,127 @@ class GuardedFeatures:
                 "recall_at_k": hits / len(expected) if expected else 1.0,
                 "wrong_citation_count": len([item for item in actual if item not in expected]),
                 "latency_ms": round((time.perf_counter() - case_started) * 1000, 3),
-            })
+            }
+            if fixed_corpus:
+                expected_policy_ids = sorted(case.get("expected_policy_event_ids", []))
+                actual_policy_events = [
+                    {
+                        "policy_event_id": str(item.get("policy_event_id", "")),
+                        "validity": str(item.get("validity", "")),
+                    }
+                    for item in metadata.get("policy_events", [])
+                ]
+                actual_policy_ids = sorted(
+                    item["policy_event_id"] for item in actual_policy_events
+                )
+                actual_validity = {
+                    item["policy_event_id"]: item["validity"]
+                    for item in actual_policy_events
+                }
+                expected_validity = case.get("expected_policy_validity", {})
+                expected_confidence = case.get("expected_confidence")
+                expected_disambiguation = case.get("expected_disambiguation")
+                confidence_matches = (
+                    expected_confidence is None
+                    or metadata.get("verification") == expected_confidence
+                )
+                policy_matches = (
+                    actual_policy_ids == expected_policy_ids
+                    and all(
+                        actual_validity.get(event_id) == validity
+                        for event_id, validity in expected_validity.items()
+                    )
+                )
+                disambiguation_matches = (
+                    expected_disambiguation is None
+                    or metadata.get("disambiguation") == expected_disambiguation
+                )
+                result.update({
+                    "mode": mode,
+                    "expected_confidence": expected_confidence,
+                    "actual_confidence": metadata.get("verification"),
+                    "confidence_matches": confidence_matches,
+                    "expected_policy_event_ids": expected_policy_ids,
+                    "expected_policy_validity": expected_validity,
+                    "actual_policy_events": actual_policy_events,
+                    "policy_matches": policy_matches,
+                    "expected_disambiguation": expected_disambiguation,
+                    "actual_disambiguation": metadata.get("disambiguation"),
+                    "disambiguation_matches": disambiguation_matches,
+                })
+                unexplained_count = 0
+                comparison = case.get("comparison")
+                if comparison is not None:
+                    baseline = set(comparison.get("baseline_message_ids", []))
+                    intended_added = set(
+                        comparison.get("intended_added_message_ids", [])
+                    )
+                    intended_removed = set(
+                        comparison.get("intended_removed_message_ids", [])
+                    )
+                    actual_set = set(actual)
+                    actual_added = actual_set - baseline
+                    actual_removed = baseline - actual_set
+                    unexplained = {
+                        "unexpected_added_message_ids": sorted(
+                            actual_added - intended_added
+                        ),
+                        "unexpected_removed_message_ids": sorted(
+                            actual_removed - intended_removed
+                        ),
+                        "missing_intended_added_message_ids": sorted(
+                            intended_added - actual_added
+                        ),
+                        "missing_intended_removed_message_ids": sorted(
+                            intended_removed - actual_removed
+                        ),
+                    }
+                    unexplained_count = sum(len(values) for values in unexplained.values())
+                    result.update({
+                        "intended_delta": {
+                            "added_message_ids": sorted(intended_added),
+                            "removed_message_ids": sorted(intended_removed),
+                        },
+                        "actual_delta": {
+                            "added_message_ids": sorted(actual_added),
+                            "removed_message_ids": sorted(actual_removed),
+                        },
+                        "unexplained_delta": unexplained,
+                        "unexplained_delta_count": unexplained_count,
+                    })
+                result["passed"] = (
+                    result["recall_at_k"] == 1.0
+                    and result["wrong_citation_count"] == 0
+                    and confidence_matches
+                    and policy_matches
+                    and disambiguation_matches
+                    and unexplained_count == 0
+                )
+            results.append(result)
+
+        if fixed_corpus:
+            return {
+                "format": "memory-wuxian-retrieval-evaluation-v2",
+                "corpus_format": corpus_header["format"] if corpus_header else None,
+                "corpus_version": corpus_header["version"] if corpus_header else None,
+                "corpus_sha256": hashlib.sha256(dataset_bytes).hexdigest(),
+                "case_count": len(results),
+                "top_k": top_k,
+                "mean_recall_at_k": sum(
+                    item["recall_at_k"] for item in results
+                ) / len(results),
+                "wrong_citation_count": sum(
+                    item["wrong_citation_count"] for item in results
+                ),
+                "unexplained_delta_count": sum(
+                    item.get("unexplained_delta_count", 0) for item in results
+                ),
+                "all_cases_passed": all(item["passed"] for item in results),
+                "total_latency_ms": round(
+                    (time.perf_counter() - started) * 1000, 3
+                ),
+                "cases": results,
+            }
         return {
             "format": "memory-wuxian-retrieval-evaluation-v1",
             "case_count": len(results),

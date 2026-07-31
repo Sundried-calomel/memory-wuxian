@@ -162,6 +162,11 @@ Use Memory無限 to preserve conversation history outside the active context win
     as a published release. Personal Environment convergence belongs to
     v2.10.0 after v2.9.0; v3.0 remains conditional on an accepted incompatible
     public-contract decision.
+68. Treat index generations as immutable derived evidence. Build and verify a
+    complete shadow generation before activation, require explicit apply for
+    activation or rollback, preserve the previous generation, and reject any
+    source-hash mismatch or unexplained retrieval delta without changing raw
+    history.
 
 ## Authority order
 
