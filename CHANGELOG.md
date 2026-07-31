@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 2.7.0 - 2026-08-01
+
+- Added a persistent model-free maintenance queue with idempotent delivery,
+  explicit leases, bounded retries, restart recovery, and quarantine.
+- Added desired-versus-actual collector, queue, and semantic-worker state plus
+  redacted diagnostic bundles that exclude raw dialogue and local user paths.
+- Routed due semantic work through a durable completed-round eligibility gate
+  before the existing one-shot worker, while keeping native capture independent.
+- Preserved coalesced backup debt handling and restored the v2.6 rebuild-index
+  desktop-backup contract after detecting a displaced code block.
+- Added fixed v2.7 crash, stale-lease, permission, capture-independence,
+  round-boundary, redaction, and no-unrequested-AI rehearsal cases.
+
 - Restored the authoritative ordered v2.6-v3.0 execution roadmap and reserved
   review-first personal Environment convergence for v2.10.
 - Required predecessor evidence, bounded work contracts, exact-candidate

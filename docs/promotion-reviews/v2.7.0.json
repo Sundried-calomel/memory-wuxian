@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.7.0",
+  "work_item_id": "memory-wuxian-v2.7.0",
+  "candidate_id": "v2.7.0-source-candidate",
+  "owner_id": "control-plane",
+  "source_revision": "feature/v2.7-background-autonomy",
+  "product_evolution_record_id": "memory-wuxian-v2.7.0-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The durable queue behavior is product-specific and is already governed by the Memory Wuxian control-plane owner; this release found no additional cross-product governance rule to promote.",
+  "evidence_refs": [
+    "outputs/rehearsal/v2.7.0/windows/report.json",
+    "references/decisions.md#d-047"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-07-31T17:33:41Z"
+}

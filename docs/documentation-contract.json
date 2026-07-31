@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.6.0",
+  "reviewed_version": "2.7.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -138,6 +138,10 @@
     {
       "id": "versioned-execution-roadmap",
       "required_tokens": ["version-roadmap-v2.5-to-v3.0.md", "v2.10", "v3.0"]
+    },
+    {
+      "id": "bounded-background-autonomy",
+      "required_tokens": ["maintenance-enqueue", "maintenance-status", "maintenance-tick", "maintenance-diagnostics", "semantic_dispatch.py", "semantic-ready", "quarantined"]
     },
     {
       "id": "immutable-index-generations",

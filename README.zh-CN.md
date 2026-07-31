@@ -622,6 +622,22 @@ python scripts/memory_cli.py environment-realize-semantic-runtime
 python scripts/memory_cli.py environment-realize-semantic-runtime --apply
 ```
 
+## v2.7 后台自治与诊断
+
+Memory无限现在把不调用模型的维护工作写入封闭的持久队列，使用稳定的幂等键、租约、
+有界重试、重启恢复和 `quarantined` 隔离状态。`maintenance-status` 对比采集器与
+worker 的期望状态和实际状态；`maintenance-diagnostics` 生成经过脱敏的诊断包，
+不包含原始对话、凭据或本机用户路径。只有完整对话边界先经 `semantic_dispatch.py`
+进入 `semantic-ready`，既有的一次性 AI worker 才能运行。机械队列 tick 不调用 AI，
+摘要失败也不会停止原生采集。
+
+```powershell
+python scripts/memory_cli.py maintenance-enqueue --kind archive-health --idempotency-key health:manual
+python scripts/memory_cli.py maintenance-status
+python scripts/memory_cli.py maintenance-tick --maximum-jobs 20
+python scripts/memory_cli.py maintenance-diagnostics
+```
+
 签名且面向目标加密的 `environment-v1` 流会把合同传给已配对设备。合同固定
 模型 revision、文件哈希、运行时包、query/passage 前缀、池化、归一化、
 相似度算法和安装入口。接收或接受合同不会自动安装或下载任何内容；每台设备

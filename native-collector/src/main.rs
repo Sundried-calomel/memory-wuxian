@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -10,6 +10,8 @@ use std::time::{Duration, SystemTime};
 
 #[cfg(target_os = "macos")]
 use std::ffi::CString;
+#[cfg(target_os = "macos")]
+use std::fs::File;
 #[cfg(target_os = "macos")]
 use std::os::fd::{AsRawFd, FromRawFd};
 #[cfg(target_os = "macos")]
@@ -256,8 +258,8 @@ struct AiSummaryConfig {
     python_path: String,
     #[serde(default)]
     python_path_windows: Option<String>,
-    #[serde(default = "default_semantic_worker_path")]
-    worker_path: String,
+    #[serde(default = "default_semantic_dispatch_path")]
+    dispatcher_path: String,
 }
 
 impl Default for AiSummaryConfig {
@@ -266,7 +268,7 @@ impl Default for AiSummaryConfig {
             enabled: false,
             python_path: default_python_path(),
             python_path_windows: None,
-            worker_path: default_semantic_worker_path(),
+            dispatcher_path: default_semantic_dispatch_path(),
         }
     }
 }
@@ -351,8 +353,8 @@ fn default_python_path() -> String {
     }
 }
 
-fn default_semantic_worker_path() -> String {
-    "scripts/semantic_worker.py".to_owned()
+fn default_semantic_dispatch_path() -> String {
+    "scripts/semantic_dispatch.py".to_owned()
 }
 fn default_true() -> bool {
     true
@@ -2139,14 +2141,14 @@ impl Store {
     }
 
     fn run_one_shot_summary(&self, job_path: &Path) -> Value {
-        let worker_path = PathBuf::from(&self.config.ai_summary.worker_path);
-        let worker_path = if worker_path.is_absolute() {
-            worker_path
+        let dispatcher_path = PathBuf::from(&self.config.ai_summary.dispatcher_path);
+        let dispatcher_path = if dispatcher_path.is_absolute() {
+            dispatcher_path
         } else {
             self.config_path
                 .parent()
                 .unwrap_or(Path::new("."))
-                .join(worker_path)
+                .join(dispatcher_path)
         };
         let python_path = self
             .python_executable
@@ -2167,7 +2169,7 @@ impl Store {
             });
         let mut command = Command::new(python_path);
         command
-            .arg(worker_path)
+            .arg(dispatcher_path)
             .arg("--root")
             .arg(&self.root)
             .arg("--config")

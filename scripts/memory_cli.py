@@ -38,6 +38,9 @@ from memory_environment_skills import EnvironmentSkillInstaller
 from memory_federation import FederationManager
 from memory_guarded_features import GuardedFeatures, atomic_json
 import memory_indexing
+from memory_diagnostics import create_diagnostic_bundle
+from memory_jobs import KINDS as MAINTENANCE_JOB_KINDS, MaintenanceQueue, run_model_free_tick
+from memory_service_state import service_state
 from semantic_runtime_contract import (
     ARTIFACT_ID as SEMANTIC_RUNTIME_ARTIFACT_ID,
     environment_manifest as semantic_runtime_environment_manifest,
@@ -4149,6 +4152,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Preview or atomically restore the previous index-generation pointer",
     )
     generation_rollback_parser.add_argument("--apply", action="store_true")
+    maintenance_enqueue_parser = subparsers.add_parser(
+        "maintenance-enqueue",
+        help="Persist one bounded model-free maintenance job",
+    )
+    maintenance_enqueue_parser.add_argument("--kind", required=True, choices=sorted(MAINTENANCE_JOB_KINDS))
+    maintenance_enqueue_parser.add_argument("--idempotency-key", required=True)
+    maintenance_enqueue_parser.add_argument("--payload-json")
+    maintenance_enqueue_parser.add_argument("--max-attempts", type=int, default=3)
+    subparsers.add_parser(
+        "maintenance-status",
+        help="Show desired-versus-actual service and maintenance queue state",
+    )
+    maintenance_tick_parser = subparsers.add_parser(
+        "maintenance-tick",
+        help="Run one bounded model-free maintenance pass",
+    )
+    maintenance_tick_parser.add_argument("--maximum-jobs", type=int, default=20)
+    subparsers.add_parser(
+        "maintenance-diagnostics",
+        help="Create a redacted diagnostic bundle without raw dialogue",
+    )
     heartbeat_parser = subparsers.add_parser("heartbeat", help="Validate archive state and recover due work")
     heartbeat_parser.add_argument("--no-create-jobs", action="store_true")
     heartbeat_parser.add_argument("--check-only", action="store_true", help="Validate without creating jobs or repairing files")
@@ -4803,6 +4827,9 @@ def dispatch_command(
             result["desktop_backup"] = str(backup) if backup else None
     elif args.command == "rebuild-indexes":
         result = store.rebuild_indexes(args.apply)
+        if args.apply and result.get("changed"):
+            backup = store.create_backup_snapshot("indexes-rebuilt")
+            result["desktop_backup"] = str(backup) if backup else None
     elif args.command == "index-generation-build":
         result = memory_indexing.build_shadow_generation(store)
     elif args.command == "index-generation-status":
@@ -4839,9 +4866,47 @@ def dispatch_command(
                 "would_activate": current["previous_generation_id"],
             }
         )
-        if args.apply and result.get("changed"):
-            backup = store.create_backup_snapshot("indexes-rebuilt")
-            result["desktop_backup"] = str(backup) if backup else None
+    elif args.command == "maintenance-enqueue":
+        payload = (
+            json.loads(Path(args.payload_json).read_text(encoding="utf-8"))
+            if args.payload_json
+            else {}
+        )
+        result = MaintenanceQueue(store.root).enqueue(
+            args.kind,
+            args.idempotency_key,
+            payload,
+            max_attempts=args.max_attempts,
+        )
+    elif args.command == "maintenance-status":
+        result = service_state(store.root, store.config)
+    elif args.command == "maintenance-tick":
+        queue = MaintenanceQueue(store.root)
+
+        def archive_health(_payload):
+            with exclusive_lock(store.root / ".locks" / "archive.lock"):
+                return store.heartbeat(False)
+
+        result = run_model_free_tick(
+            queue,
+            {
+                "backup-debt": lambda _payload: {
+                    "backup": (
+                        str(path) if (path := store.drain_backup_debt()) else None
+                    )
+                },
+                "archive-health": archive_health,
+            },
+            owner="memory-wuxian-maintenance-cli",
+            maximum_jobs=args.maximum_jobs,
+        )
+    elif args.command == "maintenance-diagnostics":
+        queue = MaintenanceQueue(store.root)
+        result = create_diagnostic_bundle(
+            store.root,
+            service_state(store.root, store.config),
+            queue.jobs(),
+        )
     elif args.command == "heartbeat":
         if args.check_only and args.repair:
             raise ValueError("--check-only and --repair cannot be used together")
@@ -5420,6 +5485,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         }:
             return dispatch_command(args, parser, store)
         if args.command in {"environment-init", "environment-register"}:
+            return dispatch_command(args, parser, store)
+        if args.command.startswith("maintenance-"):
             return dispatch_command(args, parser, store)
         if args.command in {
             "environment-export-delta",
