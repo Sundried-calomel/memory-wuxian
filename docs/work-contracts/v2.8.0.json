@@ -37,6 +37,8 @@
   "required_evidence": [
     "source-audit",
     "targeted-tests",
+    "integration-rehearsal",
+    "invariant-check",
     "exact-byte-manifest",
     "interruption-recovery",
     "duplicate-replay",
