@@ -11,6 +11,7 @@ import re
 import shutil
 import struct
 import stat
+import sys
 import tempfile
 import uuid
 import zipfile
@@ -33,6 +34,22 @@ SAFE_CHECKS = {"file-exists", "utf8", "json-parse", "python-compile"}
 SKILL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
 REVISION_RE = re.compile(r"^rev:[0-9a-f]{64}$")
+
+MACOS_SYSTEM_PATH_ALIASES = {
+    Path("/etc"): Path("/private/etc"),
+    Path("/tmp"): Path("/private/tmp"),
+    Path("/var"): Path("/private/var"),
+}
+
+
+def _is_trusted_macos_system_alias(path: Path) -> bool:
+    expected = MACOS_SYSTEM_PATH_ALIASES.get(path)
+    if sys.platform != "darwin" or expected is None:
+        return False
+    try:
+        return path.resolve(strict=True) == expected
+    except OSError:
+        return False
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 RECEIPT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,191}$")
 RUNTIME_VERSION_RE = re.compile(r"^(>=|==)?([0-9]+(?:\.[0-9]+){0,3})$")
@@ -836,7 +853,11 @@ class EnvironmentSkillInstaller:
         supplied = Path(package).absolute()
         current = supplied
         while True:
-            if current.exists() and is_link_like(current):
+            if (
+                current.exists()
+                and is_link_like(current)
+                and not _is_trusted_macos_system_alias(current)
+            ):
                 raise ValueError("Skill ZIP package path contains a link or junction")
             if current == current.parent:
                 break

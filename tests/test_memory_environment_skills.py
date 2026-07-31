@@ -21,6 +21,7 @@ from memory_environment_skills import (
     EnvironmentSkillInstaller,
     INSTALLER_LOCK_NAME,
     SkillInstallationError,
+    _is_trusted_macos_system_alias,
     skill_package_contract_bytes,
 )
 from platform_lock import exclusive_lock
@@ -102,6 +103,18 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
         self.created_at = "2026-07-28T09:00:00+00:00"
         self.artifact_id = "global-skill:demo-skill"
         self.revision = self.register_revision()
+
+    def test_only_fixed_macos_system_path_aliases_are_trusted(self):
+        with (
+            mock.patch("memory_environment_skills.sys.platform", "darwin"),
+            mock.patch.object(Path, "resolve", return_value=Path("/private/var")),
+        ):
+            self.assertTrue(_is_trusted_macos_system_alias(Path("/var")))
+            self.assertFalse(
+                _is_trusted_macos_system_alias(Path("/var/folders/user-link"))
+            )
+        with mock.patch("memory_environment_skills.sys.platform", "linux"):
+            self.assertFalse(_is_trusted_macos_system_alias(Path("/var")))
 
     def tearDown(self):
         self.temporary.cleanup()
