@@ -394,7 +394,7 @@ commits, versions, jobs, or platforms, or report an unproved scenario as passed.
 
 ## D-045: Personal Environment convergence is v2.10 and review-first
 
-Status: Accepted for the future v2.10 implementation.
+Status: Accepted and implemented in v2.10.
 
 Place cross-device personal Environment inventory and convergence after the
 v2.9 read-only interface and update-governance work. Represent installed Skills
@@ -407,6 +407,17 @@ runtime copying, project activation, permission expansion, or archive changes.
 System-bundled and plugin-managed Skills retain provider ownership. Release
 v2.10 only after the v2.9 gate and exact-candidate macOS/Windows evidence pass;
 v3.0 remains conditional on a separately accepted incompatible contract.
+
+The authentication boundary is the signed and target-encrypted envelope opened
+by the native helper. Arbitrary code already executing as the same local user in
+the Memory Wuxian Python process is inside the trusted computing base: it can
+write the archive directly and is not treated as a sandboxed adversary. The
+one-shot Python open-result object is therefore a misuse guard that binds the
+native helper result to one import, not a security boundary against hostile
+in-process code. A wider overlapping environment bundle is a recovery rebase,
+not ordinary history replacement: it is accepted only from the authenticated
+peer when every retained prefix event matches exactly, then commits a receipt
+bound to the resulting state, complete replica ledger, and every output hash.
 
 ## D-046: Index generations are immutable and pointer-activated
 

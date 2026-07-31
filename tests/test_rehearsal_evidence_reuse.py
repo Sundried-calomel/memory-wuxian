@@ -22,6 +22,7 @@ class RehearsalEvidenceReuseTests(unittest.TestCase):
             evidence.write_text(
                 f"SOURCE_CONTENT_SHA256={source_identity()[2]}\n"
                 "test_mw29_signature_001_metadata_authenticity_fails_closed (tests.test_update_governance.UpdateGovernanceTests.test_mw29_signature_001_metadata_authenticity_fails_closed) ... ok\n"
+                "test_mw210_01_capture_is_deterministic_and_deduplicated (tests.test_memory_environment_profiles.EnvironmentProfileTests.test_mw210_01_capture_is_deterministic_and_deduplicated) ... ok\n"
                 "Ran 353 tests in 12.345s\n\nOK (skipped=7)\n",
                 encoding="utf-8",
             )

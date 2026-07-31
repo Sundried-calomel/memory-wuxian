@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.10.0",
+  "candidate_id": "v2.10.0-source-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "environment-plane",
+  "target": "Deterministic, path-free personal Environment profiles with trusted read-only exchange, comparison, and review-first convergence plans.",
+  "primary_semantics": "Environment Plane owns profile identity and comparison; Exchange Plane carries immutable evidence through environment-v1; Product Shell exposes preview-only controls.",
+  "invariants": [
+    "Profile capture never reads outside explicitly supplied Rule files and Skill roots.",
+    "Profiles contain no credentials, environment values, hostnames, usernames, absolute paths, archives, conversations, indexes, models, caches, or executable state.",
+    "Imported profiles are immutable read-only peer evidence and cannot invoke an installer.",
+    "Rule convergence may name only one managed block and Skill convergence may link only an already verified immutable package.",
+    "Raw archives, summaries, indexes, and replicas are byte-identical before and after profile operations."
+  ],
+  "allowed_changes": [
+    "Add a closed profile schema, deterministic bounded inventory, immutable generations, and atomic current pointer.",
+    "Add environment-v1 profile events and read-only per-peer profile replicas.",
+    "Add explicit comparison outcomes and bounded evidence-only convergence plans.",
+    "Add preview-first CLI and dashboard views plus release evidence."
+  ],
+  "prohibited_changes": [
+    "Automatically install, update, enable, disable, remove, or downgrade any persistent capability.",
+    "Copy complete Rule files, project-scoped content, provider-owned packages, credentials, runtimes, models, or local paths.",
+    "Treat display names as stable identity or received profiles as installation authority.",
+    "Modify, normalize, compact, merge, or delete memory archives or derived memory artifacts."
+  ],
+  "before_after_checks": [
+    "Hash unchanged fixtures twice and prove one generation and one export event.",
+    "Change a Skill, a managed Rule block, and an ignored cache independently.",
+    "Inject unreadable, linked, malformed, duplicate, oversized, non-UTF8, unknown-field, and tampered inputs.",
+    "Exercise trusted resumable exchange, replay, wrong target, untrusted peer, conflict, and corruption.",
+    "Rehearse existing managed-block and verified Skill installer preview, apply, and rollback contracts without profile authority."
+  ],
+  "required_evidence": [
+    "source-audit",
+    "targeted-tests",
+    "determinism",
+    "redaction",
+    "exchange-replay",
+    "cross-platform-comparison",
+    "zero-auto-activation",
+    "installer-handoff",
+    "integration-rehearsal",
+    "full-suite",
+    "windows-candidate",
+    "macos-candidate",
+    "same-sha-ci",
+    "promotion-review"
+  ],
+  "lifecycle_state": "staged"
+}

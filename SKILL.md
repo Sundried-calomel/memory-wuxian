@@ -165,6 +165,13 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     control operation. Verify update metadata against the pinned signer, stage
     verified bytes without execution until a separate version-and-hash-bound
     explicit approval, and keep summary-budget eligibility model-free.
+65. Treat a personal Environment Profile as immutable evidence, never as
+    installation authority. Capture only explicitly supplied global Rule files
+    and Skill roots; omit paths, credentials, device identity, archives,
+    conversations, indexes, models, and caches. Capture is preview-first and
+    `--apply` may only create a predecessor-linked generation and current
+    pointer. Imported generations remain read-only peer replicas. Comparison
+    and convergence planning never invoke a Rule or Skill installer.
 
 ## Operating workflow
 
@@ -210,66 +217,71 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     Environment material is validated into staging first; use
     `environment-incoming-status` and the dashboard Environment view before an
     explicit acceptance or installation.
-31. Use `environment-conflicts` and `environment-promotions` for current
+31. Use `environment-profile-capture --specification <json>` to preview one
+    path-free personal Environment generation and add `--apply` only to persist
+    it. Use `environment-profile-compare` and `environment-convergence-plan`
+    for trusted peer evidence. These commands never install, bind, enable, or
+    overwrite a Rule or Skill.
+32. Use `environment-conflicts` and `environment-promotions` for current
     governance state. Resolve a conflict or advance a promotion only with
     explicit reviewer and evidence fields; never infer approval from recency or
     successful transfer.
-32. Validate a governance insight with `work-system-governor`, then use
+33. Validate a governance insight with `work-system-governor`, then use
     `environment-governance-propose` to preview and persist the immutable local
     envelope. Use `environment-governance-proposals` to inspect local and peer
     proposals; acceptance remains a separate global Owner workflow.
-33. Validate product evolution reports with `work-system-governor`, then use
+34. Validate product evolution reports with `work-system-governor`, then use
     `environment-product-evolution-record` to preserve and exchange the
     immutable evidence record. Peer records stay read-only and never trigger
     product remediation or governance acceptance.
-34. Use `environment-governance-ai-discover` for model-free discovery,
+35. Use `environment-governance-ai-discover` for model-free discovery,
     `environment-governance-ai-status` for inspection, and
     `environment-governance-ai-tick` for a bounded one-shot review. Configure
     or enqueue only through preview-first CLI commands. Human review remains
     mandatory before any downstream acceptance or installation.
-35. Before implementing a product change, identify its canonical owner in
+36. Before implementing a product change, identify its canonical owner in
     `PRODUCT_ARCHITECTURE.md`. If it adds or relocates production code, update
     `docs/module-architecture.json` first, then run the architecture contract
     before focused behavioral tests.
-36. On macOS, run `scripts/install_macos_transaction.py` for an existing
+37. On macOS, run `scripts/install_macos_transaction.py` for an existing
     installation. Treat its isolated candidate probe, live PID replacement,
     telemetry freshness, dashboard self-check, and rollback proof as one
     indivisible update contract.
-37. Before a time-bounded report reads Memory無限, run
+38. Before a time-bounded report reads Memory無限, run
     `scripts/archive_waterline.py --cutoff <ISO-8601>`. Use `--backfill` only
     for the exact lagging retained rollout files and require a final `covered`
     result.
-38. During collector startup, persist any due semantic job but defer AI
+39. During collector startup, persist any due semantic job but defer AI
     execution to the independent semantic-backfill scheduler. Do not hold
     collector readiness or update cutover open while a Codex CLI summary runs.
-39. Let native capture atomically record coalescing backup debt instead of
+40. Let native capture atomically record coalescing backup debt instead of
     copying the complete archive inline. Let the maintenance worker create one
     complete snapshot for all pending mutations, and clear the debt only after
     that snapshot succeeds.
-40. Register the bundled E5 interface with
+41. Register the bundled E5 interface with
     `environment-register-semantic-runtime --origin-node-id <node>`, let the
     existing `environment-v1` stream transport it, and use
     `environment-realize-semantic-runtime --apply` only after explicit review
     on the receiving device. Use `semantic-runtime-status` to verify the
     bundled contract, registered revision, model artifacts, and local runtime.
-41. Treat `configuration-compile`, `configuration-explain`, and
+42. Treat `configuration-compile`, `configuration-explain`, and
     `environment-capability-status` as stateless read-only diagnostics. They
     must not construct `MemoryStore`, initialize an archive, take an archive
     lock, alter trust, grant permissions, install capabilities, or start
     synchronization.
-42. Keep the v2.5 effective-configuration contract closed and deterministic.
+43. Keep the v2.5 effective-configuration contract closed and deterministic.
     Unknown or duplicate keys and invalid values fail closed. Preserve
     `--root`, `MEMORY_WUXIAN_ROOT`, active-root pointer, then configured-root
     precedence.
-43. Memory-sharing scopes are design-only until a separately approved
+44. Memory-sharing scopes are design-only until a separately approved
     multi-user, third-party-write, partial-sharing, hosted-service,
     non-shareable-data, or cross-identity requirement activates the review.
     Do not add runtime scope fields or controls before that decision.
-44. For v2.6-or-later work, report the target version, predecessor evidence,
+45. For v2.6-or-later work, report the target version, predecessor evidence,
     canonical owner, changed contracts, preserved invariants, test gates, and
     rollback path from `references/version-roadmap-v2.5-to-v3.0.md` before
     implementation or handoff.
-45. Build v2.6 shadow indexes with `index-generation-build`, verify them with
+46. Build v2.6 shadow indexes with `index-generation-build`, verify them with
     `index-generation-status`, and keep activation and rollback preview-first.
     Never use an index generation to rewrite raw history, and never activate a
     received generation without an explicit `--apply` operation.

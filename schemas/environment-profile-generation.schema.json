@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/environment-profile-generation.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generation_format", "previous_generation_id", "profile_sha256", "profile", "generation_id"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "generation_format": {"const": "memory-wuxian-environment-profile-generation-v1"},
+    "previous_generation_id": {"type": ["string", "null"], "pattern": "^generation:[0-9a-f]{64}$"},
+    "profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "profile": {"$ref": "environment-profile.schema.json"},
+    "generation_id": {"type": "string", "pattern": "^generation:[0-9a-f]{64}$"}
+  }
+}

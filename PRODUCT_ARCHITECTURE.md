@@ -404,9 +404,17 @@ Remain on 2.x for behavior-preserving internal modularization. Use 3.0 only
 when a public CLI, persisted format, protocol, extension API, or compatibility
 contract changes incompatibly.
 
-Personal Environment convergence remains a backward-compatible v2.10 work
-item after v2.9. It does not justify v3.0 and may not be released before its
-predecessor gates pass.
+Personal Environment convergence is a backward-compatible v2.10 Environment
+Plane capability. `memory_environment_profiles.py` owns closed profile and
+generation validation, bounded explicit-source inventory, immutable local
+generations, pointer reconstruction, comparison, and inert convergence plans.
+The Exchange Plane transports generation events through `environment-v1` and
+stores them only as read-only per-peer replicas. Product Shell CLI and dashboard
+adapters expose preview and comparison state without owning activation policy.
+Profiles do not enter Environment Registry registration or incoming installer
+staging, and they contain no local paths, credentials, runtime state, archive
+content, conversations, models, or indexes. This compatible feature does not
+justify v3.0.
 
 ## Completion Rule
 

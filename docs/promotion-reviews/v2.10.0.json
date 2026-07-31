@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.10.0",
+  "work_item_id": "memory-wuxian-v2.10.0",
+  "candidate_id": "v2.10.0-source-candidate",
+  "owner_id": "environment-plane",
+  "source_revision": "feature/v2.10-environment-convergence",
+  "product_evolution_record_id": "memory-wuxian-v2.10.0-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The profile feature extends the existing Environment and Exchange owners with inert evidence and does not create a reusable capability outside Memory Wuxian.",
+  "evidence_refs": ["references/decisions.md#d-045"],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-01T00:00:00Z"
+}

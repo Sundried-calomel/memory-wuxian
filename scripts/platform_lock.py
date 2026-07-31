@@ -20,9 +20,9 @@ def exclusive_lock(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a+b") as handle:
         if os.name == "nt":
-            if path.stat().st_size == 0:
-                handle.write(b"\0")
-                handle.flush()
+            # Windows permits locking a byte range beyond EOF. Avoid writing an
+            # initialization byte here: concurrent first users can otherwise
+            # race and one write fails with EACCES after the other acquires it.
             handle.seek(0)
             while True:
                 try:

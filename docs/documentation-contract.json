@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.9.0",
+  "reviewed_version": "2.10.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -113,7 +113,7 @@
     },
     {
       "id": "environment-exchange",
-      "required_tokens": ["environment-export-delta", "environment-import-delta", "environment-process-incoming", "environment-accept-incoming"]
+      "required_tokens": ["environment-export-delta", "cloud-sync", "environment-process-incoming", "environment-accept-incoming"]
     },
     {
       "id": "environment-installation",
@@ -154,6 +154,10 @@
     {
       "id": "unified-readonly-governance",
       "required_tokens": ["readonly-query", "readonly-http", "readonly-mcp", "memory.query", "summary-budget-status", "staged-awaiting-user-approval", "--update-metadata-json", "update-allowed-signers"]
+    },
+    {
+      "id": "personal-environment-convergence",
+      "required_tokens": ["environment-profile-capture", "environment-profile-compare", "environment-convergence-plan", "environment-convergence-artifact-links.schema.json", "evidence-only", "automatic_activation"]
     }
   ]
 }

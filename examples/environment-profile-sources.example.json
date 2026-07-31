@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "platform": "windows",
+  "skills": [
+    {
+      "installation_id": "skill:memory-wuxian",
+      "provider_type": "user-managed",
+      "provider_id": "user",
+      "applicable_platforms": ["macos", "windows"],
+      "declared_version": "2.10.0",
+      "root": "C:/replace/with/local/skill/root"
+    },
+    {
+      "installation_id": "plugin:example",
+      "provider_type": "plugin-managed",
+      "provider_id": "plugin:example",
+      "applicable_platforms": ["macos", "windows"],
+      "incomplete_reason": "provider-unavailable"
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "global-agents",
+      "path": "C:/replace/with/local/AGENTS.md"
+    }
+  ]
+}

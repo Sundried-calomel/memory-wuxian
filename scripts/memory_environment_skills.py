@@ -9,6 +9,7 @@ import os
 import py_compile
 import re
 import shutil
+import struct
 import stat
 import tempfile
 import uuid
@@ -35,6 +36,11 @@ REVISION_RE = re.compile(r"^rev:[0-9a-f]{64}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 RECEIPT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,191}$")
 RUNTIME_VERSION_RE = re.compile(r"^(>=|==)?([0-9]+(?:\.[0-9]+){0,3})$")
+MAX_SKILL_PACKAGE_BYTES = 64 * 1024 * 1024
+MAX_SKILL_PACKAGE_ENTRIES = 4096
+MAX_SKILL_MANIFEST_BYTES = 1024 * 1024
+MAX_SKILL_COMPRESSION_RATIO = 200
+MAX_SKILL_CENTRAL_DIRECTORY_BYTES = 8 * 1024 * 1024
 WINDOWS_RESERVED = {
     "con", "prn", "aux", "nul",
     *(f"com{number}" for number in range(1, 10)),
@@ -320,15 +326,15 @@ class EnvironmentSkillInstaller:
     ) -> Dict[str, Any]:
         if not package.exists() or is_link_like(package) or not package.is_file():
             raise ValueError("Skill package must be an existing regular file")
-        package_bytes = package.read_bytes()
-        package_sha256 = _sha256(package_bytes)
         artifact, revision = self._registered_revision(artifact_id, revision_id)
         if artifact["object_class"] not in {"global-skill", "project-skill"}:
             raise ValueError("artifact is not a Skill")
         binding = self._resolve_binding(artifact, target_binding)
         target_path = self._resolve_target(binding)
-        manifest, entries = self._inspect_zip(package)
-        self._validate_manifest(manifest)
+        verified_package = self.verify_package_archive(package)
+        package_sha256 = verified_package["package_sha256"]
+        manifest = verified_package["manifest"]
+        entries = verified_package["entries"]
         if manifest["source_revision"] != revision_id:
             raise ValueError("package source_revision does not match registered revision")
         if manifest["skill_id"] != binding["skill_id"]:
@@ -343,8 +349,7 @@ class EnvironmentSkillInstaller:
         if self.platform not in manifest["supported_platforms"]:
             raise ValueError(f"package does not support platform {self.platform}")
         self._validate_runtime_requirements(manifest["runtime_requirements"])
-        file_payloads = self._validate_archive_files(package, manifest, entries)
-        self._validate_skill_metadata(manifest, file_payloads)
+        file_payloads = verified_package["file_payloads"]
         package_contract = skill_package_contract_bytes(manifest)
         registered_contract = self.registry._resolve_relative(
             revision["object_path"], "object_path"
@@ -353,7 +358,7 @@ class EnvironmentSkillInstaller:
             raise ValueError(
                 "Skill package contract does not match registered revision content"
             )
-        logical_hash = self._logical_tree_hash(manifest)
+        logical_hash = verified_package["logical_tree_sha256"]
         actual_hash = self._payload_tree_hash(file_payloads, manifest)
         current = self._inspect_current(target_path, manifest)
         if current is not None and current["exact"]:
@@ -706,13 +711,96 @@ class EnvironmentSkillInstaller:
         self, package: Path
     ) -> Tuple[Dict[str, Any], Dict[str, zipfile.ZipInfo]]:
         try:
+            if package.stat().st_size > MAX_SKILL_PACKAGE_BYTES:
+                raise ValueError("Skill ZIP package exceeds size limit")
+        except OSError as error:
+            raise ValueError("Skill ZIP package is unreadable") from error
+        try:
+            size = package.stat().st_size
+            with package.open("rb") as handle:
+                handle.seek(max(0, size - 65557))
+                tail = handle.read()
+            offset = tail.rfind(b"PK\x05\x06")
+            if offset < 0 or len(tail) - offset < 22:
+                raise ValueError("invalid Skill ZIP package directory")
+            (
+                _signature,
+                disk_number,
+                directory_disk,
+                entries_on_disk,
+                entry_count,
+                directory_size,
+                directory_offset,
+                comment_length,
+            ) = struct.unpack_from("<4s4H2LH", tail, offset)
+            absolute_eocd = size - len(tail) + offset
+            if (
+                disk_number != 0
+                or directory_disk != 0
+                or entries_on_disk != entry_count
+                or entry_count == 0xFFFF
+                or directory_size == 0xFFFFFFFF
+                or directory_offset == 0xFFFFFFFF
+            ):
+                raise ValueError("multi-disk and ZIP64 Skill packages are unsupported")
+            if entry_count > MAX_SKILL_PACKAGE_ENTRIES:
+                raise ValueError("Skill ZIP package entry count exceeds limit")
+            if directory_size > MAX_SKILL_CENTRAL_DIRECTORY_BYTES:
+                raise ValueError("Skill ZIP central directory exceeds size limit")
+            if (
+                absolute_eocd + 22 + comment_length != size
+                or directory_offset + directory_size != absolute_eocd
+            ):
+                raise ValueError("invalid Skill ZIP package directory bounds")
+            with package.open("rb") as handle:
+                handle.seek(directory_offset)
+                central_directory = handle.read(directory_size)
+            cursor = 0
+            parsed_entries = 0
+            while cursor < len(central_directory):
+                if (
+                    len(central_directory) - cursor < 46
+                    or central_directory[cursor : cursor + 4] != b"PK\x01\x02"
+                ):
+                    raise ValueError("invalid Skill ZIP central directory record")
+                name_length, extra_length, entry_comment_length = struct.unpack_from(
+                    "<3H", central_directory, cursor + 28
+                )
+                record_size = 46 + name_length + extra_length + entry_comment_length
+                if cursor + record_size > len(central_directory):
+                    raise ValueError("invalid Skill ZIP central directory record bounds")
+                parsed_entries += 1
+                if parsed_entries > MAX_SKILL_PACKAGE_ENTRIES:
+                    raise ValueError("Skill ZIP package entry count exceeds limit")
+                cursor += record_size
+            if cursor != len(central_directory) or parsed_entries != entry_count:
+                raise ValueError("Skill ZIP central directory entry count mismatch")
+        except OSError as error:
+            raise ValueError("Skill ZIP package is unreadable") from error
+        try:
             archive = zipfile.ZipFile(package)
         except (OSError, zipfile.BadZipFile) as error:
             raise ValueError("invalid Skill ZIP package") from error
         with archive:
             entries: Dict[str, zipfile.ZipInfo] = {}
             case_keys: Dict[str, str] = {}
-            for info in archive.infolist():
+            infos = archive.infolist()
+            if len(infos) > MAX_SKILL_PACKAGE_ENTRIES:
+                raise ValueError("Skill ZIP package entry count exceeds limit")
+            total_uncompressed = 0
+            for info in infos:
+                total_uncompressed += int(info.file_size)
+                if (
+                    info.file_size > MAX_SKILL_PACKAGE_BYTES
+                    or total_uncompressed > MAX_SKILL_PACKAGE_BYTES
+                    or (info.file_size and info.compress_size == 0)
+                    or (
+                        info.compress_size
+                        and info.file_size / info.compress_size
+                        > MAX_SKILL_COMPRESSION_RATIO
+                    )
+                ):
+                    raise ValueError("Skill ZIP package expansion exceeds limit")
                 name = info.filename.rstrip("/") if info.is_dir() else info.filename
                 if not name:
                     continue
@@ -731,6 +819,8 @@ class EnvironmentSkillInstaller:
             manifest_info = entries.get(MANIFEST_NAME)
             if manifest_info is None or manifest_info.is_dir():
                 raise ValueError(f"package is missing {MANIFEST_NAME}")
+            if manifest_info.file_size > MAX_SKILL_MANIFEST_BYTES:
+                raise ValueError("Skill package manifest exceeds size limit")
             try:
                 manifest = json.loads(archive.read(manifest_info).decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -738,6 +828,43 @@ class EnvironmentSkillInstaller:
         if not isinstance(manifest, dict):
             raise ValueError("Skill package manifest must be an object")
         return manifest, entries
+
+    @classmethod
+    def verify_package_archive(cls, package: Path) -> Dict[str, Any]:
+        """Validate a Skill package without selecting a binding or installing it."""
+
+        supplied = Path(package).absolute()
+        current = supplied
+        while True:
+            if current.exists() and is_link_like(current):
+                raise ValueError("Skill ZIP package path contains a link or junction")
+            if current == current.parent:
+                break
+            current = current.parent
+        if not supplied.is_file():
+            raise ValueError("Skill ZIP package is not a regular file")
+        package = supplied
+        try:
+            if package.stat().st_size > MAX_SKILL_PACKAGE_BYTES:
+                raise ValueError("Skill ZIP package exceeds size limit")
+            package_digest = hashlib.sha256()
+            with package.open("rb") as handle:
+                while chunk := handle.read(1024 * 1024):
+                    package_digest.update(chunk)
+        except OSError as error:
+            raise ValueError("Skill ZIP package is unreadable") from error
+        verifier = cls.__new__(cls)
+        manifest, entries = verifier._inspect_zip(package)
+        verifier._validate_manifest(manifest)
+        payloads = verifier._validate_archive_files(package, manifest, entries)
+        verifier._validate_skill_metadata(manifest, payloads)
+        return {
+            "package_sha256": package_digest.hexdigest(),
+            "manifest": manifest,
+            "entries": entries,
+            "file_payloads": payloads,
+            "logical_tree_sha256": verifier._logical_tree_hash(manifest),
+        }
 
     @staticmethod
     def _zip_is_symlink(info: zipfile.ZipInfo) -> bool:

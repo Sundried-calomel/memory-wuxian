@@ -63,6 +63,18 @@ class EnvironmentRegistryTest(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_read_registry_revalidates_authority_path(self):
+        self.registry.init()
+        registry_path = self.registry.registry_path
+        original = sys.modules["memory_environment"].is_link_like
+
+        with patch(
+            "memory_environment.is_link_like",
+            side_effect=lambda path: Path(path) == registry_path or original(path),
+        ):
+            with self.assertRaisesRegex(ValueError, "symlink path"):
+                self.registry.status()
+
     def artifact(self, artifact_id="global-rule:codex-agents", **updates):
         value = {
             "schema_version": 1,

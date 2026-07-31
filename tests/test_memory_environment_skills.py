@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -9,6 +10,7 @@ import unittest
 import warnings
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -361,6 +363,58 @@ class EnvironmentSkillInstallerTest(unittest.TestCase):
                 revision_id=self.revision["revision_id"],
                 target_binding="global-demo",
             )
+
+    def test_shared_verifier_rejects_zip_directory_count_and_compression_bombs(self):
+        manifest = self.manifest(self.revision["revision_id"])
+        counted = self.package("counted.zip", manifest)
+        payload = bytearray(counted.read_bytes())
+        eocd = payload.rfind(b"PK\x05\x06")
+        self.assertGreaterEqual(eocd, 0)
+        struct.pack_into("<H", payload, eocd + 8, 4097)
+        struct.pack_into("<H", payload, eocd + 10, 4097)
+        counted.write_bytes(payload)
+        with self.assertRaisesRegex(ValueError, "entry count"):
+            EnvironmentSkillInstaller.verify_package_archive(counted)
+
+        undercounted = self.package("undercounted.zip", manifest)
+        payload = bytearray(undercounted.read_bytes())
+        eocd = payload.rfind(b"PK\x05\x06")
+        struct.pack_into("<H", payload, eocd + 8, 1)
+        struct.pack_into("<H", payload, eocd + 10, 1)
+        undercounted.write_bytes(payload)
+        with self.assertRaisesRegex(ValueError, "entry count mismatch"):
+            EnvironmentSkillInstaller.verify_package_archive(undercounted)
+
+        bomb = self.package(
+            "compression-bomb.zip",
+            manifest,
+            extra=("bomb.bin", b"0" * (2 * 1024 * 1024)),
+        )
+        with self.assertRaisesRegex(ValueError, "expansion"):
+            EnvironmentSkillInstaller.verify_package_archive(bomb)
+
+        commented = self.package("fake-eocd-comment.zip", manifest)
+        payload = bytearray(commented.read_bytes())
+        real_eocd = payload.rfind(b"PK\x05\x06")
+        fake_eocd = struct.pack("<4s4H2LH", b"PK\x05\x06", 0, 0, 0, 0, 0, 0, 0)
+        struct.pack_into("<H", payload, real_eocd + 20, len(fake_eocd))
+        payload.extend(fake_eocd)
+        commented.write_bytes(payload)
+        with self.assertRaisesRegex(ValueError, "directory bounds"):
+            EnvironmentSkillInstaller.verify_package_archive(commented)
+
+        safe = self.package("junction-parent.zip", manifest)
+        parent = safe.parent
+        from memory_environment_skills import is_link_like as original
+
+        def classify(path):
+            return Path(path) == parent or original(path)
+
+        with mock.patch(
+            "memory_environment_skills.is_link_like", side_effect=classify
+        ):
+            with self.assertRaisesRegex(ValueError, "link or junction"):
+                EnvironmentSkillInstaller.verify_package_archive(safe)
 
     def test_undeclared_duplicate_and_case_collisions_are_rejected(self):
         manifest = self.manifest(self.revision["revision_id"])

@@ -502,8 +502,13 @@ environment-diff
 environment-register
 environment-validate
 environment-export-delta
-environment-import-delta
 environment-exchange-status
+environment-profile-capture
+environment-profile-status
+environment-profile-current
+environment-profile-rebuild-current
+environment-profile-compare
+environment-convergence-plan
 environment-incoming-status
 environment-process-incoming
 environment-accept-incoming
@@ -810,6 +815,46 @@ Governed beta/development or delta metadata is supplied with `--channel` and
 Ed25519 SSH signature against the pinned `keys/update-allowed-signers` identity
 before channel selection or download. Summary-budget checks are deterministic and model-free,
 and can enqueue one idempotent completed-round job without invoking AI.
+
+## v2.10 personal Environment convergence
+
+Version 2.10 can inventory explicitly supplied global Rule files and installed
+Skill roots into a deterministic, device-independent profile. Profiles retain
+stable installation and provider identities, declared versions, exact tree or
+file SHA-256 evidence, counts, platform applicability, and managed Rule-block
+identities. They never retain source paths, usernames, hostnames, credentials,
+environment values, caches, models, archives, conversations, or indexes.
+
+Capture is preview-first. `--apply` creates one immutable generation linked to
+its predecessor and atomically advances a rebuildable current pointer.
+Unchanged capture creates neither a generation nor an export event. The
+existing `environment-v1` stream transports generations only to trusted peers,
+where they remain read-only replicas with `automatic_activation=false`.
+
+Comparison reports `same`, `missing-local`, `missing-peer`,
+`content-differs`, `platform-inapplicable`, and `inventory-incomplete`.
+Convergence plans are bounded previews: system-bundled and plugin-managed
+Skills remain provider references, while user-managed items without an exact
+existing immutable Environment artifact remain `evidence-only`. A profile can
+never invoke the Rule or Skill installer.
+
+```bash
+python scripts/memory_cli.py environment-profile-capture --specification profile-sources.json
+python scripts/memory_cli.py environment-profile-capture --specification profile-sources.json --apply
+python scripts/memory_cli.py environment-profile-status
+python scripts/memory_cli.py environment-profile-current
+python scripts/memory_cli.py environment-profile-rebuild-current
+python scripts/memory_cli.py environment-profile-compare --peer-node-id node-mac
+python scripts/memory_cli.py environment-convergence-plan --peer-node-id node-mac
+```
+
+Optional `--artifact-links` input must conform to
+`schemas/environment-convergence-artifact-links.schema.json`; see
+`examples/environment-convergence-artifact-links.json`. A valid link still
+produces only an existing-installer preview and never authorizes activation.
+
+The dashboard Environment tab shows local generation and export counts,
+trusted peer profile replicas, and a read-only comparison preview.
 
 The signed and target-encrypted `environment-v1` stream transports the
 contract to paired devices. It pins the model revision, artifact hashes,

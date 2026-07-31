@@ -15,7 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from memory_cli import MemoryStore, load_simple_yaml
-from memory_cloud_transport import CloudFolderTransport, filesystem_native_path
+from memory_cloud_transport import (
+    AuthenticatedOpenResult,
+    CloudFolderTransport,
+    _AUTHENTICATED_OPEN_AUTHORITY,
+    filesystem_native_path,
+)
 from memory_environment import revision_id_for
 from memory_environment_exchange import EnvironmentExchangeManager
 from memory_environment_incoming import EnvironmentIncomingProcessor
@@ -25,6 +30,24 @@ from memory_environment_skills import (
 )
 from memory_federation import FederationManager, canonical_sha256
 from tests.test_memory_cloud_transport import FakeCrypto
+
+
+def verified_import(manager, bundle, expected_node_id=None):
+    manifest = manager.read_bundle_manifest(bundle)
+    origin = manifest["origin_node_id"]
+    target = manager.node()["node_id"]
+    return manager._import_authenticated_delta(
+        bundle,
+        expected_node_id=expected_node_id,
+        authenticated_open_result=AuthenticatedOpenResult(
+            _AUTHENTICATED_OPEN_AUTHORITY,
+            {
+                "origin_node_id": origin,
+                "target_node_id": target,
+                "payload_sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
+            },
+        ),
+    )
 
 
 class EnvironmentExchangeTests(unittest.TestCase):
@@ -294,7 +317,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         bundle = self.base / "environment.mwxb"
         exported = self.a.export_delta(bundle, target_node_id="node-b")
         self.assertEqual(exported["status"], "created")
-        imported = self.b.import_delta(bundle, expected_node_id="node-a")
+        imported = verified_import(self.b, bundle, expected_node_id="node-a")
         self.assertEqual(imported["status"], "imported")
         self.assertEqual(imported["staged_artifacts"], 1)
         self.assertEqual(self.b.registry.list(), [])
@@ -336,7 +359,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
             side_effect=fail_receipt,
         ):
             with self.assertRaisesRegex(OSError, "injected receipt failure"):
-                self.b.import_delta(bundle, expected_node_id="node-a")
+                verified_import(self.b, bundle, expected_node_id="node-a")
         processor = EnvironmentIncomingProcessor(
             self.store_b.root,
             platform="macos",
@@ -366,14 +389,75 @@ class EnvironmentExchangeTests(unittest.TestCase):
             side_effect=fail_once,
         ):
             with self.assertRaisesRegex(OSError, "injected receipt failure"):
-                self.b.import_delta(bundle, expected_node_id="node-a")
-        imported = self.b.import_delta(bundle, expected_node_id="node-a")
+                verified_import(self.b, bundle, expected_node_id="node-a")
+        imported = verified_import(self.b, bundle, expected_node_id="node-a")
         self.assertEqual(imported["status"], "imported")
         self.assertEqual(self.b.replica_state("node-a")["last_event_sequence"], 1)
         staged = list(
             (self.b.registry.staging_dir / "incoming" / "node-a").glob("*.json")
         )
         self.assertEqual(len(staged), 1)
+
+    def test_event_ledger_failure_rolls_back_and_can_be_retried(self):
+        self.register_rule()
+        bundle = self.base / "environment-ledger-retry.mwxb"
+        self.a.export_delta(bundle, target_node_id="node-b")
+
+        with mock.patch.object(
+            self.b,
+            "_persist_replica_events",
+            side_effect=OSError("injected ledger failure"),
+        ):
+            with self.assertRaisesRegex(OSError, "injected ledger failure"):
+                verified_import(self.b, bundle, expected_node_id="node-a")
+
+        self.assertEqual(self.b.replica_state("node-a")["last_event_sequence"], 0)
+        ledger = self.b._replica_events_path("node-a")
+        self.assertEqual(ledger.read_text(encoding="utf-8") if ledger.exists() else "", "")
+        self.assertEqual(
+            list((self.b.registry.staging_dir / "incoming" / "node-a").glob("*.json")),
+            [],
+        )
+        imported = verified_import(self.b, bundle, expected_node_id="node-a")
+        self.assertEqual(imported["status"], "imported")
+        self.assertEqual(self.b.replica_state("node-a")["last_event_sequence"], 1)
+
+    def test_replica_ledger_rejects_duplicate_sequence_before_merge(self):
+        self.register_rule()
+        bundle = self.base / "duplicate-ledger.mwxb"
+        self.a.export_delta(bundle, target_node_id="node-b")
+        verified_import(self.b, bundle, expected_node_id="node-a")
+        ledger = self.b._replica_events_path("node-a")
+        first = ledger.read_text(encoding="utf-8").strip()
+        ledger.write_text(first + "\n" + first + "\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "strictly increasing"):
+            self.b._read_replica_events("node-a")
+
+    def test_receipt_interruption_recovers_state_outputs_and_replica_ledger(self):
+        self.register_rule()
+        bundle = self.base / "environment-receipt-interruption.mwxb"
+        self.a.export_delta(bundle, target_node_id="node-b")
+        original = __import__("memory_environment_exchange").atomic_write_json
+
+        def interrupt_receipt(path, value):
+            if "receipts" in path.parts:
+                raise KeyboardInterrupt("injected receipt interruption")
+            return original(path, value)
+
+        with mock.patch(
+            "memory_environment_exchange.atomic_write_json",
+            side_effect=interrupt_receipt,
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                verified_import(self.b, bundle, expected_node_id="node-a")
+
+        self.assertEqual(self.b.replica_state("node-a")["last_event_sequence"], 1)
+        self.assertEqual(len(self.b._replica_events_path("node-a").read_text(encoding="utf-8").splitlines()), 1)
+        imported = verified_import(self.b, bundle, expected_node_id="node-a")
+        self.assertEqual(imported["status"], "imported")
+        self.assertEqual(self.b.replica_state("node-a")["last_event_sequence"], 1)
+        self.assertEqual(len(self.b._replica_events_path("node-a").read_text(encoding="utf-8").splitlines()), 1)
 
     def test_batch_registration_exports_every_artifact_with_unique_identity(self):
         self.a.registry.register(
@@ -484,7 +568,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         bundle = self.base / "project.mwxb"
         exported = self.a.export_delta(bundle, target_node_id="node-b")
         self.assertEqual(exported["artifact_count"], 1)
-        imported = self.b.import_delta(bundle, expected_node_id="node-a")
+        imported = verified_import(self.b, bundle, expected_node_id="node-a")
         self.assertEqual(imported["staged_projects"], 1)
         self.assertEqual(self.b.registry.list(), [])
         replica = next(
@@ -500,7 +584,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         self.register_rule()
         bundle = self.base / "environment.mwxb"
         self.a.export_delta(bundle, target_node_id="node-b")
-        self.b.import_delta(bundle, expected_node_id="node-a")
+        verified_import(self.b, bundle, expected_node_id="node-a")
         environment_state = self.b.replica_state("node-a")
         archive_state = FederationManager(self.store_b).replica_state("node-a")
         self.assertEqual(environment_state["last_event_sequence"], 1)
@@ -510,7 +594,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         revision = self.register_and_cache_skill()
         bundle = self.base / "skill-environment.mwxb"
         self.a.export_delta(bundle, target_node_id="node-b")
-        imported = self.b.import_delta(bundle, expected_node_id="node-a")
+        imported = verified_import(self.b, bundle, expected_node_id="node-a")
         self.assertEqual(imported["staged_artifacts"], 1)
         staged = next(
             (self.b.registry.staging_dir / "incoming" / "node-a").glob("*.json")
@@ -540,7 +624,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         tampered = self.base / "tampered.mwxb"
         tampered.write_bytes(raw)
         with self.assertRaises(Exception):
-            self.b.import_delta(tampered, expected_node_id="node-a")
+            verified_import(self.b, tampered, expected_node_id="node-a")
 
     def test_excessive_zip_compression_ratio_is_rejected_before_payload_read(self):
         bundle = self.base / "compressed-bomb.mwxb"
@@ -718,7 +802,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         self.register_rule()
         first_bundle = self.base / "first.mwxb"
         self.a.export_delta(first_bundle, target_node_id="node-b")
-        self.b.import_delta(first_bundle, expected_node_id="node-a")
+        verified_import(self.b, first_bundle, expected_node_id="node-a")
         self.b._replica_events_path("node-a").unlink()
         staged = next(
             (
@@ -746,7 +830,7 @@ class EnvironmentExchangeTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "overlap conflicts"):
-            self.b.import_delta(overlap_bundle, expected_node_id="node-a")
+            verified_import(self.b, overlap_bundle, expected_node_id="node-a")
 
     def test_status_uses_environment_sync_log_not_archive_log(self):
         FederationManager(self.store_a).log_sync(
@@ -766,6 +850,101 @@ class EnvironmentExchangeTests(unittest.TestCase):
         self.assertEqual(recent[0]["published"], 1)
         self.assertEqual(recent[0]["imported"], 2)
         self.assertEqual(recent[0]["acknowledged"], 3)
+
+    def test_mw210_profile_only_change_is_cloud_eligible(self):
+        before = self.a.exchange_observation(0)
+        profile_events = self.a.profiles.events_path
+        profile_events.parent.mkdir(parents=True, exist_ok=True)
+        profile_events.write_text('{"generation_id":"generation:test"}\n', encoding="utf-8")
+        after = self.a.exchange_observation(1)
+        self.assertNotEqual(
+            before["personal_environment_profiles"],
+            after["personal_environment_profiles"],
+        )
+        self.assertTrue(CloudFolderTransport._eligible_change(after, before))
+
+    def test_mw210_direct_import_requires_authenticated_transport_receipt(self):
+        self.register_rule()
+        bundle = self.base / "unsigned-direct.mwxb"
+        self.a.export_delta(bundle, target_node_id="node-b")
+        self.assertFalse(hasattr(self.b, "import_delta"))
+        with self.assertRaisesRegex(TypeError, "crypto-open evidence"):
+            self.b._import_authenticated_delta(
+                bundle,
+                expected_node_id="node-a",
+                authenticated_open_result=object(),
+            )
+        self.assertEqual(self.b.replica_state("node-a")["last_event_sequence"], 0)
+
+    def test_mw210_import_rejects_junction_like_target_parent(self):
+        self.register_rule()
+        bundle = self.base / "junction-target.mwxb"
+        self.a.export_delta(bundle, target_node_id="node-b")
+        original = self.b.registry._resolve_relative
+
+        def guarded(relative, label, **kwargs):
+            if label == "environment import target":
+                raise ValueError("junction parent is forbidden")
+            return original(relative, label, **kwargs)
+
+        with mock.patch.object(self.b.registry, "_resolve_relative", side_effect=guarded):
+            with self.assertRaisesRegex(ValueError, "junction parent"):
+                verified_import(self.b, bundle, expected_node_id="node-a")
+        self.assertEqual(self.b.replica_state("node-a")["last_event_sequence"], 0)
+
+    def test_mw210_replay_rejects_missing_receipt_output(self):
+        self.register_rule()
+        bundle = self.base / "receipt-output-binding.mwxb"
+        exported = self.a.export_delta(bundle, target_node_id="node-b")
+        verified_import(self.b, bundle, expected_node_id="node-a")
+        receipt = json.loads(
+            (
+                self.b._peer_root("node-a")
+                / "receipts"
+                / f"{exported['bundle_id']}.json"
+            ).read_text(encoding="utf-8")
+        )
+        target = self.b.registry.root / receipt["outputs"][0]["relative_path"]
+        target.unlink()
+        with self.assertRaisesRegex(ValueError, "missing or changed"):
+            verified_import(self.b, bundle, expected_node_id="node-a")
+
+    def test_mw210_latest_receipt_covers_outputs_from_earlier_ranges(self):
+        self.register_rule()
+        first_bundle = self.base / "cumulative-receipt-1.mwxb"
+        first = self.a.export_delta(first_bundle, target_node_id="node-b")
+        verified_import(self.b, first_bundle, expected_node_id="node-a")
+        self.a.registry.register(
+            {
+                "schema_version": 1,
+                "artifacts": [self.rule_item("second")],
+                "projects": [],
+            },
+            apply=True,
+        )
+        second_bundle = self.base / "cumulative-receipt-2.mwxb"
+        second = self.a.export_delta(
+            second_bundle,
+            after_event_sequence=first["to_event_sequence"],
+            previous_bundle_sha256=first["sha256"],
+            target_node_id="node-b",
+        )
+        verified_import(self.b, second_bundle, expected_node_id="node-a")
+        first_receipt = json.loads((
+            self.b._peer_root("node-a")
+            / "receipts"
+            / f"{first['bundle_id']}.json"
+        ).read_text(encoding="utf-8"))
+        latest_receipt = json.loads((
+            self.b._peer_root("node-a")
+            / "receipts"
+            / f"{second['bundle_id']}.json"
+        ).read_text(encoding="utf-8"))
+        earlier_path = first_receipt["outputs"][0]["relative_path"]
+        self.assertIn(earlier_path, {item["relative_path"] for item in latest_receipt["outputs"]})
+        (self.b.registry.root / earlier_path).unlink()
+        with self.assertRaisesRegex(ValueError, "missing or changed"):
+            verified_import(self.b, second_bundle, expected_node_id="node-a")
 
 
 if __name__ == "__main__":

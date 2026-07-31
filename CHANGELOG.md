@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 2.10.0 - 2026-08-01
+
+- Added deterministic, path-free personal Environment profiles for explicit
+  global Rule files and user-managed, system-bundled, or plugin-managed Skills.
+- Added immutable predecessor-linked profile generations, preview-first capture,
+  atomic current pointers, pointer reconstruction, and duplicate suppression.
+- Added trusted `environment-v1` transport into read-only per-peer profile
+  replicas with replay, target, integrity, and conflict checks.
+- Added all six cross-platform comparison outcomes and bounded convergence plans
+  that preserve provider ownership and never authorize automatic activation.
+- Added CLI and localized dashboard profile views plus fixed v2.10 determinism,
+  redaction, failure-injection, exchange, comparison, and no-installer cases.
+
 ## 2.9.0 - 2026-08-01
 
 - Added one bounded provenance-aware read service shared by local CLI,
