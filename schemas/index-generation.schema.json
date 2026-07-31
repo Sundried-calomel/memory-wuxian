@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/index-generation.schema.json",
+  "title": "Memory Wuxian Index Generation",
+  "description": "A complete immutable index generation. generation_id, created_at, and previous_generation_id are metadata excluded from generation identity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "generation_id",
+    "format",
+    "format_version",
+    "builder",
+    "source_manifest",
+    "files",
+    "created_at",
+    "previous_generation_id",
+    "status"
+  ],
+  "properties": {
+    "generation_id": {"$ref": "#/$defs/generationId"},
+    "format": {"const": "memory-wuxian-index-generation-v1"},
+    "format_version": {"const": 1},
+    "builder": {"type": "string", "minLength": 1},
+    "source_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entries", "sha256"],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/exactFile"}
+        },
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "files": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/exactFile"}
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+    },
+    "previous_generation_id": {
+      "oneOf": [
+        {"$ref": "#/$defs/generationId"},
+        {"type": "null"}
+      ]
+    },
+    "status": {"const": "complete"}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "generationId": {
+      "type": "string",
+      "pattern": "^idxgen-[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "exactFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "byte_length", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "byte_length": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

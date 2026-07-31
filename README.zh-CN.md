@@ -504,6 +504,10 @@ register-title
 rebuild-state
 rebuild-conversations
 rebuild-indexes
+index-generation-build
+index-generation-status
+index-generation-activate
+index-generation-rollback
 heartbeat
 rebuild-deterministic-indexes
 init-node
@@ -567,6 +571,16 @@ Windows 每个 job 只运行一次完整测试；macOS 在拉取请求中运行�
 恢复证据、有界工作合同、绑定同一候选 SHA 的 macOS 与 Windows 门禁，以及已经
 证明的回滚路径。个人 Environment 收敛固定属于 v2.10；只有另行接受了不兼容的
 公共合同变更，才可以进入 v3.0。
+
+### v2.6 索引安全
+
+`index-generation-build` 根据经过准确 SHA-256 验证的 raw 与摘要来源清单创建
+不可变影子代际，不改动当前索引文件。`index-generation-status` 验证闭合清单和
+全部 payload。`index-generation-activate --generation-id <id>` 在提供
+`--apply` 之前只进行预览；`index-generation-rollback` 同样先预览前一指针，再
+执行仅切换指针的原子回滚。固定的 v2.6 检索基准保存语料哈希、策略谱系和准确
+消歧案例，并拒绝未解释的结果差异。这些操作都不会修改原始历史，也不会自动
+激活接收到的索引。
 
 ## 许可证
 

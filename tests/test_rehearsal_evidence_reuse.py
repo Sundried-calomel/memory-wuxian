@@ -50,12 +50,14 @@ class RehearsalEvidenceReuseTests(unittest.TestCase):
                 for item in report["scenarios"]
                 if "reused_evidence_sha256" in item
             ]
-            self.assertEqual(len(reused), 1)
-            reference = output / reused[0]["evidence"]
-            self.assertIn(
-                reused[0]["reused_evidence_sha256"],
-                reference.read_text(encoding="utf-8"),
-            )
+            self.assertGreaterEqual(len(reused), 1)
+            references = [output / item["evidence"] for item in reused]
+            self.assertEqual(len(references), len(set(references)))
+            for item, reference in zip(reused, references):
+                self.assertIn(
+                    item["reused_evidence_sha256"],
+                    reference.read_text(encoding="utf-8"),
+                )
 
     def test_missing_reused_evidence_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

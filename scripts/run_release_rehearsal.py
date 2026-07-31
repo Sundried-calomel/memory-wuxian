@@ -132,6 +132,28 @@ def main() -> int:
             ],
         ),
         (
+            "v26-index-generation-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_platform_index_transaction",
+                "tests.test_index_generations",
+            ],
+        ),
+        (
+            "v26-retrieval-benchmark-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_retrieval_v26",
+            ],
+        ),
+        (
+            "v26-index-generation-cli-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_cli.MemoryCliTest.test_index_generation_cli_is_preview_first_for_activation",
+            ],
+        ),
+        (
             "token-usage-ledger",
             [
                 python, "-m", "unittest", "-v", "tests.test_token_usage",

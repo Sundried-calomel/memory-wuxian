@@ -407,3 +407,16 @@ runtime copying, project activation, permission expansion, or archive changes.
 System-bundled and plugin-managed Skills retain provider ownership. Release
 v2.10 only after the v2.9 gate and exact-candidate macOS/Windows evidence pass;
 v3.0 remains conditional on a separately accepted incompatible contract.
+
+## D-046: Index generations are immutable and pointer-activated
+
+Status: Accepted and implemented in v2.6.
+
+Build each deterministic index reconstruction beside the active indexes from
+an exact verified raw-and-summary source manifest. Persist a closed immutable
+generation manifest and payload before exposing it, activate only by an atomic
+pointer replacement after integrity and fixed-benchmark checks pass, and retain
+the previous generation for pointer-only rollback. Creation timestamps and the
+previous-pointer metadata do not participate in generation identity. Source
+drift, payload tampering, incomplete generations, and unexplained retrieval
+deltas fail closed without modifying raw history or semantic indexes.

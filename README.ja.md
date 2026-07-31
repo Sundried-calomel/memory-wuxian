@@ -541,6 +541,10 @@ register-title
 rebuild-state
 rebuild-conversations
 rebuild-indexes
+index-generation-build
+index-generation-status
+index-generation-activate
+index-generation-rollback
 heartbeat
 rebuild-deterministic-indexes
 init-node
@@ -599,6 +603,17 @@ macOS は pull request でプラットフォーム固有契約、`main` で完�
 macOS・Windows ゲート、実証済みロールバック経路を必要とします。Personal
 Environment の収束は v2.10 に限定され、v3.0 は別途承認された非互換の公開契約
 変更がある場合だけ検討します。
+
+### v2.6 索引安全性
+
+`index-generation-build` は、正確な SHA-256 で検証した raw・要約ソースの
+マニフェストから不変のシャドー世代を作成し、現在の索引ファイルを変更しません。
+`index-generation-status` は閉じたマニフェストと payload を検証します。
+`index-generation-activate --generation-id <id>` は `--apply` が指定される
+までプレビューのみで、`index-generation-rollback` も前のポインターを表示して
+からポインターだけを原子的に戻します。固定 v2.6 検索ベンチマークはコーパスの
+ハッシュ、ポリシー系譜、正確な曖昧性解消ケースを保持し、説明のない結果差分を
+拒否します。raw 履歴の変更や受信索引の自動有効化は行いません。
 
 ## ライセンス
 

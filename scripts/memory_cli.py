@@ -37,6 +37,7 @@ from memory_environment_rules import EnvironmentRuleInstaller
 from memory_environment_skills import EnvironmentSkillInstaller
 from memory_federation import FederationManager
 from memory_guarded_features import GuardedFeatures, atomic_json
+import memory_indexing
 from semantic_runtime_contract import (
     ARTIFACT_ID as SEMANTIC_RUNTIME_ARTIFACT_ID,
     environment_manifest as semantic_runtime_environment_manifest,
@@ -2922,247 +2923,7 @@ class MemoryStore:
         }
 
     def rebuild_indexes(self, apply: bool) -> Dict[str, Any]:
-        self.init()
-        raw_records = self.read_all_raw()
-        summaries = self.summary_records_from_files()
-        summaries_by_id = {summary["summary_id"]: summary for summary in summaries}
-        integrity_issues = []
-        for record in raw_records:
-            stored_digest = record.get("content_sha256")
-            if stored_digest and stored_digest != raw_record_sha256(record):
-                integrity_issues.append(f"raw content SHA-256 mismatch: {record['message_id']}")
-        for summary in summaries:
-            actual_source_sha256 = self.actual_summary_source_sha256(
-                summary, raw_records, summaries_by_id
-            )
-            if summary.get("source_sha256") and summary["source_sha256"] != actual_source_sha256:
-                integrity_issues.append(f"summary source SHA-256 mismatch: {summary['summary_id']}")
-            if not summary.get("source_sha256"):
-                summary["source_sha256"] = actual_source_sha256
-
-        try:
-            existing_summary_index = self.summary_records()
-        except ValueError:
-            existing_summary_index = []
-        for existing in existing_summary_index:
-            summary = summaries_by_id.get(existing["summary_id"])
-            expected_digest = existing.get("summary_sha256")
-            if summary and expected_digest and expected_digest != summary["summary_sha256"]:
-                integrity_issues.append(f"summary SHA-256 mismatch: {existing['summary_id']}")
-        integrity_issues = list(dict.fromkeys(integrity_issues))
-        if apply and integrity_issues:
-            raise RuntimeError(
-                "Refusing to rebuild indexes over integrity failures: " + "; ".join(integrity_issues)
-            )
-
-        conversations = []
-        for record in raw_records:
-            index_record = {
-                key: value
-                for key, value in record.items()
-                if key not in {"text", "_path"}
-            }
-            index_record["content_sha256"] = record.get("content_sha256") or raw_record_sha256(record)
-            index_record["path"] = record["_path"]
-            index_record["conversation_path"] = self.relative(
-                self.conversation_transcript_path(str(record["conversation_id"]))
-            )
-            conversations.append(index_record)
-
-        registry = []
-        concepts = []
-        policies = []
-        timeline_lines = ["# Timeline Index", ""]
-        concept_lines = ["# Concept Index", ""]
-        for summary in summaries:
-            source_signature = (
-                "children:" + ",".join(summary.get("source_summaries", []))
-                if int(summary["level"]) > 1
-                else f"messages:{summary.get('source_start')}-{summary.get('source_end')}"
-            )
-            registry.append({
-                "event": "created",
-                "summary_id": summary["summary_id"],
-                "level": summary["level"],
-                "conversation_id": summary.get("conversation_id"),
-                "path": summary["path"],
-                "source_signature": source_signature,
-                "source_sha256": summary.get("source_sha256"),
-                "summary_sha256": summary["summary_sha256"],
-                "timestamp": summary.get("created_at"),
-            })
-            for child_id in summary.get("source_summaries", []):
-                registry.append({
-                    "event": "grouped",
-                    "child_summary_id": child_id,
-                    "parent_summary_id": summary["summary_id"],
-                    "timestamp": summary.get("created_at"),
-                })
-            date = str(summary.get("start_time") or "unknown").split("T", 1)[0]
-            topics = ", ".join(summary["topics"]) or "No topics recorded"
-            timeline_lines.extend([
-                f"## {date}",
-                "",
-                f"- Summary: `{summary['summary_id']}`",
-                f"- Level: `{summary['level']}`",
-                f"- Time range: `{summary.get('start_time')}` to `{summary.get('end_time')}`",
-                f"- Topics: {topics}",
-                f"- Source: `{summary.get('source_start')}` through `{summary.get('source_end')}`",
-                "",
-            ])
-            for concept in summary["concepts"]:
-                concepts.append({
-                    "event": "appearance",
-                    "concept": concept,
-                    "normalized": concept.casefold(),
-                    "conversation_id": summary.get("conversation_id"),
-                    "summary_id": summary["summary_id"],
-                    "summary_level": summary["level"],
-                    "start_time": summary.get("start_time"),
-                    "end_time": summary.get("end_time"),
-                    "source_start": summary.get("source_start"),
-                    "source_end": summary.get("source_end"),
-                    "source_start_sequence": summary.get("source_start_sequence"),
-                    "source_end_sequence": summary.get("source_end_sequence"),
-                    "source_files": summary.get("source_files", []),
-                })
-                concept_lines.extend([
-                    f"## {concept}",
-                    "",
-                    f"- Summary: `{summary['summary_id']}`",
-                    f"- First indexed time in this entry: `{summary.get('start_time')}`",
-                    f"- Source: `{summary.get('source_start')}` through `{summary.get('source_end')}`",
-                    "",
-                ])
-            policies.extend(self.policy_event_records(summary))
-
-        targets = [
-            self.index_dir / "conversations.jsonl",
-            self.index_dir / "summaries.jsonl",
-            self.index_dir / "concepts.jsonl",
-            self.policy_index_path,
-            self.index_dir / "timeline.md",
-            self.index_dir / "concepts.md",
-            self.current_policy_path,
-            self.summaries_dir / "registry.jsonl",
-            self.index_dir / "by-conversation",
-        ]
-        backup = None
-        if apply:
-            backup = self.backup_derived_files("index-rebuild", targets)
-            write_jsonl(self.index_dir / "conversations.jsonl", conversations)
-            write_jsonl(self.index_dir / "summaries.jsonl", summaries)
-            write_jsonl(self.index_dir / "concepts.jsonl", concepts)
-            write_jsonl(self.policy_index_path, policies)
-            atomic_write_text(self.index_dir / "timeline.md", "\n".join(timeline_lines).rstrip() + "\n")
-            atomic_write_text(self.index_dir / "concepts.md", "\n".join(concept_lines).rstrip() + "\n")
-            atomic_write_text(
-                self.current_policy_path,
-                self.render_current_policy_view(policies),
-            )
-            write_jsonl(self.summaries_dir / "registry.jsonl", registry)
-            by_conversation_root = self.index_dir / "by-conversation"
-            if by_conversation_root.exists():
-                shutil.rmtree(by_conversation_root)
-            by_conversation_root.mkdir(parents=True, exist_ok=True)
-            conversation_ids = sorted({
-                str(record["conversation_id"]) for record in conversations
-            })
-            for conversation_id in conversation_ids:
-                directory = self.ensure_conversation_index_files(conversation_id)
-                message_records = [
-                    record for record in conversations
-                    if record.get("conversation_id") == conversation_id
-                ]
-                summary_records = [
-                    summary for summary in summaries
-                    if summary.get("conversation_id") == conversation_id
-                ]
-                concept_records = [
-                    concept for concept in concepts
-                    if concept.get("conversation_id") == conversation_id
-                ]
-                policy_records = [
-                    policy for policy in policies
-                    if policy.get("conversation_id") == conversation_id
-                ]
-                write_jsonl(directory / "messages.jsonl", message_records)
-                write_jsonl(directory / "summaries.jsonl", summary_records)
-                write_jsonl(directory / "concepts.jsonl", concept_records)
-                write_jsonl(directory / "policies.jsonl", policy_records)
-
-                message_timeline = [
-                    "# Conversation Timeline",
-                    "",
-                    f"- Conversation ID: `{conversation_id}`",
-                    "",
-                ]
-                for record in message_records:
-                    source = record.get("source") or {}
-                    phase = source.get("phase") or record.get("speaker")
-                    message_timeline.append(
-                        f"- `{record['timestamp']}` | sequence `{record['sequence']}` | "
-                        f"`{phase}` | round `{record.get('round_number', 0)}` | "
-                        f"`{record['message_id']}`"
-                    )
-                atomic_write_text(
-                    directory / "timeline.md",
-                    "\n".join(message_timeline).rstrip() + "\n",
-                )
-
-                summary_timeline = [
-                    "# Conversation Summary Timeline",
-                    "",
-                    f"- Conversation ID: `{conversation_id}`",
-                    "",
-                ]
-                conversation_concepts = [
-                    "# Conversation Concept Index",
-                    "",
-                    f"- Conversation ID: `{conversation_id}`",
-                    "",
-                ]
-                for summary in summary_records:
-                    topics = ", ".join(summary["topics"]) or "No topics recorded"
-                    summary_timeline.extend([
-                        f"## {str(summary.get('start_time') or 'unknown').split('T', 1)[0]}",
-                        "",
-                        f"- Summary: `{summary['summary_id']}`",
-                        f"- Level: `{summary['level']}`",
-                        f"- Time range: `{summary.get('start_time')}` to `{summary.get('end_time')}`",
-                        f"- Topics: {topics}",
-                        f"- Source: `{summary.get('source_start')}` through `{summary.get('source_end')}`",
-                        "",
-                    ])
-                    for concept in summary["concepts"]:
-                        conversation_concepts.extend([
-                            f"## {concept}",
-                            "",
-                            f"- Summary: `{summary['summary_id']}`",
-                            f"- First indexed time in this entry: `{summary.get('start_time')}`",
-                            f"- Source: `{summary.get('source_start')}` through `{summary.get('source_end')}`",
-                            "",
-                        ])
-                atomic_write_text(
-                    directory / "summary-timeline.md",
-                    "\n".join(summary_timeline).rstrip() + "\n",
-                )
-                atomic_write_text(
-                    directory / "concepts.md",
-                    "\n".join(conversation_concepts).rstrip() + "\n",
-                )
-        return {
-            "mode": "apply" if apply else "preview",
-            "changed": apply,
-            "backup": str(backup) if backup else None,
-            "raw_messages": len(conversations),
-            "summaries": len(summaries),
-            "concept_entries": len(concepts),
-            "policy_events": len(policies),
-            "registry_entries": len(registry),
-            "integrity_issues": integrity_issues,
-            "can_apply": not integrity_issues,
-        }
+        return memory_indexing.rebuild_indexes(self, apply)
 
     @staticmethod
     def overlapping_ranges(records: Iterable[Dict[str, Any]], label: str) -> List[str]:
@@ -4368,6 +4129,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rebuild_indexes_parser = subparsers.add_parser("rebuild-indexes", help="Preview or apply derived-index reconstruction")
     rebuild_indexes_parser.add_argument("--apply", action="store_true", help="Back up and replace derived indexes")
+    subparsers.add_parser(
+        "index-generation-build",
+        help="Build and verify an immutable shadow index generation without activating it",
+    )
+    generation_status_parser = subparsers.add_parser(
+        "index-generation-status",
+        help="Verify the active or selected immutable index generation",
+    )
+    generation_status_parser.add_argument("--generation-id")
+    generation_activate_parser = subparsers.add_parser(
+        "index-generation-activate",
+        help="Preview or atomically activate one verified index generation",
+    )
+    generation_activate_parser.add_argument("--generation-id", required=True)
+    generation_activate_parser.add_argument("--apply", action="store_true")
+    generation_rollback_parser = subparsers.add_parser(
+        "index-generation-rollback",
+        help="Preview or atomically restore the previous index-generation pointer",
+    )
+    generation_rollback_parser.add_argument("--apply", action="store_true")
     heartbeat_parser = subparsers.add_parser("heartbeat", help="Validate archive state and recover due work")
     heartbeat_parser.add_argument("--no-create-jobs", action="store_true")
     heartbeat_parser.add_argument("--check-only", action="store_true", help="Validate without creating jobs or repairing files")
@@ -5022,6 +4803,42 @@ def dispatch_command(
             result["desktop_backup"] = str(backup) if backup else None
     elif args.command == "rebuild-indexes":
         result = store.rebuild_indexes(args.apply)
+    elif args.command == "index-generation-build":
+        result = memory_indexing.build_shadow_generation(store)
+    elif args.command == "index-generation-status":
+        result = memory_indexing.inspect_generation_status(
+            store,
+            args.generation_id,
+            verify_sources=bool(args.generation_id),
+        )
+    elif args.command == "index-generation-activate":
+        candidate = memory_indexing.inspect_generation_status(
+            store,
+            args.generation_id,
+            verify_sources=True,
+        )
+        result = (
+            memory_indexing.activate_generation(store, args.generation_id)
+            if args.apply
+            else {
+                **candidate,
+                "mode": "preview",
+                "would_activate": args.generation_id,
+            }
+        )
+    elif args.command == "index-generation-rollback":
+        current = memory_indexing.inspect_generation_status(store)
+        if not current.get("previous_generation_id"):
+            raise RuntimeError("No previous index generation is available")
+        result = (
+            memory_indexing.rollback_generation(store)
+            if args.apply
+            else {
+                **current,
+                "mode": "preview",
+                "would_activate": current["previous_generation_id"],
+            }
+        )
         if args.apply and result.get("changed"):
             backup = store.create_backup_snapshot("indexes-rebuilt")
             result["desktop_backup"] = str(backup) if backup else None
