@@ -419,8 +419,13 @@ environment-diff
 environment-register
 environment-validate
 environment-export-delta
-environment-import-delta
 environment-exchange-status
+environment-profile-capture
+environment-profile-status
+environment-profile-current
+environment-profile-rebuild-current
+environment-profile-compare
+environment-convergence-plan
 environment-incoming-status
 environment-process-incoming
 environment-accept-incoming
@@ -711,6 +716,43 @@ python scripts/memory_cli.py readonly-http --host 127.0.0.1 --port 8766
 python scripts/memory_cli.py readonly-mcp
 python scripts/memory_cli.py summary-budget-status --metrics-json metrics.json --policy-json policy.json
 ```
+
+## v2.10 個人 Environment の収束
+
+2.10 では、明示的に指定したグローバル Rule ファイルとインストール済み Skill のルートを、
+決定的でデバイスパスに依存しない Profile として棚卸しできます。Profile が保持するのは、
+安定したインストール ID、provider、宣言バージョン、正確なツリーまたはファイル SHA-256、
+件数、バイト数、対応プラットフォーム、Memory 無限の管理 Rule ブロック ID だけです。
+ソースパス、ユーザー名、ホスト名、資格情報、環境変数値、キャッシュ、モデル、アーカイブ、
+会話、インデックスは保存しません。
+
+キャプチャは既定でプレビューのみです。`--apply` を指定した場合だけ、前世代に連結された
+不変世代を作成し、再構築可能な current ポインターを原子的に更新します。変更がなければ、
+世代もエクスポートイベントも重複しません。既存の `environment-v1` は信頼済み peer にだけ
+世代を送り、受信側では `automatic_activation=false` の読み取り専用 replica として保持します。
+
+比較結果は `same`、`missing-local`、`missing-peer`、`content-differs`、
+`platform-inapplicable`、`inventory-incomplete` の6種類です。収束計画は有界なプレビューに
+限られ、system-bundled と plugin-managed の Skill は provider 参照のままです。正確な既存の
+不変 Environment artifact がない項目は `evidence-only` となり、Profile 自体が Rule または
+Skill installer を呼び出すことはありません。
+
+```powershell
+python scripts/memory_cli.py environment-profile-capture --specification profile-sources.json
+python scripts/memory_cli.py environment-profile-capture --specification profile-sources.json --apply
+python scripts/memory_cli.py environment-profile-status
+python scripts/memory_cli.py environment-profile-current
+python scripts/memory_cli.py environment-profile-rebuild-current
+python scripts/memory_cli.py environment-profile-compare --peer-node-id node-mac
+python scripts/memory_cli.py environment-convergence-plan --peer-node-id node-mac
+```
+
+任意の `--artifact-links` 入力は
+`schemas/environment-convergence-artifact-links.schema.json` に準拠する必要があります。完全な例は
+`examples/environment-convergence-artifact-links.json` を参照してください。有効なリンクでも既存インストーラーのプレビューだけを生成し、アクティベーションを許可しません。
+
+ダッシュボードの Environment タブには、ローカル世代数、エクスポートイベント数、信頼済み
+peer の Profile replica、読み取り専用の比較プレビューが表示されます。
 
 更新メタデータは stable、beta、development を明示します。検証済み delta が
 失敗した場合は検証済み full package に戻ります。ダウンロードは

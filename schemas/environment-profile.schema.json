@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/environment-profile.schema.json",
+  "title": "Memory Wuxian Personal Environment Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_format", "platform", "skills", "rules", "profile_sha256", "profile_id"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile_format": {"const": "memory-wuxian-personal-environment-v1"},
+    "platform": {"enum": ["windows", "macos", "linux"]},
+    "skills": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["installation_id", "provider_type", "provider_id", "applicable_platforms", "inventory_status", "incomplete_reason", "declared_version", "tree_sha256", "file_count", "byte_count"],
+        "properties": {
+          "installation_id": {"type": "string", "pattern": "^(skill|system|plugin):[a-z0-9][a-z0-9._-]{1,183}$"},
+          "provider_type": {"enum": ["user-managed", "system-bundled", "plugin-managed"]},
+          "provider_id": {"type": "string", "pattern": "^(user(:[a-z0-9][a-z0-9._-]{1,119})?|system:[a-z0-9][a-z0-9._-]{1,119}|plugin:[a-z0-9][a-z0-9._-]{1,119})$"},
+          "applicable_platforms": {"type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": {"enum": ["windows", "macos", "linux"]}},
+          "inventory_status": {"enum": ["complete", "incomplete"]},
+          "incomplete_reason": {"type": ["string", "null"], "enum": [null, "not-installed", "platform-inapplicable", "provider-unavailable"]},
+          "declared_version": {"type": ["string", "null"], "pattern": "^[0-9A-Za-z][0-9A-Za-z._+-]{0,127}$"},
+          "tree_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+          "file_count": {"type": "integer", "minimum": 0, "maximum": 4096},
+          "byte_count": {"type": "integer", "minimum": 0, "maximum": 67108864}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"provider_type": {"const": "user-managed"}}},
+            "then": {"properties": {"installation_id": {"pattern": "^skill:[a-z0-9][a-z0-9._-]{1,183}$"}, "provider_id": {"pattern": "^user(:[a-z0-9][a-z0-9._-]{1,119})?$"}}}
+          },
+          {
+            "if": {"properties": {"provider_type": {"const": "system-bundled"}}},
+            "then": {"properties": {"installation_id": {"pattern": "^system:[a-z0-9][a-z0-9._-]{1,183}$"}, "provider_id": {"pattern": "^system:[a-z0-9][a-z0-9._-]{1,119}$"}}}
+          },
+          {
+            "if": {"properties": {"provider_type": {"const": "plugin-managed"}}},
+            "then": {"properties": {"installation_id": {"pattern": "^plugin:[a-z0-9][a-z0-9._-]{1,183}$"}, "provider_id": {"pattern": "^plugin:[a-z0-9][a-z0-9._-]{1,119}$"}}}
+          },
+          {
+            "if": {"properties": {"inventory_status": {"const": "complete"}}},
+            "then": {
+              "properties": {
+                "incomplete_reason": {"const": null},
+                "tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              }
+            }
+          },
+          {
+            "if": {"properties": {"inventory_status": {"const": "incomplete"}}},
+            "then": {
+              "properties": {
+                "incomplete_reason": {"enum": ["not-installed", "platform-inapplicable", "provider-unavailable"]},
+                "tree_sha256": {"const": null},
+                "file_count": {"const": 0},
+                "byte_count": {"const": 0}
+              }
+            }
+          }
+        ]
+      }
+    },
+    "rules": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_id", "content_sha256", "byte_count", "managed_blocks"],
+        "properties": {
+          "rule_id": {"enum": ["global-agents", "global-agents-override"]},
+          "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "byte_count": {"type": "integer", "minimum": 0, "maximum": 1048576},
+          "managed_blocks": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["managed_block_id", "content_sha256", "byte_count"],
+              "properties": {
+                "managed_block_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{1,127}$"},
+                "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "byte_count": {"type": "integer", "minimum": 0, "maximum": 262144}
+              }
+            }
+          }
+        }
+      }
+    },
+    "profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "profile_id": {"type": "string", "pattern": "^profile:[0-9a-f]{64}$"}
+  }
+}

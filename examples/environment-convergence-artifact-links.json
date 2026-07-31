@@ -1,0 +1,14 @@
+{
+  "skill:skill:demo": {
+    "artifact_id": "global-skill:demo",
+    "revision_id": "rev:0000000000000000000000000000000000000000000000000000000000000000",
+    "source": "peer",
+    "installation_id": "skill:demo"
+  },
+  "rule-block:global-agents:memory-wuxian-rules": {
+    "artifact_id": "global-rule:codex-agents",
+    "revision_id": "rev:0000000000000000000000000000000000000000000000000000000000000000",
+    "source": "local",
+    "binding_id": "global-agents-memory-wuxian-rules"
+  }
+}

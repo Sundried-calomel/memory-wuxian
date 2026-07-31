@@ -66,6 +66,8 @@ def validate_unittest_evidence(path: Path, expected_source_content_sha256: str) 
         raise ValueError("Reusable unittest evidence does not match the candidate source content")
     if not re.search(r"(?m)^test_mw29_signature_001_metadata_authenticity_fails_closed .* \.\.\. ok\r?$", text):
         raise ValueError("Reusable unittest evidence does not prove the mandatory update-signature case")
+    if not re.search(r"(?m)^test_mw210_01_capture_is_deterministic_and_deduplicated .* \.\.\. ok\r?$", text):
+        raise ValueError("Reusable unittest evidence does not prove the mandatory v2.10 profile case")
     return digest(path)
 
 
@@ -454,6 +456,10 @@ def main() -> int:
         (
             "v29-summary-budget-contract",
             [python, "-m", "unittest", "-v", "tests.test_summary_budget"],
+        ),
+        (
+            "v210-personal-environment-profile-contract",
+            [python, "-m", "unittest", "-v", "tests.test_memory_environment_profiles"],
         ),
         ("diff-check", ["git", "diff", "--check"]),
     ]

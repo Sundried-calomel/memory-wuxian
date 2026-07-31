@@ -342,28 +342,40 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             thread.start()
             barrier = threading.Barrier(3)
             responses = []
+            request_errors = []
 
             def post_sync():
-                barrier.wait()
-                request = Request(
-                    f"http://127.0.0.1:{server.server_port}/api/cloud",
-                    data=json.dumps({"action": "sync"}).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urlopen(request, timeout=5) as response:
-                    responses.append((response.status, json.load(response)))
+                try:
+                    barrier.wait()
+                    request = Request(
+                        f"http://127.0.0.1:{server.server_port}/api/cloud",
+                        data=json.dumps({"action": "sync"}).encode("utf-8"),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urlopen(request, timeout=15) as response:
+                        responses.append((response.status, json.load(response)))
+                except Exception as error:
+                    body = None
+                    if hasattr(error, "read"):
+                        try:
+                            body = error.read().decode("utf-8", errors="replace")
+                        except Exception:
+                            body = None
+                    request_errors.append((repr(error), body))
 
             callers = [threading.Thread(target=post_sync) for _ in range(2)]
             for caller in callers:
                 caller.start()
             barrier.wait()
             for caller in callers:
-                caller.join(timeout=5)
+                caller.join(timeout=15)
+                self.assertFalse(caller.is_alive())
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
 
+        self.assertEqual(request_errors, [])
         self.assertEqual(len(responses), 2)
         self.assertEqual(maximum_active, 1)
         self.assertTrue(all(status == 200 for status, _ in responses))

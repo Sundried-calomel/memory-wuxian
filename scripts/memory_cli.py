@@ -33,6 +33,7 @@ from memory_governance_ai import GovernanceAIQueue
 from memory_environment_exchange import EnvironmentExchangeManager
 from memory_environment_incoming import EnvironmentIncomingProcessor
 from memory_environment_promotions import PromotionStore
+from memory_environment_profiles import EnvironmentProfileManager
 from memory_environment_rules import EnvironmentRuleInstaller
 from memory_environment_skills import EnvironmentSkillInstaller
 from memory_federation import FederationManager
@@ -4501,15 +4502,46 @@ def build_parser() -> argparse.ArgumentParser:
     environment_export.add_argument("--after-event-sequence", type=int, default=0)
     environment_export.add_argument("--previous-bundle-sha256")
     environment_export.add_argument("--target-node-id")
-    environment_import = subparsers.add_parser(
-        "environment-import-delta",
-        help="Verify and stage one trusted environment-v1 delta bundle",
-    )
-    environment_import.add_argument("--bundle", required=True)
-    environment_import.add_argument("--expected-node-id")
     subparsers.add_parser(
         "environment-exchange-status",
         help="Show the independent environment-v1 stream cursor",
+    )
+    environment_profile_capture = subparsers.add_parser(
+        "environment-profile-capture",
+        help="Capture one deterministic path-free personal Environment profile from an explicit specification",
+    )
+    environment_profile_capture.add_argument("--specification", required=True)
+    environment_profile_capture.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "environment-profile-status",
+        help="Show immutable personal Environment profile generation counters",
+    )
+    subparsers.add_parser(
+        "environment-profile-current",
+        help="Show the current local personal Environment profile evidence",
+    )
+    environment_profile_rebuild = subparsers.add_parser(
+        "environment-profile-rebuild-current",
+        help="Preview or atomically rebuild the current pointer from one complete generation chain",
+    )
+    environment_profile_rebuild.add_argument("--apply", action="store_true")
+    environment_profile_compare = subparsers.add_parser(
+        "environment-profile-compare",
+        help="Compare the current local profile with one trusted read-only peer replica",
+    )
+    environment_profile_compare.add_argument("--peer-node-id", required=True)
+    environment_profile_compare.add_argument("--peer-generation-sha256")
+    environment_profile_plan = subparsers.add_parser(
+        "environment-convergence-plan",
+        help="Preview a bounded convergence plan without activating any capability",
+    )
+    environment_profile_plan.add_argument("--peer-node-id", required=True)
+    environment_profile_plan.add_argument(
+        "--artifact-links",
+        help=(
+            "Optional JSON file conforming to "
+            "schemas/environment-convergence-artifact-links.schema.json"
+        ),
     )
     subparsers.add_parser(
         "environment-incoming-status",
@@ -5391,13 +5423,39 @@ def dispatch_command(
             target_node_id=args.target_node_id,
             previous_bundle_sha256=args.previous_bundle_sha256,
         )
-    elif args.command == "environment-import-delta":
-        result = EnvironmentExchangeManager(store).import_delta(
-            Path(args.bundle),
-            expected_node_id=args.expected_node_id,
-        )
     elif args.command == "environment-exchange-status":
         result = EnvironmentExchangeManager(store).status()
+    elif args.command == "environment-profile-capture":
+        result = EnvironmentProfileManager(store.root).capture(
+            read_json(Path(args.specification).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "environment-profile-status":
+        result = EnvironmentProfileManager(store.root).status()
+    elif args.command == "environment-profile-current":
+        result = {
+            "status": "ok",
+            "profile": EnvironmentProfileManager(store.root).current(),
+        }
+    elif args.command == "environment-profile-rebuild-current":
+        result = EnvironmentProfileManager(store.root).rebuild_current(
+            apply=args.apply
+        )
+    elif args.command == "environment-profile-compare":
+        result = EnvironmentProfileManager(store.root).compare(
+            args.peer_node_id,
+            args.peer_generation_sha256,
+        )
+    elif args.command == "environment-convergence-plan":
+        links = (
+            read_json(Path(args.artifact_links).expanduser().resolve())
+            if args.artifact_links
+            else None
+        )
+        result = EnvironmentProfileManager(store.root).convergence_plan(
+            args.peer_node_id,
+            links,
+        )
     elif args.command in {
         "environment-incoming-status",
         "environment-process-incoming",
@@ -5638,9 +5696,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "environment-validate",
             "environment-exchange-status",
             "environment-incoming-status",
+            "environment-profile-status",
+            "environment-profile-current",
+            "environment-profile-compare",
+            "environment-convergence-plan",
         }:
             return dispatch_command(args, parser, store)
         if args.command in {"environment-init", "environment-register"}:
+            return dispatch_command(args, parser, store)
+        if args.command in {
+            "environment-profile-capture",
+            "environment-profile-rebuild-current",
+        }:
             return dispatch_command(args, parser, store)
         if args.command.startswith("maintenance-"):
             return dispatch_command(args, parser, store)
@@ -5654,7 +5721,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 return dispatch_command(args, parser, store)
         if args.command in {
             "environment-export-delta",
-            "environment-import-delta",
         }:
             with exclusive_lock(
                 store.root / ".locks" / "environment-exchange.lock"

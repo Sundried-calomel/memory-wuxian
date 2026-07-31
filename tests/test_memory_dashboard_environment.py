@@ -7,16 +7,21 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
-from memory_dashboard import EnvironmentDashboardCache, make_handler
+from memory_dashboard import (
+    EnvironmentDashboardCache,
+    _bounded_archive_files,
+    make_handler,
+)
 from memory_environment import EnvironmentRegistry, revision_id_for
 from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_promotions import PromotionStore
+from memory_environment_profiles import EnvironmentProfileManager
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -42,6 +47,24 @@ class EnvironmentDashboardCacheTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def test_archive_scan_rejects_link_like_root_before_traversal(self) -> None:
+        root = self.archive_root / "raw"
+        root.mkdir(parents=True)
+        with patch("memory_dashboard.is_link_like", return_value=True):
+            with self.assertRaisesRegex(ValueError, "root is a link or junction"):
+                _bounded_archive_files([root])
+
+    def test_signature_revalidates_authority_paths(self) -> None:
+        self.fixture_environment()
+        registry_path = self.archive_root / "environment" / "registry.json"
+        original = sys.modules["memory_environment"].is_link_like
+        with patch(
+            "memory_environment.is_link_like",
+            side_effect=lambda path: Path(path) == registry_path or original(path),
+        ):
+            with self.assertRaisesRegex(ValueError, "symlink path"):
+                EnvironmentDashboardCache(self.archive_root).source_signature()
 
     def fixture_environment(self) -> None:
         content = "Shared rule\n"
@@ -272,17 +295,45 @@ class EnvironmentDashboardCacheTest(unittest.TestCase):
             )
         content_object.touch()
         cache.get()
-        self.assertEqual(build_calls, 1)
+        self.assertEqual(build_calls, 2)
 
         state = self.archive_root / "environment" / "state.json"
         state.touch()
         cache.get()
-        self.assertEqual(build_calls, 2)
+        self.assertEqual(build_calls, 3)
 
         registry = self.archive_root / "environment" / "registry.json"
         registry.touch()
         cache.get()
-        self.assertEqual(build_calls, 3)
+        self.assertEqual(build_calls, 4)
+
+    def test_revoked_peer_is_removed_from_trusted_profile_list_and_cache(self) -> None:
+        self.fixture_environment()
+        peer_path = self.archive_root / "federation" / "peers" / "node-peer.json"
+        write_json(
+            peer_path,
+            {"format_version": 1, "node_id": "node-peer", "trusted": True},
+        )
+        write_json(
+            self.archive_root
+            / "environment"
+            / "replicas"
+            / "peers"
+            / "node-peer"
+            / "profiles"
+            / ("a" * 64 + ".json"),
+            {"replica": True},
+        )
+        cache = EnvironmentDashboardCache(self.archive_root)
+        self.assertEqual(
+            cache.get()["profiles"]["peer_profiles"],
+            [{"node_id": "node-peer", "profile_count": 1}],
+        )
+        write_json(
+            peer_path,
+            {"format_version": 1, "node_id": "node-peer", "trusted": False},
+        )
+        self.assertEqual(cache.get()["profiles"]["peer_profiles"], [])
 
     def test_inventory_read_does_not_modify_environment_or_archive_files(self) -> None:
         self.fixture_environment()
@@ -353,6 +404,37 @@ class EnvironmentDashboardCacheTest(unittest.TestCase):
         self.assertTrue(api_payload["validation_error"])
         self.assertEqual(file_hashes(self.archive_root), before)
 
+    def test_profile_summary_is_read_only_and_invalidates_environment_cache(self) -> None:
+        skill = Path(self.temporary.name) / "skill"
+        skill.mkdir()
+        (skill / "SKILL.md").write_text(
+            "---\nname: demo\ndescription: Demo\n---\n", encoding="utf-8"
+        )
+        rule = Path(self.temporary.name) / "AGENTS.md"
+        rule.write_text("global\n", encoding="utf-8")
+        manager = EnvironmentProfileManager(self.archive_root)
+        manager.capture(
+            {
+                "schema_version": 1,
+                "platform": "windows",
+                "skills": [{
+                    "installation_id": "skill:demo",
+                    "provider_type": "user-managed",
+                    "provider_id": "user",
+                    "applicable_platforms": ["windows"],
+                    "root": str(skill),
+                }],
+                "rules": [{"rule_id": "global-agents", "path": str(rule)}],
+            },
+            apply=True,
+        )
+        before = file_hashes(self.archive_root)
+        payload = EnvironmentDashboardCache(self.archive_root).get()
+        self.assertEqual(payload["profiles"]["generation_count"], 1)
+        self.assertEqual(payload["profiles"]["export_event_count"], 1)
+        self.assertIsNotNone(payload["profiles"]["current"])
+        self.assertEqual(file_hashes(self.archive_root), before)
+
     def test_frontend_has_environment_view_without_changing_archive_views(self) -> None:
         html = (SKILL_ROOT / "dashboard" / "index.html").read_text(encoding="utf-8")
         for marker in (
@@ -368,9 +450,15 @@ class EnvironmentDashboardCacheTest(unittest.TestCase):
             "@media(max-width:480px)",
             ".conversation,.device-row,.environment-row{grid-template-columns:1fr 1fr}",
             ".conversation,.environment-row{grid-template-columns:1fr}",
+            'id="environment-profiles"',
+            'id="environment-profile-peer"',
+            "fetch(`/api/environment-profile?peer_node_id=",
             ".environment-overview{grid-template-columns:1fr}",
+            "planned?.artifact?` / `+esc(planned.artifact.artifact_id)",
         ):
             self.assertIn(marker, html)
+        for restored in ("経路", "本机路径", "配置路径", "第一枚路标", "深层通路", "深層の経路"):
+            self.assertIn(restored, html)
 
 
 if __name__ == "__main__":

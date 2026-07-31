@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import sys
 import tempfile
@@ -12,6 +13,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from memory_cli import MemoryStore, load_simple_yaml
 from memory_environment_evolution import ProductEvolutionStore
 from memory_environment_exchange import EnvironmentExchangeManager
+from memory_cloud_transport import (
+    AuthenticatedOpenResult,
+    _AUTHENTICATED_OPEN_AUTHORITY,
+)
 from memory_federation import FederationManager
 
 
@@ -63,7 +68,18 @@ class EnvironmentProductEvolutionTests(unittest.TestCase):
         bundle = self.base / "evolution.mwxb"
         exported = self.exchange_a.export_delta(bundle, target_node_id="node-b")
         self.assertEqual(exported["artifact_count"], 1)
-        imported = self.exchange_b.import_delta(bundle, expected_node_id="node-a")
+        imported = self.exchange_b._import_authenticated_delta(
+            bundle,
+            expected_node_id="node-a",
+            authenticated_open_result=AuthenticatedOpenResult(
+                _AUTHENTICATED_OPEN_AUTHORITY,
+                {
+                    "origin_node_id": "node-a",
+                    "target_node_id": "node-b",
+                    "payload_sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
+                },
+            ),
+        )
         self.assertEqual(imported["staged_artifacts"], 0)
         self.assertEqual(imported["staged_product_evolution_records"], 1)
         replicas = list(

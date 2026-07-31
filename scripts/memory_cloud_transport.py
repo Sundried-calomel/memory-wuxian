@@ -17,6 +17,7 @@ from typing import Any, Dict, Iterable, List, Optional, Protocol
 
 from platform_process import no_window_kwargs
 from platform_lock import exclusive_lock
+from platform_paths import is_link_like
 from memory_federation import (
     PROTOCOL_VERSION,
     FederationManager,
@@ -56,6 +57,8 @@ DEFAULT_MERGE_WINDOW_SECONDS = 900
 DEFAULT_EARLY_FLUSH_BYTES = 1024 * 1024
 DEFAULT_MAXIMUM_PENDING_SECONDS = 3600
 DEFAULT_CLEANUP_GRACE_SECONDS = 24 * 60 * 60
+MAX_CLOUD_QUEUE_ENTRIES = 4096
+MAX_CLOUD_SCAN_SECONDS = 3.0
 ENVELOPE_PATTERN = re.compile(
     r"^(?P<from_sequence>[0-9]{20})-"
     r"(?P<to_sequence>[0-9]{20})-"
@@ -66,6 +69,29 @@ ACK_PATTERN = re.compile(
     r"^ack-(?P<sequence>[0-9]{20})-"
     r"(?P<bundle_id>mwb-[0-9a-f]{32})[.]mwxa$"
 )
+
+
+_AUTHENTICATED_OPEN_AUTHORITY = object()
+
+
+class AuthenticatedOpenResult(dict):
+    """One-shot evidence emitted only after the native crypto helper succeeds."""
+
+    def __init__(self, authority: object, value: Dict[str, Any]):
+        if authority is not _AUTHENTICATED_OPEN_AUTHORITY:
+            raise TypeError("authenticated open results are issued by CommandCrypto")
+        super().__init__(value)
+        self._consumed = False
+
+    def consume_environment_binding(self) -> tuple[str, str, str]:
+        if self._consumed:
+            raise ValueError("authenticated open result was already consumed")
+        self._consumed = True
+        return (
+            safe_node_id(str(self["origin_node_id"])),
+            safe_node_id(str(self["target_node_id"])),
+            str(self["payload_sha256"]),
+        )
 
 
 class CryptoAdapter(Protocol):
@@ -212,8 +238,8 @@ class CommandCrypto:
         kind: str,
         origin_node_id: str,
         target_node_id: str,
-    ) -> Dict[str, Any]:
-        return self._run(
+    ) -> AuthenticatedOpenResult:
+        result = self._run(
             [
                 "open",
                 "--identity",
@@ -232,6 +258,7 @@ class CommandCrypto:
             ],
             invalid_envelope_on_failure=True,
         )
+        return AuthenticatedOpenResult(_AUTHENTICATED_OPEN_AUTHORITY, result)
 
 
 def _validated_identity(value: Dict[str, Any], label: str) -> Dict[str, str]:
@@ -488,7 +515,58 @@ class CloudFolderTransport:
         root = self._provider_root(value) / "MemoryWuxianExchange" / "v1"
         if self.stream_id is not None:
             root = root / self.stream_id
+        provider_root = self._provider_root(value)
+        current = root
+        while current != provider_root and current != current.parent:
+            if current.exists() and is_link_like(current):
+                raise ValueError("Cloud exchange queue contains a link or junction")
+            current = current.parent
         return Path(filesystem_native_path(root)) if os.name == "nt" else root
+
+    def _queue_path(self, *parts: str, for_write: bool = False) -> Path:
+        root = self._exchange_root()
+        candidate = root.joinpath(*parts)
+        try:
+            candidate.relative_to(root)
+            candidate.resolve(strict=False).relative_to(root.resolve(strict=False))
+        except ValueError as error:
+            raise ValueError("Cloud exchange path escapes its queue root") from error
+        current = candidate
+        while True:
+            if current.exists() and is_link_like(current):
+                raise ValueError("Cloud exchange path contains a link or junction")
+            if current == root:
+                break
+            current = current.parent
+        native_candidate = (
+            Path(filesystem_native_path(candidate)) if os.name == "nt" else candidate
+        )
+        if not for_write and not native_candidate.exists():
+            raise ValueError("Cloud exchange path does not exist")
+        return native_candidate
+
+    def _assert_queue_path(self, path: Path, *, for_write: bool = False) -> Path:
+        root = self._exchange_root()
+        try:
+            relative = Path(display_path(path)).relative_to(Path(display_path(root)))
+        except ValueError as error:
+            raise ValueError("Cloud exchange path is outside its queue root") from error
+        return self._queue_path(*relative.parts, for_write=for_write)
+
+    def _bounded_queue_entries(self, root: Path, label: str) -> List[Path]:
+        if not root.exists():
+            return []
+        started = time.monotonic()
+        paths: List[Path] = []
+        with os.scandir(root) as entries:
+            for entry in entries:
+                if time.monotonic() - started > MAX_CLOUD_SCAN_SECONDS:
+                    raise ValueError(f"{label} exceeded its scan time limit")
+                paths.append(Path(entry.path))
+                if len(paths) > MAX_CLOUD_QUEUE_ENTRIES:
+                    raise ValueError(f"{label} exceeded its entry limit")
+        paths.sort(key=lambda path: path.name)
+        return paths
 
     @staticmethod
     def _provider_root(value: str | Path) -> Path:
@@ -536,30 +614,30 @@ class CloudFolderTransport:
         return peers
 
     def _self_node_root(self) -> Path:
-        return self._exchange_root() / "nodes" / self._local_node_id()
+        return self._queue_path("nodes", self._local_node_id(), for_write=True)
 
     def _outbox(self, target_node_id: str) -> Path:
-        return self._self_node_root() / "outbox" / safe_node_id(target_node_id)
+        return self._queue_path(
+            "nodes", self._local_node_id(), "outbox", safe_node_id(target_node_id),
+            for_write=True,
+        )
 
     def _ack_outbox(self, origin_node_id: str) -> Path:
-        return self._self_node_root() / "acks" / safe_node_id(origin_node_id)
+        return self._queue_path(
+            "nodes", self._local_node_id(), "acks", safe_node_id(origin_node_id),
+            for_write=True,
+        )
 
     def _incoming_outbox(self, origin_node_id: str) -> Path:
-        return (
-            self._exchange_root()
-            / "nodes"
-            / safe_node_id(origin_node_id)
-            / "outbox"
-            / self._local_node_id()
+        return self._queue_path(
+            "nodes", safe_node_id(origin_node_id), "outbox", self._local_node_id(),
+            for_write=True,
         )
 
     def _incoming_acks(self, acknowledging_node_id: str) -> Path:
-        return (
-            self._exchange_root()
-            / "nodes"
-            / safe_node_id(acknowledging_node_id)
-            / "acks"
-            / self._local_node_id()
+        return self._queue_path(
+            "nodes", safe_node_id(acknowledging_node_id), "acks", self._local_node_id(),
+            for_write=True,
         )
 
     def _peer_state(self, node_id: str) -> Dict[str, Any]:
@@ -606,7 +684,11 @@ class CloudFolderTransport:
             published.get("completed_rounds", 0)
         ):
             return True
-        for key in ("summary_registry", "title_index"):
+        for key in (
+            "summary_registry",
+            "title_index",
+            "personal_environment_profiles",
+        ):
             if current.get(key) != published.get(key):
                 return True
         return False
@@ -616,7 +698,12 @@ class CloudFolderTransport:
         current: Dict[str, Any], published: Dict[str, Any]
     ) -> int:
         total = 0
-        for key in ("raw_today", "summary_registry", "title_index"):
+        for key in (
+            "raw_today",
+            "summary_registry",
+            "title_index",
+            "personal_environment_profiles",
+        ):
             current_size = int((current.get(key) or {}).get("size", 0))
             previous_size = int((published.get(key) or {}).get("size", 0))
             total += max(0, current_size - previous_size)
@@ -664,6 +751,7 @@ class CloudFolderTransport:
         kind: str,
         target_node_id: str,
     ) -> None:
+        destination = self._assert_queue_path(destination, for_write=True)
         destination.parent.mkdir(parents=True, exist_ok=True)
         partial = destination.parent / (
             f".mw-partial-{os.getpid()}-{uuid.uuid4().hex[:16]}.tmp"
@@ -682,6 +770,7 @@ class CloudFolderTransport:
                 raise RuntimeError("Envelope helper did not create a nonempty output")
             with partial.open("rb+") as handle:
                 os.fsync(handle.fileno())
+            self._assert_queue_path(destination, for_write=True)
             os.replace(
                 filesystem_native_path(partial),
                 filesystem_native_path(destination),
@@ -801,16 +890,31 @@ class CloudFolderTransport:
             "reason": reason,
         }
         destination = self.quarantine_root / f"{artifact_type}-{digest}.json"
+        registry = getattr(self.manager, "registry", None)
+        if registry is not None:
+            destination = registry._resolve_relative(
+                destination.relative_to(registry.root).as_posix(),
+                "cloud quarantine record",
+                for_write=True,
+            )
+        else:
+            current = destination
+            while True:
+                if current.exists() and is_link_like(current):
+                    raise ValueError("cloud quarantine path contains a link or junction")
+                if current == self.manager.metadata_root:
+                    break
+                current = current.parent
         atomic_write_json(destination, record)
         return record
 
-    @staticmethod
-    def _stable_candidate(path: Path) -> bool:
+    def _stable_candidate(self, path: Path) -> bool:
         if path.name.endswith(".partial") or ".partial." in path.name:
             return False
         try:
+            self._assert_queue_path(path)
             return path.is_file() and path.stat().st_size > 0
-        except OSError:
+        except (OSError, ValueError):
             return False
 
     @staticmethod
@@ -868,8 +972,8 @@ class CloudFolderTransport:
         for peer_id, peer in peers.items():
             incoming = self._incoming_acks(peer_id)
             try:
-                paths = sorted(incoming.iterdir()) if incoming.exists() else []
-            except OSError as exc:
+                paths = self._bounded_queue_entries(incoming, "cloud ack queue")
+            except (OSError, ValueError) as exc:
                 result["transient"].append(
                     {"peer": peer_id, "type": "ack-scan", "reason": str(exc)}
                 )
@@ -996,8 +1100,8 @@ class CloudFolderTransport:
         for peer_id, peer in peers.items():
             incoming = self._incoming_outbox(peer_id)
             try:
-                paths = sorted(incoming.iterdir()) if incoming.exists() else []
-            except OSError as exc:
+                paths = self._bounded_queue_entries(incoming, "cloud bundle queue")
+            except (OSError, ValueError) as exc:
                 result["transient"].append(
                     {"peer": peer_id, "type": "bundle-scan", "reason": str(exc)}
                 )
@@ -1066,6 +1170,14 @@ class CloudFolderTransport:
                 match,
             ) in candidates:
                 if (
+                    _to_sequence < expected_sequence
+                    and not (
+                        is_current_replay
+                        and expected_sequence == current_sequence + 1
+                    )
+                ):
+                    continue
+                if (
                     from_sequence < expected_sequence
                     and not is_current_replay
                     and _to_sequence < expected_sequence
@@ -1087,7 +1199,7 @@ class CloudFolderTransport:
                         prefix="memory-wuxian-cloud-bundle-"
                     ) as temp:
                         bundle = Path(temp) / "delta.mwxb"
-                        self.crypto.open(
+                        open_result = self.crypto.open(
                             path,
                             bundle,
                             self._identity_private_path(),
@@ -1097,6 +1209,15 @@ class CloudFolderTransport:
                             self._local_node_id(),
                         )
                         actual_sha256 = bytes_sha256(bundle.read_bytes())
+                        if (
+                            not isinstance(open_result, dict)
+                            or open_result.get("origin_node_id") != peer_id
+                            or open_result.get("target_node_id") != self._local_node_id()
+                            or open_result.get("payload_sha256") != actual_sha256
+                            or int(open_result.get("payload_length", -1))
+                            != bundle.stat().st_size
+                        ):
+                            raise ValueError("Cloud crypto-open result binding mismatch")
                         if actual_sha256 != match.group("bundle_sha256"):
                             raise ValueError(
                                 "Cloud envelope filename bundle SHA-256 mismatch"
@@ -1116,9 +1237,22 @@ class CloudFolderTransport:
                             self.archive_root / ".locks" / "archive.lock",
                         )
                         with exclusive_lock(exchange_lock):
-                            imported = self.manager.import_delta(
-                                bundle, expected_node_id=peer_id
-                            )
+                            import_kwargs = {"expected_node_id": peer_id}
+                            if getattr(
+                                self.manager,
+                                "requires_authenticated_transport",
+                                False,
+                            ):
+                                imported = self.manager._import_authenticated_delta(
+                                    bundle,
+                                    expected_node_id=peer_id,
+                                    authenticated_open_result=open_result,
+                                )
+                            else:
+                                imported = self.manager.import_delta(
+                                    bundle,
+                                    **import_kwargs,
+                                )
                         ack_path = self._write_ack(
                             peer_id,
                             peer["cloud_identity"],
@@ -1165,7 +1299,11 @@ class CloudFolderTransport:
                 state["acknowledged"]["last_event_sequence"]
             )
             candidates = []
-            for path in sorted(self._outbox(peer_id).glob("*.mwxe")):
+            for path in self._bounded_queue_entries(
+                self._outbox(peer_id), "cloud outbox recovery"
+            ):
+                if path.suffix != ".mwxe":
+                    continue
                 match = ENVELOPE_PATTERN.fullmatch(path.name)
                 if (
                     match
@@ -1194,7 +1332,9 @@ class CloudFolderTransport:
                         }
                     )
         if outstanding:
-            path = Path(str(outstanding.get("path", "")))
+            path = self._assert_queue_path(
+                Path(str(outstanding.get("path", ""))), for_write=True
+            )
             if path.is_file() and path.stat().st_size > 0:
                 result["waiting_ack"].append(
                     {"peer": peer_id, "bundle_id": outstanding["bundle_id"]}
@@ -1263,7 +1403,9 @@ class CloudFolderTransport:
             last_sequence = int(acknowledged["last_event_sequence"])
             if last_sequence > 0:
                 outbox = self._outbox(peer_id)
-                for path in sorted(outbox.glob("*.mwxe")):
+                for path in self._bounded_queue_entries(outbox, "cloud cleanup outbox"):
+                    if path.suffix != ".mwxe":
+                        continue
                     match = ENVELOPE_PATTERN.fullmatch(path.name)
                     if not match:
                         continue
@@ -1275,12 +1417,15 @@ class CloudFolderTransport:
                         continue
                     if age < grace:
                         continue
+                    self._assert_queue_path(path)
                     path.unlink(missing_ok=True)
                     removed.append(display_path(path))
             acknowledgements = [
                 path
-                for path in sorted(self._ack_outbox(peer_id).glob("*.mwxa"))
-                if ACK_PATTERN.fullmatch(path.name)
+                for path in self._bounded_queue_entries(
+                    self._ack_outbox(peer_id), "cloud cleanup acknowledgements"
+                )
+                if path.suffix == ".mwxa" and ACK_PATTERN.fullmatch(path.name)
             ]
             for path in acknowledgements[:-1]:
                 try:
@@ -1289,6 +1434,7 @@ class CloudFolderTransport:
                     continue
                 if age < grace:
                     continue
+                self._assert_queue_path(path)
                 path.unlink(missing_ok=True)
                 removed.append(display_path(path))
         return removed
@@ -1352,7 +1498,12 @@ class CloudFolderTransport:
             if all_handled and peers:
                 self.config["schedule"]["published"] = observation
                 self.config["schedule"]["pending_since"] = None
-        result["cleaned"] = self._cleanup(peers, timestamp)
+        try:
+            result["cleaned"] = self._cleanup(peers, timestamp)
+        except (OSError, ValueError) as exc:
+            result["transient"].append(
+                {"type": "cleanup-scan", "reason": str(exc)}
+            )
         self.save_config()
         for peer_id in peers:
             peer_activity = (

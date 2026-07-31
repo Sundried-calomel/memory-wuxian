@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/environment-convergence-artifact-links.schema.json",
+  "type": "object",
+  "maxProperties": 768,
+  "additionalProperties": false,
+  "patternProperties": {
+    "^skill:skill:[a-z0-9][a-z0-9._-]{1,183}$": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "revision_id", "source", "installation_id"],
+      "properties": {
+        "artifact_id": {"type": "string", "pattern": "^global-skill:[a-z0-9][a-z0-9._-]{1,183}$"},
+        "revision_id": {"type": "string", "pattern": "^rev:[0-9a-f]{64}$"},
+        "source": {"enum": ["local", "peer"]},
+        "installation_id": {"type": "string", "pattern": "^skill:[a-z0-9][a-z0-9._-]{1,183}$"}
+      }
+    },
+    "^rule-block:(global-agents|global-agents-override):[a-z0-9][a-z0-9._-]{1,127}$": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "revision_id", "source", "binding_id"],
+      "properties": {
+        "artifact_id": {"type": "string", "pattern": "^global-rule:[a-z0-9][a-z0-9._-]{1,183}$"},
+        "revision_id": {"type": "string", "pattern": "^rev:[0-9a-f]{64}$"},
+        "source": {"enum": ["local", "peer"]},
+        "binding_id": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    }
+  }
+}

@@ -165,6 +165,8 @@ class EnvironmentRegistry:
         return {"status": "initialized", "root": str(self.root), "recovered": recovered}
 
     def _ensure_layout(self) -> None:
+        if self.root.exists() and is_link_like(self.root):
+            raise ValueError("environment root must not be a link or junction")
         for directory in (
             self.locks_dir,
             self.artifacts_dir,
@@ -180,7 +182,21 @@ class EnvironmentRegistry:
             self.promotions_dir,
             self.derived_dir,
         ):
+            boundary = self.locks_dir if directory == self.locks_dir else self.root
+            current = directory
+            while True:
+                if current.exists() and is_link_like(current):
+                    raise ValueError("environment layout contains a link or junction")
+                if current == boundary:
+                    break
+                current = current.parent
             directory.mkdir(parents=True, exist_ok=True)
+        self.registry_path = self._resolve_relative(
+            "registry.json", "Environment registry authority", for_write=True
+        )
+        self.state_path = self._resolve_relative(
+            "state.json", "Environment state authority", for_write=True
+        )
         if not self.registry_path.exists():
             atomic_write_json(self.registry_path, self._empty_registry())
         if not self.state_path.exists():
@@ -804,9 +820,13 @@ class EnvironmentRegistry:
             raise ValueError("content object SHA-256 mismatch")
 
     def _read_registry(self) -> Dict[str, Any]:
-        if not self.registry_path.exists():
+        registry_path = self._resolve_relative(
+            "registry.json", "Environment registry authority", for_write=True
+        )
+        self.registry_path = registry_path
+        if not registry_path.exists():
             return self._empty_registry()
-        value = read_json(self.registry_path)
+        value = read_json(registry_path)
         if not isinstance(value, dict):
             raise ValueError("registry: expected object")
         fields = {"schema_version", "events", "current_artifacts", "current_projects"}
@@ -963,6 +983,8 @@ class EnvironmentRegistry:
         self, relative: str, label: str, *, for_write: bool = False
     ) -> Path:
         normalized = self._validate_relative_path(relative, label)
+        if self.root.exists() and is_link_like(self.root):
+            raise ValueError(f"{label}: environment root is a link or junction")
         root = self.root.resolve()
         candidate = self.root.joinpath(*PurePosixPath(normalized).parts)
         # resolve(strict=False) follows existing parent symlinks, catching both

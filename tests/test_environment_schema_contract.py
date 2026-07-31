@@ -9,6 +9,25 @@ SCHEMAS = ROOT / "schemas"
 
 class EnvironmentSchemaContractTests(unittest.TestCase):
     EXPECTED = {
+        "environment-profile-source-specification.schema.json": {
+            "schema_version", "platform", "skills", "rules",
+        },
+        "environment-profile.schema.json": {
+            "schema_version", "profile_format", "platform", "skills", "rules",
+            "profile_sha256", "profile_id",
+        },
+        "environment-profile-generation.schema.json": {
+            "schema_version", "generation_format", "previous_generation_id",
+            "profile_sha256", "profile", "generation_id",
+        },
+        "environment-profile-pointer.schema.json": {
+            "schema_version", "generation_id", "generation_sha256", "profile_id",
+            "profile_sha256",
+        },
+        "environment-profile-assessment.schema.json": {
+            "status", "local_profile_id", "peer_profile_id", "peer_node_id",
+            "differences",
+        },
         "environment-artifact.schema.json": {
             "schema_version",
             "artifact_id",
@@ -131,6 +150,23 @@ class EnvironmentSchemaContractTests(unittest.TestCase):
                 self.assertEqual(required, set(schema["required"]))
                 self.assertTrue(required.issubset(schema["properties"]))
 
+    def test_convergence_artifact_links_have_closed_typed_key_contracts(self):
+        schema = self.load("environment-convergence-artifact-links.schema.json")
+        self.assertEqual(
+            "https://json-schema.org/draft/2020-12/schema", schema["$schema"]
+        )
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(2, len(schema["patternProperties"]))
+        for value_schema in schema["patternProperties"].values():
+            self.assertFalse(value_schema["additionalProperties"])
+            self.assertIn("source", value_schema["required"])
+        example = json.loads(
+            (ROOT / "examples" / "environment-convergence-artifact-links.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual({"local", "peer"}, {item["source"] for item in example.values()})
+
     def test_identifiers_and_hashes_are_constrained(self):
         revision = self.load("environment-revision.schema.json")["properties"]
         self.assertEqual("^rev:[0-9a-f]{64}$", revision["revision_id"]["pattern"])
@@ -142,6 +178,28 @@ class EnvironmentSchemaContractTests(unittest.TestCase):
             "^objects/sha256/[0-9a-f]{2}/[0-9a-f]{62}$",
             revision["object_path"]["pattern"],
         )
+        version_pattern = "^[0-9A-Za-z][0-9A-Za-z._+-]{0,127}$"
+        profile_skill = self.load("environment-profile.schema.json")["properties"][
+            "skills"
+        ]["items"]
+        source_skill = self.load(
+            "environment-profile-source-specification.schema.json"
+        )["properties"]["skills"]["items"]
+        assessment = self.load("environment-profile-assessment.schema.json")[
+            "properties"
+        ]["differences"]["items"]["properties"]
+        self.assertEqual(
+            profile_skill["properties"]["declared_version"]["pattern"],
+            version_pattern,
+        )
+        self.assertEqual(
+            source_skill["properties"]["declared_version"]["pattern"],
+            version_pattern,
+        )
+        self.assertEqual(
+            assessment["local_declared_version"]["pattern"], version_pattern
+        )
+        self.assertGreaterEqual(len(profile_skill["allOf"]), 5)
 
     def test_environment_object_classes_are_exact(self):
         expected = {

@@ -553,6 +553,25 @@ receive -> authenticate -> decrypt -> verify -> stage -> compatibility check
 
 No-change checks create no object, bundle, receipt, backup, or AI request.
 
+### 17.9 Personal Environment profiles
+
+`memory_environment_profiles.py` inventories only explicit source descriptors.
+Skill walks are bounded by file count, byte count, and depth; ignored caches,
+virtual environments, models, archives, and indexes do not affect identity.
+Links, junctions, unreadable files, malformed metadata, duplicate portable
+paths or identities, non-UTF-8 Rules, unknown fields, and oversize input fail
+before a generation or pointer is written.
+
+Capture is preview-first. Applied generations are immutable and linked to their
+predecessor, while `current.json` is a reconstructible atomic pointer. The
+Environment exchange ledger transports a validated generation as one
+`personal-environment-profile` event. Import writes only a per-peer read-only
+replica with `automatic_activation=false`; it never enters Registry incoming
+staging. Comparison and convergence planning are deterministic and model-free.
+Only an exact, already registered Environment artifact may be linked for later
+review, and existing Rule and Skill installers still require their own preview,
+binding, explicit approval, self-check, and rollback contracts.
+
 ### 17.8 Independent exchange streams
 
 Reuse the federation and encrypted envelope framework but keep `archive-v1` and

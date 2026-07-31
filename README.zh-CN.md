@@ -399,8 +399,13 @@ environment-diff
 environment-register
 environment-validate
 environment-export-delta
-environment-import-delta
 environment-exchange-status
+environment-profile-capture
+environment-profile-status
+environment-profile-current
+environment-profile-rebuild-current
+environment-profile-compare
+environment-convergence-plan
 environment-incoming-status
 environment-process-incoming
 environment-accept-incoming
@@ -670,6 +675,38 @@ python scripts/memory_cli.py readonly-http --host 127.0.0.1 --port 8766
 python scripts/memory_cli.py readonly-mcp
 python scripts/memory_cli.py summary-budget-status --metrics-json metrics.json --policy-json policy.json
 ```
+
+## v2.10 个人 Environment 收敛
+
+2.10 可把明确指定的全局规则文件和已安装 Skill 根目录盘点为确定性、与设备路径无关的
+Profile。Profile 只记录稳定安装身份、provider 来源、声明版本、精确树或文件 SHA-256、
+文件数、字节数、平台适用性和 Memory 无限托管规则块身份；不记录源路径、用户名、主机名、
+凭据、环境变量值、缓存、模型、归档、对话或索引。
+
+采集默认只预览，只有 `--apply` 才会创建一个与前代相连的不可变代次，并原子更新可重建的
+current 指针。环境没有变化时不会重复创建代次或导出事件。现有 `environment-v1` 只向已信任
+设备传输代次，接收端保存为 `automatic_activation=false` 的只读副本。
+
+比较结果固定为 `same`、`missing-local`、`missing-peer`、`content-differs`、
+`platform-inapplicable` 和 `inventory-incomplete`。收敛计划只提供有界预览：系统内置和
+插件托管 Skill 保持 provider 引用；没有精确、既有、不可变 Environment 产物的项目只能标记为
+`evidence-only`。Profile 本身永远不能调用规则或 Skill 安装器。
+
+```powershell
+python scripts/memory_cli.py environment-profile-capture --specification profile-sources.json
+python scripts/memory_cli.py environment-profile-capture --specification profile-sources.json --apply
+python scripts/memory_cli.py environment-profile-status
+python scripts/memory_cli.py environment-profile-current
+python scripts/memory_cli.py environment-profile-rebuild-current
+python scripts/memory_cli.py environment-profile-compare --peer-node-id node-mac
+python scripts/memory_cli.py environment-convergence-plan --peer-node-id node-mac
+```
+
+可选的 `--artifact-links` 输入必须符合
+`schemas/environment-convergence-artifact-links.schema.json`；完整示例见
+`examples/environment-convergence-artifact-links.json`。有效链接也只会生成既有安装器的预览，不会授权激活。
+
+状态台的 Environment 页会显示本机代次数、导出事件数、可信设备 Profile 副本和只读比较预览。
 
 更新元数据明确区分 stable、beta 和 development 通道。已验证的差分包失败后会
 回退到已验证的完整包。下载结果保持 `staged-awaiting-user-approval`；只有单独明确的

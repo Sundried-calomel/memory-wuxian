@@ -284,3 +284,27 @@ Node-local bindings conform to `schemas/environment-binding.schema.json`.
 Three-way conflict events conform to
 `schemas/environment-conflict.schema.json`. Conflict events are append-only;
 modification times are not authority inputs.
+
+## Personal Environment profiles
+
+`schemas/environment-profile-source-specification.schema.json` defines the
+closed, node-local explicit-source input. `schemas/environment-profile.schema.json`
+defines the closed, path-free profile
+payload. Stable Skill installation identity, provider provenance, platform
+applicability, exact content evidence, counts, incomplete reason codes, global
+Rule hashes, and managed-block hashes are canonical inputs. Source paths and
+content capable of disclosing credentials or device identity are not fields.
+
+`schemas/environment-profile-generation.schema.json` links one profile to its
+predecessor generation. The generation ID is the SHA-256 identity of the closed
+canonical generation excluding only its own ID. The separately closed
+`schemas/environment-profile-pointer.schema.json` can be rebuilt from the unique chain
+head. `schemas/environment-profile-assessment.schema.json` fixes the six comparison
+outcomes and bounds the human review surface.
+
+Optional links from profile differences to already verified immutable
+Environment artifacts conform to
+`schemas/environment-convergence-artifact-links.schema.json`; the complete
+key and value shapes are illustrated by
+`examples/environment-convergence-artifact-links.json`. These links authorize
+only an installer preview and never activation.

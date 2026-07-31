@@ -140,6 +140,13 @@ Required scenarios:
     no execution or installation before separate user approval.
 42. v2.9 summary-budget tests prove before/at/after thresholds, completed-round
     gating, idempotent queue creation, and zero AI calls during eligibility.
+43. v2.10 personal Environment tests prove deterministic path-free profile and
+    generation identities, preview-first capture, pointer reconstruction,
+    bounded inventory, metadata and redaction failures, all six comparison
+    outcomes, trusted read-only exchange, replay and corruption rejection,
+    provider-owned references, zero automatic activation, and unchanged raw
+    history. Existing Rule and Skill installer scenarios remain the required
+    handoff and rollback evidence; a received profile alone cannot invoke them.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

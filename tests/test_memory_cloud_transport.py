@@ -17,9 +17,11 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from memory_cli import MemoryStore, load_simple_yaml
 from memory_cloud_transport import (
+    AuthenticatedOpenResult,
     CloudFolderTransport,
     CommandCrypto,
     TransientCloudArtifactError,
+    _AUTHENTICATED_OPEN_AUTHORITY,
     display_path,
     filesystem_native_path,
 )
@@ -169,7 +171,14 @@ class FakeCrypto:
         if hashlib.sha256(signed).hexdigest() != envelope["signature"]:
             raise ValueError("Envelope signature is invalid")
         Path(destination).write_bytes(payload)
-        return metadata
+        return AuthenticatedOpenResult(
+            _AUTHENTICATED_OPEN_AUTHORITY,
+            {
+                **metadata,
+                "payload_length": len(payload),
+                "payload_sha256": hashlib.sha256(payload).hexdigest(),
+            },
+        )
 
 
 class MemoryCloudTransportTest(unittest.TestCase):
@@ -401,6 +410,22 @@ safety:
                 )
             ),
         )
+
+    def test_cloud_queue_rejects_link_like_descendant_before_write(self):
+        root = self.transport_a._exchange_root()
+        nodes = root / "nodes"
+        nodes.mkdir(parents=True, exist_ok=True)
+        from memory_cloud_transport import is_link_like as original
+
+        def classify(path):
+            return (
+                Path(display_path(path)) == Path(display_path(nodes))
+                or original(path)
+            )
+
+        with patch("memory_cloud_transport.is_link_like", side_effect=classify):
+            with self.assertRaisesRegex(ValueError, "link or junction"):
+                self.transport_a._outbox("node-beta")
 
     def test_native_windows_queue_directory_config_is_normalized_when_read(self):
         queue_directory = self.exchange / "MemoryWuxianExchange"

@@ -43,7 +43,9 @@ from memory_environment import EnvironmentRegistry
 from memory_environment_capabilities import local_device_capability_offer
 from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_incoming import EnvironmentIncomingProcessor
+from platform_paths import is_link_like
 from memory_environment_promotions import PromotionStore
+from memory_environment_profiles import EnvironmentProfileManager
 from memory_federation import FederationManager
 from memory_governance_ai import GovernanceAIQueue
 from memory_readonly_service import ReadOnlyMemoryService
@@ -441,15 +443,47 @@ def collector_telemetry(root: Path) -> dict[str, Any] | None:
     return telemetry
 
 
+MAX_DASHBOARD_ARCHIVE_ENTRIES = 200000
+MAX_DASHBOARD_ARCHIVE_SCAN_SECONDS = 5.0
+
+
+def _bounded_archive_files(directories: list[Path]) -> list[Path]:
+    started = time.monotonic()
+    files: list[Path] = []
+    stack = []
+    for directory in directories:
+        if is_link_like(directory):
+            raise ValueError("dashboard archive scan root is a link or junction")
+        if directory.is_dir():
+            stack.append(directory)
+    entries_seen = 0
+    while stack:
+        directory = stack.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                entries_seen += 1
+                if (
+                    entries_seen > MAX_DASHBOARD_ARCHIVE_ENTRIES
+                    or time.monotonic() - started > MAX_DASHBOARD_ARCHIVE_SCAN_SECONDS
+                ):
+                    raise ValueError("dashboard archive scan exceeded its bounded budget")
+                candidate = Path(entry.path)
+                if entry.is_symlink():
+                    raise ValueError("dashboard archive scan contains a link")
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(candidate)
+                elif entry.is_file(follow_symlinks=False):
+                    files.append(candidate)
+    return files
+
+
 def archive_storage_bytes(store: MemoryStore) -> int:
     paths = [store.state_path]
-    for directory in (
-        store.raw_dir,
-        store.conversation_dir,
-        store.summaries_dir,
-        store.index_dir,
-    ):
-        paths.extend(path for path in directory.rglob("*") if path.is_file())
+    paths.extend(
+        _bounded_archive_files(
+            [store.raw_dir, store.conversation_dir, store.summaries_dir, store.index_dir]
+        )
+    )
     total = 0
     for path in paths:
         try:
@@ -696,19 +730,23 @@ class DashboardSnapshotCache:
             Path.home() / ".codex/state_5.sqlite-wal",
             Path.home() / ".codex/.codex-global-state.json",
         ]
-        paths.extend(self.store.raw_dir.rglob("*.md"))
-        paths.extend(path for path in self.store.conversation_dir.rglob("*") if path.is_file())
-        paths.extend(path for path in self.store.summaries_dir.rglob("*") if path.is_file())
-        paths.extend(path for path in self.store.index_dir.rglob("*") if path.is_file())
-        paths.extend(self.store.pending_dir.glob("job-*.json"))
+        paths.extend(
+            _bounded_archive_files(
+                [
+                    self.store.raw_dir,
+                    self.store.conversation_dir,
+                    self.store.summaries_dir,
+                    self.store.index_dir,
+                    self.store.pending_dir,
+                ]
+            )
+        )
         token_usage_dir = getattr(
             self.store,
             "codex_token_usage_dir",
             self.store.root / "imports" / "codex" / "token-usage",
         )
-        paths.extend(
-            path for path in token_usage_dir.glob("*.json") if path.is_file()
-        )
+        paths.extend(_bounded_archive_files([token_usage_dir]))
         stamps = []
         for path in sorted(set(paths), key=str):
             try:
@@ -810,12 +848,20 @@ class EnvironmentDashboardCache:
         "global-runtime-contract",
     )
     ACTIVITY_DIRECTORIES = (
+        "artifacts",
+        "projects",
+        "revisions",
+        "objects",
         "conflicts",
         "promotions",
         "receipts",
         "staging",
         "governance-ai",
+        "profiles",
+        "replicas",
     )
+    MAX_JSON_FILES = 4096
+    MAX_SCAN_SECONDS = 3.0
 
     def __init__(self, archive_root: Path):
         self.registry = EnvironmentRegistry(archive_root)
@@ -829,20 +875,107 @@ class EnvironmentDashboardCache:
         stat = path.stat()
         return str(path), stat.st_size, stat.st_mtime_ns
 
+    def _bounded_json_paths(self, directory_name: str) -> list[Path]:
+        candidate = self.root / directory_name
+        if not candidate.exists():
+            return []
+        root = self.registry._resolve_relative(
+            directory_name, f"dashboard {directory_name} root"
+        )
+        if not root.is_dir():
+            return []
+        started = time.monotonic()
+        paths = []
+        stack = [root]
+        directories = 0
+        entries_seen = 0
+        while stack:
+            if time.monotonic() - started > self.MAX_SCAN_SECONDS:
+                raise ValueError("dashboard Environment inventory scan timed out")
+            directory = stack.pop()
+            directories += 1
+            if directories > self.MAX_JSON_FILES:
+                raise ValueError("dashboard Environment directory count exceeds limit")
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    entries_seen += 1
+                    if (
+                        entries_seen > self.MAX_JSON_FILES
+                        or time.monotonic() - started > self.MAX_SCAN_SECONDS
+                    ):
+                        raise ValueError("dashboard Environment entry scan exceeds limit")
+                    candidate = Path(entry.path)
+                    if is_link_like(candidate):
+                        raise ValueError("dashboard Environment inventory contains a link")
+                    if entry.is_dir(follow_symlinks=False):
+                        stack.append(candidate)
+                    elif entry.is_file(follow_symlinks=False) and (
+                        candidate.suffix == ".json" or directory_name == "objects"
+                    ):
+                        paths.append(candidate)
+                        if len(paths) > self.MAX_JSON_FILES:
+                            raise ValueError("dashboard Environment file count exceeds limit")
+        return paths
+
+    def _bounded_flat_entries(self, root: Path, label: str) -> list[Path]:
+        if not root.is_dir():
+            return []
+        started = time.monotonic()
+        paths = []
+        with os.scandir(root) as entries:
+            for entry in entries:
+                if (
+                    len(paths) >= self.MAX_JSON_FILES
+                    or time.monotonic() - started > self.MAX_SCAN_SECONDS
+                ):
+                    raise ValueError(f"{label} exceeds bounded scan limits")
+                paths.append(Path(entry.path))
+        paths.sort(key=lambda path: path.name)
+        return paths
+
     def source_signature(self) -> str:
         if not self.root.is_dir():
             return "uninitialized"
-        paths = [self.registry.registry_path, self.registry.state_path]
+        registry_path = self.registry._resolve_relative(
+            "registry.json", "dashboard Environment registry authority", for_write=True
+        )
+        state_path = self.registry._resolve_relative(
+            "state.json", "dashboard Environment state authority", for_write=True
+        )
+        paths = [registry_path, state_path]
         directory_stamps = []
         for name in self.ACTIVITY_DIRECTORIES:
-            directory = self.root / name
+            candidate = self.root / name
+            if not candidate.exists():
+                continue
+            directory = self.registry._resolve_relative(
+                name, f"dashboard {name} root"
+            )
             if directory.is_dir():
                 try:
                     stat = directory.stat()
                     directory_stamps.append((str(directory), stat.st_mtime_ns))
                 except OSError:
                     pass
-                paths.extend(path for path in directory.rglob("*.json") if path.is_file())
+                paths.extend(self._bounded_json_paths(name))
+        federation_peers = self.registry.archive_root / "federation" / "peers"
+        if is_link_like(federation_peers.parent) or is_link_like(federation_peers):
+            raise ValueError("dashboard federation peer root is link-like")
+        if federation_peers.is_dir():
+            try:
+                stat = federation_peers.stat()
+                directory_stamps.append((str(federation_peers), stat.st_mtime_ns))
+            except OSError:
+                pass
+            for path in self._bounded_flat_entries(
+                federation_peers, "dashboard federation peers"
+            ):
+                if path.suffix != ".json":
+                    continue
+                if len(paths) > self.MAX_JSON_FILES:
+                    raise ValueError("dashboard federation peer count exceeds limit")
+                if path.is_file() and not is_link_like(path):
+                    paths.append(path)
         stamps = []
         for path in sorted(set(paths), key=str):
             try:
@@ -865,11 +998,8 @@ class EnvironmentDashboardCache:
         return value if isinstance(value, dict) else None
 
     def _read_json_objects(self, directory_name: str) -> list[dict[str, Any]]:
-        directory = self.root / directory_name
-        if not directory.is_dir():
-            return []
         values = []
-        for path in sorted(directory.rglob("*.json"), key=str):
+        for path in sorted(self._bounded_json_paths(directory_name), key=str):
             value = self._read_json_object(path)
             if value is not None:
                 values.append(value)
@@ -912,6 +1042,7 @@ class EnvironmentDashboardCache:
                 "governance_ai": GovernanceAIQueue(
                     self.registry.archive_root
                 ).status(),
+                "profiles": {"generation_count": 0, "export_event_count": 0, "current": None, "peer_profiles": []},
             }
 
         try:
@@ -946,6 +1077,7 @@ class EnvironmentDashboardCache:
                     **GovernanceAIQueue(self.registry.archive_root).status(),
                     "scheduler": governance_ai_scheduler_status(),
                 },
+                "profiles": {"generation_count": 0, "export_event_count": 0, "current": None, "peer_profiles": []},
             }
         conflicts = EnvironmentConflictStore(self.registry.archive_root).list()
         promotions = PromotionStore(self.registry.archive_root).list()
@@ -991,11 +1123,71 @@ class EnvironmentDashboardCache:
                     ),
                 }
             )
+        profile_manager = EnvironmentProfileManager(self.registry.archive_root)
+        profile_error = None
+        try:
+            profile_status = profile_manager.status()
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+            profile_error = str(error)
+            profile_status = {
+                "initialized": True,
+                "generation_count": 0,
+                "current": None,
+                "export_event_count": 0,
+            }
+        peer_profiles = []
+        peer_root = self.registry._resolve_relative(
+            "replicas/peers", "dashboard peer replica root", for_write=True
+        )
+        trusted_peers = set()
+        federation_peers = self.registry.archive_root / "federation" / "peers"
+        if is_link_like(federation_peers.parent) or is_link_like(federation_peers):
+            raise ValueError("dashboard federation peer registry is link-like")
+        if federation_peers.is_dir():
+            for peer_path in self._bounded_flat_entries(
+                federation_peers, "dashboard federation peer registry"
+            ):
+                if peer_path.suffix != ".json":
+                    continue
+                if is_link_like(peer_path):
+                    raise ValueError("dashboard federation peer record is link-like")
+                peer = self._read_json_object(peer_path)
+                if peer is None:
+                    continue
+                if peer.get("trusted") is True and peer.get("node_id") == peer_path.stem:
+                    trusted_peers.add(peer_path.stem)
+        if peer_root.is_dir():
+            for peer in sorted(trusted_peers):
+                node = self.registry._resolve_relative(
+                    f"replicas/peers/{peer}",
+                    "dashboard peer replica",
+                )
+                profile_dir = self.registry._resolve_relative(
+                    f"replicas/peers/{peer}/profiles",
+                    "dashboard peer profile replica root",
+                )
+                if profile_dir.is_dir():
+                    replica_count = 0
+                    for replica in self._bounded_flat_entries(
+                        profile_dir, "dashboard peer profile replicas"
+                    ):
+                        if replica.suffix != ".json":
+                            continue
+                        safe_replica = self.registry._resolve_relative(
+                            replica.relative_to(self.registry.root).as_posix(),
+                            "dashboard peer profile replica",
+                        )
+                        if safe_replica.is_file():
+                            replica_count += 1
+                        if replica_count > 1024:
+                            raise ValueError("dashboard peer profile replica count exceeds limit")
+                    if replica_count:
+                        peer_profiles.append({"node_id": peer, "profile_count": replica_count})
         return {
             "format_version": self.FORMAT_VERSION,
             "initialized": bool(status["initialized"]),
-            "validation_status": "valid",
-            "validation_error": None,
+            "validation_status": "needs-attention" if profile_error else "valid",
+            "validation_error": profile_error,
             "generated_at": generated_at,
             "object_classes": {
                 name: {"count": class_counts[name]}
@@ -1066,6 +1258,7 @@ class EnvironmentDashboardCache:
                 **GovernanceAIQueue(self.registry.archive_root).status(),
                 "scheduler": governance_ai_scheduler_status(),
             },
+            "profiles": {**profile_status, "peer_profiles": peer_profiles},
         }
 
     def get(self) -> dict[str, Any]:
@@ -1254,6 +1447,26 @@ def make_handler(
                 body = json.dumps(
                     environment_cache.get(), ensure_ascii=False
                 ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+            elif path == "/api/environment-profile":
+                try:
+                    peer_node_id = parse_qs(request.query).get("peer_node_id", [None])[0]
+                    if not peer_node_id:
+                        raise ValueError("peer_node_id is required")
+                    manager = EnvironmentProfileManager(store.root)
+                    comparison = manager.compare(peer_node_id)
+                    body = json.dumps(
+                        {
+                            "comparison": comparison,
+                            "plan": manager.convergence_plan_from_comparison(comparison),
+                        },
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                except ValueError as exc:
+                    self.send_json(400, {"error": str(exc)})
+                    return
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")

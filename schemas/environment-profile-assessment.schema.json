@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/environment-profile-assessment.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "local_profile_id", "peer_profile_id", "peer_node_id", "differences"],
+  "properties": {
+    "status": {"enum": ["same", "different"]},
+    "local_profile_id": {"type": "string", "pattern": "^profile:[0-9a-f]{64}$"},
+    "peer_profile_id": {"type": "string", "pattern": "^profile:[0-9a-f]{64}$"},
+    "peer_node_id": {"type": "string"},
+    "differences": {
+      "type": "array",
+      "maxItems": 2048,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "identity", "outcome", "reason", "local_provider_type", "peer_provider_type", "local_provider_id", "peer_provider_id", "local_declared_version", "peer_declared_version", "local_applicable_platforms", "peer_applicable_platforms", "local_content_sha256", "peer_content_sha256"],
+        "properties": {
+          "kind": {"enum": ["skill", "rule", "rule-block"]},
+          "identity": {"type": "string"},
+          "outcome": {"enum": ["same", "missing-local", "missing-peer", "content-differs", "platform-inapplicable", "inventory-incomplete"]},
+          "reason": {"type": "string"},
+          "local_provider_type": {"enum": [null, "user-managed", "system-bundled", "plugin-managed"]},
+          "peer_provider_type": {"enum": [null, "user-managed", "system-bundled", "plugin-managed"]},
+          "local_provider_id": {"type": ["string", "null"], "pattern": "^(user(:[a-z0-9][a-z0-9._-]{1,119})?|system:[a-z0-9][a-z0-9._-]{1,119}|plugin:[a-z0-9][a-z0-9._-]{1,119})$"},
+          "peer_provider_id": {"type": ["string", "null"], "pattern": "^(user(:[a-z0-9][a-z0-9._-]{1,119})?|system:[a-z0-9][a-z0-9._-]{1,119}|plugin:[a-z0-9][a-z0-9._-]{1,119})$"},
+          "local_declared_version": {"type": ["string", "null"], "pattern": "^[0-9A-Za-z][0-9A-Za-z._+-]{0,127}$"},
+          "peer_declared_version": {"type": ["string", "null"], "pattern": "^[0-9A-Za-z][0-9A-Za-z._+-]{0,127}$"},
+          "local_applicable_platforms": {"type": ["array", "null"], "items": {"enum": ["windows", "macos", "linux"]}},
+          "peer_applicable_platforms": {"type": ["array", "null"], "items": {"enum": ["windows", "macos", "linux"]}},
+          "local_content_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+          "peer_content_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+        },
+        "allOf": [
+          {"if": {"properties": {"local_provider_type": {"type": "null"}}, "required": ["local_provider_type"]}, "then": {"properties": {"local_provider_id": {"type": "null"}}}, "else": {"properties": {"local_provider_id": {"type": "string"}}}},
+          {"if": {"properties": {"local_provider_id": {"type": "null"}}, "required": ["local_provider_id"]}, "then": {"properties": {"local_provider_type": {"type": "null"}}}},
+          {"if": {"properties": {"peer_provider_type": {"type": "null"}}, "required": ["peer_provider_type"]}, "then": {"properties": {"peer_provider_id": {"type": "null"}}}, "else": {"properties": {"peer_provider_id": {"type": "string"}}}},
+          {"if": {"properties": {"peer_provider_id": {"type": "null"}}, "required": ["peer_provider_id"]}, "then": {"properties": {"peer_provider_type": {"type": "null"}}}},
+          {"if": {"properties": {"local_provider_type": {"const": "user-managed"}}}, "then": {"properties": {"local_provider_id": {"pattern": "^user(:[a-z0-9][a-z0-9._-]{1,119})?$"}}}},
+          {"if": {"properties": {"local_provider_type": {"const": "system-bundled"}}}, "then": {"properties": {"local_provider_id": {"pattern": "^system:[a-z0-9][a-z0-9._-]{1,119}$"}}}},
+          {"if": {"properties": {"local_provider_type": {"const": "plugin-managed"}}}, "then": {"properties": {"local_provider_id": {"pattern": "^plugin:[a-z0-9][a-z0-9._-]{1,119}$"}}}},
+          {"if": {"properties": {"peer_provider_type": {"const": "user-managed"}}}, "then": {"properties": {"peer_provider_id": {"pattern": "^user(:[a-z0-9][a-z0-9._-]{1,119})?$"}}}},
+          {"if": {"properties": {"peer_provider_type": {"const": "system-bundled"}}}, "then": {"properties": {"peer_provider_id": {"pattern": "^system:[a-z0-9][a-z0-9._-]{1,119}$"}}}},
+          {"if": {"properties": {"peer_provider_type": {"const": "plugin-managed"}}}, "then": {"properties": {"peer_provider_id": {"pattern": "^plugin:[a-z0-9][a-z0-9._-]{1,119}$"}}}}
+        ]
+      }
+    }
+  }
+}
