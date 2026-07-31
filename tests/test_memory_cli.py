@@ -1877,6 +1877,15 @@ summaries:
         ])
 
     def test_native_collector_matches_python_storage_contract(self):
+        self.config.write_text(
+            self.config.read_text(encoding="utf-8")
+            .replace("level_1_trigger_rounds: 2", "level_1_trigger_rounds: 999")
+            .replace(
+                "level_1_trigger_characters: 20000",
+                "level_1_trigger_characters: 999999\n  level_1_trigger_tokens: 1",
+            ),
+            encoding="utf-8",
+        )
         cargo = shutil.which("cargo") or str(Path.home() / ".cargo" / "bin" / "cargo")
         completed = subprocess.run(
             [cargo, "build", "--manifest-path", str(NATIVE_MANIFEST)],
@@ -2102,6 +2111,7 @@ summaries:
         python_job.pop("created_at")
         native_job.pop("created_at")
         self.assertEqual(python_job, native_job)
+        self.assertEqual(1, native_job["source_round_end"])
         self.assertEqual(
             json.loads((self.root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
             json.loads((native_root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],

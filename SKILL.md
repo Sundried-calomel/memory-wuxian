@@ -159,6 +159,12 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     predecessor gates, non-goals, evidence matrix, and rollback contract.
     Personal Environment convergence is v2.10 after v2.9; v3.0 is conditional,
     and an untagged future-version branch is not a release.
+64. Use one bounded provenance-aware read service for CLI, loopback HTTP, and
+    MCP. Keep adapter validation and confidence behavior equivalent; expose no
+    write, deletion, pairing, installation, arbitrary path, command, or remote
+    control operation. Verify update metadata against the pinned signer, stage
+    verified bytes without execution until a separate version-and-hash-bound
+    explicit approval, and keep summary-budget eligibility model-free.
 
 ## Operating workflow
 
@@ -372,6 +378,11 @@ python scripts/install_agent_rules.py --agents-file /path/to/workspace/AGENTS.md
 python scripts/install_codex_autosync_windows.py --archive-root C:\path\to\memory --load
 python scripts/install_auto_update.py --skill-root /path/to/memory-wuxian
 python scripts/auto_update.py --check-only --force
+python scripts/auto_update.py --approve-install --expected-version <version> --expected-sha256 <sha256>
+python scripts/memory_cli.py readonly-query --query "prior decision" --mode hybrid --limit 20
+python scripts/memory_cli.py readonly-http --host 127.0.0.1 --port 8766
+python scripts/memory_cli.py readonly-mcp
+python scripts/memory_cli.py summary-budget-status --metrics-json /path/to/metrics.json --policy-json /path/to/policy.json
 powershell -ExecutionPolicy Bypass -File scripts/install_dashboard_shortcut_windows.ps1 -SkillRoot C:\path\to\memory-wuxian -ArchiveRoot C:\path\to\memory -PythonExecutable C:\path\to\python.exe
 ```
 

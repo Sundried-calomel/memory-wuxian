@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/summary-budget.schema.json",
+  "title": "Memory Wuxian deterministic summary budget",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["minimum_completed_rounds", "character_threshold", "token_threshold"],
+  "properties": {
+    "minimum_completed_rounds": {"type": "integer", "minimum": 0},
+    "character_threshold": {"type": "integer", "minimum": 0},
+    "token_threshold": {"type": "integer", "minimum": 0}
+  }
+}

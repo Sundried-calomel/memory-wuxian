@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.9.0",
+  "work_item_id": "memory-wuxian-v2.9.0",
+  "candidate_id": "v2.9.0-source-candidate",
+  "owner_id": "product-shell-control-plane",
+  "source_revision": "feature/v2.9-readonly-governance",
+  "product_evolution_record_id": "memory-wuxian-v2.9.0-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The shared read-only surface and mechanical update and summary gates implement accepted decisions D-042 and D-049 without introducing a new cross-product governance rule.",
+  "evidence_refs": [
+    "outputs/rehearsal/windows-2022/report.json",
+    "outputs/rehearsal/macos-latest/report.json",
+    "references/decisions.md#d-042",
+    "references/decisions.md#d-049"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-01T00:00:00Z"
+}

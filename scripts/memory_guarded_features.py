@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import heapq
 import json
 import math
 import os
@@ -24,6 +25,27 @@ AUTHORITATIVE_PREFIXES = ("raw/", "summaries/")
 AUTHORITATIVE_FILES = {"state.json"}
 IGNORED_MIGRATION_PARTS = {".locks", ".DS_Store"}
 E5_PROVIDER = "multilingual-e5-small"
+MAX_SEMANTIC_RECORDS = 200_000
+MAX_SEMANTIC_INDEX_BYTES = 512 * 1024 * 1024
+MAX_SEMANTIC_LINE_BYTES = 1024 * 1024
+MAX_SEMANTIC_MANIFEST_BYTES = 64 * 1024
+MAX_E5_SCORE_BYTES = 16 * 1024 * 1024
+SEMANTIC_WORKER_TIMEOUT_SECONDS = 120
+
+
+def raw_record_sha256(record: Dict[str, Any]) -> str:
+    payload = {
+        key: value
+        for key, value in record.items()
+        if key not in {"_path", "content_sha256"}
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def sha256_file(path: Path) -> str:
@@ -304,12 +326,14 @@ class GuardedFeatures:
     def raw_pointer_index(
         self, records: List[Dict[str, Any]]
     ) -> Dict[tuple[str, str], Dict[str, Optional[int]]]:
-        requested: Dict[str, set[str]] = {}
+        requested: Dict[str, Dict[str, str]] = {}
         for record in records:
             relative = str(record.get("_path", ""))
             message_id = str(record.get("message_id", ""))
             if relative and message_id:
-                requested.setdefault(relative, set()).add(message_id)
+                requested.setdefault(relative, {})[message_id] = str(
+                    record.get("content_sha256", "")
+                )
         pointers: Dict[tuple[str, str], Dict[str, Optional[int]]] = {}
         for relative, message_ids in requested.items():
             path = self.root / relative
@@ -325,9 +349,16 @@ class GuardedFeatures:
                     continue
                 message_id = str(candidate.get("message_id", ""))
                 if message_id in message_ids:
+                    computed = raw_record_sha256(candidate)
+                    expected = message_ids[message_id]
                     pointers[(relative, message_id)] = {
                         "raw_line_start": index + 1,
                         "raw_line_end": index + 4,
+                        "verified_against_raw": bool(
+                            expected
+                            and candidate.get("content_sha256") == expected
+                            and computed == expected
+                        ),
                     }
         return pointers
 
@@ -686,6 +717,7 @@ class GuardedFeatures:
                 ],
                 check=True,
                 env=self.e5_environment(),
+                timeout=SEMANTIC_WORKER_TIMEOUT_SECONDS,
             )
         finally:
             payload.unlink(missing_ok=True)
@@ -700,25 +732,34 @@ class GuardedFeatures:
                 json.dumps({"texts": [query]}, ensure_ascii=False),
                 encoding="utf-8",
             )
-            subprocess.run(
-                [
-                    str(runtime_python),
-                    str(Path(__file__).with_name("semantic_e5_worker.py")),
-                    "--contract", str(CONTRACT_PATH),
-                    "--model-dir", str(model_dir),
-                    "--input", str(payload),
-                    "--output", str(output),
-                    "--prefix", "query",
-                    "--batch-size", "1",
-                    "--matrix", str(matrix),
-                ],
-                check=True,
-                env=self.e5_environment(),
-            )
-            return [
-                float(value)
-                for value in json.loads(output.read_text(encoding="utf-8"))["scores"]
-            ]
+            try:
+                subprocess.run(
+                    [
+                        str(runtime_python),
+                        str(Path(__file__).with_name("semantic_e5_worker.py")),
+                        "--contract", str(CONTRACT_PATH),
+                        "--model-dir", str(model_dir),
+                        "--input", str(payload),
+                        "--output", str(output),
+                        "--prefix", "query",
+                        "--batch-size", "1",
+                        "--matrix", str(matrix),
+                    ],
+                    check=True,
+                    env=self.e5_environment(),
+                    timeout=SEMANTIC_WORKER_TIMEOUT_SECONDS,
+                )
+            except (OSError, subprocess.SubprocessError) as exc:
+                raise ValueError("semantic query worker failed") from exc
+            if not output.is_file() or output.stat().st_size > MAX_E5_SCORE_BYTES:
+                raise ValueError("semantic score output exceeds the query bound")
+            result = json.loads(output.read_text(encoding="utf-8"))
+            if not isinstance(result, dict) or set(result) != {"scores"} or not isinstance(result["scores"], list):
+                raise ValueError("semantic score output is malformed")
+            scores = [float(value) for value in result["scores"]]
+            if any(not math.isfinite(value) for value in scores):
+                raise ValueError("semantic score output contains a non-finite value")
+            return scores
 
     def semantic_build(self, provider: str) -> Dict[str, Any]:
         if provider not in {"local-hash-v1", E5_PROVIDER}:
@@ -790,46 +831,114 @@ class GuardedFeatures:
             "keyword_retrieval_available": True,
         }
 
-    def semantic_retrieve(self, query: str, top_k: int) -> Dict[str, Any]:
+    def semantic_retrieve(
+        self,
+        query: str,
+        top_k: int,
+        *,
+        raw_records: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 1_000:
+            raise ValueError("Semantic result limit is invalid")
         path = self.store.index_dir / "semantic" / "vectors.jsonl"
         if not path.exists():
             raise ValueError("Semantic index is not built")
-        raw = {str(item["message_id"]): item for item in self.store.read_all_raw()}
-        manifest = json.loads(
-            (self.store.index_dir / "semantic" / "manifest.json").read_text(encoding="utf-8")
-        )
-        provider = str(manifest.get("provider") or "local-hash-v1")
+        raw = {
+            str(item["message_id"]): item
+            for item in (
+                raw_records if raw_records is not None else self.store.read_all_raw()
+            )
+        }
+        manifest_path = self.store.index_dir / "semantic" / "manifest.json"
+        if not manifest_path.is_file() or manifest_path.stat().st_size > MAX_SEMANTIC_MANIFEST_BYTES:
+            raise ValueError("Semantic index manifest exceeds the query bound")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_fields = {
+            "format", "provider", "model_id", "model_revision", "interface_version",
+            "vector_file", "record_count", "disposable", "raw_archive_required_for_verification",
+        }
+        if (
+            not isinstance(manifest, dict)
+            or set(manifest) != manifest_fields
+            or manifest.get("format") != "memory-wuxian-semantic-index-v1"
+            or manifest.get("provider") not in {"local-hash-v1", E5_PROVIDER}
+            or isinstance(manifest.get("record_count"), bool)
+            or not isinstance(manifest.get("record_count"), int)
+            or not 0 <= manifest["record_count"] <= MAX_SEMANTIC_RECORDS
+            or manifest.get("disposable") is not True
+            or manifest.get("raw_archive_required_for_verification") is not True
+        ):
+            raise ValueError("Semantic index manifest is malformed")
+        provider = manifest["provider"]
         query_vector = self._hash_embedding(query)
         e5_scores = None
         if provider == E5_PROVIDER:
+            if not isinstance(manifest.get("vector_file"), str) or Path(manifest["vector_file"]).name != manifest["vector_file"]:
+                raise ValueError("Semantic vector filename is malformed")
             e5_scores = self.e5_scores(
                 query,
                 self.store.index_dir / "semantic" / str(manifest["vector_file"]),
             )
+            if len(e5_scores) != manifest["record_count"]:
+                raise ValueError("Semantic score count does not match the manifest")
+        elif manifest.get("vector_file") is not None:
+            raise ValueError("Local semantic index must not declare a matrix")
         matches = []
-        for index, line in enumerate(path.read_text(encoding="utf-8").splitlines()):
-            item = json.loads(line)
-            source = raw.get(str(item["message_id"]))
-            if not source or source.get("content_sha256") != item["record_sha256"]:
-                continue
-            score = (
-                e5_scores[index]
-                if e5_scores is not None
-                else float(sum(a * b for a, b in zip(query_vector, item["vector"])))
-            )
-            matches.append({
-                "message_id": item["message_id"],
-                "conversation_id": item["conversation_id"],
-                "score": round(score, 8),
-                "raw_path": item["raw_path"],
-                "raw_line_start": item.get("raw_line_start"),
-                "raw_line_end": item.get("raw_line_end"),
-                "record_sha256": item["record_sha256"],
-            })
-        matches.sort(key=lambda item: item["score"], reverse=True)
+        scanned_bytes = 0
+        record_count = 0
+        allowed_fields = {
+            "message_id", "conversation_id", "raw_path", "record_sha256", "raw_line_start",
+            "raw_line_end", "verified_against_raw", "provider", "vector",
+        }
+        with path.open("rb") as handle:
+            while True:
+                line = handle.readline(MAX_SEMANTIC_LINE_BYTES + 1)
+                if not line:
+                    break
+                scanned_bytes += len(line)
+                if len(line) > MAX_SEMANTIC_LINE_BYTES or scanned_bytes > MAX_SEMANTIC_INDEX_BYTES:
+                    raise ValueError("Semantic index exceeds the query bound")
+                record_count += 1
+                if record_count > MAX_SEMANTIC_RECORDS:
+                    raise ValueError("Semantic index record count exceeds the query bound")
+                item = json.loads(line.decode("utf-8"))
+                required = allowed_fields - {"vector"}
+                if (
+                    not isinstance(item, dict)
+                    or set(item) - allowed_fields
+                    or not required.issubset(item)
+                    or item.get("provider") != provider
+                    or not all(isinstance(item.get(key), str) and item[key] for key in ("message_id", "conversation_id", "raw_path", "record_sha256"))
+                ):
+                    raise ValueError("Semantic index record is malformed")
+                vector = item.get("vector")
+                if provider == "local-hash-v1" and (
+                    not isinstance(vector, list)
+                    or len(vector) != len(query_vector)
+                    or any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) for value in vector)
+                ):
+                    raise ValueError("Semantic index vector is malformed")
+                if provider == E5_PROVIDER and vector is not None:
+                    raise ValueError("E5 semantic metadata must not contain vectors")
+                source = raw.get(item["message_id"])
+                if not source or source.get("content_sha256") != item["record_sha256"]:
+                    continue
+                score = e5_scores[record_count - 1] if e5_scores is not None else float(sum(a * float(b) for a, b in zip(query_vector, vector)))
+                match = {
+                    "message_id": item["message_id"], "conversation_id": item["conversation_id"],
+                    "score": round(score, 8), "raw_path": item["raw_path"],
+                    "raw_line_start": item.get("raw_line_start"), "raw_line_end": item.get("raw_line_end"),
+                    "record_sha256": item["record_sha256"],
+                }
+                heapq.heappush(matches, (match["score"], record_count, match))
+                if len(matches) > top_k:
+                    heapq.heappop(matches)
+        if record_count != manifest["record_count"]:
+            raise ValueError("Semantic index record count does not match the manifest")
+        ranked = [entry[2] for entry in sorted(matches, key=lambda entry: (entry[0], entry[1]), reverse=True)]
         return {
             "query": query,
             "provider": provider,
-            "matches": matches[:top_k],
+            "matches": ranked,
             "verified_against_raw": True,
         }

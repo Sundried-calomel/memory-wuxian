@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 2.9.0 - 2026-08-01
+
+- Added one bounded provenance-aware read service shared by local CLI,
+  loopback HTTP, and an allow-listed MCP stdio adapter.
+- Added strict malformed, over-broad, unavailable-source, stale-index, and raw
+  verification behavior with explicit confidence and provenance fields.
+- Added stable, beta, and development update selection plus verified delta to
+  full-package fallback; release metadata uses a pinned Ed25519 SSH signer and
+  downloaded artifacts remain inert until a second version-and-hash-bound
+  approval authorizes installation.
+- Added a deterministic summary-budget scheduler that queues only completed
+  dialogue rounds and never invokes AI during eligibility checks.
+- Added fixed v2.9 interface parity, provenance, update fallback, corruption,
+  approval, scheduler threshold, and no-AI rehearsal cases.
+
 ## 2.8.0 - 2026-08-01
 
 - Added a removable exact-byte shadow content store addressed only by SHA-256,

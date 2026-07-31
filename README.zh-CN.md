@@ -656,6 +656,30 @@ python scripts/memory_cli.py content-shadow-disable
 python scripts/memory_cli.py content-transfer --manifest-id <manifest-id> --target-archive-root C:\target --domain archive --target-id <node> --start 0 --count 100
 ```
 
+## v2.9 统一只读访问与更新治理
+
+`readonly-query`、`readonly-http` 和 `readonly-mcp` 共用同一个有界服务与
+`memory.query` 合同。结果包含置信度、准确原文来源、SHA-256 和原文复核状态。
+HTTP 只接受 GET 且只能绑定回环地址；MCP 只公布一个读取工具，不提供写入、安装、
+配对、任意路径、命令或远程控制工具。语义索引陈旧或不可用时，混合模式会降级到
+经过原文复核的关键词检索。
+
+```powershell
+python scripts/memory_cli.py readonly-query --query "之前的决定" --mode hybrid --limit 20
+python scripts/memory_cli.py readonly-http --host 127.0.0.1 --port 8766
+python scripts/memory_cli.py readonly-mcp
+python scripts/memory_cli.py summary-budget-status --metrics-json metrics.json --policy-json policy.json
+```
+
+更新元数据明确区分 stable、beta 和 development 通道。已验证的差分包失败后会
+回退到已验证的完整包。下载结果保持 `staged-awaiting-user-approval`；只有单独明确的
+第二条命令同时提供 `--approve-install`、`--expected-version` 和
+`--expected-sha256` 才能调用既有安装器。beta/development 通道或差分元数据通过
+`--channel` 与 `--update-metadata-json` 提供。选择通道或下载前，发布元数据还必须
+通过 Ed25519 SSH 分离签名，并与固定的 `keys/update-allowed-signers` 身份一致。
+摘要预算检查完全确定且不调用模型，只能在
+完整轮次边界幂等地排入一次性任务。
+
 签名且面向目标加密的 `environment-v1` 流会把合同传给已配对设备。合同固定
 模型 revision、文件哈希、运行时包、query/passage 前缀、池化、归一化、
 相似度算法和安装入口。接收或接受合同不会自动安装或下载任何内容；每台设备

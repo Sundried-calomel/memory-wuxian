@@ -20,10 +20,12 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from platform_process import no_window_kwargs
+from memory_update_governance import apply_delta_bundle, load_signed_metadata, select_release, stage_update
 
 
 REPOSITORY = "Sundried-calomel/memory-wuxian"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
+LATEST_RELEASE_DOWNLOAD = f"https://github.com/{REPOSITORY}/releases/latest/download"
 DEFAULT_INTERVAL_SECONDS = 24 * 60 * 60
 WINDOWS_RUN_ONCE = r"HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce"
 WINDOWS_RUN_ONCE_VALUE = "MemoryWuxianUpdate"
@@ -81,6 +83,12 @@ def download(url: str, destination: Path) -> None:
     with urllib.request.urlopen(request, timeout=120) as response, destination.open("wb") as handle:
         while chunk := response.read(1024 * 1024):
             handle.write(chunk)
+
+
+def fetch_bytes(url: str) -> bytes:
+    request = urllib.request.Request(url, headers={"User-Agent": "MemoryWuxian-AutoUpdater"})
+    with urllib.request.urlopen(request, timeout=120) as response:
+        return response.read(1024 * 1024 * 1024 + 1)
 
 
 def verify_checksum(package: Path, checksum: Path) -> str:
@@ -237,7 +245,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--python-executable", default=sys.executable)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument(
+        "--approve-install",
+        action="store_true",
+        help="Install only a previously staged artifact matching expected version and SHA-256",
+    )
+    parser.add_argument("--expected-version")
+    parser.add_argument("--expected-sha256")
     parser.add_argument("--release-json", help=argparse.SUPPRESS)
+    parser.add_argument("--channel", choices=("stable", "beta", "development"), default="stable")
+    parser.add_argument("--update-metadata-json")
+    parser.add_argument("--update-metadata-signature")
+    parser.add_argument("--allowed-signers")
+    parser.add_argument("--base-package")
     return parser
 
 
@@ -248,14 +268,105 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     download_root = Path(args.download_directory).expanduser().resolve()
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     now = int(time.time())
+    if args.approve_install:
+        try:
+            if not args.expected_version or not args.expected_sha256:
+                raise ValueError("approval requires --expected-version and --expected-sha256")
+            if state.get("status") != "staged-awaiting-user-approval":
+                raise ValueError("no verified staged update is awaiting approval")
+            if state.get("latest_version") != args.expected_version:
+                raise ValueError("staged update version does not match approval")
+            if state.get("sha256") != args.expected_sha256.lower():
+                raise ValueError("staged update SHA-256 does not match approval")
+            package = Path(str(state.get("package", ""))).expanduser().resolve()
+            if not package.is_file() or hashlib.sha256(package.read_bytes()).hexdigest() != args.expected_sha256.lower():
+                raise ValueError("staged update bytes no longer match approval")
+            state["status"] = stage_install(
+                package,
+                platform.system(),
+                skill_root=skill_root,
+                python_executable=Path(args.python_executable).expanduser(),
+            )
+            state["install_approved"] = True
+            state["approved_at_epoch"] = now
+            atomic_json(state_path, state)
+            print(json.dumps(state, ensure_ascii=False, indent=2))
+            return 0
+        except Exception as error:
+            failure = {"status": "failed", "checked_at_epoch": now, "error": str(error)}
+            print(json.dumps(failure, ensure_ascii=False, indent=2))
+            return 1
     if not args.force and now - int(state.get("checked_at_epoch", 0)) < args.interval_seconds:
         print(json.dumps({"status": "not-due", **state}, ensure_ascii=False, indent=2))
         return 0
     try:
+        if args.release_json and os.environ.get("MEMORY_WUXIAN_TEST_ALLOW_UNSIGNED_RELEASE") != "1":
+            raise ValueError("unsigned release fixtures are disabled outside tests")
+        installed = current_version(skill_root)
+        metadata_path = Path(args.update_metadata_json).expanduser().resolve() if args.update_metadata_json else None
+        signature_path = Path(args.update_metadata_signature).expanduser().resolve() if args.update_metadata_signature else None
+        if not args.release_json and metadata_path is None:
+            platform_label = {"Windows": "windows", "Darwin": "macos"}.get(platform.system())
+            if not platform_label:
+                raise ValueError(f"Automatic release updates are unsupported on {platform.system()}")
+            metadata_root = download_root / "metadata"
+            metadata_path = metadata_root / f"memory-wuxian-update-{platform_label}-v1.json"
+            signature_path = metadata_path.with_suffix(metadata_path.suffix + ".sig")
+            metadata_root.mkdir(parents=True, exist_ok=True)
+            download(f"{LATEST_RELEASE_DOWNLOAD}/{metadata_path.name}", metadata_path)
+            download(f"{LATEST_RELEASE_DOWNLOAD}/{signature_path.name}", signature_path)
+        if metadata_path is not None:
+            if signature_path is None:
+                signature_path = metadata_path.with_suffix(metadata_path.suffix + ".sig")
+            allowed_signers = (
+                Path(args.allowed_signers).expanduser().resolve()
+                if args.allowed_signers
+                else skill_root / "keys/update-allowed-signers"
+            )
+            metadata = load_signed_metadata(metadata_path, signature_path, allowed_signers)
+            selection = select_release(metadata, args.channel, installed)
+            if selection["status"] == "up-to-date":
+                result = {"checked_at_epoch": now, **selection}
+            elif args.check_only:
+                result = {"checked_at_epoch": now, **selection, "release": selection["release"]["version"]}
+            else:
+                release = selection["release"]
+                filename = str(release["full"].get("filename", ""))
+                if not filename or Path(filename).name != filename:
+                    raise ValueError("update filename is unsafe")
+                destination = download_root / release["version"] / filename
+                base = (
+                    Path(args.base_package).expanduser().resolve().read_bytes()
+                    if args.base_package
+                    else b""
+                )
+                staged = stage_update(
+                    release,
+                    installed,
+                    destination,
+                    fetch_bytes,
+                    lambda patch: apply_delta_bundle(base, patch),
+                )
+                result = {
+                    "checked_at_epoch": now,
+                    "installed_version": installed,
+                    "latest_version": release["version"],
+                    "channel": args.channel,
+                    "package": staged["path"],
+                    "sha256": staged["sha256"],
+                    "status": staged["status"],
+                    "artifact_kind": staged["artifact_kind"],
+                    "attempts": staged["attempts"],
+                    "install_approved": False,
+                }
+            atomic_json(state_path, result)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.channel != "stable":
+            raise ValueError("beta and development channels require --update-metadata-json")
         release = json.loads(Path(args.release_json).read_text(encoding="utf-8")) if args.release_json else fetch_json(LATEST_RELEASE_API)
         if release.get("draft") or release.get("prerelease"):
             raise ValueError("GitHub latest release is not a stable published release")
-        installed = current_version(skill_root)
         latest = str(release["tag_name"]).removeprefix("v")
         result: dict[str, Any] = {
             "checked_at_epoch": now,
@@ -279,21 +390,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             download(assets[checksum_name], checksum)
             digest = verify_checksum(package, checksum)
             result.update({
-                "status": stage_install(
-                    package,
-                    platform.system(),
-                    skill_root=skill_root,
-                    python_executable=Path(args.python_executable).expanduser(),
-                ),
+                "status": "staged-awaiting-user-approval",
                 "package": str(package),
                 "sha256": digest,
+                "install_approved": False,
             })
         atomic_json(state_path, result)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except Exception as error:
         failure = {"status": "failed", "checked_at_epoch": now, "error": str(error)}
-        atomic_json(state_path, failure)
+        staged_package = Path(str(state.get("package", ""))).expanduser()
+        staged_digest = str(state.get("sha256", "")).lower()
+        if (
+            state.get("status") == "staged-awaiting-user-approval"
+            and re.fullmatch(r"[0-9a-f]{64}", staged_digest)
+            and staged_package.is_file()
+            and hashlib.sha256(staged_package.read_bytes()).hexdigest() == staged_digest
+        ):
+            state["checked_at_epoch"] = now
+            state["last_check_failure"] = failure
+            atomic_json(state_path, state)
+            failure["staged_approval_preserved"] = True
+        else:
+            atomic_json(state_path, failure)
         print(json.dumps(failure, ensure_ascii=False, indent=2))
         return 1
 
