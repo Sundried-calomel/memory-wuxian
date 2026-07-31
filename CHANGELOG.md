@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Restored the authoritative ordered v2.6-v3.0 execution roadmap and reserved
+  review-first personal Environment convergence for v2.10.
+- Required predecessor evidence, bounded work contracts, exact-candidate
+  cross-platform gates, and rollback proof before each future release.
+- Kept v3.0 conditional on a separately accepted incompatible public-contract
+  decision rather than roadmap completion.
+
 ## 2.5.2 - 2026-07-31
 
 - Removed duplicate feature-branch push and pull-request CI matrices; only

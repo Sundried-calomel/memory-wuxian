@@ -675,6 +675,16 @@ one owner, and `scripts/check_architecture_contract.py` rejects unowned files,
 overlapping ownership, and declared prohibited dependencies. Windows and
 macOS package builds fail if these architecture-gate files are absent.
 
+## Versioned execution roadmap
+
+[`references/version-roadmap-v2.5-to-v3.0.md`](references/version-roadmap-v2.5-to-v3.0.md)
+is the implementation authority for the ordered v2.6 through v2.10 work. Each
+version requires its predecessor's release and recovery evidence, a bounded
+work contract, an exact-candidate macOS and Windows gate, and a proven rollback
+before publication. Personal Environment convergence is reserved for v2.10;
+v3.0 remains conditional on a separately accepted incompatible public-contract
+decision.
+
 ## License
 
 Memory無限 is released under the [MIT License](LICENSE.txt).

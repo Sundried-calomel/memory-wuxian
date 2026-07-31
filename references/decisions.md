@@ -391,3 +391,19 @@ and superseded PR runs are cancelled. Installer publication consumes the
 successful same-SHA candidate proof and does not repeat unit or rehearsal
 suites. No optimization may delete a safety contract, reuse evidence across
 commits, versions, jobs, or platforms, or report an unproved scenario as passed.
+
+## D-045: Personal Environment convergence is v2.10 and review-first
+
+Status: Accepted for the future v2.10 implementation.
+
+Place cross-device personal Environment inventory and convergence after the
+v2.9 read-only interface and update-governance work. Represent installed Skills
+and global Rules as a deterministic, content-addressed, path-free profile and
+transport it only as immutable evidence through the existing independent
+`environment-v1` stream. Imported profiles remain read-only. A profile may
+identify differences and link to an existing approved Environment artifact,
+but it never authorizes installation, whole-file Rule overwrite, credential or
+runtime copying, project activation, permission expansion, or archive changes.
+System-bundled and plugin-managed Skills retain provider ownership. Release
+v2.10 only after the v2.9 gate and exact-candidate macOS/Windows evidence pass;
+v3.0 remains conditional on a separately accepted incompatible contract.

@@ -134,6 +134,10 @@
     {
       "id": "explainable-configuration-and-capabilities",
       "required_tokens": ["configuration-compile", "configuration-explain", "environment-capability-status", "configuration-v1", "System"]
+    },
+    {
+      "id": "versioned-execution-roadmap",
+      "required_tokens": ["version-roadmap-v2.5-to-v3.0.md", "v2.10", "v3.0"]
     }
   ]
 }

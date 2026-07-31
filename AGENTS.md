@@ -154,6 +154,14 @@ Use Memory無限 to preserve conversation history outside the active context win
     backup-eligible mutation atomically records coalescing backup debt; the
     independent maintenance worker creates one complete snapshot for the batch
     and clears the debt only after successful verification.
+67. Before planning or implementing v2.6 or later, read
+    `references/version-roadmap-v2.5-to-v3.0.md` and report the exact target,
+    predecessor evidence, canonical owner, invariants, non-goals, tests, and
+    rollback path. Do not reconstruct version scope from chat recollection,
+    skip a predecessor release gate, or treat an untagged future-version branch
+    as a published release. Personal Environment convergence belongs to
+    v2.10.0 after v2.9.0; v3.0 remains conditional on an accepted incompatible
+    public-contract decision.
 
 ## Authority order
 

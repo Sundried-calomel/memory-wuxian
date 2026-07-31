@@ -591,6 +591,15 @@ macOS は pull request でプラットフォーム固有契約、`main` で完�
 
 設計判断と実装契約は[`PROJECT.md`](PROJECT.md)と[`references/`](references/)に、変更履歴は[`CHANGELOG.md`](CHANGELOG.md)にあります。`README.md`、`README.zh-CN.md`、`README.ja.md`は一つの文書契約として管理し、記載動作が変わる場合は同時に更新します。
 
+## バージョン別実行ロードマップ
+
+[`references/version-roadmap-v2.5-to-v3.0.md`](references/version-roadmap-v2.5-to-v3.0.md)
+は v2.6 から v2.10 までの順序付き実装権限です。各バージョンは公開前に、
+直前バージョンのリリース・復旧証拠、境界付き作業契約、同一候補 SHA に対する
+macOS・Windows ゲート、実証済みロールバック経路を必要とします。Personal
+Environment の収束は v2.10 に限定され、v3.0 は別途承認された非互換の公開契約
+変更がある場合だけ検討します。
+
 ## ライセンス
 
 Memory無限は[MIT License](LICENSE.txt)で公開されています。

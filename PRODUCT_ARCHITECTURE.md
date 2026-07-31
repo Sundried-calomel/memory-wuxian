@@ -352,6 +352,12 @@ change, first amend an architecture decision and version the contract.
 
 ## Ordered Productization Roadmap
 
+The detailed version-by-version execution authority is
+`references/version-roadmap-v2.5-to-v3.0.md`. Read it before assigning or
+implementing any v2.6-or-later scope. The phases below describe architecture
+order; they do not override the version dependencies, non-goals, evidence
+requirements, or release gates in that file.
+
 ### Phase 1: 2.0.x Operational Stabilization
 
 Complete real macOS and Windows installation, bidirectional cloud exchange,
@@ -397,6 +403,10 @@ rehearsals.
 Remain on 2.x for behavior-preserving internal modularization. Use 3.0 only
 when a public CLI, persisted format, protocol, extension API, or compatibility
 contract changes incompatibly.
+
+Personal Environment convergence remains a backward-compatible v2.10 work
+item after v2.9. It does not justify v3.0 and may not be released before its
+predecessor gates pass.
 
 ## Completion Rule
 

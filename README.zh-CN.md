@@ -560,6 +560,14 @@ Windows 每个 job 只运行一次完整测试；macOS 在拉取请求中运行�
 `scripts/check_architecture_contract.py` 会拒绝未归属文件、重复归属和已声明的
 禁止依赖。Windows 与 macOS 安装包如果缺少这些架构门禁文件，发布将直接失败。
 
+## 分版本执行路线
+
+[`references/version-roadmap-v2.5-to-v3.0.md`](references/version-roadmap-v2.5-to-v3.0.md)
+是 v2.6 至 v2.10 顺序实施的权威文件。每个版本发布前都必须具备上一版本的发布与
+恢复证据、有界工作合同、绑定同一候选 SHA 的 macOS 与 Windows 门禁，以及已经
+证明的回滚路径。个人 Environment 收敛固定属于 v2.10；只有另行接受了不兼容的
+公共合同变更，才可以进入 v3.0。
+
 ## 许可证
 
 Memory無限 使用 [MIT License](LICENSE.txt) 发布。
