@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 2.8.0 - 2026-08-01
+
+- Added a removable exact-byte shadow content store addressed only by SHA-256,
+  with closed ordered manifests recording stable source identity, path, byte
+  length, and whole-file hash.
+- Added preview-first exact reconstruction that refuses conflicting targets and
+  verifies every reconstructed file without changing authoritative sources.
+- Added independent archive/environment transfer streams with durable ordered
+  checkpoints, bounded ranges, exact resume, idempotent replay, corruption
+  rejection, and explicit gap/overlap/conflict errors.
+- Added preview-first CLI adapters for shadow build, status, verification,
+  reconstruction, disable, and local resumable transfer.
+- Added fixed v2.8 exact-byte, interruption, duplicate, corrupt, isolation,
+  conflict, tamper, and rollback rehearsal cases.
+
 ## 2.7.0 - 2026-08-01
 
 - Added a persistent model-free maintenance queue with idempotent delivery,

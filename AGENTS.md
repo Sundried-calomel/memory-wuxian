@@ -173,6 +173,12 @@ Use Memory無限 to preserve conversation history outside the active context win
     `semantic-ready` only after a completed dialogue boundary; only an explicit
     one-shot dispatcher may invoke AI, and its failure must never stop or roll
     back native raw capture.
+70. Treat v2.8 content addressing as removable exact-byte shadow evidence.
+    Object identity is SHA-256 over unchanged bytes; manifests are closed and
+    ordered; transfers advance only through verified contiguous checkpoints.
+    Never normalize, semantically deduplicate, merge, overwrite, delete, or
+    garbage-collect source history, and never replace the independent
+    `archive-v1` or `environment-v1` protocol contracts.
 
 ## Authority order
 

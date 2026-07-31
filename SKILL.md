@@ -82,6 +82,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     idempotency keys, leases, bounded retries, and quarantine; promote semantic
     work only after a complete dialogue boundary, then run at most one
     explicitly leased one-shot AI worker attempt.
+46. Keep exact-byte content storage in the removable shadow path. Require
+    ordered closed manifests, per-file length and SHA-256, contiguous
+    per-stream checkpoints, exact reconstruction verification, and
+    preview-first writes. Never treat shadow data as replacement authority.
     Validate package contents, platform and runtime contracts, preserve a
     rollback object before mutation, atomically switch, self-check, and append a
     receipt.
@@ -287,6 +291,15 @@ python3 scripts/memory_cli.py maintenance-enqueue --kind archive-health --idempo
 python3 scripts/memory_cli.py maintenance-status
 python3 scripts/memory_cli.py maintenance-tick --maximum-jobs 20
 python3 scripts/memory_cli.py maintenance-diagnostics
+python3 scripts/memory_cli.py content-shadow-build --source-root /snapshot --source-id node:snapshot --file raw/a.md
+python3 scripts/memory_cli.py content-shadow-build --source-root /snapshot --source-id node:snapshot --file raw/a.md --apply
+python3 scripts/memory_cli.py content-shadow-status
+python3 scripts/memory_cli.py content-shadow-verify --manifest-id <manifest-id> --source-root /snapshot
+python3 scripts/memory_cli.py content-shadow-reconstruct --manifest-id <manifest-id> --destination /restore
+python3 scripts/memory_cli.py content-shadow-reconstruct --manifest-id <manifest-id> --destination /restore --apply
+python3 scripts/memory_cli.py content-transfer --manifest-id <manifest-id> --target-archive-root /target --domain archive --target-id <node> --start 0 --count 100
+python3 scripts/memory_cli.py content-shadow-disable
+python3 scripts/memory_cli.py content-shadow-disable --apply
 python3 scripts/memory_cli.py ingest-summary --job memory/pending/<job>.json --summary-json <summary>.json
 python3 scripts/memory_cli.py retrieve --query "..."
 python3 scripts/memory_cli.py retrieve --query "..." --mode current-policy

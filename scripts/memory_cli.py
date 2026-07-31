@@ -38,8 +38,10 @@ from memory_environment_skills import EnvironmentSkillInstaller
 from memory_federation import FederationManager
 from memory_guarded_features import GuardedFeatures, atomic_json
 import memory_indexing
+from memory_content_store import ContentStore
 from memory_diagnostics import create_diagnostic_bundle
 from memory_jobs import KINDS as MAINTENANCE_JOB_KINDS, MaintenanceQueue, run_model_free_tick
+from memory_resumable_sync import ResumableTransfer
 from memory_service_state import service_state
 from semantic_runtime_contract import (
     ARTIFACT_ID as SEMANTIC_RUNTIME_ARTIFACT_ID,
@@ -4152,6 +4154,47 @@ def build_parser() -> argparse.ArgumentParser:
         help="Preview or atomically restore the previous index-generation pointer",
     )
     generation_rollback_parser.add_argument("--apply", action="store_true")
+    content_build_parser = subparsers.add_parser(
+        "content-shadow-build",
+        help="Preview or build one exact-byte shadow manifest from explicit files",
+    )
+    content_build_parser.add_argument("--source-root", required=True)
+    content_build_parser.add_argument("--source-id", required=True)
+    content_build_parser.add_argument("--file", action="append", required=True)
+    content_build_parser.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "content-shadow-status",
+        help="Show removable exact-byte shadow-store status",
+    )
+    content_verify_parser = subparsers.add_parser(
+        "content-shadow-verify",
+        help="Verify one shadow manifest and its exact-byte objects",
+    )
+    content_verify_parser.add_argument("--manifest-id", required=True)
+    content_verify_parser.add_argument("--source-root")
+    content_reconstruct_parser = subparsers.add_parser(
+        "content-shadow-reconstruct",
+        help="Preview or reconstruct one verified manifest without overwriting conflicts",
+    )
+    content_reconstruct_parser.add_argument("--manifest-id", required=True)
+    content_reconstruct_parser.add_argument("--destination", required=True)
+    content_reconstruct_parser.add_argument("--apply", action="store_true")
+    content_disable_parser = subparsers.add_parser(
+        "content-shadow-disable",
+        help="Preview or disable shadow-store use without changing source history",
+    )
+    content_disable_parser.add_argument("--apply", action="store_true")
+    content_transfer_parser = subparsers.add_parser(
+        "content-transfer",
+        help="Preview or apply one bounded resumable local shadow transfer range",
+    )
+    content_transfer_parser.add_argument("--manifest-id", required=True)
+    content_transfer_parser.add_argument("--target-archive-root", required=True)
+    content_transfer_parser.add_argument("--domain", choices=("archive", "environment"), required=True)
+    content_transfer_parser.add_argument("--target-id", required=True)
+    content_transfer_parser.add_argument("--start", type=int, required=True)
+    content_transfer_parser.add_argument("--count", type=int, required=True)
+    content_transfer_parser.add_argument("--apply", action="store_true")
     maintenance_enqueue_parser = subparsers.add_parser(
         "maintenance-enqueue",
         help="Persist one bounded model-free maintenance job",
@@ -4853,6 +4896,42 @@ def dispatch_command(
                 "would_activate": args.generation_id,
             }
         )
+    elif args.command == "content-shadow-build":
+        content_store = ContentStore(store.root)
+        source_root = Path(args.source_root).expanduser().resolve()
+        result = (
+            content_store.build_manifest(source_root, args.source_id, args.file)
+            if args.apply
+            else content_store.plan_manifest(source_root, args.source_id, args.file)
+        )
+        result = {**result, "status": "built" if args.apply else "preview", "applied": args.apply}
+    elif args.command == "content-shadow-status":
+        result = ContentStore(store.root).status()
+    elif args.command == "content-shadow-verify":
+        result = ContentStore(store.root).verify(
+            args.manifest_id,
+            Path(args.source_root).expanduser().resolve() if args.source_root else None,
+        )
+    elif args.command == "content-shadow-reconstruct":
+        result = ContentStore(store.root).reconstruct(
+            args.manifest_id,
+            Path(args.destination).expanduser().resolve(),
+            apply=args.apply,
+        )
+    elif args.command == "content-shadow-disable":
+        result = ContentStore(store.root).disable(apply=args.apply)
+    elif args.command == "content-transfer":
+        transfer = ResumableTransfer(
+            ContentStore(store.root),
+            ContentStore(Path(args.target_archive_root).expanduser().resolve()),
+            args.domain,
+            args.target_id,
+        )
+        result = (
+            transfer.transfer(args.manifest_id, start=args.start, count=args.count)
+            if args.apply
+            else transfer.preview(args.manifest_id, start=args.start, count=args.count)
+        )
     elif args.command == "index-generation-rollback":
         current = memory_indexing.inspect_generation_status(store)
         if not current.get("previous_generation_id"):
@@ -5488,6 +5567,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return dispatch_command(args, parser, store)
         if args.command.startswith("maintenance-"):
             return dispatch_command(args, parser, store)
+        if args.command == "content-shadow-status" or (
+            args.command in {"content-shadow-build", "content-shadow-reconstruct", "content-shadow-disable", "content-transfer"}
+            and not args.apply
+        ) or args.command == "content-shadow-verify":
+            return dispatch_command(args, parser, store)
+        if args.command.startswith("content-"):
+            with exclusive_lock(store.root / ".locks" / "content-store.lock"):
+                return dispatch_command(args, parser, store)
         if args.command in {
             "environment-export-delta",
             "environment-import-delta",

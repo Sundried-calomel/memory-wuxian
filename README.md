@@ -764,6 +764,27 @@ python scripts/memory_cli.py maintenance-tick --maximum-jobs 20
 python scripts/memory_cli.py maintenance-diagnostics
 ```
 
+## v2.8 lossless shadow storage and resumable transfer
+
+The optional `exact-byte` shadow store writes content-addressed objects and
+closed ordered manifests under `shadow-content-v1`. Each entry retains a stable
+source identity, relative path, byte length, and whole-file SHA-256. Build,
+reconstruction, disable, and transfer are preview-first. Per-domain
+`checkpoint` files resume only contiguous verified ranges; duplicate replay is
+idempotent, while gaps, overlaps, corruption, tampering, and destination
+conflicts fail closed with explicit explanations. Removing the shadow path
+leaves raw history and the existing `archive-v1` and `environment-v1` streams
+unchanged.
+
+```bash
+python scripts/memory_cli.py content-shadow-build --source-root /snapshot --source-id node:snapshot --file raw/a.md
+python scripts/memory_cli.py content-shadow-status
+python scripts/memory_cli.py content-shadow-verify --manifest-id <manifest-id> --source-root /snapshot
+python scripts/memory_cli.py content-shadow-reconstruct --manifest-id <manifest-id> --destination /restore
+python scripts/memory_cli.py content-shadow-disable
+python scripts/memory_cli.py content-transfer --manifest-id <manifest-id> --target-archive-root /target --domain archive --target-id <node> --start 0 --count 100
+```
+
 The signed and target-encrypted `environment-v1` stream transports the
 contract to paired devices. It pins the model revision, artifact hashes,
 runtime packages, query/passage prefixes, pooling, normalization, similarity,

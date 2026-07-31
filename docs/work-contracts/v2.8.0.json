@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "work_item_id": "memory-wuxian-v2.8.0",
-  "candidate_id": "v2.8.0-unfrozen",
+  "candidate_id": "v2.8.0-source-candidate",
   "artifact_profile": "software-feature",
   "classification": "extension",
   "owner_id": "memory-plane-exchange-plane",
@@ -50,5 +50,5 @@
     "macos-candidate",
     "promotion-review"
   ],
-  "lifecycle_state": "contracted"
+  "lifecycle_state": "staged"
 }

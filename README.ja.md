@@ -676,6 +676,25 @@ python scripts/memory_cli.py maintenance-tick --maximum-jobs 20
 python scripts/memory_cli.py maintenance-diagnostics
 ```
 
+## v2.8 ロスレスシャドウ保存と再開可能転送
+
+任意の `exact-byte` シャドウストアは、`shadow-content-v1` にコンテンツアドレス
+オブジェクトと閉じた順序付きマニフェストを保存します。各項目は安定したソース ID、
+相対パス、バイト長、ファイル全体の SHA-256 を保持します。構築、復元、無効化、転送は
+既定でプレビューです。ドメインごとの `checkpoint` は連続して検証済みの範囲だけを
+再開し、重複再送は冪等です。欠落、重複範囲、破損、改ざん、宛先競合は明示的な説明と
+ともに失敗します。シャドウ領域を削除しても、原文履歴と既存の `archive-v1`、
+`environment-v1` ストリームは変わりません。
+
+```powershell
+python scripts/memory_cli.py content-shadow-build --source-root C:\snapshot --source-id node:snapshot --file raw/a.md
+python scripts/memory_cli.py content-shadow-status
+python scripts/memory_cli.py content-shadow-verify --manifest-id <manifest-id> --source-root C:\snapshot
+python scripts/memory_cli.py content-shadow-reconstruct --manifest-id <manifest-id> --destination C:\restore
+python scripts/memory_cli.py content-shadow-disable
+python scripts/memory_cli.py content-transfer --manifest-id <manifest-id> --target-archive-root C:\target --domain archive --target-id <node> --start 0 --count 100
+```
+
 署名済み・対象暗号化済み `environment-v1` ストリームが、契約をペア済み
 デバイスへ転送します。契約はモデル revision、成果物ハッシュ、ランタイム
 パッケージ、query/passage プレフィックス、pooling、正規化、類似度、

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/sync-checkpoint.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "stream_id", "domain", "source_id", "target_id", "manifest_id", "next_index", "accepted_sha256", "status"],
+  "properties": {
+    "format": {"const": "memory-wuxian-transfer-checkpoint-v1"},
+    "stream_id": {"type": "string", "pattern": "^stream-[0-9a-f]{64}$"},
+    "domain": {"enum": ["archive", "environment"]},
+    "source_id": {"type": "string", "minLength": 1},
+    "target_id": {"type": "string", "minLength": 1},
+    "manifest_id": {"type": "string", "pattern": "^manifest-[0-9a-f]{64}$"},
+    "next_index": {"type": "integer", "minimum": 0},
+    "accepted_sha256": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+    "status": {"enum": ["receiving", "completed"]}
+  }
+}
