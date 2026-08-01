@@ -910,7 +910,7 @@ impl Store {
     fn recover_pending_rounds(
         &self,
         records: &[Value],
-        completed_rounds: u64,
+        _completed_rounds: u64,
     ) -> Result<Map<String, Value>> {
         let mut pending = Map::new();
         for record in records {
@@ -918,7 +918,7 @@ impl Store {
                 .get("round_number")
                 .and_then(Value::as_u64)
                 .unwrap_or(0);
-            if number <= completed_rounds {
+            if number == 0 {
                 continue;
             }
             let conversation_id = string_field(record, "conversation_id")?;

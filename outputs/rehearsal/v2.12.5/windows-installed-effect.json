@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "version": "2.12.5",
+  "observed_at": "2026-08-02T05:47:00+09:00",
+  "archive_root": "C:/Users/56453/Documents/本地文件整理/memory-wuxian-archive",
+  "legacy_duplicate_round": 1133,
+  "restored_pending_conversations": [
+    "codex:019f7b17-1217-7aa1-b82c-b3a6828dbaa8",
+    "codex:019fb8f2-9a67-7b03-9474-6f92cd6b21a7"
+  ],
+  "state_backup": "archive/state-rebuild-20260802_054245_366332",
+  "heartbeat_status": "ok",
+  "integrity_issue_count": 0,
+  "repairable_issue_count": 0,
+  "quarantined_job_count": 0,
+  "existing_raw_file_count": 19,
+  "changed_existing_raw_file_count_during_paused_collector_check": 0,
+  "collector_restarted": true,
+  "source_history_rewritten": false
+}

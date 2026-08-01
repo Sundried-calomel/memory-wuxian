@@ -133,6 +133,27 @@
   `L2-000005` 并完成，待处理由修复前146降至141。
 - 错误族：`MW-R05`、`MW-R07`、`MW-R08`、`MW-R10`。
 
+### MW-WIN-011: stale repair dropped one open conversation and allowed round reuse
+
+- Evidence: a pre-v2.12.4 unlocked heartbeat repair removed conversation
+  `codex:019f7b17-1217-7aa1-b82c-b3a6828dbaa8` from `pending_rounds` while its
+  raw user message remained authoritative. A later conversation then reused
+  round 1133. The v2.12.4 transaction lock prevents new occurrences but its
+  recovered-state audit still skipped unresolved records at or below the
+  global completed-round watermark.
+- Escape boundary: concurrent-conversation tests allocated unique rounds and
+  closed both conversations; they did not preserve a legacy duplicate round
+  where one conversation was complete and another remained open.
+- Permanent gate: pending-round recovery must scan every positive-numbered raw
+  record and pair completion by conversation ID plus round number. Python and
+  Rust implementations must share this rule. A live repair may replace only
+  derived `state.json`, must retain a rollback backup, and must leave existing
+  raw bytes unchanged.
+- Installed effect: the repaired Python audit restored both round-1133
+  conversations to derived state, created a state rollback backup, returned
+  heartbeat `status=ok`, and left quarantine at zero.
+- Families: `MW-R05`, `MW-R07`, `MW-R10`.
+
 ## macOS 事故账
 
 ### MW-MAC-001：不稳定 Python 身份使后台权限失效

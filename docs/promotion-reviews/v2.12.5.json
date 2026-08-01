@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "version": "2.12.5",
+  "candidate": "duplicate-pending-round-recovery",
+  "decision": "promote-after-targeted-ci",
+  "scope": "Python and Rust pending-round recovery plus derived-state repair",
+  "raw_history_changed": false,
+  "installed_effect": "outputs/rehearsal/v2.12.5/windows-installed-effect.json",
+  "required_checks": [
+    "duplicate pending-round regression",
+    "Python and Rust source contract",
+    "paused-collector raw hash comparison",
+    "heartbeat status ok",
+    "three-platform targeted CI"
+  ],
+  "rollback": "Restore the state rebuild backup and the previous Skill package; raw history requires no rollback."
+}

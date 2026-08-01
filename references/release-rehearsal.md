@@ -236,3 +236,15 @@ derived categories with no remaining integrity or repairable issue, and the
 audited requeue moved the real parent job from quarantined to completed in one
 attempt. `L2-000005` was created with SHA-256
 `84bbd0e9ad73a642fc2319d3ec4118087bc984389b6fc7931b20d4e1bc46e7e3`.
+
+# v2.12.5 targeted duplicate pending-round recovery hotfix
+
+- Reproduce one completed and one unresolved conversation sharing a legacy
+  global round number.
+- Require both Python and Rust recovery to scan every positive-numbered raw
+  record and pair completion within one conversation.
+- Apply repair only to derived `state.json` with a rollback backup.
+- During a bounded collector pause, require heartbeat `ok`, zero integrity and
+  repairable issues, zero quarantine, and unchanged SHA-256 for every existing
+  raw file.
+- Run only the six scenarios bound by `docs/work-contracts/v2.12.5.json`.

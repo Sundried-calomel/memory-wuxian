@@ -26,7 +26,7 @@ from memory_dashboard import (
     debt_status_projection,
     estimate_context_tokens,
 )
-from memory_cli import filesystem_native_path, resolve_root
+from memory_cli import MemoryStore, filesystem_native_path, resolve_root
 from semantic_worker import (
     build_prompt_payload,
     pack_source_records,
@@ -2115,6 +2115,29 @@ summaries:
             if record.get("reply_to")
             and owners.get(record["reply_to"]) != record["conversation_id"]
         ])
+
+    def test_round_recovery_keeps_duplicate_number_pending_per_conversation(self):
+        store = MemoryStore(self.root, self.config)
+        records = [
+            {"sequence": 1, "round_number": 1, "conversation_id": "codex:a", "speaker": "user", "message_id": "a-u"},
+            {"sequence": 2, "round_number": 1, "conversation_id": "codex:a", "speaker": "assistant", "message_id": "a-f", "completes_round": True},
+            {"sequence": 3, "round_number": 1, "conversation_id": "codex:b", "speaker": "user", "message_id": "b-u"},
+        ]
+
+        recovered = store.recover_round_tracking(records)
+
+        self.assertEqual(recovered["completed_rounds"], 1)
+        self.assertEqual(
+            recovered["pending_rounds"],
+            {
+                "codex:b": {
+                    "number": 1,
+                    "first_user_message_id": "b-u",
+                    "latest_user_message_id": "b-u",
+                }
+            },
+        )
+        self.assertEqual(recovered["next_round_number"], 2)
 
     def test_native_collector_matches_python_storage_contract(self):
         self.config.write_text(
