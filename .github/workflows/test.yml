@@ -82,6 +82,9 @@ jobs:
       - if: steps.validation-profile.outputs.profile != 'targeted-patch'
         run: cargo test --locked --manifest-path native-collector/Cargo.toml
       - run: cargo build --locked --bins --manifest-path native-collector/Cargo.toml
+      - name: Build packaged Windows candidate binaries
+        shell: pwsh
+        run: ./scripts/build_native_collector.ps1
       - name: Run full Python suite once
         if: steps.validation-profile.outputs.profile != 'targeted-patch'
         shell: pwsh

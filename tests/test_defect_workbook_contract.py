@@ -11,6 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKBOOK = ROOT / "docs" / "retrospectives" / "memory-wuxian-defect-workbook.md"
 
 
+def canonical_text_sha256(path: Path) -> str:
+    canonical = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 class DefectWorkbookContractTests(unittest.TestCase):
     def test_workbook_keeps_required_recurrence_families(self) -> None:
         text = WORKBOOK.read_text(encoding="utf-8")
@@ -62,7 +67,7 @@ class DefectWorkbookContractTests(unittest.TestCase):
             for field in ("preflight", "completion"):
                 receipt = ROOT / gate[f"{field}_receipt"]
                 self.assertTrue(receipt.is_file(), f"{path.name}: missing {receipt}")
-                actual = hashlib.sha256(receipt.read_bytes()).hexdigest()
+                actual = canonical_text_sha256(receipt)
                 self.assertEqual(actual, gate[f"{field}_sha256"], path.name)
 
 

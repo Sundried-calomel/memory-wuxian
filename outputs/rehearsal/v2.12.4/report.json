@@ -1,10 +1,10 @@
 {
   "format_version": 1,
   "release_version": "2.12.4",
-  "source_revision": "57f02d923496d7216f1a22b8fd8c43cfce4a7964",
+  "source_revision": "d881e21c0763fd0b7f2cbb56c60976cb3f3ea4be",
   "source_clean": false,
-  "source_content_sha256": "6090b0b0a81aaa9c5400e2899db48ee7a106a3fb8fcdba9b9d092af24d535f26",
-  "generated_at": "2026-08-01T20:10:26.205046+00:00",
+  "source_content_sha256": "43f1cad5e3479e15afc30a5958d5a0fb754d396e09b1e038af210f1324d26d9a",
+  "generated_at": "2026-08-01T20:16:15.762446+00:00",
   "status": "passed",
   "required_scenarios": 6,
   "completed_scenarios": 6,
@@ -73,7 +73,7 @@
         "tests.test_v2124_release_contract"
       ],
       "evidence": "v2124-lossless-audit-lock-contract.log",
-      "evidence_sha256": "91d186853101766bf41d5a9d0beecaa6a8ac814e448380ffcf195083b30fd5c0"
+      "evidence_sha256": "8c4887996340739ef165171f467d1097e4ca79ce0c69c94806c37a62fc283a10"
     },
     {
       "id": "documentation-contract",
@@ -96,7 +96,7 @@
         "--check"
       ],
       "evidence": "diff-check.log",
-      "evidence_sha256": "ed95dc5ced6a1a8509d8d691acb31879d062213734cb42b5ac5c41f709128ada"
+      "evidence_sha256": "2186a779f268c9340c47bc75f64342c94df301ea13ad232aee3ba52bf21fed3e"
     }
   ]
 }

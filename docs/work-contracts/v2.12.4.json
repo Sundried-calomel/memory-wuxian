@@ -50,9 +50,9 @@
   ],
   "defect_workbook": {
     "preflight_receipt": "docs/defect-receipts/v2.12.4-preflight.json",
-    "preflight_sha256": "9e5960ea85ac1d89cbb22fe344c61dfb71c2307aed0c03c45563e2f14dded461",
+    "preflight_sha256": "9c5679b000dbcf1714b3c9187f59d2fdb5a06bd5cf0c30914baa6dcbf0233dc6",
     "completion_receipt": "docs/defect-receipts/v2.12.4-completion.json",
-    "completion_sha256": "5ceb405a42b814235bbfd46d4f546afb8c03078b35cfe85a940bc4c4dadcf362",
+    "completion_sha256": "3175677ae1a80c442e5fc7d3c2b9e1158b97f1239dbe644f9daa9cd35bdff761",
     "applicable_families": [
       "MW-R05",
       "MW-R07",
