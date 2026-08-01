@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 #[cfg(not(target_os = "macos"))]
@@ -10,8 +10,6 @@ use std::time::{Duration, SystemTime};
 
 #[cfg(target_os = "macos")]
 use std::ffi::CString;
-#[cfg(target_os = "macos")]
-use std::fs::File;
 #[cfg(target_os = "macos")]
 use std::os::fd::{AsRawFd, FromRawFd};
 #[cfg(target_os = "macos")]
@@ -24,13 +22,16 @@ use fs2::FileExt;
 #[cfg(not(target_os = "macos"))]
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
-use serde::Deserialize;
+use serde::de::{Error as DeError, IgnoredAny, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
 const RAW_MARKER: &str = "<!-- memory-wuxian-record -->";
 const TOKEN_USAGE_FORMAT_VERSION: u64 = 1;
+const ROLLOUT_BATCH_MAX_LINES: usize = 512;
+const ROLLOUT_BATCH_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const TOKEN_USAGE_FIELDS: [&str; 6] = [
     "input_tokens",
     "cached_input_tokens",
@@ -39,6 +40,101 @@ const TOKEN_USAGE_FIELDS: [&str; 6] = [
     "reasoning_output_tokens",
     "total_tokens",
 ];
+
+#[derive(Debug, Default)]
+struct RolloutRoute {
+    outer: Option<String>,
+    payload: Option<String>,
+}
+
+const ROUTE_CAPTURED: &str = "memory-wuxian-rollout-route-captured";
+
+struct PayloadTypeVisitor<'a> {
+    route: &'a RefCell<RolloutRoute>,
+}
+
+impl<'de> Visitor<'de> for PayloadTypeVisitor<'_> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a rollout payload object")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        while let Some(key) = map.next_key::<String>()? {
+            if key == "type" {
+                self.route.borrow_mut().payload = Some(map.next_value::<String>()?);
+                return Err(A::Error::custom(ROUTE_CAPTURED));
+            }
+            map.next_value::<IgnoredAny>()?;
+        }
+        Ok(())
+    }
+}
+
+struct RolloutRouteVisitor<'a> {
+    route: &'a RefCell<RolloutRoute>,
+}
+
+impl<'de> Visitor<'de> for RolloutRouteVisitor<'_> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a Codex rollout event object")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        while let Some(key) = map.next_key::<String>()? {
+            match key.as_str() {
+                "type" => self.route.borrow_mut().outer = Some(map.next_value::<String>()?),
+                "payload" if self.route.borrow().outer.is_some() => {
+                    if !matches!(
+                        self.route.borrow().outer.as_deref(),
+                        Some("event_msg" | "response_item")
+                    ) {
+                        return Err(A::Error::custom(ROUTE_CAPTURED));
+                    }
+                    map.next_value_seed(PayloadTypeSeed { route: self.route })?;
+                }
+                _ => {
+                    map.next_value::<IgnoredAny>()?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+struct PayloadTypeSeed<'a> {
+    route: &'a RefCell<RolloutRoute>,
+}
+
+impl<'de> serde::de::DeserializeSeed<'de> for PayloadTypeSeed<'_> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> std::result::Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_map(PayloadTypeVisitor { route: self.route })
+    }
+}
+
+fn rollout_route(text: &str) -> Result<RolloutRoute> {
+    let route = RefCell::new(RolloutRoute::default());
+    let mut deserializer = serde_json::Deserializer::from_str(text);
+    match deserializer.deserialize_map(RolloutRouteVisitor { route: &route }) {
+        Ok(()) => Ok(route.into_inner()),
+        Err(error) if error.to_string().starts_with(ROUTE_CAPTURED) => Ok(route.into_inner()),
+        Err(error) => Err(error.into()),
+    }
+}
 
 fn empty_usage() -> BTreeMap<String, u64> {
     TOKEN_USAGE_FIELDS
@@ -378,6 +474,39 @@ struct FileSyncResult {
     reported_total_tokens: Option<u64>,
     token_usage_ledger: Option<PathBuf>,
     excluded_reason: Option<String>,
+    committed_byte_offset: u64,
+    observed_source_size: u64,
+    complete: bool,
+    caught_up: bool,
+}
+
+#[derive(Debug)]
+struct RolloutLine {
+    number: u64,
+    text: String,
+}
+
+#[derive(Debug)]
+struct RolloutBatch {
+    session_id: String,
+    excluded_reason: Option<String>,
+    lines: Vec<RolloutLine>,
+    committed_byte_offset: u64,
+    observed_source_size: u64,
+    observed_source_mtime: SystemTime,
+    complete: bool,
+    caught_up: bool,
+}
+
+#[derive(Debug)]
+struct PreparedSync {
+    source_path: PathBuf,
+    hinted_cursor: Value,
+    last_line: u64,
+    backfill_file_changes: bool,
+    backfill_token_usage: bool,
+    resume_line: u64,
+    batch: RolloutBatch,
 }
 
 #[derive(Debug, Default)]
@@ -400,6 +529,130 @@ struct Store {
     message_cache: RefCell<Option<HashMap<String, Value>>>,
     python_executable: Option<PathBuf>,
     codex_cli: Option<PathBuf>,
+}
+
+fn session_metadata(event: &Value) -> Option<(String, Option<String>)> {
+    if event.get("type").and_then(Value::as_str) != Some("session_meta") {
+        return None;
+    }
+    let payload = event.get("payload")?;
+    let session_id = payload
+        .get("id")
+        .or_else(|| payload.get("session_id"))
+        .and_then(Value::as_str)?
+        .to_owned();
+    let is_subagent = payload
+        .get("source")
+        .and_then(Value::as_object)
+        .is_some_and(|source| source.contains_key("subagent"));
+    let is_exec = payload.get("source").and_then(Value::as_str) == Some("exec");
+    let reason = if is_subagent {
+        Some("subagent-session".to_owned())
+    } else if is_exec {
+        Some("exec-session".to_owned())
+    } else {
+        None
+    };
+    Some((session_id, reason))
+}
+
+fn read_complete_line(reader: &mut BufReader<File>, buffer: &mut Vec<u8>) -> Result<Option<u64>> {
+    buffer.clear();
+    let start = reader.stream_position()?;
+    if reader.read_until(b'\n', buffer)? == 0 {
+        return Ok(None);
+    }
+    if !buffer.ends_with(b"\n") {
+        reader.seek(SeekFrom::Start(start))?;
+        buffer.clear();
+        return Ok(None);
+    }
+    Ok(Some(reader.stream_position()?))
+}
+
+fn read_rollout_batch(
+    source_path: &Path,
+    start_line: u64,
+    start_offset: Option<u64>,
+) -> Result<RolloutBatch> {
+    let file = File::open(source_path)?;
+    let source_metadata = file.metadata()?;
+    let observed_source_size = source_metadata.len();
+    let observed_source_mtime = source_metadata.modified()?;
+    let mut reader = BufReader::new(file);
+    let mut buffer = Vec::new();
+    let mut session = None;
+    let mut line_number = 0u64;
+    let mut committed_byte_offset = 0u64;
+
+    while (start_offset.is_none() && line_number < start_line) || session.is_none() {
+        let Some(end_offset) = read_complete_line(&mut reader, &mut buffer)? else {
+            break;
+        };
+        line_number += 1;
+        committed_byte_offset = end_offset;
+        if session.is_none() {
+            let decoded = std::str::from_utf8(buffer.strip_suffix(b"\n").unwrap_or(&buffer))?;
+            let text = decoded.strip_suffix('\r').unwrap_or(decoded);
+            if let Ok(event) = serde_json::from_str::<Value>(text) {
+                session = session_metadata(&event);
+            }
+        }
+    }
+
+    let (session_id, excluded_reason) = session.ok_or_else(|| {
+        anyhow!(
+            "Codex session metadata is missing an ID: {}",
+            source_path.display()
+        )
+    })?;
+    if let Some(offset) = start_offset {
+        if offset > observed_source_size {
+            bail!(
+                "Codex session was truncated below its byte cursor: {} ({} < {offset})",
+                source_path.display(),
+                observed_source_size
+            );
+        }
+        reader.seek(SeekFrom::Start(offset))?;
+        committed_byte_offset = offset;
+        line_number = start_line;
+    }
+
+    let batch_start = committed_byte_offset;
+    let mut lines = Vec::new();
+    let mut stopped_at_limit = false;
+    loop {
+        if lines.len() >= ROLLOUT_BATCH_MAX_LINES
+            || committed_byte_offset.saturating_sub(batch_start) >= ROLLOUT_BATCH_MAX_BYTES
+        {
+            stopped_at_limit = true;
+            break;
+        }
+        let Some(end_offset) = read_complete_line(&mut reader, &mut buffer)? else {
+            break;
+        };
+        line_number += 1;
+        let bytes = buffer.strip_suffix(b"\n").unwrap_or(&buffer);
+        let decoded = std::str::from_utf8(bytes)?;
+        let text = decoded.strip_suffix('\r').unwrap_or(decoded).to_owned();
+        committed_byte_offset = end_offset;
+        lines.push(RolloutLine {
+            number: line_number,
+            text,
+        });
+    }
+    let complete = committed_byte_offset == observed_source_size;
+    Ok(RolloutBatch {
+        session_id,
+        excluded_reason,
+        lines,
+        committed_byte_offset,
+        observed_source_size,
+        observed_source_mtime,
+        complete,
+        caught_up: complete || !stopped_at_limit,
+    })
 }
 
 impl Store {
@@ -985,6 +1238,54 @@ impl Store {
             .join(format!("{}.json", Self::safe_session_id(session_id)))
     }
 
+    fn write_coverage_status(&self, paths: &[PathBuf]) -> Result<()> {
+        let mut missing_cursor_rollouts = 0u64;
+        let mut incomplete_rollouts = 0u64;
+        let mut pending_bytes = 0u64;
+        let mut observed_bytes = 0u64;
+        for path in paths {
+            let metadata = fs::metadata(path)?;
+            observed_bytes = observed_bytes.saturating_add(metadata.len());
+            let cursor = rollout_session_id(path)
+                .map(|session_id| self.cursor_path(&session_id))
+                .filter(|cursor_path| cursor_path.exists())
+                .map(|cursor_path| read_json(&cursor_path))
+                .transpose()?;
+            let Some(cursor) = cursor else {
+                missing_cursor_rollouts += 1;
+                pending_bytes = pending_bytes.saturating_add(metadata.len());
+                continue;
+            };
+            let committed = cursor
+                .get("committed_byte_offset")
+                .or_else(|| cursor.get("source_size"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                .min(metadata.len());
+            if !cursor_covers_source(&cursor, path, &metadata) {
+                incomplete_rollouts += 1;
+                pending_bytes = pending_bytes.saturating_add(metadata.len() - committed);
+            }
+        }
+        atomic_write_json(
+            &self.root.join("imports/codex/coverage-status.json"),
+            &json!({
+                "format_version": 1,
+                "status": if missing_cursor_rollouts == 0 && incomplete_rollouts == 0 {
+                    "covered"
+                } else {
+                    "catching-up"
+                },
+                "scoped_rollouts": paths.len(),
+                "missing_cursor_rollouts": missing_cursor_rollouts,
+                "incomplete_rollouts": incomplete_rollouts,
+                "pending_bytes": pending_bytes,
+                "observed_bytes": observed_bytes,
+                "updated_at": now_iso(),
+            }),
+        )
+    }
+
     fn safe_session_id(session_id: &str) -> String {
         session_id
             .chars()
@@ -1002,8 +1303,8 @@ impl Store {
         &self,
         session_id: &str,
         source_path: &Path,
-        lines: &[&str],
-        start_line: u64,
+        lines: &[RolloutLine],
+        committed_line: u64,
     ) -> Result<TokenUsageUpdate> {
         let path = self
             .root
@@ -1045,14 +1346,6 @@ impl Store {
             .get("scanned_through_line")
             .and_then(Value::as_u64)
             .unwrap_or(0);
-        if (lines.len() as u64) < ledger_line {
-            bail!(
-                "Codex token source was truncated below its ledger cursor: {} ({} < {ledger_line})",
-                source_path.display(),
-                lines.len()
-            );
-        }
-        let effective_start = start_line.max(ledger_line) as usize;
         let existing_events = ledger
             .get("token_event_count")
             .and_then(Value::as_u64)
@@ -1064,9 +1357,12 @@ impl Store {
             None
         };
         let mut changed_events = 0u64;
-        for (zero_index, line) in lines.iter().enumerate().skip(effective_start) {
-            let line_number = zero_index as u64 + 1;
-            let event: Value = serde_json::from_str(line).with_context(|| {
+        for line in lines.iter().filter(|line| line.number > ledger_line) {
+            let line_number = line.number;
+            if rollout_route(&line.text)?.outer.as_deref() != Some("event_msg") {
+                continue;
+            }
+            let event: Value = serde_json::from_str(&line.text).with_context(|| {
                 format!(
                     "invalid Codex JSONL {}:{line_number}",
                     source_path.display()
@@ -1160,7 +1456,7 @@ impl Store {
             "kind": "codex-rollout-token-count",
             "path": portable_path(source_path),
         });
-        ledger["scanned_through_line"] = json!(lines.len() as u64);
+        ledger["scanned_through_line"] = json!(committed_line);
         ledger["updated_at"] = json!(now_iso());
         atomic_write_json(&path, &ledger)?;
         Ok(TokenUsageUpdate {
@@ -1226,97 +1522,156 @@ impl Store {
         Ok(changed)
     }
 
-    fn sync_file(&self, source_path: &Path) -> Result<FileSyncResult> {
+    fn prepare_sync_file(&self, source_path: &Path) -> Result<PreparedSync> {
         let source_path = source_path.canonicalize()?;
-        let bytes = fs::read(&source_path)?;
-        let text = String::from_utf8(bytes.clone()).context("Codex rollout is not UTF-8")?;
-        let complete_text = if text.ends_with('\n') {
-            text.as_str()
-        } else {
-            text.rsplit_once('\n')
-                .map(|(complete, _)| complete)
-                .unwrap_or("")
-        };
-        let lines: Vec<&str> = if complete_text.is_empty() {
-            Vec::new()
-        } else {
-            complete_text.lines().collect()
-        };
-        let (session_id, excluded_reason) = lines
-            .iter()
-            .find_map(|line| {
-                let event: Value = serde_json::from_str(line).ok()?;
-                if event.get("type").and_then(Value::as_str) != Some("session_meta") {
-                    return None;
-                }
-                let payload = event.get("payload")?;
-                let session_id = payload
-                    .get("id")
-                    .or_else(|| payload.get("session_id"))
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)?;
-                let is_subagent = payload
-                    .get("source")
-                    .and_then(Value::as_object)
-                    .is_some_and(|source| source.contains_key("subagent"));
-                let is_exec = payload.get("source").and_then(Value::as_str) == Some("exec");
-                let excluded_reason = if is_subagent {
-                    Some("subagent-session")
-                } else if is_exec {
-                    Some("exec-session")
-                } else {
-                    None
-                };
-                Some((session_id, excluded_reason))
-            })
-            .ok_or_else(|| {
-                anyhow!(
-                    "Codex session metadata is missing an ID: {}",
-                    source_path.display()
-                )
-            })?;
-        let cursor_path = self.cursor_path(&session_id);
-        let cursor = if cursor_path.exists() {
-            read_json(&cursor_path)?
-        } else {
-            json!({})
-        };
-        let last_line = cursor.get("last_line").and_then(Value::as_u64).unwrap_or(0);
-        let backfill_file_changes = cursor
+        let hinted_session_id = resolve_rollout_session_id(&source_path)?;
+        let hinted_cursor = hinted_session_id
+            .as_ref()
+            .map(|session_id| self.cursor_path(session_id))
+            .filter(|path| path.exists())
+            .map(|path| read_json(&path))
+            .transpose()?
+            .unwrap_or_else(|| json!({}));
+        let last_line = hinted_cursor
+            .get("last_line")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let backfill_file_changes = hinted_cursor
             .get("file_change_format_version")
             .and_then(Value::as_u64)
             .unwrap_or(0)
             < 1;
-        let backfill_token_usage = cursor
+        let backfill_token_usage = hinted_cursor
             .get("token_usage_format_version")
             .and_then(Value::as_u64)
             .unwrap_or(0)
             < TOKEN_USAGE_FORMAT_VERSION;
-        let total_lines = lines.len() as u64;
-        if total_lines < last_line {
+        if last_line > 0 {
+            let metadata = fs::metadata(&source_path)?;
+            let committed = hinted_cursor
+                .get("committed_byte_offset")
+                .or_else(|| hinted_cursor.get("source_size"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            if metadata.len() < committed {
+                bail!(
+                    "Codex session was truncated below its byte cursor: {} ({} < {committed})",
+                    source_path.display(),
+                    metadata.len()
+                );
+            }
+            let current_modified: DateTime<Utc> =
+                metadata.modified().unwrap_or(SystemTime::now()).into();
+            let cursor_modified = hinted_cursor
+                .get("source_mtime")
+                .and_then(Value::as_str)
+                .and_then(|value| DateTime::parse_from_rfc3339(value).ok());
+            if metadata.len() == committed
+                && cursor_modified.is_some_and(|value| {
+                    value.timestamp_nanos_opt() != current_modified.timestamp_nanos_opt()
+                })
+            {
+                bail!(
+                    "Codex session identity changed without an append: {}",
+                    source_path.display()
+                );
+            }
+        }
+        let resume_line = if backfill_file_changes || backfill_token_usage {
+            0
+        } else {
+            last_line
+        };
+        let resume_offset = if resume_line == last_line && resume_line > 0 {
+            hinted_cursor
+                .get("committed_byte_offset")
+                .and_then(Value::as_u64)
+        } else {
+            None
+        };
+        let batch = read_rollout_batch(&source_path, resume_line, resume_offset)?;
+        let session_id = batch.session_id.clone();
+        if hinted_session_id
+            .as_deref()
+            .is_some_and(|hint| hint != session_id)
+        {
             bail!(
-                "Codex session was truncated below its cursor: {} ({total_lines} < {last_line})",
+                "rollout filename and session metadata IDs differ: {}",
+                source_path.display()
+            );
+        }
+        Ok(PreparedSync {
+            source_path,
+            hinted_cursor,
+            last_line,
+            backfill_file_changes,
+            backfill_token_usage,
+            resume_line,
+            batch,
+        })
+    }
+
+    fn sync_prepared_file(&self, prepared: PreparedSync) -> Result<FileSyncResult> {
+        let PreparedSync {
+            source_path,
+            hinted_cursor,
+            last_line,
+            backfill_file_changes,
+            backfill_token_usage,
+            resume_line,
+            batch,
+        } = prepared;
+        let session_id = batch.session_id.clone();
+        let excluded_reason = batch.excluded_reason.clone();
+        let cursor_path = self.cursor_path(&session_id);
+        let current_cursor = if cursor_path.exists() {
+            read_json(&cursor_path)?
+        } else {
+            json!({})
+        };
+        if current_cursor != hinted_cursor {
+            bail!(
+                "Codex cursor changed while a source batch was prepared: {}",
+                source_path.display()
+            );
+        }
+        let committed_line = batch
+            .lines
+            .last()
+            .map(|line| line.number)
+            .unwrap_or(resume_line);
+        if committed_line < last_line && !backfill_file_changes && !backfill_token_usage {
+            bail!(
+                "Codex session was truncated below its cursor: {} ({committed_line} < {last_line})",
                 source_path.display()
             );
         }
         let mut result = FileSyncResult {
             session_id: session_id.clone(),
             source_path: source_path.clone(),
-            last_line: total_lines,
+            last_line: committed_line,
+            committed_byte_offset: batch.committed_byte_offset,
+            observed_source_size: batch.observed_source_size,
+            complete: batch.complete,
+            caught_up: batch.caught_up,
             ..Default::default()
         };
         if let Some(excluded_reason) = excluded_reason {
-            let metadata = fs::metadata(&source_path)?;
+            let modified: DateTime<Utc> = batch.observed_source_mtime.into();
             atomic_write_json(
                 &cursor_path,
                 &json!({
                     "format_version": 1,
                     "session_id": session_id,
                     "source_path": portable_path(&source_path),
-                    "last_line": total_lines,
+                    "last_line": committed_line,
                     "file_change_format_version": 1,
                     "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
-                    "source_size": metadata.len(),
+                    "source_size": batch.committed_byte_offset,
+                    "committed_byte_offset": batch.committed_byte_offset,
+                    "observed_source_size": batch.observed_source_size,
+                    "complete": batch.complete,
+                    "source_mtime": modified.to_rfc3339(),
                     "excluded_reason": excluded_reason,
                     "updated_at": now_iso(),
                 }),
@@ -1324,14 +1679,26 @@ impl Store {
             result.excluded_reason = Some(excluded_reason.to_owned());
             return Ok(result);
         }
-        let start_line = if backfill_file_changes {
-            0
-        } else {
-            last_line as usize
-        };
-        for (zero_index, line) in lines.iter().enumerate().skip(start_line) {
-            let line_number = zero_index as u64 + 1;
-            let event: Value = serde_json::from_str(line).with_context(|| {
+        for line in &batch.lines {
+            let line_number = line.number;
+            let route = rollout_route(&line.text)?;
+            if route.outer.as_deref() == Some("response_item")
+                && !matches!(
+                    route.payload.as_deref(),
+                    Some(
+                        "custom_tool_call"
+                            | "function_call"
+                            | "local_shell_call"
+                            | "web_search_call"
+                    )
+                )
+            {
+                continue;
+            }
+            if !matches!(route.outer.as_deref(), Some("event_msg" | "response_item")) {
+                continue;
+            }
+            let event: Value = serde_json::from_str(&line.text).with_context(|| {
                 format!(
                     "invalid Codex JSONL {}:{line_number}",
                     source_path.display()
@@ -1439,28 +1806,26 @@ impl Store {
                 result.repaired_transcripts += 1;
             }
         }
-        let token_usage = self.update_token_usage(
-            &session_id,
-            &source_path,
-            &lines,
-            if backfill_token_usage { 0 } else { last_line },
-        )?;
+        let token_usage =
+            self.update_token_usage(&session_id, &source_path, &batch.lines, committed_line)?;
         result.token_usage_changed_events = token_usage.changed_events;
         result.reported_total_tokens = token_usage.reported_total_tokens;
         result.token_usage_ledger = token_usage.ledger_path;
-        if total_lines != last_line || backfill_file_changes || backfill_token_usage {
-            let metadata = fs::metadata(&source_path)?;
-            let modified: DateTime<Utc> = metadata.modified().unwrap_or(SystemTime::now()).into();
+        if committed_line != last_line || backfill_file_changes || backfill_token_usage {
+            let modified: DateTime<Utc> = batch.observed_source_mtime.into();
             atomic_write_json(
                 &cursor_path,
                 &json!({
                     "format_version": 1,
                     "session_id": session_id,
                     "source_path": portable_path(&source_path),
-                    "last_line": total_lines,
+                    "last_line": committed_line,
                     "file_change_format_version": 1,
                     "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
-                    "source_size": metadata.len(),
+                    "source_size": batch.committed_byte_offset,
+                    "committed_byte_offset": batch.committed_byte_offset,
+                    "observed_source_size": batch.observed_source_size,
+                    "complete": batch.complete,
                     "source_mtime": modified.to_rfc3339(),
                     "updated_at": now_iso(),
                 }),
@@ -2121,7 +2486,132 @@ impl Store {
         paths: Vec<PathBuf>,
         run_semantic_worker: bool,
     ) -> Result<Value> {
-        let mut result = self.lock("archive.lock", || self.sync_batch_unlocked(paths))?;
+        self.repair_native_recovery_debt()?;
+        self.write_coverage_status(&paths)?;
+        let coverage_paths = paths.clone();
+        let completed_before = self.lock("archive.lock", || {
+            Ok(completed_round_total(&self.load_state()?))
+        })?;
+        let mut result = json!({
+            "status": "synced",
+            "sessions": [],
+            "session_count": 0,
+            "imported_messages": 0,
+            "duplicate_messages": 0,
+            "repaired_transcripts": 0,
+            "token_usage_changed_events": 0,
+            "created_summary_job": null,
+            "deterministic_indexes": null,
+            "backup": null,
+            "backup_debt": null,
+        });
+        for path in paths {
+            let mut accumulated_session: Option<Value> = None;
+            loop {
+                let prepared = self.prepare_sync_file(&path)?;
+                let chunk =
+                    self.lock("archive.lock", || self.sync_batch_unlocked(vec![prepared]))?;
+                for field in [
+                    "imported_messages",
+                    "duplicate_messages",
+                    "repaired_transcripts",
+                    "token_usage_changed_events",
+                ] {
+                    result[field] = json!(
+                        result.get(field).and_then(Value::as_u64).unwrap_or(0)
+                            + chunk.get(field).and_then(Value::as_u64).unwrap_or(0)
+                    );
+                }
+                if let Some(session) = chunk
+                    .get("sessions")
+                    .and_then(Value::as_array)
+                    .and_then(|sessions| sessions.first())
+                {
+                    if let Some(accumulated) = accumulated_session.as_mut() {
+                        for field in [
+                            "visible_events",
+                            "imported_messages",
+                            "duplicate_messages",
+                            "repaired_transcripts",
+                            "token_usage_changed_events",
+                        ] {
+                            accumulated[field] = json!(
+                                accumulated.get(field).and_then(Value::as_u64).unwrap_or(0)
+                                    + session.get(field).and_then(Value::as_u64).unwrap_or(0)
+                            );
+                        }
+                        for field in [
+                            "last_line",
+                            "reported_total_tokens",
+                            "token_usage_ledger",
+                            "excluded_reason",
+                            "committed_byte_offset",
+                            "observed_source_size",
+                            "complete",
+                            "caught_up",
+                        ] {
+                            accumulated[field] = session[field].clone();
+                        }
+                    } else {
+                        accumulated_session = Some(session.clone());
+                    }
+                }
+                for field in [
+                    "created_summary_job",
+                    "deterministic_indexes",
+                    "backup_debt",
+                ] {
+                    if chunk.get(field).is_some_and(|value| !value.is_null()) {
+                        result[field] = chunk[field].clone();
+                    }
+                }
+                let caught_up = chunk
+                    .get("sessions")
+                    .and_then(Value::as_array)
+                    .and_then(|sessions| sessions.first())
+                    .and_then(|session| session.get("caught_up"))
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true);
+                if caught_up {
+                    break;
+                }
+            }
+            if let Some(session) = accumulated_session {
+                result["sessions"]
+                    .as_array_mut()
+                    .expect("sessions is an array")
+                    .push(session);
+            }
+        }
+        result["session_count"] = json!(coverage_paths.len());
+        let imported = result
+            .get("imported_messages")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let finalized = self.lock("archive.lock", || {
+            let deterministic_indexes = if imported > 0 {
+                Some(self.refresh_deterministic_indexes()?)
+            } else {
+                None
+            };
+            let completed_after = completed_round_total(&self.load_state()?);
+            let created_job = if imported > 0
+                && completed_after > completed_before
+                && self.config.summaries.automatic_semantic_jobs
+            {
+                self.maybe_create_level_one_job()?
+            } else {
+                None
+            };
+            Ok(json!({
+                "created_summary_job": created_job.map(|path| path.to_string_lossy().into_owned()),
+                "deterministic_indexes": deterministic_indexes,
+            }))
+        })?;
+        for field in ["created_summary_job", "deterministic_indexes"] {
+            result[field] = finalized[field].clone();
+        }
+        self.write_coverage_status(&coverage_paths)?;
         if run_semantic_worker
             && self.config.ai_summary.enabled
             && let Some(job) = result.get("created_summary_job").and_then(Value::as_str)
@@ -2151,6 +2641,84 @@ impl Store {
 
     fn sync_startup_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
         self.sync_batch_with_semantic_worker(paths, false)
+    }
+
+    fn repair_native_recovery_debt(&self) -> Result<()> {
+        let marker = self.root.join("pending/native-recovery-debt.json");
+        if !marker.exists() {
+            return Ok(());
+        }
+        let configured_memory_cli = self
+            .config_path
+            .parent()
+            .unwrap_or(Path::new("."))
+            .join("scripts/memory_cli.py");
+        let bundled_memory_cli = std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(Path::to_path_buf))
+            .and_then(|path| path.parent().map(Path::to_path_buf))
+            .map(|path| path.join("scripts/memory_cli.py"));
+        let memory_cli = if configured_memory_cli.is_file() {
+            configured_memory_cli
+        } else if let Some(path) = bundled_memory_cli.filter(|path| path.is_file()) {
+            path
+        } else {
+            configured_memory_cli
+        };
+        if !memory_cli.is_file() {
+            bail!(
+                "native recovery requires the installed memory CLI: {}",
+                memory_cli.display()
+            );
+        }
+        let python_path = self
+            .python_executable
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned())
+            .or_else(|| std::env::var("MEMORY_WUXIAN_PYTHON").ok())
+            .unwrap_or_else(|| {
+                if cfg!(windows) {
+                    self.config
+                        .ai_summary
+                        .python_path_windows
+                        .as_ref()
+                        .unwrap_or(&self.config.ai_summary.python_path)
+                        .clone()
+                } else {
+                    self.config.ai_summary.python_path.clone()
+                }
+            });
+        let mut command = Command::new(python_path);
+        command
+            .arg(memory_cli)
+            .arg("--root")
+            .arg(&self.root)
+            .arg("--config")
+            .arg(&self.config_path)
+            .arg("heartbeat")
+            .arg("--no-create-jobs")
+            .arg("--repair");
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000);
+        }
+        let output = command
+            .output()
+            .context("run deterministic native recovery before resuming collection")?;
+        if !output.status.success() {
+            bail!(
+                "native recovery failed before resume: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        let recovery: Value = serde_json::from_slice(&output.stdout)
+            .context("parse deterministic native recovery result")?;
+        if recovery.get("status").and_then(Value::as_str) != Some("ok") {
+            bail!("native recovery did not verify the archive: {recovery}");
+        }
+        fs::remove_file(&marker)?;
+        Ok(())
     }
 
     fn run_one_shot_summary(&self, job_path: &Path) -> Value {
@@ -2215,16 +2783,30 @@ impl Store {
         }
     }
 
-    fn sync_batch_unlocked(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        let state_before = self.load_state()?;
-        let completed_before = completed_round_total(&state_before);
+    fn sync_batch_unlocked(&self, prepared_files: Vec<PreparedSync>) -> Result<Value> {
         let mut files = Vec::new();
         let mut imported = 0;
         let mut duplicates = 0;
         let mut repaired = 0;
         let mut token_usage_changed_events = 0;
-        for path in paths {
-            let result = self.sync_file(&path)?;
+        for prepared in prepared_files {
+            let recovery_debt = self.root.join("pending/native-recovery-debt.json");
+            let inherited_recovery_debt = recovery_debt.exists();
+            if !inherited_recovery_debt {
+                atomic_write_json(
+                    &recovery_debt,
+                    &json!({
+                        "format": "memory-wuxian-native-recovery-debt-v1",
+                        "source_path": portable_path(&prepared.source_path),
+                        "last_committed_line": prepared.last_line,
+                        "created_at": now_iso(),
+                    }),
+                )?;
+            }
+            let result = self.sync_prepared_file(prepared)?;
+            if !inherited_recovery_debt {
+                fs::remove_file(&recovery_debt)?;
+            }
             imported += result.imported_messages;
             duplicates += result.duplicate_messages;
             repaired += result.repaired_transcripts;
@@ -2244,32 +2826,24 @@ impl Store {
                     .as_ref()
                     .map(|path| portable_path(path)),
                 "excluded_reason": result.excluded_reason,
+                "committed_byte_offset": result.committed_byte_offset,
+                "observed_source_size": result.observed_source_size,
+                "complete": result.complete,
+                "caught_up": result.caught_up,
             }));
         }
-        let deterministic_indexes = if imported > 0 {
-            Some(self.refresh_deterministic_indexes()?)
-        } else {
-            None
-        };
-        let completed_after = completed_round_total(&self.load_state()?);
-        let created_job = if imported > 0
-            && completed_after > completed_before
-            && self.config.summaries.automatic_semantic_jobs
-        {
-            self.maybe_create_level_one_job()?
-        } else {
-            None
-        };
-        let mutation = imported > 0 || repaired > 0 || token_usage_changed_events > 0;
-        let metadata = json!({
-            "session_count": files.len(), "imported_messages": imported,
-            "duplicate_messages": duplicates, "repaired_transcripts": repaired,
-            "token_usage_changed_events": token_usage_changed_events,
-            "created_summary_job": created_job.as_ref().map(|path| path.to_string_lossy()),
-            "deterministic_indexes": deterministic_indexes,
-        });
-        let backup_debt = if mutation {
-            self.record_backup_debt("codex-native-sync", metadata.clone())?
+        let backup_debt = if imported > 0 || repaired > 0 || token_usage_changed_events > 0 {
+            self.record_backup_debt(
+                "codex-native-sync",
+                json!({
+                    "session_count": files.len(),
+                    "imported_messages": imported,
+                    "duplicate_messages": duplicates,
+                    "repaired_transcripts": repaired,
+                    "token_usage_changed_events": token_usage_changed_events,
+                    "bounded_batch": true,
+                }),
+            )?
         } else {
             None
         };
@@ -2278,8 +2852,8 @@ impl Store {
             "imported_messages": imported, "duplicate_messages": duplicates,
             "repaired_transcripts": repaired,
             "token_usage_changed_events": token_usage_changed_events,
-            "created_summary_job": created_job.map(|path| path.to_string_lossy().into_owned()),
-            "deterministic_indexes": deterministic_indexes,
+            "created_summary_job": Value::Null,
+            "deterministic_indexes": Value::Null,
             "backup": Value::Null,
             "backup_debt": backup_debt.map(|path| path.to_string_lossy().into_owned()),
         }))
@@ -2457,7 +3031,63 @@ fn redact_secrets(text: &str) -> String {
         })
 }
 
-fn recent_rollouts(root: &Path, since: Option<DateTime<FixedOffset>>) -> Result<Vec<PathBuf>> {
+fn rollout_session_id(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_str()?;
+    Regex::new(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$")
+        .expect("valid session ID regex")
+        .captures(name)
+        .and_then(|captures| captures.get(1))
+        .map(|value| value.as_str().to_owned())
+}
+
+fn resolve_rollout_session_id(path: &Path) -> Result<Option<String>> {
+    if let Some(session_id) = rollout_session_id(path) {
+        return Ok(Some(session_id));
+    }
+    let mut reader = BufReader::new(File::open(path)?);
+    let mut buffer = Vec::new();
+    for _ in 0..32 {
+        if read_complete_line(&mut reader, &mut buffer)?.is_none() {
+            break;
+        }
+        let bytes = buffer.strip_suffix(b"\n").unwrap_or(&buffer);
+        let decoded = std::str::from_utf8(bytes)?;
+        let text = decoded.strip_suffix('\r').unwrap_or(decoded);
+        if let Ok(event) = serde_json::from_str::<Value>(text)
+            && let Some((session_id, _)) = session_metadata(&event)
+        {
+            return Ok(Some(session_id));
+        }
+    }
+    Ok(None)
+}
+
+fn cursor_covers_source(cursor: &Value, path: &Path, metadata: &fs::Metadata) -> bool {
+    if cursor.get("source_path").and_then(Value::as_str) != Some(portable_path(path).as_str()) {
+        return false;
+    }
+    let modified: DateTime<Utc> = metadata.modified().unwrap_or(SystemTime::now()).into();
+    let same_mtime = cursor
+        .get("source_mtime")
+        .and_then(Value::as_str)
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .is_some_and(|value| value.timestamp_nanos_opt() == modified.timestamp_nanos_opt());
+    if cursor.get("complete").and_then(Value::as_bool) == Some(true) {
+        return same_mtime
+            && cursor
+                .get("committed_byte_offset")
+                .or_else(|| cursor.get("source_size"))
+                .and_then(Value::as_u64)
+                == Some(metadata.len());
+    }
+    cursor.get("source_size").and_then(Value::as_u64) == Some(metadata.len()) && same_mtime
+}
+
+fn recent_rollouts(
+    root: &Path,
+    since: Option<DateTime<FixedOffset>>,
+    archive_root: &Path,
+) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for entry in WalkDir::new(root).follow_links(false) {
         let entry = entry?;
@@ -2470,13 +3100,27 @@ fn recent_rollouts(root: &Path, since: Option<DateTime<FixedOffset>>) -> Result<
         {
             continue;
         }
+        let path = entry.path().canonicalize()?;
+        let metadata = entry.metadata()?;
         if let Some(since) = since {
-            let modified: DateTime<Utc> = entry.metadata()?.modified()?.into();
+            let modified: DateTime<Utc> = metadata.modified()?.into();
             if modified.timestamp() < since.timestamp() {
-                continue;
+                let covered = rollout_session_id(&path)
+                    .map(|session_id| {
+                        archive_root
+                            .join("imports/codex")
+                            .join(format!("{session_id}.json"))
+                    })
+                    .filter(|cursor_path| cursor_path.exists())
+                    .map(|cursor_path| read_json(&cursor_path))
+                    .transpose()?
+                    .is_some_and(|cursor| cursor_covers_source(&cursor, &path, &metadata));
+                if covered {
+                    continue;
+                }
             }
         }
-        paths.push(entry.path().canonicalize()?);
+        paths.push(path);
     }
     paths.sort();
     paths.dedup();
@@ -2488,6 +3132,7 @@ fn event_rollouts(
     event: Event,
     sessions_root: &Path,
     since: Option<DateTime<FixedOffset>>,
+    archive_root: &Path,
 ) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     let mut needs_scan = false;
@@ -2504,7 +3149,7 @@ fn event_rollouts(
         }
     }
     if needs_scan || paths.is_empty() {
-        paths.extend(recent_rollouts(sessions_root, since)?);
+        paths.extend(recent_rollouts(sessions_root, since, archive_root)?);
     }
     paths.sort();
     paths.dedup();
@@ -2557,7 +3202,7 @@ const MAX_KQUEUE_ROLLOUT_WATCHES: usize = 64;
 
 #[cfg(target_os = "macos")]
 impl KqueueWatcher {
-    fn new(root: &Path, since: Option<DateTime<FixedOffset>>) -> Result<Self> {
+    fn new(root: &Path, _since: Option<DateTime<FixedOffset>>) -> Result<Self> {
         let queue_fd = unsafe { libc::kqueue() };
         if queue_fd < 0 {
             return Err(std::io::Error::last_os_error()).context("create kqueue");
@@ -2580,12 +3225,6 @@ impl KqueueWatcher {
                 continue;
             }
             let modified = entry.metadata()?.modified()?;
-            if let Some(since) = since {
-                let modified_utc: DateTime<Utc> = modified.into();
-                if modified_utc.timestamp() < since.timestamp() {
-                    continue;
-                }
-            }
             rollout_files.push((modified, entry.path().to_path_buf()));
         }
         rollout_files
@@ -2796,7 +3435,7 @@ fn run_event_loop(
     debounce_ms: u64,
 ) -> Result<()> {
     let mut watcher = KqueueWatcher::new(sessions_root, since)?;
-    let initial_paths = recent_rollouts(sessions_root, since)?;
+    let initial_paths = recent_rollouts(sessions_root, since, &store.root)?;
     let mut known_stamps = rollout_stamps(&initial_paths)?;
     let mut last_activity = std::time::Instant::now();
     let mut telemetry = CollectorTelemetry::new();
@@ -2819,7 +3458,7 @@ fn run_event_loop(
             telemetry.record_event();
             std::thread::sleep(Duration::from_millis(debounce_ms));
         }
-        let current_paths = recent_rollouts(sessions_root, since)?;
+        let current_paths = recent_rollouts(sessions_root, since, &store.root)?;
         let current_stamps = rollout_stamps(&current_paths)?;
         let source_watermark = newest_source_watermark(&current_stamps);
         telemetry.record_source_watermark(source_watermark.clone());
@@ -2858,7 +3497,7 @@ fn run_event_loop(
         let _ = sender.send(event);
     })?;
     watcher.watch(sessions_root, RecursiveMode::Recursive)?;
-    let initial_paths = recent_rollouts(sessions_root, since)?;
+    let initial_paths = recent_rollouts(sessions_root, since, &store.root)?;
     let mut known_stamps = rollout_stamps(&initial_paths)?;
     let mut last_activity = std::time::Instant::now();
     let mut telemetry = CollectorTelemetry::new();
@@ -2888,13 +3527,15 @@ fn run_event_loop(
         let mut candidates = BTreeSet::new();
         if let Some(first) = first {
             match first {
-                Ok(event) => candidates.extend(event_rollouts(event, sessions_root, since)?),
+                Ok(event) => {
+                    candidates.extend(event_rollouts(event, sessions_root, since, &store.root)?)
+                }
                 Err(error) => eprintln!("watch error: {error}"),
             }
             loop {
                 match receiver.recv_timeout(Duration::from_millis(debounce_ms)) {
                     Ok(Ok(event)) => {
-                        candidates.extend(event_rollouts(event, sessions_root, since)?)
+                        candidates.extend(event_rollouts(event, sessions_root, since, &store.root)?)
                     }
                     Ok(Err(error)) => eprintln!("watch error: {error}"),
                     Err(RecvTimeoutError::Timeout) => break,
@@ -2903,7 +3544,7 @@ fn run_event_loop(
             }
         }
 
-        let current_paths = recent_rollouts(sessions_root, since)?;
+        let current_paths = recent_rollouts(sessions_root, since, &store.root)?;
         let current_stamps = rollout_stamps(&current_paths)?;
         let source_watermark = newest_source_watermark(&current_stamps);
         telemetry.record_source_watermark(source_watermark.clone());
@@ -2963,6 +3604,184 @@ mod adaptive_fallback_tests {
     }
 }
 
+#[cfg(test)]
+mod rollout_stream_tests {
+    use super::*;
+
+    const SESSION_ID: &str = "019fb8f2-9a67-7b03-9474-6f92cd6b21a7";
+
+    fn rollout_path(root: &Path) -> PathBuf {
+        root.join(format!("rollout-2026-08-01T01-12-15-{SESSION_ID}.jsonl"))
+    }
+
+    fn session_meta(source: Value) -> String {
+        serde_json::to_string(&json!({
+            "type": "session_meta",
+            "payload": {"id": SESSION_ID, "source": source}
+        }))
+        .unwrap()
+    }
+
+    fn user_event(message: &str) -> String {
+        serde_json::to_string(&json!({
+            "timestamp": "2026-08-01T00:00:00Z",
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": message}
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn older_than_since_without_cursor_is_discovered() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let path = rollout_path(sessions.path());
+        fs::write(&path, format!("{}\n", session_meta(json!("user"))))?;
+        let since = DateTime::parse_from_rfc3339("2999-01-01T00:00:00+00:00")?;
+
+        let discovered = recent_rollouts(sessions.path(), Some(since), archive.path())?;
+        assert_eq!(discovered, vec![path.canonicalize()?]);
+
+        let canonical = path.canonicalize()?;
+        let metadata = fs::metadata(&canonical)?;
+        let size = metadata.len();
+        let modified: DateTime<Utc> = metadata.modified()?.into();
+        let cursor_dir = archive.path().join("imports/codex");
+        fs::create_dir_all(&cursor_dir)?;
+        atomic_write_json(
+            &cursor_dir.join(format!("{SESSION_ID}.json")),
+            &json!({
+                "format_version": 1,
+                "session_id": SESSION_ID,
+                "source_path": portable_path(&canonical),
+                "source_size": size,
+                "committed_byte_offset": size,
+                "observed_source_size": size,
+                "complete": true,
+                "source_mtime": modified.to_rfc3339(),
+            }),
+        )?;
+        assert!(recent_rollouts(sessions.path(), Some(since), archive.path())?.is_empty());
+        atomic_write_json(
+            &cursor_dir.join(format!("{SESSION_ID}.json")),
+            &json!({
+                "format_version": 1,
+                "session_id": SESSION_ID,
+                "source_path": portable_path(&canonical),
+                "source_size": size,
+                "source_mtime": modified.to_rfc3339(),
+            }),
+        )?;
+        assert!(recent_rollouts(sessions.path(), Some(since), archive.path())?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn utf8_crosses_reader_buffer_without_text_changes() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let path = rollout_path(temporary.path());
+        let message = format!("{}円¥中文🙂終", "あ".repeat(10_000));
+        fs::write(
+            &path,
+            format!(
+                "{}\n{}\n",
+                session_meta(json!("user")),
+                user_event(&message)
+            ),
+        )?;
+        let batch = read_rollout_batch(&path, 0, None)?;
+        assert!(batch.complete);
+        assert_eq!(batch.lines.len(), 1);
+        let event: Value = serde_json::from_str(&batch.lines[0].text)?;
+        assert_eq!(
+            event.pointer("/payload/message").and_then(Value::as_str),
+            Some(message.as_str())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn trailing_partial_line_is_not_committed_and_resumes() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let path = rollout_path(temporary.path());
+        let first = user_event("first");
+        let second = user_event("second");
+        let split = second.len() / 2;
+        fs::write(
+            &path,
+            format!(
+                "{}\n{}\n{}",
+                session_meta(json!("user")),
+                first,
+                &second[..split]
+            ),
+        )?;
+        let first_batch = read_rollout_batch(&path, 0, None)?;
+        assert!(!first_batch.complete);
+        assert!(first_batch.caught_up);
+        assert_eq!(first_batch.lines.len(), 1);
+        let committed = first_batch.committed_byte_offset;
+        let committed_line = first_batch.lines.last().unwrap().number;
+
+        let mut file = OpenOptions::new().append(true).open(&path)?;
+        writeln!(file, "{}", &second[split..])?;
+        let resumed = read_rollout_batch(&path, committed_line, Some(committed))?;
+        assert!(resumed.complete);
+        assert_eq!(resumed.lines.len(), 1);
+        assert_eq!(resumed.lines[0].number, committed_line + 1);
+        assert_eq!(resumed.lines[0].text, second);
+        Ok(())
+    }
+
+    #[test]
+    fn bounded_batch_resumes_at_exact_line_and_offset() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let path = rollout_path(temporary.path());
+        let mut content = format!("{}\n", session_meta(json!("user")));
+        for index in 0..(ROLLOUT_BATCH_MAX_LINES + 9) {
+            content.push_str(&user_event(&format!("message-{index}")));
+            content.push('\n');
+        }
+        fs::write(&path, content)?;
+        let first = read_rollout_batch(&path, 0, None)?;
+        assert_eq!(first.lines.len(), ROLLOUT_BATCH_MAX_LINES);
+        assert!(!first.caught_up);
+        let first_line = first.lines.last().unwrap().number;
+        let second = read_rollout_batch(&path, first_line, Some(first.committed_byte_offset))?;
+        assert_eq!(second.lines.first().unwrap().number, first_line + 1);
+        assert_eq!(second.lines.len(), 9);
+        assert!(second.complete);
+        Ok(())
+    }
+
+    #[test]
+    fn subagent_and_exec_metadata_remain_excluded() -> Result<()> {
+        for (source, expected) in [
+            (json!({"subagent": {"id": "worker"}}), "subagent-session"),
+            (json!("exec"), "exec-session"),
+        ] {
+            let temporary = tempfile::tempdir()?;
+            let path = rollout_path(temporary.path());
+            fs::write(&path, format!("{}\n", session_meta(source)))?;
+            let batch = read_rollout_batch(&path, 0, None)?;
+            assert_eq!(batch.excluded_reason.as_deref(), Some(expected));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn giant_irrelevant_payload_uses_the_lightweight_envelope() -> Result<()> {
+        let text = format!(
+            "{{\"timestamp\":\"2026-08-01T00:00:00Z\",\"type\":\"response_item\",\"payload\":{{\"type\":\"custom_tool_call_output\",\"output\":\"{}\"}}}}",
+            "x".repeat(5 * 1024 * 1024)
+        );
+        let route = rollout_route(&text)?;
+        assert_eq!(route.outer.as_deref(), Some("response_item"));
+        assert_eq!(route.payload.as_deref(), Some("custom_tool_call_output"));
+        Ok(())
+    }
+}
+
 fn run() -> Result<()> {
     let args = Args::parse();
     let sessions_root = expand_tilde(&args.sessions_root)?
@@ -2991,7 +3810,7 @@ fn run() -> Result<()> {
         startup_telemetry.write(&store, ACTIVE_FALLBACK)?;
     }
     let initial_paths = if args.session_files.is_empty() {
-        recent_rollouts(&sessions_root, since)?
+        recent_rollouts(&sessions_root, since, &store.root)?
     } else {
         args.session_files
             .iter()
@@ -3012,11 +3831,9 @@ fn run() -> Result<()> {
         initial_paths.len()
     );
     eprintln!("memory-wuxian-collector startup: synchronization started");
-    let initial = if args.once {
-        store.sync_batch(initial_paths)?
-    } else {
-        store.sync_startup_batch(initial_paths)?
-    };
+    // Startup and explicit recovery must never block exact capture on a model.
+    // The maintenance supervisor drains any summary job created by this pass.
+    let initial = store.sync_startup_batch(initial_paths)?;
     eprintln!("memory-wuxian-collector startup: synchronization completed");
     if args.once {
         emit(&initial)?;

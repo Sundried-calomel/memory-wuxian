@@ -2338,7 +2338,23 @@ class MemoryStore:
                 f"source_files: {yaml_list(job.get('source_files', []))}",
             ]
             if level == 1:
-                metadata_lines.append(f"source_rounds: {int(job['source_round_end']) - int(job['source_round_start']) + 1}")
+                source_round_numbers = sorted({
+                    int(value) for value in job.get("source_round_numbers", [])
+                })
+                if not source_round_numbers:
+                    source_round_numbers = sorted({
+                        int(record["round_number"])
+                        for record in job.get("source_records", [])
+                        if record.get("round_number") is not None
+                    })
+                source_round_count = int(
+                    job.get("source_round_count")
+                    or len(source_round_numbers)
+                    or (int(job["source_round_end"]) - int(job["source_round_start"]) + 1)
+                )
+                metadata_lines.append(f"source_rounds: {source_round_count}")
+                if source_round_numbers:
+                    metadata_lines.append(f"source_round_numbers: {yaml_list(source_round_numbers)}")
                 metadata_lines.append(f"source_round_start: {int(job['source_round_start'])}")
                 metadata_lines.append(f"source_round_end: {int(job['source_round_end'])}")
                 metadata_lines.append(
@@ -2377,6 +2393,8 @@ class MemoryStore:
                 "source_message_ids": job.get("source_message_ids", []),
                 "source_round_start": job.get("source_round_start"),
                 "source_round_end": job.get("source_round_end"),
+                "source_round_numbers": source_round_numbers if level == 1 else [],
+                "source_round_count": source_round_count if level == 1 else None,
                 "source_sha256": current_source_sha256,
                 "summary_sha256": summary_sha256,
                 "path": self.relative(output_path),

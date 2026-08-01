@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.10.0",
+  "reviewed_version": "2.11.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -158,6 +158,10 @@
     {
       "id": "personal-environment-convergence",
       "required_tokens": ["environment-profile-capture", "environment-profile-compare", "environment-convergence-plan", "environment-convergence-artifact-links.schema.json", "evidence-only", "automatic_activation"]
+    },
+    {
+      "id": "continuous-catch-up-and-debt-convergence",
+      "required_tokens": ["collector-activation.json", "coverage-status.json", "maintenance_supervisor.py", "install_maintenance_supervisor.py", "semantic_plan.py", "900,000", "catching-up"]
     }
   ]
 }

@@ -19,7 +19,12 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from memory_cli import MemoryStore
-from memory_dashboard import DashboardSnapshotCache, dashboard_health, make_handler
+from memory_dashboard import (
+    DashboardSnapshotCache,
+    dashboard_health,
+    debt_status_projection,
+    make_handler,
+)
 
 
 class MemoryDashboardFederationTest(unittest.TestCase):
@@ -44,6 +49,93 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             ),
             "attention",
         )
+
+    def test_dashboard_reads_bounded_debt_projections_and_classifies_recovery(self):
+        root = self.store.root
+        maintenance = root / "maintenance/status-projection.json"
+        maintenance.parent.mkdir(parents=True)
+        maintenance.write_text(
+            json.dumps(
+                {
+                    "format": "memory-wuxian-maintenance-projection-v1",
+                    "semantic_debt": {
+                        "pending_summary_jobs": 190,
+                        "maintenance": {
+                            "counts": {
+                                "queued": 0,
+                                "running": 1,
+                                "retry": 2,
+                                "semantic-ready": 187,
+                                "completed": 0,
+                                "quarantined": 0,
+                            }
+                        },
+                    },
+                    "mechanical_debt": {},
+                    "backup_debt": {"present": True, "mutation_count": 1948},
+                }
+            ),
+            encoding="utf-8",
+        )
+        coverage = root / "imports/codex/coverage-status.json"
+        coverage.parent.mkdir(parents=True)
+        coverage.write_text(
+            json.dumps(
+                {
+                    "status": "catching-up",
+                    "missing_cursor_rollouts": 1,
+                    "incomplete_rollouts": 2,
+                    "pending_bytes": 25,
+                    "observed_bytes": 100,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        projection = debt_status_projection(root)
+
+        self.assertEqual(projection["debts"]["coverage_debt"]["count"], 3)
+        self.assertEqual(projection["debts"]["coverage_debt"]["progress"], 75.0)
+        self.assertEqual(projection["debts"]["semantic_debt"]["count"], 190)
+        self.assertEqual(projection["debts"]["semantic_debt"]["in_progress"], 1)
+        self.assertEqual(projection["debts"]["backup_debt"]["count"], 1948)
+        self.assertEqual(dashboard_health({}, {"alerts": []}, projection), "catching-up")
+
+    def test_dashboard_health_reserves_attention_and_error_for_real_failures(self):
+        quarantined = {
+            "debts": {
+                "semantic_debt": {
+                    "count": 1,
+                    "state": "pending",
+                    "quarantined": 1,
+                }
+            }
+        }
+        corrupt = {
+            "debts": {
+                "coverage_debt": {"count": 1, "state": "integrity-failure"}
+            }
+        }
+        self.assertEqual(dashboard_health({}, {"alerts": []}, quarantined), "attention")
+        self.assertEqual(dashboard_health({}, {"alerts": []}, corrupt), "error")
+
+    def test_live_cache_health_can_downgrade_after_debt_clears(self):
+        cache = DashboardSnapshotCache(self.store)
+        cache._payload = {"health": "attention", "archive_health": {}}
+        cache._refreshing = True
+        projection_path = self.store.root / "maintenance/status-projection.json"
+        projection_path.parent.mkdir(parents=True)
+        projection_path.write_text(
+            json.dumps({"semantic_debt": {"pending_summary_jobs": 1}}),
+            encoding="utf-8",
+        )
+        with patch("memory_dashboard.collector_telemetry", return_value={"alerts": []}):
+            self.assertEqual(cache.get_fast()["health"], "catching-up")
+            projection_path.write_text(
+                json.dumps({"semantic_debt": {"pending_summary_jobs": 0}}),
+                encoding="utf-8",
+            )
+            self.assertEqual(cache.get_fast()["health"], "ok")
 
     def test_federation_activity_does_not_invalidate_archive_snapshot(self):
         root = self.store.root
@@ -586,6 +678,18 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "ローカル連携ノードは未初期化です",
         ):
             self.assertIn(contract, html)
+
+        for debt_contract in (
+            'id="debt-title"',
+            'id="debt-grid"',
+            "const debtCopy=",
+            "coverage_debt:q.coverage",
+            "mechanical_debt:q.mechanical",
+            "semantic_debt:q.semantic",
+            "backup_debt:q.backup",
+            "'catching-up':q.catchingUp",
+        ):
+            self.assertIn(debt_contract, html)
 
         for preserved_contract in (
             "memory-wuxian-dashboard-settings-v1",

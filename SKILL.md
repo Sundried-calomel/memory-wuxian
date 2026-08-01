@@ -157,7 +157,8 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 63. Before assigning or implementing v2.6 or later, read
     `references/version-roadmap-v2.5-to-v3.0.md`. Preserve its version order,
     predecessor gates, non-goals, evidence matrix, and rollback contract.
-    Personal Environment convergence is v2.10 after v2.9; v3.0 is conditional,
+    Personal Environment convergence is v2.10 after v2.9; continuous catch-up
+    and bounded debt convergence is compatible v2.11 work. v3.0 is conditional,
     and an untagged future-version branch is not a release.
 64. Use one bounded provenance-aware read service for CLI, loopback HTTP, and
     MCP. Keep adapter validation and confidence behavior equivalent; expose no
@@ -172,6 +173,14 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     `--apply` may only create a predecessor-linked generation and current
     pointer. Imported generations remain read-only peer replicas. Comparison
     and convergence planning never invoke a Rule or Skill installer.
+66. Preserve the earliest collector activation boundary across installation and
+    upgrade. A retained top-level rollout without a completed cursor is coverage
+    debt even when it predates the latest installer run. Recover it through
+    bounded native streaming batches, advance the cursor only after durable
+    append, and never rewrite partial historical records. Reconcile mechanical,
+    semantic, and backup debt with a hidden bounded supervisor; model
+    unavailability must defer semantic work without consuming retries. Every
+    actual semantic prompt must satisfy both character and UTF-8 byte budgets.
 
 ## Operating workflow
 
@@ -185,6 +194,10 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 8. Run `heartbeat` for validation and recovery. Keep count-based events as primary triggers.
 9. Preview `rebuild-state`, `rebuild-conversations`, or `rebuild-indexes` before applying a recovery operation.
 10. Use the native collector for automatic Codex import. Use `sync-codex` only as a manual compatibility and recovery adapter. Both paths must remain idempotent and storage-compatible.
+   Let `maintenance_supervisor.py` run as the installed hidden five-minute
+   one-shot scheduler. It reconciles all historical debt, skips quarantined
+   items without blocking later work, and resumes deferred semantic jobs when
+   Codex becomes available. Do not replace it with a foreground loop.
 11. Use `import-chatgpt` for an official ChatGPT data-export ZIP, extracted directory, or `conversations.json`. It is incremental and idempotent, but it is not a real-time ChatGPT listener. The same experimental adapter is available under Dashboard > Settings; current automated coverage uses synthetic exports and does not constitute validation against a real user export.
 12. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
 13. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.

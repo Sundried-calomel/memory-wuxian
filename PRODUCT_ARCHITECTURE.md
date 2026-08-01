@@ -123,12 +123,18 @@ trigger evaluation, and an atomic coalescing backup-debt handoff in the
 prescribed order under the archive lock. Failure must not expose a partially
 committed state. Complete external snapshot creation is an independent
 maintenance transaction; it clears debt only after the snapshot succeeds.
+Large source files are parsed outside the lock and admitted through bounded
+durable batches. A source cursor advances only after its corresponding batch is
+committed, and an upgrade cannot move the persisted coverage boundary later.
 
 ### 3. Summary Job Contract
 
 Deterministic code freezes a closed source range and SHA-256. AI receives only
 the bounded job and returns schema-constrained data. Ingest rechecks the source
 hash. Summaries remain routing indexes.
+If a job exceeds the actual prompt budget, a hash-bound resumable map-reduce
+plan preserves its parent identity, validates reusable partial results, and
+caps both characters and UTF-8 bytes for every model invocation.
 
 ### 4. Retrieval Contract
 

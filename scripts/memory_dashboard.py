@@ -437,10 +437,190 @@ def collector_telemetry(root: Path) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError):
         backup_debt = None
     telemetry["backup_debt"] = backup_debt
-    if backup_debt is not None:
-        alerts.append("backup-pending")
     telemetry["alerts"] = alerts
     return telemetry
+
+
+DEBT_KINDS = (
+    "coverage_debt",
+    "mechanical_debt",
+    "semantic_debt",
+    "backup_debt",
+)
+MAX_DEBT_PROJECTION_BYTES = 1024 * 1024
+DEBT_PROJECTION_PATHS = (
+    "maintenance/status-projection.json",
+    "dashboard/debt-status.json",
+    "imports/codex/collector-status-projection.json",
+)
+
+
+def _debt_count(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _queue_counts(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {"pending": 0, "running": 0, "retry": 0, "quarantined": 0}
+    counts = value.get("counts")
+    if isinstance(counts, dict):
+        return {
+            "pending": sum(
+                _debt_count(counts.get(state))
+                for state in ("queued", "retry", "semantic-ready", "running")
+            ),
+            "running": _debt_count(counts.get("running")),
+            "retry": _debt_count(counts.get("retry")),
+            "quarantined": _debt_count(counts.get("quarantined")),
+        }
+    totals = [_queue_counts(child) for child in value.values() if isinstance(child, dict)]
+    return {
+        field: sum(item[field] for item in totals)
+        for field in ("pending", "running", "retry", "quarantined")
+    }
+
+
+def _normalize_debt(value: Any, kind: str = "") -> dict[str, Any]:
+    if isinstance(value, (int, float)):
+        value = {"count": value}
+    if not isinstance(value, dict):
+        value = {}
+    queue = _queue_counts(value)
+    count = _debt_count(
+        value.get(
+            "count",
+            value.get(
+                "pending",
+                value.get(
+                    "remaining",
+                    value.get(
+                        "total_pending",
+                        value.get(
+                            "file_count",
+                            value.get("job_count", value.get("mutation_count", 0)),
+                        ),
+                    ),
+                ),
+            ),
+        )
+    )
+    if kind == "coverage_debt":
+        count = _debt_count(value.get("missing_cursor_rollouts")) + _debt_count(
+            value.get("incomplete_rollouts")
+        )
+    elif kind == "semantic_debt":
+        count = max(count, _debt_count(value.get("pending_summary_jobs")), queue["pending"])
+    elif kind == "mechanical_debt":
+        count = max(count, queue["pending"])
+    elif kind == "backup_debt" and value.get("present") is not False:
+        count = max(count, _debt_count(value.get("mutation_count")), int(bool(value.get("present"))))
+    progress = value.get("progress")
+    if progress is None and kind == "coverage_debt":
+        observed = _debt_count(value.get("observed_bytes"))
+        pending = min(observed, _debt_count(value.get("pending_bytes")))
+        progress = round((observed - pending) * 100 / observed, 2) if observed else None
+    return {
+        "count": count,
+        "state": str(
+            value.get("state")
+            or value.get("status")
+            or ("pending" if count else "clear")
+        ),
+        "in_progress": max(
+            _debt_count(value.get("in_progress", value.get("running"))),
+            queue["running"],
+        ),
+        "retry": max(_debt_count(value.get("retry", value.get("retries"))), queue["retry"]),
+        "quarantined": max(_debt_count(value.get("quarantined")), queue["quarantined"]),
+        "permanent_failures": _debt_count(
+            value.get("permanent_failures", value.get("failed_permanently"))
+        ),
+        "oldest_at": value.get("oldest_at") or value.get("oldest_pending_at"),
+        "last_error": value.get("last_error"),
+        "progress": progress,
+    }
+
+
+def debt_status_projection(root: Path) -> dict[str, Any]:
+    """Read one bounded control-plane projection without scanning source rollouts."""
+    payload: dict[str, Any] | None = None
+    source: str | None = None
+    projection_error: str | None = None
+    for relative in DEBT_PROJECTION_PATHS:
+        path = root / relative
+        try:
+            if path.stat().st_size > MAX_DEBT_PROJECTION_BYTES:
+                projection_error = "projection-too-large"
+                source = relative
+                break
+            candidate = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+        except (OSError, json.JSONDecodeError):
+            projection_error = "projection-invalid"
+            source = relative
+            break
+        if not isinstance(candidate, dict):
+            projection_error = "projection-invalid"
+            source = relative
+            break
+        payload = candidate
+        source = relative
+        break
+
+    source_debts = (payload or {}).get("debts", (payload or {}).get("debt", payload or {}))
+    if not isinstance(source_debts, dict):
+        source_debts = {}
+        projection_error = "projection-invalid"
+    debts = {
+        kind: _normalize_debt(
+            source_debts.get(kind, source_debts.get(kind.removesuffix("_debt"))),
+            kind,
+        )
+        for kind in DEBT_KINDS
+    }
+
+    coverage_path = root / "imports/codex/coverage-status.json"
+    try:
+        if coverage_path.stat().st_size > MAX_DEBT_PROJECTION_BYTES:
+            raise ValueError("projection-too-large")
+        coverage = json.loads(coverage_path.read_text(encoding="utf-8"))
+        if not isinstance(coverage, dict):
+            raise ValueError("projection-invalid")
+        debts["coverage_debt"] = _normalize_debt(coverage, "coverage_debt")
+    except FileNotFoundError:
+        pass
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        projection_error = str(exc) if isinstance(exc, ValueError) else "projection-invalid"
+
+    # The legacy backup marker is a small, bounded compatibility source. It is
+    # debt, not a collector failure, and disappears as soon as maintenance drains it.
+    if source is None:
+        backup_path = root / "pending/backup-debt.json"
+        try:
+            if backup_path.stat().st_size <= MAX_DEBT_PROJECTION_BYTES:
+                backup = json.loads(backup_path.read_text(encoding="utf-8"))
+                if isinstance(backup, dict):
+                    count = _debt_count(backup.get("mutation_count", 1))
+                    debts["backup_debt"] = _normalize_debt(
+                        {**backup, "count": count, "state": "pending"},
+                        "backup_debt",
+                    )
+                    source = "pending/backup-debt.json"
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            pass
+
+    return {
+        "format": str((payload or {}).get("format") or "memory-wuxian-debt-status-v1"),
+        "updated_at": (payload or {}).get("updated_at"),
+        "health": (payload or {}).get("health"),
+        "source": source,
+        "projection_error": projection_error,
+        "debts": debts,
+    }
 
 
 MAX_DASHBOARD_ARCHIVE_ENTRIES = 200000
@@ -518,22 +698,45 @@ def verified_retrieval_stats(store: MemoryStore) -> dict[str, int]:
 def dashboard_health(
     status: dict[str, Any],
     collector: dict[str, Any] | None = None,
+    debt_status: dict[str, Any] | None = None,
 ) -> str:
-    actionable_fields = (
-        "integrity_issues",
-        "issues",
-        "warnings",
-        "failed_jobs",
-        "failed_summary_jobs",
-    )
-    return (
-        "attention"
-        if (
-            any(status.get(field) for field in actionable_fields)
-            or bool((collector or {}).get("alerts"))
+    if status.get("errors") or (debt_status or {}).get("projection_error"):
+        return "error"
+    if (debt_status or {}).get("health") == "error":
+        return "error"
+    debts = (debt_status or {}).get("debts") or {}
+    debt_values = [value for value in debts.values() if isinstance(value, dict)]
+    permanent_states = {"attention", "quarantined", "permanent-failure", "failed"}
+    error_states = {"error", "corrupt", "integrity-failure"}
+    if any(str(value.get("state")) in error_states for value in debt_values):
+        return "error"
+    if (
+        any(status.get(field) for field in ("integrity_issues", "issues"))
+        or (debt_status or {}).get("health") == "attention"
+        or any(
+            str(value.get("state")) in permanent_states
+            or _debt_count(value.get("quarantined"))
+            or _debt_count(value.get("permanent_failures"))
+            for value in debt_values
         )
-        else "ok"
+    ):
+        return "attention"
+    alerts = set((collector or {}).get("alerts") or [])
+    if "collector-not-running" in alerts:
+        return "error"
+    if "collector-telemetry-stale" in alerts:
+        return "attention"
+    recoverable = bool(
+        alerts.intersection({"collector-starting", "archive-watermark-lag"})
+        or any(
+            _debt_count(value.get("count"))
+            or _debt_count(value.get("in_progress"))
+            or _debt_count(value.get("retry"))
+            for value in debt_values
+        )
+        or any(status.get(field) for field in ("warnings", "failed_jobs", "failed_summary_jobs"))
     )
+    return "catching-up" if recoverable else "ok"
 
 
 def dashboard_data(store: MemoryStore) -> dict[str, Any]:
@@ -638,11 +841,25 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         codex_conversation_ids.intersection(usage_by_conversation)
     )
     collector = collector_telemetry(store.root)
+    debt_status = debt_status_projection(store.root)
     return {
         "generated_at": now.isoformat(),
         "archive_root": str(store.root),
-        "health": dashboard_health(status, collector),
+        "health": dashboard_health(status, collector, debt_status),
         "collector": collector,
+        "debt_status": debt_status,
+        "archive_health": {
+            field: status.get(field)
+            for field in (
+                "errors",
+                "integrity_issues",
+                "issues",
+                "warnings",
+                "failed_jobs",
+                "failed_summary_jobs",
+            )
+            if status.get(field)
+        },
         "totals": {
             "conversations": len(conversations),
             "active_conversations": len(active_conversations),
@@ -769,6 +986,17 @@ class DashboardSnapshotCache:
             return None
         return snapshot["payload"]
 
+    def _with_live_status(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = dict(payload)
+        response["collector"] = collector_telemetry(self.store.root)
+        response["debt_status"] = debt_status_projection(self.store.root)
+        response["health"] = dashboard_health(
+            response.get("archive_health", {}),
+            response["collector"],
+            response["debt_status"],
+        )
+        return response
+
     def get(self) -> dict[str, Any]:
         signature = self.source_signature()
         with self._lock:
@@ -790,10 +1018,7 @@ class DashboardSnapshotCache:
                     )
                 self._payload = payload
                 self._signature = signature
-        response = dict(payload)
-        response["collector"] = collector_telemetry(self.store.root)
-        if (response["collector"] or {}).get("alerts"):
-            response["health"] = "attention"
+        response = self._with_live_status(payload)
         response["served_at"] = datetime.now(timezone.utc).isoformat()
         response["snapshot"] = {
             "source_signature": signature,
@@ -811,10 +1036,7 @@ class DashboardSnapshotCache:
                 except (OSError, json.JSONDecodeError):
                     payload = None
             if isinstance(payload, dict):
-                response = dict(payload)
-                response["collector"] = collector_telemetry(self.store.root)
-                if (response["collector"] or {}).get("alerts"):
-                    response["health"] = "attention"
+                response = self._with_live_status(payload)
                 response["served_at"] = datetime.now(timezone.utc).isoformat()
                 response["snapshot"] = {"persisted": True, "refreshing": True}
                 if not self._refreshing:

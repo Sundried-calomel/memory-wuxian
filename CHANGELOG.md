@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 2.11.0 - 2026-08-01
+
+- Added upgrade-safe collector activation state so reinstalls never move the
+  retained-source coverage boundary later or abandon a rollout without a
+  completed cursor.
+- Replaced whole-file native recovery with bounded streaming batches, durable
+  byte-offset cursors, partial-line handling, and explicit coverage debt.
+- Added a fail-closed pre-resume repair gate so a process interruption between
+  raw append and derived-state commit cannot change round linkage on replay.
+- Added a hidden five-minute maintenance supervisor for persistent mechanical,
+  semantic, and backup-debt convergence while preserving model-free capture.
+- Added hash-bound resumable map-reduce summary plans with strict 900,000
+  character and UTF-8 byte prompt budgets and a 16-call ceiling.
+- Split dashboard health into coverage, mechanical, semantic, and backup debt;
+  recoverable backlog reports catching-up instead of a false integrity alarm.
 - Fixed macOS Skill ZIP verification so Apple's fixed `/var`, `/tmp`, and
   `/etc` aliases are accepted only when they resolve to their exact `/private`
   targets; arbitrary package-path links remain rejected.

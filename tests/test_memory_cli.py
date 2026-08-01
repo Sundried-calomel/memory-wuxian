@@ -23,6 +23,7 @@ from memory_dashboard import (
     collector_telemetry,
     dashboard_data,
     dashboard_health,
+    debt_status_projection,
     estimate_context_tokens,
 )
 from memory_cli import resolve_root
@@ -512,7 +513,7 @@ safety:
         self.assertTrue(result["startup_pending"])
         self.assertIn("collector-starting", result["alerts"])
 
-    def test_dashboard_reports_pending_coalesced_backup(self):
+    def test_dashboard_reports_pending_coalesced_backup_as_recoverable_debt(self):
         telemetry_path = self.root / "imports/codex/collector-telemetry.json"
         telemetry_path.parent.mkdir(parents=True, exist_ok=True)
         telemetry_path.write_text(
@@ -534,8 +535,11 @@ safety:
             encoding="utf-8",
         )
         result = collector_telemetry(self.root)
-        self.assertIn("backup-pending", result["alerts"])
+        self.assertNotIn("backup-pending", result["alerts"])
         self.assertEqual(result["backup_debt"]["mutation_count"], 2)
+        debt = debt_status_projection(self.root)
+        self.assertEqual(debt["debts"]["backup_debt"]["count"], 2)
+        self.assertEqual(dashboard_health({}, result, debt), "catching-up")
 
     def test_dashboard_separates_archived_conversations_and_groups_projects(self):
         for conversation_id, text in (
@@ -2047,9 +2051,10 @@ summaries:
         native_result = json.loads(native.stdout)
         self.assertEqual(python_result["imported_messages"], 7)
         self.assertEqual(native_result["imported_messages"], 7)
-        self.assertTrue(worker_marker.exists())
-        worker_arguments = json.loads(worker_marker.read_text(encoding="utf-8"))
-        self.assertIn("--job", worker_arguments)
+        self.assertFalse(worker_marker.exists())
+        self.assertIsNotNone(native_result["created_summary_job"])
+        self.assertNotIn("semantic_worker", native_result)
+        self.assertTrue(Path(native_result["created_summary_job"]).is_file())
 
         def embedded_records(root):
             records = []

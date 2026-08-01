@@ -147,6 +147,11 @@ Required scenarios:
     provider-owned references, zero automatic activation, and unchanged raw
     history. Existing Rule and Skill installer scenarios remain the required
     handoff and rollback evidence; a received profile alone cannot invoke them.
+44. v2.11 catch-up tests prove activation boundaries never move later, retained
+    no-cursor sources remain eligible, native batches resume after interruption,
+    maintenance uses hidden bounded schedulers, deferred semantic work does not
+    consume retries, oversized prompts satisfy character and UTF-8 byte limits,
+    and the dashboard distinguishes four independent debt classes.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

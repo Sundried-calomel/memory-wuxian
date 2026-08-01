@@ -6,32 +6,46 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Dict
 
 from memory_cli import append_jsonl, load_simple_yaml, nested_get, now_iso
-from memory_jobs import MaintenanceQueue, run_model_free_tick
+from memory_jobs import MaintenanceQueue, redact_error, semantic_eligibility_payload
 from platform_lock import exclusive_lock
 from platform_process import no_window_kwargs
 from semantic_worker import run_job
 
 
 def eligibility_payload(job_path: Path) -> Dict[str, Any]:
-    job = json.loads(job_path.read_text(encoding="utf-8"))
-    completed_round = int(job.get("source_round_end") or 0)
-    if int(job.get("summary_level", 0)) > 1:
-        completed_round = int(job.get("source_end_sequence") or 0)
-    if completed_round < 1:
-        raise ValueError("Semantic summary job has no completed source boundary")
-    return {
-        "summary_job": str(job_path.resolve()),
-        "summary_job_id": str(job["job_id"]),
-        "source_signature": str(job["source_signature"]),
-        "conversation_id": str(job.get("conversation_id") or ""),
-        "completed_round": completed_round,
-        "round_complete": True,
-    }
+    return semantic_eligibility_payload(job_path)
+
+
+def codex_runtime_available(config_path: Path, *, timeout_seconds: int = 10) -> tuple[bool, str]:
+    """Check local Codex presence and authentication without invoking a model."""
+    config = load_simple_yaml(config_path)
+    codex_key = "codex_cli_path_windows" if os.name == "nt" else "codex_cli_path"
+    configured = str(nested_get(config, ["ai_summary", codex_key], "codex.exe" if os.name == "nt" else "codex"))
+    executable = shutil.which(configured) or (configured if Path(configured).expanduser().is_file() else None)
+    if not executable:
+        return False, "Codex CLI executable is unavailable"
+    try:
+        completed = subprocess.run(
+            [str(executable), "login", "status"],
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            timeout=timeout_seconds,
+            check=False,
+            **no_window_kwargs(),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"Codex availability probe failed: {exc}"
+    if completed.returncode != 0:
+        detail = redact_error((completed.stderr or completed.stdout or "not logged in").strip()[-500:])
+        return False, f"Codex is unavailable: {detail}"
+    return True, "available"
 
 
 def dispatch_job(
@@ -42,6 +56,8 @@ def dispatch_job(
     dry_run: bool = False,
     create_backup: bool = False,
     retry_delay_seconds: int = 60,
+    check_availability: bool = False,
+    availability_probe=codex_runtime_available,
 ) -> Dict[str, Any]:
     root = root.resolve()
     job_path = job_path.resolve()
@@ -54,12 +70,21 @@ def dispatch_job(
         max_attempts=4,
     )
     if queued["state"] in {"queued", "retry"}:
-        run_model_free_tick(queue, {}, owner="semantic-eligibility", maximum_jobs=100)
+        queue.mark_semantic_ready_bulk(maximum_jobs=10000)
     current = next(job for job in queue.jobs() if job["job_id"] == queued["job_id"])
     if current["state"] == "completed":
         return {"status": "already-completed", "maintenance_job_id": current["job_id"]}
     if current["state"] == "quarantined":
         return {"status": "quarantined", "maintenance_job_id": current["job_id"]}
+    if check_availability:
+        available, reason = availability_probe(config_path)
+        if not available:
+            return {
+                "status": "unavailable",
+                "reason": reason,
+                "maintenance_job_id": current["job_id"],
+                "ai_invocations": 0,
+            }
     owner = f"semantic-dispatch:{os.getpid()}"
     claimed = queue.claim_semantic(current["job_id"], owner)
     if claimed is None:
@@ -120,6 +145,18 @@ def dispatch_job(
         queue.complete(current["job_id"], owner, result)
         return {**result, "maintenance_job_id": current["job_id"], "ai_invocations": 1}
     except Exception as exc:
+        if check_availability:
+            available, reason = availability_probe(config_path)
+            if not available:
+                queue.defer_semantic(
+                    current["job_id"], owner, reason, retry_delay_seconds=retry_delay_seconds
+                )
+                return {
+                    "status": "unavailable",
+                    "reason": redact_error(reason),
+                    "maintenance_job_id": current["job_id"],
+                    "ai_invocations": 0,
+                }
         failed = queue.fail_semantic(
             current["job_id"], owner, exc, retry_delay_seconds=retry_delay_seconds
         )

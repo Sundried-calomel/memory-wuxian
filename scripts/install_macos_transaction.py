@@ -259,6 +259,15 @@ def install(
     failed = update_root / "failed-candidate"
     plist = Path.home() / "Library" / "LaunchAgents" / f"{COLLECTOR_LABEL}.plist"
     old_plist = plist.read_bytes() if plist.is_file() else None
+    maintenance_plist = (
+        Path.home()
+        / "Library"
+        / "LaunchAgents"
+        / "com.openai.codex.memory-wuxian-maintenance.plist"
+    )
+    old_maintenance_plist = (
+        maintenance_plist.read_bytes() if maintenance_plist.is_file() else None
+    )
     active_root_pointer = codex_home / "memory-wuxian-active-root.txt"
     old_active_root = (
         active_root_pointer.read_bytes() if active_root_pointer.is_file() else None
@@ -289,8 +298,6 @@ def install(
                 str(python_executable),
                 "--codex-cli",
                 str(codex_cli),
-                "--since",
-                datetime.now().astimezone().isoformat(timespec="seconds"),
                 "--load",
             ],
             check=True,
@@ -317,6 +324,12 @@ def install(
         )
     except Exception as error:
         runner(
+            ["/bin/launchctl", "bootout", f"gui/{os.getuid()}", str(maintenance_plist)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        runner(
             ["/bin/launchctl", "bootout", f"gui/{os.getuid()}", str(plist)],
             check=False,
             capture_output=True,
@@ -335,6 +348,21 @@ def install(
                 text=True,
             )
             wait_for_launch_agent(COLLECTOR_LABEL, runner=runner)
+        if old_maintenance_plist is None:
+            maintenance_plist.unlink(missing_ok=True)
+        else:
+            atomic_bytes(maintenance_plist, old_maintenance_plist)
+            runner(
+                [
+                    "/bin/launchctl",
+                    "bootstrap",
+                    f"gui/{os.getuid()}",
+                    str(maintenance_plist),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
         if old_active_root is None:
             active_root_pointer.unlink(missing_ok=True)
         else:

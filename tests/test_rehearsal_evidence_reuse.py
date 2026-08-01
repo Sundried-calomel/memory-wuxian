@@ -23,7 +23,8 @@ class RehearsalEvidenceReuseTests(unittest.TestCase):
                 f"SOURCE_CONTENT_SHA256={source_identity()[2]}\n"
                 "test_mw29_signature_001_metadata_authenticity_fails_closed (tests.test_update_governance.UpdateGovernanceTests.test_mw29_signature_001_metadata_authenticity_fails_closed) ... ok\n"
                 "test_mw210_01_capture_is_deterministic_and_deduplicated (tests.test_memory_environment_profiles.EnvironmentProfileTests.test_mw210_01_capture_is_deterministic_and_deduplicated) ... ok\n"
-                "Ran 353 tests in 12.345s\n\nOK (skipped=7)\n",
+                "test_mw211_01_continuous_catchup_contract_is_versioned (tests.test_v211_release_contract.V211ReleaseContractTest.test_mw211_01_continuous_catchup_contract_is_versioned) ... ok\n"
+                "Ran 507 tests in 12.345s\n\nOK (skipped=7)\n",
                 encoding="utf-8",
             )
             output = root / "rehearsal"

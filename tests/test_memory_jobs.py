@@ -12,7 +12,13 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from memory_jobs import MaintenanceQueue, run_model_free_tick
+from memory_jobs import (
+    MaintenanceQueue,
+    commit_backup_debt_generation,
+    maintenance_projection,
+    reconcile_pending_debt,
+    run_model_free_tick,
+)
 from memory_service_state import service_state
 
 
@@ -133,6 +139,85 @@ class MaintenanceQueueTests(unittest.TestCase):
         with patch("memory_service_state.time.time", return_value=1785542420):
             state = service_state(self.root, {"integration": {"codex": {"enabled": True}}})
         self.assertEqual(state["actual"]["collector"], "running")
+
+    def _pending_summary(self, name: str, signature: str, round_end: int = 2):
+        pending = self.root / "pending"
+        pending.mkdir(parents=True, exist_ok=True)
+        path = pending / name
+        path.write_text(
+            json.dumps({
+                "job_id": name.removesuffix(".json"),
+                "summary_level": 1,
+                "source_signature": signature,
+                "conversation_id": "codex:test",
+                "source_round_end": round_end,
+            }),
+            encoding="utf-8",
+        )
+        return path
+
+    def test_mw211_reconcile_001_scans_all_debt_once_and_is_idempotent(self):
+        self._pending_summary("job-000001.json", "conversation:a:rounds:1-2")
+        self._pending_summary("job-000002.json", "conversation:b:rounds:1-2")
+        debt = self.root / "pending" / "backup-debt.json"
+        debt.write_text(json.dumps({"format_version": 1, "mutation_count": 7}), encoding="utf-8")
+
+        first = reconcile_pending_debt(self.root, self.queue)
+        second = reconcile_pending_debt(self.root, self.queue)
+
+        self.assertEqual(first["summary_jobs_scanned"], 2)
+        self.assertEqual(first["created"], 3)
+        self.assertEqual(second["created"], 0)
+        self.assertEqual(second["existing"], 3)
+        self.assertEqual(len(self.queue.jobs()), 3)
+
+    def test_mw211_queue_002_quarantined_and_deferred_work_do_not_block_ready_jobs(self):
+        blocked = self.queue.enqueue("archive-health", "health:a", max_attempts=1)
+        claimed = self.queue.claim("worker")
+        self.assertEqual(claimed["job_id"], blocked["job_id"])
+        self.queue.fail(blocked["job_id"], "worker", "permanent")
+        semantic = self.queue.enqueue(
+            "semantic-summary-eligibility",
+            "summary:next",
+            {"completed_round": 2, "round_complete": True},
+        )
+        promoted = self.queue.mark_semantic_ready_bulk()
+        self.assertEqual(promoted, [semantic["job_id"]])
+        self.assertEqual(self.queue.claim_semantic(semantic["job_id"], "semantic")["job_id"], semantic["job_id"])
+
+    def test_mw211_semantic_003_unavailable_runtime_does_not_consume_attempt(self):
+        job = self.queue.enqueue(
+            "semantic-summary-eligibility",
+            "summary:offline",
+            {"completed_round": 1, "round_complete": True},
+        )
+        self.queue.mark_semantic_ready_bulk()
+        claimed = self.queue.claim_semantic(job["job_id"], "semantic")
+        self.assertEqual(claimed["attempts"], 1)
+        deferred = self.queue.defer_semantic(job["job_id"], "semantic", "Codex unavailable")
+        self.assertEqual(deferred["state"], "semantic-ready")
+        self.assertEqual(deferred["attempts"], 0)
+
+    def test_mw211_backup_004_generation_clear_is_compare_and_delete(self):
+        debt = self.root / "pending" / "backup-debt.json"
+        debt.parent.mkdir(parents=True, exist_ok=True)
+        debt.write_text(json.dumps({"mutation_count": 1}), encoding="utf-8")
+        reconcile_pending_debt(self.root, self.queue)
+        generation = maintenance_projection(self.root, self.queue)["backup_debt"]["generation_sha256"]
+        debt.write_text(json.dumps({"mutation_count": 2}), encoding="utf-8")
+        self.assertFalse(commit_backup_debt_generation(self.root, generation))
+        self.assertTrue(debt.exists())
+        current = maintenance_projection(self.root, self.queue)["backup_debt"]["generation_sha256"]
+        self.assertTrue(commit_backup_debt_generation(self.root, current))
+        self.assertFalse(debt.exists())
+
+    def test_mw211_projection_005_separates_semantic_and_backup_debt(self):
+        self._pending_summary("job-000003.json", "conversation:c:rounds:1-2")
+        reconcile_pending_debt(self.root, self.queue)
+        projection = maintenance_projection(self.root, self.queue)
+        self.assertEqual(projection["format"], "memory-wuxian-maintenance-projection-v1")
+        self.assertEqual(projection["semantic_debt"]["pending_summary_jobs"], 1)
+        self.assertFalse(projection["backup_debt"]["present"])
 
 
 if __name__ == "__main__":
