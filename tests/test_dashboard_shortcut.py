@@ -42,6 +42,22 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn("[IO.File]::Replace($temporaryPath, $shortcutPath, $backupPath)", script)
         self.assertIn("[IO.File]::Move($temporaryPath, $shortcutPath)", script)
         self.assertIn("[IO.File]::Delete($shortcutPath)", script)
+        self.assertIn("$installedShortcut.TargetPath -ne $launcher", script)
+        self.assertIn("Dashboard shortcut activation verification failed", script)
+        inspector = (
+            SKILL_ROOT / "scripts/inspect_dashboard_shortcut_windows.ps1"
+        ).read_text(encoding="utf-8")
+        self.assertIn("[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)", inspector)
+
+    def test_installer_prefers_a_valid_explicit_skill_root_over_process_sid(self):
+        install = (SKILL_ROOT / "packaging/windows/install.ps1").read_text(
+            encoding="utf-8"
+        )
+        explicit_check = install.index("Test-MemoryWuxianSkillRoot $SkillRoot")
+        sid_lookup = install.index("WindowsIdentity]::GetCurrent()")
+        self.assertLess(explicit_check, sid_lookup)
+        self.assertIn("Sandboxed launchers can have a service SID", install)
+        self.assertNotIn("if (Test-Path -LiteralPath $expectedSkillRoot) {\n  $SkillRoot", install)
 
     def test_installer_preserves_active_root_and_rebuilds_shortcut(self):
         install = (SKILL_ROOT / "packaging/windows/install.ps1").read_text(encoding="utf-8")

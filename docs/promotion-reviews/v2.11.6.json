@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.11.6",
+  "work_item_id": "memory-wuxian-v2.11.6",
+  "candidate_id": "v2.11.6-windows-activation-candidate",
+  "owner_id": "memory-plane-control-plane",
+  "source_revision": "hotfix/v2.11.6-windows-activation-effect",
+  "product_evolution_record_id": "memory-wuxian-v2.11.6-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "Exact Windows activation evidence extends the existing runtime-effect and installer Owner rather than creating a separate capability.",
+  "evidence_refs": [
+    "outputs/rehearsal/v2.11.6/windows-final/report.json",
+    "references/release-rehearsal.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-01T00:00:00Z"
+}

@@ -70,6 +70,8 @@ if (Test-Path -LiteralPath $launcherConfig) {
 New-Item -ItemType Directory -Force -Path $Desktop | Out-Null
 $temporaryPath = Join-Path $Desktop ("." + [IO.Path]::GetRandomFileName() + ".lnk")
 $backupPath = Join-Path $Desktop ("." + [IO.Path]::GetRandomFileName() + ".bak")
+$discardPath = Join-Path $Desktop ("." + [IO.Path]::GetRandomFileName() + ".discard")
+$replacedExisting = $false
 try {
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($temporaryPath)
@@ -80,14 +82,40 @@ try {
     $shortcut.Description = $shortcutDescription
     $shortcut.WindowStyle = 1
     $shortcut.Save()
+
+    $temporaryShortcut = $shell.CreateShortcut($temporaryPath)
+    if (
+        $temporaryShortcut.TargetPath -ne $launcher -or
+        $temporaryShortcut.WorkingDirectory -ne $skill -or
+        $temporaryShortcut.IconLocation -ne "$icon,0"
+    ) {
+        throw "Dashboard shortcut did not preserve the requested activation paths."
+    }
     if (Test-Path -LiteralPath $shortcutPath) {
         [IO.File]::Replace($temporaryPath, $shortcutPath, $backupPath)
+        $replacedExisting = $true
     } else {
         [IO.File]::Move($temporaryPath, $shortcutPath)
+    }
+
+    $installedShortcut = $shell.CreateShortcut($shortcutPath)
+    if (
+        $installedShortcut.TargetPath -ne $launcher -or
+        $installedShortcut.WorkingDirectory -ne $skill -or
+        $installedShortcut.IconLocation -ne "$icon,0" -or
+        -not (Test-Path -LiteralPath $installedShortcut.TargetPath -PathType Leaf)
+    ) {
+        if ($replacedExisting -and (Test-Path -LiteralPath $backupPath)) {
+            [IO.File]::Replace($backupPath, $shortcutPath, $discardPath)
+        } else {
+            [IO.File]::Delete($shortcutPath)
+        }
+        throw "Dashboard shortcut activation verification failed."
     }
 } finally {
     [IO.File]::Delete($temporaryPath)
     [IO.File]::Delete($backupPath)
+    [IO.File]::Delete($discardPath)
 }
 
 [ordered]@{

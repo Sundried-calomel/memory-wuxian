@@ -19,6 +19,24 @@ from console_encoding import configure_unicode_stdio
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def validation_profile(version: str) -> tuple[str, list[str]]:
+    contract_path = ROOT / "docs" / "work-contracts" / f"v{version}.json"
+    if not contract_path.is_file():
+        return "full", []
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    profile = str(contract.get("validation_profile", "full"))
+    scenarios = contract.get("required_rehearsal_scenarios", [])
+    if profile not in {"full", "targeted-patch"}:
+        raise ValueError(f"unsupported validation profile: {profile}")
+    if profile == "targeted-patch" and (
+        not isinstance(scenarios, list)
+        or not scenarios
+        or not all(isinstance(item, str) and item for item in scenarios)
+    ):
+        raise ValueError("targeted-patch requires explicit rehearsal scenarios")
+    return profile, list(scenarios)
+
+
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -92,9 +110,20 @@ def main() -> int:
         ),
     )
     parser.add_argument("--print-source-content-sha256", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--print-validation-profile", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--contract-profile",
+        action="store_true",
+        help="Run the explicit targeted-patch scenarios in the version work contract.",
+    )
     args = parser.parse_args()
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     if args.print_source_content_sha256:
         print(source_identity()[2])
+        return 0
+    profile, profile_scenarios = validation_profile(version)
+    if args.print_validation_profile:
+        print(profile)
         return 0
     if (args.scenario_shard_index is None) != (args.scenario_shard_count is None):
         parser.error("scenario shard index and count must be supplied together")
@@ -107,7 +136,6 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     initial_revision, initial_source_clean, initial_source_content_sha256 = source_identity()
     python = sys.executable
-    version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     scenarios = [
         ("python-compile", [python, "-m", "compileall", "-q", "scripts"]),
         (
@@ -134,6 +162,27 @@ def main() -> int:
                     " assert path.is_file(), f'missing bundled executable: {path}'\n"
                     " result=subprocess.run([str(path),'--version'],text=True,"
                     "capture_output=True)\n"
+                    " assert result.returncode==0, result.stderr\n"
+                    " assert result.stdout.strip()==f'{name} {version}', "
+                    "f'{path}: {result.stdout.strip()} != {name} {version}'\n"
+                ),
+            ],
+        ),
+        (
+            "candidate-native-version",
+            [
+                python,
+                "-c",
+                (
+                    "import subprocess,sys,tomllib\n"
+                    "from pathlib import Path\n"
+                    "version=tomllib.loads(Path('pyproject.toml').read_text('utf-8'))"
+                    "['project']['version']\n"
+                    "suffix='.exe' if sys.platform=='win32' else ''\n"
+                    "for name in ('memory-wuxian-collector','memory-wuxian-envelope'):\n"
+                    " path=Path('native-collector/target/debug')/(name+suffix)\n"
+                    " assert path.is_file(), f'missing candidate executable: {path}'\n"
+                    " result=subprocess.run([str(path),'--version'],text=True,capture_output=True)\n"
                     " assert result.returncode==0, result.stderr\n"
                     " assert result.stdout.strip()==f'{name} {version}', "
                     "f'{path}: {result.stdout.strip()} != {name} {version}'\n"
@@ -479,18 +528,25 @@ def main() -> int:
             ],
         ),
         (
-            "v2115-runtime-effect-gate-contract",
+            "v2116-runtime-effect-gate-contract",
             [
                 python, "-m", "unittest", "-v",
                 "tests.test_runtime_effect_gate",
-                "tests.test_memory_environment_exchange.EnvironmentExchangeTests.test_legacy_committed_receipt_is_upgraded_only_from_matching_evidence",
-                "tests.test_memory_environment_exchange.EnvironmentExchangeTests.test_legacy_committed_receipt_rejects_changed_output",
-                "tests.test_memory_cli.MemoryCliTest.test_backup_failure_cleans_current_and_orphaned_temporary_directories",
-                "tests.test_memory_configuration.MemoryConfigurationTests.test_upgrade_migration_adds_defaults_without_overwriting_user_values",
+                "tests.test_dashboard_shortcut",
+                "tests.test_v211_release_contract",
+                "tests.test_release_workflow_gate",
             ],
         ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
+    if args.contract_profile:
+        if profile != "targeted-patch":
+            parser.error("the current work contract does not declare targeted-patch")
+        catalog = {scenario_id: command for scenario_id, command in scenarios}
+        unknown = sorted(set(profile_scenarios) - set(catalog))
+        if unknown:
+            parser.error(f"unknown contract rehearsal scenarios: {', '.join(unknown)}")
+        scenarios = [(scenario_id, catalog[scenario_id]) for scenario_id in profile_scenarios]
     baseline_ids = {
         "python-compile",
         "native-format",
@@ -581,6 +637,7 @@ def main() -> int:
         "required_scenarios": len(scenarios),
         "completed_scenarios": len(results),
         "scenario_catalog_size": total_scenarios,
+        "validation_profile": profile if args.contract_profile else "full",
         "scenario_shard_index": args.scenario_shard_index,
         "scenario_shard_count": args.scenario_shard_count,
         "baseline_excluded": args.exclude_baseline,

@@ -391,6 +391,9 @@ and superseded PR runs are cancelled. Installer publication consumes the
 successful same-SHA candidate proof and does not repeat unit or rehearsal
 suites. No optimization may delete a safety contract, reuse evidence across
 commits, versions, jobs, or platforms, or report an unproved scenario as passed.
+Bounded patch releases declare an explicit `targeted-patch` impact matrix in
+their versioned work contract. That matrix replaces unrelated historical suites
+for the patch; undeclared or expanded scope still defaults to the full gate.
 
 ## D-045: Personal Environment convergence is v2.10 and review-first
 

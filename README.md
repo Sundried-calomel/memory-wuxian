@@ -1,5 +1,12 @@
 # Memory無限
 
+> **2.11.6:** Windows upgrades now trust a validated package-provided Skill
+> root before consulting the process SID, preventing Codex sandbox profiles
+> from contaminating the desktop shortcut. Shortcut installation atomically
+> resolves and verifies the final target, working directory, icon, arguments,
+> and launcher configuration. The post-install runtime-effect gate rejects a
+> shortcut that merely exists but targets the wrong user or a missing binary.
+>
 > **2.11.5:** Background health now means verified effects, not merely running
 > processes. The collector never launches or waits for AI; the independent
 > scheduler creates Level-2+ summary work, repairs safe derived-index holes,

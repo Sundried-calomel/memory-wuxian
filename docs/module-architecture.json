@@ -17,6 +17,7 @@
         "scripts/bootstrap_windows.ps1",
         "scripts/install_*.py",
         "scripts/install_*.ps1",
+        "scripts/inspect_dashboard_shortcut_windows.ps1",
         "scripts/install_maintenance_supervisor.py",
         "scripts/migrate_config.py",
         "scripts/memory_cli.py",

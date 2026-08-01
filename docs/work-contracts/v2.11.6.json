@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.11.6",
+  "candidate_id": "v2.11.6-windows-activation-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-control-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "native-format",
+    "native-check",
+    "candidate-native-version",
+    "static-contracts",
+    "documentation-contract",
+    "architecture-contract",
+    "v2116-runtime-effect-gate-contract",
+    "diff-check"
+  ],
+  "target": "Prevent sandbox process identities from redirecting Windows activation artifacts and require exact post-install shortcut evidence.",
+  "primary_semantics": "A validated package-provided Skill root is authoritative; fallback identity discovery is permitted only when that root is invalid, and activation is healthy only when the final Shell-resolved shortcut and launcher configuration match live installed paths.",
+  "invariants": [
+    "Raw history, summaries, indexes, cloud state, device trust, and active archive contents remain unchanged.",
+    "The existing shortcut name, icon, native launcher, active archive pointer, and user configuration remain preserved.",
+    "Shortcut replacement remains atomic and restores the previous shortcut when final verification fails.",
+    "v3.0 remains prohibited without its separate incompatible-contract decision."
+  ],
+  "allowed_changes": [
+    "Prefer a validated explicit Windows Skill root over process SID discovery.",
+    "Inspect Windows Shell shortcut properties after installation.",
+    "Add shortcut and launcher configuration checks to the runtime-effect gate.",
+    "Extend release rehearsal, documentation, and tests for sandbox-profile activation."
+  ],
+  "prohibited_changes": [
+    "Rewrite or delete authoritative memory records.",
+    "Accept file existence, process identity, or installer exit code as activation evidence.",
+    "Create a shortcut to Python or a console-visible wrapper.",
+    "Silently replace a valid explicit Skill root with a service or sandbox profile."
+  ],
+  "before_after_checks": [
+    "Resolve the production shortcut and prove all activation paths use the interactive user's installed Skill.",
+    "Inject a CodexSandboxOffline shortcut target and prove the runtime-effect gate fails.",
+    "Prove an exact live shortcut and launcher configuration pass.",
+    "Run full regression, architecture, documentation, same-SHA CI, and installer gates."
+  ],
+  "required_evidence": [
+    "targeted-regressions",
+    "windows-production-shortcut-inspection",
+    "runtime-effect-matrix",
+    "targeted-impact-suite",
+    "architecture-contract",
+    "documentation-contract",
+    "same-sha-ci",
+    "installer-upgrade-rollback",
+    "promotion-review"
+  ],
+  "lifecycle_state": "staged"
+}

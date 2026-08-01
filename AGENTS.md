@@ -81,12 +81,16 @@ Use Memory無限 to preserve conversation history outside the active context win
     model adapter requires a pinned source, explicit authorization, and the
     third-party audit gate.
 51. Every release requires its own clean commit, tag, documentation contract,
-    full rehearsal directory, passing report, and published GitHub Release.
-    Evidence from one version cannot count for another.
-    During iteration use focused tests. Feature branches run the PR workflow
-    only; branch pushes must not duplicate that matrix. `main` pushes run the
-    complete release-candidate gate once, and the installer workflow consumes
-    that same-SHA result without rerunning unit or rehearsal suites.
+    version-specific rehearsal directory, passing report, and published GitHub
+    Release. Evidence from one version cannot count for another. A bounded
+    patch may declare `validation_profile: targeted-patch` plus explicit
+    affected scenarios in its work contract; local rehearsal and CI then run
+    that impact matrix instead of unrelated historical suites. Missing,
+    ambiguous, structural, cross-owner, or platform-expanding declarations
+    default to the complete candidate gate. During iteration use focused tests.
+    Feature branches run the PR workflow only; branch pushes must not duplicate
+    that matrix. The installer workflow consumes the same-SHA candidate result
+    without rerunning unit or rehearsal suites.
 52. Persist available top-level Codex `token_count` telemetry as a derived
     per-conversation ledger. Label it Codex-reported model usage rather than
     billing usage; exclude subagents, preserve counter-reset segments, and do
@@ -201,6 +205,11 @@ Use Memory無限 to preserve conversation history outside the active context win
     hybrid retrieval must expose an explicit keyword fallback. Upgrade
     transactions merge only missing configuration defaults, preserve user
     values, and retain an exact rollback copy and migration receipt.
+75. On Windows, a validated package-provided Skill root is authoritative over
+    the current process SID because Codex may launch maintenance inside a
+    service profile. Post-install evidence must resolve the final `.lnk` and
+    verify its exact target, working directory, icon, empty arguments, launcher
+    configuration, and live target; file existence alone is not activation.
 
 ## Authority order
 

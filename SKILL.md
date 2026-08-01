@@ -310,6 +310,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     parent summary. Bind semantic indexes to the exact raw-source snapshot and
     expose keyword fallback when stale. During upgrades, add only missing
     configuration defaults and preserve the prior bytes as rollback evidence.
+49. On Windows, prefer a validated explicit installed Skill root over the
+    process SID profile. After every install or upgrade, resolve the final
+    desktop `.lnk` through Windows Shell and verify its exact launcher target,
+    working directory, icon, empty arguments, launcher configuration, and live
+    target. A shortcut that only exists does not prove activation.
 
 ## Commands
 
@@ -446,6 +451,11 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
   log per covered contract without executing those modules again. Feature
   branches use PR CI only, `main` uses one complete same-SHA candidate gate,
   and the release workflow builds installers from that proof.
+- For a bounded patch, declare `validation_profile: targeted-patch` and an
+  explicit affected scenario list in its version work contract, then run
+  `run_release_rehearsal.py --contract-profile`. Do not restart unrelated
+  historical suites for a small correction. Missing or expanded scope defaults
+  to the complete candidate gate.
 - Read [AGENTS.md](AGENTS.md) when integrating this skill into an Agent's persistent operating rules.
 - Use files in `templates/` as output contracts and files in `prompts/` as Agent prompts.
 

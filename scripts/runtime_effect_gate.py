@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -74,12 +76,43 @@ def semantic_parent_debt(store: MemoryStore) -> list[dict[str, Any]]:
     return debt
 
 
+def inspect_windows_shortcut(script: Path, shortcut: Path) -> dict[str, Any]:
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+            "-Path",
+            str(shortcut),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=30,
+    )
+    if completed.returncode != 0:
+        return {"error": completed.stderr.strip() or f"exit-{completed.returncode}"}
+    try:
+        value = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return {"error": "invalid-shortcut-inspection-json"}
+    return value if isinstance(value, dict) else {"error": "invalid-shortcut-inspection-result"}
+
+
 def check_runtime_effects(
     root: Path,
     config_path: Path,
     *,
     now: float | None = None,
     supervisor_max_age_seconds: int = 900,
+    skill_root: Path | None = None,
+    launcher_config: Path | None = None,
+    windows_shortcut: Path | None = None,
 ) -> dict[str, Any]:
     root = root.resolve()
     config = load_simple_yaml(config_path.resolve())
@@ -167,6 +200,42 @@ def check_runtime_effects(
     ):
         failures.append({"code": "maintenance-supervisor-not-healthy"})
 
+    if skill_root is not None or launcher_config is not None or windows_shortcut is not None:
+        if skill_root is None or launcher_config is None or windows_shortcut is None:
+            failures.append({"code": "windows-activation-input-incomplete"})
+        else:
+            skill = skill_root.resolve()
+            expected_target = skill / "bin" / "memory-wuxian-dashboard-launcher.exe"
+            expected_icon = f"{skill / 'assets' / 'memory-wuxian.ico'},0"
+            launcher = load_json(launcher_config.resolve())
+            observations["windows_launcher_config"] = launcher
+            configured_archive = str(launcher.get("archive_root", ""))
+            configured_python = Path(str(launcher.get("python_executable", "")))
+            if (
+                os.path.normcase(os.path.abspath(configured_archive))
+                != os.path.normcase(str(root))
+                or not configured_python.is_file()
+            ):
+                failures.append({"code": "windows-launcher-config-invalid"})
+
+            shortcut = inspect_windows_shortcut(
+                skill / "scripts" / "inspect_dashboard_shortcut_windows.ps1",
+                windows_shortcut.resolve(),
+            )
+            observations["windows_shortcut"] = shortcut
+            if (
+                not shortcut.get("exists")
+                or not shortcut.get("target_exists")
+                or os.path.normcase(str(shortcut.get("target", "")))
+                != os.path.normcase(str(expected_target))
+                or os.path.normcase(str(shortcut.get("working_directory", "")))
+                != os.path.normcase(str(skill))
+                or os.path.normcase(str(shortcut.get("icon", "")))
+                != os.path.normcase(expected_icon)
+                or str(shortcut.get("arguments", ""))
+            ):
+                failures.append({"code": "windows-shortcut-activation-invalid"})
+
     return {
         "format": "memory-wuxian-runtime-effect-gate-v1",
         "status": "pass" if not failures else "fail",
@@ -180,11 +249,17 @@ def main() -> int:
     parser.add_argument("--root", required=True)
     parser.add_argument("--config", required=True)
     parser.add_argument("--supervisor-max-age-seconds", type=int, default=900)
+    parser.add_argument("--skill-root")
+    parser.add_argument("--launcher-config")
+    parser.add_argument("--windows-shortcut")
     args = parser.parse_args()
     result = check_runtime_effects(
         Path(args.root),
         Path(args.config),
         supervisor_max_age_seconds=args.supervisor_max_age_seconds,
+        skill_root=Path(args.skill_root) if args.skill_root else None,
+        launcher_config=Path(args.launcher_config) if args.launcher_config else None,
+        windows_shortcut=Path(args.windows_shortcut) if args.windows_shortcut else None,
     )
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
     return 0 if result["status"] == "pass" else 1
