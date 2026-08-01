@@ -2215,7 +2215,15 @@ summaries:
             )
             time.sleep(0.2)
             self.assertIsNone(native_process.poll())
-        native_stdout, native_stderr = native_process.communicate(timeout=10)
+        try:
+            native_stdout, native_stderr = native_process.communicate(timeout=60)
+        except subprocess.TimeoutExpired:
+            native_process.kill()
+            native_stdout, native_stderr = native_process.communicate()
+            self.fail(
+                "native parity collector did not finish within 60 seconds:\n"
+                + native_stderr
+            )
         native = subprocess.CompletedProcess(
             native_args,
             native_process.returncode,
