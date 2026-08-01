@@ -154,6 +154,21 @@
   heartbeat `status=ok`, and left quarantine at zero.
 - Families: `MW-R05`, `MW-R07`, `MW-R10`.
 
+### MW-WIN-012: duplicate-round regression asserted partial completion
+
+- Evidence: v2.12.5 added the correct duplicate-round trigger but asserted that
+  one completed conversation made the shared round globally complete. Live
+  post-install audit exposed the remaining `completed_rounds_out_of_order`
+  drift.
+- Escape boundary: the test checked that the second conversation stayed
+  pending, but did not require global completion to remain false until every
+  user-bearing conversation in that round had a final answer.
+- Permanent gate: for conversation-scoped records, a round is complete only
+  when the non-empty user-conversation set is a subset of the final-answer
+  conversation set. The regression must assert both the partial and fully
+  completed states.
+- Families: `MW-R05`, `MW-R08`, `MW-R10`.
+
 ## macOS 事故账
 
 ### MW-MAC-001：不稳定 Python 身份使后台权限失效

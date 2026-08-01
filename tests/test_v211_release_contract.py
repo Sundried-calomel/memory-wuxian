@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 class V211ReleaseContractTest(unittest.TestCase):
     def test_mw211_01_continuous_catchup_contract_is_versioned(self):
         version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertEqual(version, "2.12.5")
+        self.assertEqual(version, "2.12.6")
         contract = json.loads((ROOT / "docs/work-contracts/v2.11.0.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["work_item_id"], "memory-wuxian-v2.11.0")
         review = json.loads((ROOT / "docs/promotion-reviews/v2.11.0.json").read_text(encoding="utf-8"))

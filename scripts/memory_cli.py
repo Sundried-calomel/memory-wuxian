@@ -728,7 +728,8 @@ class MemoryStore:
                 for record in round_records
             )
             if (
-                user_conversations & final_conversations
+                bool(user_conversations)
+                and user_conversations.issubset(final_conversations)
                 if conversation_scoped
                 else user_conversations and final_conversations
             ):

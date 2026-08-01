@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "version": "2.12.6",
+  "candidate": "shared-round-completion",
+  "decision": "promote-after-targeted-ci",
+  "scope": "Recovered global completion for legacy conversation-scoped duplicate rounds",
+  "raw_history_changed": false,
+  "installed_effect": "outputs/rehearsal/v2.12.6/windows-installed-effect.json",
+  "rollback": "Restore the generated state backup and previous Skill package; raw history requires no rollback."
+}

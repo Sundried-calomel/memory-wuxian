@@ -2119,14 +2119,14 @@ summaries:
     def test_round_recovery_keeps_duplicate_number_pending_per_conversation(self):
         store = MemoryStore(self.root, self.config)
         records = [
-            {"sequence": 1, "round_number": 1, "conversation_id": "codex:a", "speaker": "user", "message_id": "a-u"},
-            {"sequence": 2, "round_number": 1, "conversation_id": "codex:a", "speaker": "assistant", "message_id": "a-f", "completes_round": True},
-            {"sequence": 3, "round_number": 1, "conversation_id": "codex:b", "speaker": "user", "message_id": "b-u"},
+            {"sequence": 1, "round_number": 1, "round_scope": "conversation", "conversation_id": "codex:a", "speaker": "user", "message_id": "a-u"},
+            {"sequence": 2, "round_number": 1, "round_scope": "conversation", "conversation_id": "codex:a", "speaker": "assistant", "message_id": "a-f", "completes_round": True},
+            {"sequence": 3, "round_number": 1, "round_scope": "conversation", "conversation_id": "codex:b", "speaker": "user", "message_id": "b-u"},
         ]
 
         recovered = store.recover_round_tracking(records)
 
-        self.assertEqual(recovered["completed_rounds"], 1)
+        self.assertEqual(recovered["completed_rounds"], 0)
         self.assertEqual(
             recovered["pending_rounds"],
             {
@@ -2138,6 +2138,13 @@ summaries:
             },
         )
         self.assertEqual(recovered["next_round_number"], 2)
+
+        records.append(
+            {"sequence": 4, "round_number": 1, "round_scope": "conversation", "conversation_id": "codex:b", "speaker": "assistant", "message_id": "b-f", "completes_round": True}
+        )
+        completed = store.recover_round_tracking(records)
+        self.assertEqual(completed["completed_rounds"], 1)
+        self.assertEqual(completed["pending_rounds"], {})
 
     def test_native_collector_matches_python_storage_contract(self):
         self.config.write_text(

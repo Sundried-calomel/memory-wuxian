@@ -248,3 +248,11 @@ attempt. `L2-000005` was created with SHA-256
   repairable issues, zero quarantine, and unchanged SHA-256 for every existing
   raw file.
 - Run only the six scenarios bound by `docs/work-contracts/v2.12.5.json`.
+
+# v2.12.6 targeted shared-round completion hotfix
+
+- Keep a shared conversation-scoped round incomplete while any user-bearing
+  conversation lacks a final answer.
+- Add the missing final and require recovered completion with no pending entry.
+- Repair only derived state with backup, then require heartbeat `ok`, zero
+  integrity issues, and zero repairable issues.

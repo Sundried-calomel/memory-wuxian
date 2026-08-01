@@ -1,5 +1,9 @@
 # Memory無限
 
+> **2.12.6:** A shared legacy round is complete only after every conversation
+> with a user message has its own final answer, keeping recovered completion
+> and pending state consistent.
+
 > **2.12.5:** Legacy duplicate-round recovery now tracks unresolved rounds per
 > conversation across all immutable raw records. Repair rebuilds only derived
 > state and preserves source dialogue unchanged.

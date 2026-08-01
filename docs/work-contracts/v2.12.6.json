@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.12.6",
+  "candidate_id": "v2.12.6-shared-round-completion-hotfix",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-control-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "architecture-contract",
+    "bundled-native-version",
+    "v2126-shared-round-completion-contract",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "target": "Complete a shared legacy round only after every user-bearing conversation has its own final answer.",
+  "primary_semantics": "Conversation-scoped completion is universal across the round's user conversations, not existential.",
+  "invariants": [
+    "Raw dialogue and summaries remain unchanged.",
+    "An unresolved conversation keeps the shared round incomplete.",
+    "The completed state is reached after every corresponding conversation final is present."
+  ],
+  "allowed_changes": ["Correct recovered completion set logic and its exact regression, version metadata, and release documentation."],
+  "prohibited_changes": ["Rewrite or renumber raw history.", "Run a broad full-release rehearsal for this narrow patch."],
+  "before_after_checks": [
+    "Assert partial shared-round completion remains incomplete.",
+    "Append the second conversation final and assert completion.",
+    "Repair derived state and require heartbeat ok with zero integrity or repairable issues."
+  ],
+  "required_evidence": ["partial-and-complete-shared-round-regression", "windows-installed-heartbeat-effect", "documentation-contract"],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.12.6-preflight.json",
+    "preflight_sha256": "123b84d08138922456bbf7320ba7e5b45c38f47a585081e4fc0a1eb2a774aafb",
+    "completion_receipt": "docs/defect-receipts/v2.12.6-completion.json",
+    "completion_sha256": "89474e9f2c07c497570ef0f0a1102c6417ba2988ea33813cf9e940b19561f121",
+    "applicable_families": ["MW-R05", "MW-R08", "MW-R10"],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "The v2.12.5 duplicate-round regression expected a globally completed round while another conversation in that round remained unresolved.",
+      "Post-install heartbeat exposed completed-round and pending-round projection drift."
+    ]
+  },
+  "lifecycle_state": "verified"
+}

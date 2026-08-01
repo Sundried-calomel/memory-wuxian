@@ -604,6 +604,16 @@ def main() -> int:
                 "tests.test_v2125_release_contract",
             ],
         ),
+        (
+            "v2126-shared-round-completion-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_cli.MemoryCliTest.test_round_recovery_keeps_duplicate_number_pending_per_conversation",
+                "tests.test_memory_cli.MemoryCliTest.test_concurrent_conversations_keep_rounds_and_replies_isolated",
+                "tests.test_defect_workbook_contract",
+                "tests.test_v2126_release_contract",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     if args.contract_profile:
