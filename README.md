@@ -1,6 +1,6 @@
 # Memory無限
 
-> **2.11.1:** Continuous catch-up now survives installs and upgrades. The native
+> **2.11.2:** Continuous catch-up now survives installs and upgrades. The native
 > collector preserves the earliest boundary in `collector-activation.json`,
 > streams retained rollout files in bounded batches, resumes from durable
 > cursors, and publishes `coverage-status.json`. If capture is interrupted
@@ -15,6 +15,8 @@
 > recoverable backlog as `catching-up`.
 > Global coverage is refreshed only from the complete activation scope; an
 > incremental one-rollout event cannot replace the all-source status view.
+> Successful no-op verification also converges legacy cursor identity and
+> completion metadata, so zero-byte metadata debt does not remain permanent.
 >
 > **2.4.6:** This stable release adds a cross-device semantic runtime contract,
 > explicit local E5 realization, and linear-time raw-pointer construction for
