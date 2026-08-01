@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import os
 import shutil
@@ -13,7 +12,12 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Sequence
 
-from platform_process import detached_no_window_kwargs, no_window_kwargs
+try:
+    from platform_process import detached_no_window_kwargs, no_window_kwargs
+    from collector_activation import resolve_activation_since
+except ModuleNotFoundError:
+    from scripts.platform_process import detached_no_window_kwargs, no_window_kwargs
+    from scripts.collector_activation import resolve_activation_since
 
 
 DEFAULT_TASK_NAME = "MemoryWuxianCodexSync"
@@ -101,6 +105,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.debounce_ms < 100:
         raise SystemExit("--debounce-ms must be at least 100")
     if args.uninstall:
+        try:
+            from install_maintenance_supervisor import uninstall as uninstall_maintenance
+        except ModuleNotFoundError:
+            from scripts.install_maintenance_supervisor import uninstall as uninstall_maintenance
+        uninstall_maintenance(platform_name="win32", runner=subprocess.run)
         subprocess.run(
             ["schtasks.exe", "/End", "/TN", args.task_name],
             check=False,
@@ -152,8 +161,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     atomic_write_text(active_root_pointer(), f"{archive_root}\n")
     runtime_dir = archive_root / "imports" / "codex"
     output = Path(args.output).expanduser().resolve() if args.output else runtime_dir / "collector-command.json"
-    since = args.since or dt.datetime.now().astimezone().isoformat(timespec="seconds")
-    dt.datetime.fromisoformat(since[:-1] + "+00:00" if since.endswith("Z") else since)
+    since = resolve_activation_since(archive_root, args.since)
     command = collector_command(
         collector, archive_root, config, sessions_root, python_executable,
         codex_cli, since, args.debounce_ms,
@@ -221,6 +229,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             except PermissionError:
                 print("immediate-start:deferred-by-process-policy")
             print(f"run-key:{RUN_KEY}\\{RUN_VALUE}")
+        try:
+            from install_maintenance_supervisor import install as install_maintenance
+        except ModuleNotFoundError:
+            from scripts.install_maintenance_supervisor import install as install_maintenance
+        install_maintenance(
+            archive_root,
+            skill_root,
+            python_executable,
+            platform_name="win32",
+            load=True,
+            runner=subprocess.run,
+        )
     print(f"command-manifest:{output}")
     return 0
 

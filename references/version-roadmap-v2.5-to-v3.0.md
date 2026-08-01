@@ -80,7 +80,8 @@ For every versioned work item:
 | v2.8.0 | Released | v2.7.0 | Lossless storage and sync protocol hardening. |
 | v2.9.0 | Released | v2.8.0 | Unified read-only interfaces and update governance. |
 | v2.10.0 | Candidate | v2.9.0 | Personal Environment inventory, comparison, and review-first convergence. |
-| v3.0.0 | Conditional | v2.10.0 plus an accepted incompatibility decision | Cross-platform integration only when a real breaking public contract requires a major version. |
+| v2.11.0 | Candidate | v2.10.0 | Continuous source catch-up and bounded debt convergence. |
+| v3.0.0 | Conditional | v2.11.0 plus an accepted incompatibility decision | Cross-platform integration only when a real breaking public contract requires a major version. |
 
 ## v2.5.0: completed foundation
 
@@ -352,11 +353,43 @@ read-only peer replicas, replay-safe exchange, explainable differences, zero
 automatic activation, managed-block byte preservation, verified installer
 handoff, and same-SHA macOS/Windows evidence all pass on the exact candidate.
 
+## v2.11.0: continuous catch-up and debt convergence
+
+### Objective
+
+Make retained source coverage and every recoverable debt class converge after
+idle periods, process restarts, upgrades, and temporary model unavailability,
+without rewriting authoritative history or weakening bounded execution.
+
+### Implementation contract
+
+1. Persist the earliest collector activation boundary; upgrades may move it
+   earlier but never later.
+2. Treat every retained top-level rollout without a completed cursor as
+   coverage debt. Stream complete JSONL lines in bounded native batches and
+   commit a cursor only after the corresponding archive append is durable.
+3. Reconcile historical mechanical, semantic, and backup debt in linear time.
+   A quarantined or deferred item must not block later eligible work.
+4. Run low-frequency maintenance independently of the foreground Codex task.
+   Mechanical work remains model-free; unavailable Codex defers semantic work
+   without consuming a retry.
+5. Split oversized summary jobs through a source-hash-bound resumable plan.
+   Enforce both actual prompt character and UTF-8 byte budgets and a fixed
+   model-call ceiling while retaining the original parent job identity.
+6. Expose coverage, mechanical, semantic, and backup debt independently. Normal
+   backlog is catching-up; corruption, quarantine, or permanent failure is an
+   attention or error state.
+
+Release gate: exact source-contract parity, interruption and restart recovery,
+old no-cursor discovery, partial-import recovery, prompt-budget proof, hidden
+background scheduling, full cross-platform rehearsal, same-SHA CI, and
+installer rollback all pass on one frozen candidate.
+
 ## v3.0.0: conditional major-version integration
 
 ### Decision rule
 
-Do not create v3.0 simply because v2.6--v2.10 are complete. Continue with a 2.x
+Do not create v3.0 simply because v2.6--v2.11 are complete. Continue with a 2.x
 release when all public contracts remain compatible. Start v3.0 only after an
 explicit accepted decision identifies an incompatible public CLI, persisted
 format, protocol, extension API, or compatibility-policy change.

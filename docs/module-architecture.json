@@ -17,6 +17,7 @@
         "scripts/bootstrap_windows.ps1",
         "scripts/install_*.py",
         "scripts/install_*.ps1",
+        "scripts/install_maintenance_supervisor.py",
         "scripts/memory_cli.py",
         "scripts/memory_dashboard.py",
         "scripts/memory_readonly_http.py",
@@ -37,9 +38,11 @@
         "scripts/memory_readonly_service.py",
         "scripts/memory_service_state.py",
         "scripts/memory_summary_budget.py",
+        "scripts/maintenance_supervisor.py",
         "scripts/semantic_backfill.py",
         "scripts/semantic_dispatch.py",
         "scripts/semantic_e5_worker.py",
+        "scripts/semantic_plan.py",
         "scripts/semantic_worker.py"
       ]
     },
@@ -80,6 +83,7 @@
       "architecture_owner": "Platform Foundation",
       "patterns": [
         "scripts/console_encoding.py",
+        "scripts/collector_activation.py",
         "scripts/platform_transaction.py",
         "scripts/platform_*.py",
         "schemas/**"

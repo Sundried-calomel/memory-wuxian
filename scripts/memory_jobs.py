@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Optional
@@ -17,6 +18,7 @@ FORMAT = "memory-wuxian-maintenance-job-v1"
 STATES = {"queued", "running", "retry", "semantic-ready", "completed", "quarantined"}
 KINDS = {"backup-debt", "semantic-summary-eligibility", "archive-health"}
 TERMINAL_STATES = {"semantic-ready", "completed", "quarantined"}
+PROJECTION_FORMAT = "memory-wuxian-maintenance-projection-v1"
 
 
 def now_utc() -> datetime:
@@ -164,15 +166,26 @@ class MaintenanceQueue:
                 recovered.append(job["job_id"])
         return recovered
 
-    def claim(self, owner: str, *, lease_seconds: int = 60) -> Optional[Dict[str, Any]]:
+    def claim(
+        self,
+        owner: str,
+        *,
+        lease_seconds: int = 60,
+        kinds: Optional[Iterable[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
         if not owner or not 5 <= lease_seconds <= 3600:
             raise ValueError("Invalid maintenance lease request")
+        allowed_kinds = set(kinds) if kinds is not None else set(KINDS)
+        if not allowed_kinds or not allowed_kinds <= KINDS:
+            raise ValueError("Invalid maintenance job kind filter")
         self.recover_expired()
         with exclusive_lock(self.lock):
             now = self.clock()
             candidates = [
                 job for job in self.jobs()
-                if job["state"] in {"queued", "retry"} and parse_iso(job["available_at"]) <= now
+                if job["kind"] in allowed_kinds
+                and job["state"] in {"queued", "retry"}
+                and parse_iso(job["available_at"]) <= now
             ]
             if not candidates:
                 return None
@@ -184,6 +197,35 @@ class MaintenanceQueue:
             job["lease_expires_at"] = iso(now + timedelta(seconds=lease_seconds))
             self._write(job)
             return job
+
+    def mark_semantic_ready_bulk(self, *, maximum_jobs: int = 100) -> list[str]:
+        """Promote due semantic eligibility jobs in one O(N) locked scan."""
+        if maximum_jobs < 0 or maximum_jobs > 10000:
+            raise ValueError("maximum_jobs must be between 0 and 10000")
+        promoted: list[str] = []
+        limit = maximum_jobs or 10000
+        with exclusive_lock(self.lock):
+            now = self.clock()
+            paths = sorted(self.root.glob("job-*.json")) if self.root.exists() else []
+            for path in paths:
+                if len(promoted) >= limit:
+                    break
+                job = self._read(path)
+                if (
+                    job["kind"] != "semantic-summary-eligibility"
+                    or job["state"] not in {"queued", "retry"}
+                    or parse_iso(job["available_at"]) > now
+                ):
+                    continue
+                job["state"] = "semantic-ready"
+                job["result_sha256"] = canonical_hash({"eligible": True})
+                job["updated_at"] = iso(now)
+                job["lease_owner"] = None
+                job["lease_expires_at"] = None
+                job["last_error"] = None
+                self._write(job)
+                promoted.append(job["job_id"])
+        return promoted
 
     def claim_semantic(
         self,
@@ -265,6 +307,31 @@ class MaintenanceQueue:
             self._write(job)
             return job
 
+    def defer_semantic(
+        self,
+        job_id: str,
+        owner: str,
+        reason: BaseException | str,
+        *,
+        retry_delay_seconds: int = 300,
+    ) -> Dict[str, Any]:
+        """Release unavailable semantic work without consuming an attempt."""
+        with exclusive_lock(self.lock):
+            job = self._read(self._path(job_id))
+            if job["kind"] != "semantic-summary-eligibility":
+                raise ValueError("Maintenance job is not semantic work")
+            if job["state"] != "running" or job["lease_owner"] != owner:
+                raise ValueError("Maintenance job is not owned by this worker")
+            job["state"] = "semantic-ready"
+            job["attempts"] = max(0, job["attempts"] - 1)
+            job["available_at"] = iso(self.clock() + timedelta(seconds=max(0, retry_delay_seconds)))
+            job["updated_at"] = iso(self.clock())
+            job["lease_owner"] = None
+            job["lease_expires_at"] = None
+            job["last_error"] = redact_error(reason)
+            self._write(job)
+            return job
+
     def status(self) -> Dict[str, Any]:
         counts = {state: 0 for state in sorted(STATES)}
         for job in self.jobs():
@@ -289,8 +356,9 @@ def run_model_free_tick(
         raise ValueError("maximum_jobs must be between 0 and 100")
     processed = []
     limit = maximum_jobs or 100
+    allowed_kinds = {"semantic-summary-eligibility", *handlers.keys()}
     for _ in range(limit):
-        job = queue.claim(owner)
+        job = queue.claim(owner, kinds=allowed_kinds)
         if job is None:
             break
         try:
@@ -306,3 +374,136 @@ def run_model_free_tick(
             failed = queue.fail(job["job_id"], owner, exc)
             processed.append({"job_id": job["job_id"], "state": failed["state"]})
     return {"processed": processed, "status": queue.status(), "ai_invocations": 0}
+
+
+def semantic_eligibility_payload(job_path: Path) -> Dict[str, Any]:
+    job = json.loads(Path(job_path).read_text(encoding="utf-8"))
+    completed_round = int(job.get("source_round_end") or 0)
+    if int(job.get("summary_level", 0)) > 1:
+        completed_round = int(job.get("source_end_sequence") or 0)
+    if completed_round < 1:
+        raise ValueError("Semantic summary job has no completed source boundary")
+    return {
+        "summary_job": str(Path(job_path).resolve()),
+        "summary_job_id": str(job["job_id"]),
+        "source_signature": str(job["source_signature"]),
+        "conversation_id": str(job.get("conversation_id") or ""),
+        "completed_round": completed_round,
+        "round_complete": True,
+    }
+
+
+def read_backup_debt_generation(archive_root: Path) -> Optional[Dict[str, Any]]:
+    path = Path(archive_root) / "pending" / "backup-debt.json"
+    if not path.exists():
+        return None
+    debt = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(debt, dict):
+        raise ValueError("Backup debt must be a JSON object")
+    return {
+        "path": str(path.resolve()),
+        "debt": debt,
+        "debt_sha256": canonical_hash(debt),
+        "mutation_count": int(debt.get("mutation_count", 0)),
+    }
+
+
+def commit_backup_debt_generation(archive_root: Path, expected_sha256: str) -> bool:
+    """Clear only the exact snapshotted debt generation under a short lock."""
+    root = Path(archive_root)
+    path = root / "pending" / "backup-debt.json"
+    with exclusive_lock(root / ".locks" / "archive.lock"):
+        current = read_backup_debt_generation(root)
+        if current is None or current["debt_sha256"] != expected_sha256:
+            return False
+        path.unlink()
+        return True
+
+
+def reconcile_pending_debt(archive_root: Path, queue: Optional[MaintenanceQueue] = None) -> Dict[str, Any]:
+    """Reconcile every pending summary and backup generation in one source scan."""
+    root = Path(archive_root).resolve()
+    queue = queue or MaintenanceQueue(root)
+    pending = root / "pending"
+    summary_paths = sorted(pending.glob("job-*.json")) if pending.exists() else []
+    created = 0
+    existing = 0
+    invalid: list[Dict[str, str]] = []
+    for path in summary_paths:
+        try:
+            payload = semantic_eligibility_payload(path)
+            result = queue.enqueue(
+                "semantic-summary-eligibility",
+                f"summary:{payload['source_signature']}",
+                payload,
+                max_attempts=4,
+            )
+            created += int(result["created"])
+            existing += int(not result["created"])
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            invalid.append({"path": str(path), "error": redact_error(exc)})
+
+    backup = read_backup_debt_generation(root)
+    if backup is not None:
+        result = queue.enqueue(
+            "backup-debt",
+            f"backup:{backup['debt_sha256']}",
+            {
+                "debt_sha256": backup["debt_sha256"],
+                "mutation_count": backup["mutation_count"],
+            },
+            max_attempts=4,
+        )
+        created += int(result["created"])
+        existing += int(not result["created"])
+    return {
+        "summary_jobs_scanned": len(summary_paths),
+        "backup_debt_present": backup is not None,
+        "created": created,
+        "existing": existing,
+        "invalid": invalid,
+    }
+
+
+def maintenance_projection(archive_root: Path, queue: Optional[MaintenanceQueue] = None) -> Dict[str, Any]:
+    root = Path(archive_root).resolve()
+    queue = queue or MaintenanceQueue(root)
+    jobs = queue.jobs()
+    pending_dir = root / "pending"
+    pending_summaries = len(list(pending_dir.glob("job-*.json"))) if pending_dir.exists() else 0
+
+    def category(kind: str) -> Dict[str, Any]:
+        selected = [job for job in jobs if job["kind"] == kind]
+        counts = {state: 0 for state in sorted(STATES)}
+        for job in selected:
+            counts[job["state"]] += 1
+        oldest = min((job["created_at"] for job in selected if job["state"] not in {"completed"}), default=None)
+        return {"total": len(selected), "counts": counts, "oldest_pending_at": oldest}
+
+    backup = read_backup_debt_generation(root)
+    return {
+        "format": PROJECTION_FORMAT,
+        "updated_at": iso(now_utc()),
+        "process_id": os.getpid(),
+        "coverage_debt": {"status": "reported-by-native-collector"},
+        "mechanical_debt": {
+            "backup": category("backup-debt"),
+            "archive_health": category("archive-health"),
+        },
+        "semantic_debt": {
+            "pending_summary_jobs": pending_summaries,
+            "maintenance": category("semantic-summary-eligibility"),
+        },
+        "backup_debt": {
+            "present": backup is not None,
+            "generation_sha256": backup["debt_sha256"] if backup else None,
+            "mutation_count": backup["mutation_count"] if backup else 0,
+        },
+    }
+
+
+def write_maintenance_projection(archive_root: Path, queue: Optional[MaintenanceQueue] = None) -> Path:
+    root = Path(archive_root).resolve()
+    path = root / "maintenance" / "status-projection.json"
+    atomic_write_canonical_json(path, maintenance_projection(root, queue))
+    return path

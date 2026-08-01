@@ -466,3 +466,21 @@ fall back to a verified full package, but neither path executes or installs
 without a separate explicit user approval. Evaluate summary budgets from closed
 numeric metrics only at a completed dialogue boundary; the scheduler may enqueue
 one idempotent semantic job but cannot invoke AI itself.
+
+## D-050: Retained source coverage and recoverable debt must converge
+
+Status: Accepted for v2.11.
+
+Persist the earliest collector activation boundary across installation and
+upgrade. Any retained top-level rollout without a completed cursor remains
+coverage debt regardless of the latest installer timestamp. Parse it by
+complete JSONL lines in bounded native transactions and advance its cursor only
+after durable append; existing partial archive records remain append-only.
+
+Reconcile historical mechanical, semantic, and backup debt with idempotent
+linear-time maintenance. Model unavailability defers semantic work without
+consuming retry attempts. Oversized semantic jobs use a source-hash-bound,
+resumable map-reduce plan whose actual prompts satisfy both character and UTF-8
+byte budgets and whose completed pieces are reused only after hash validation.
+The dashboard reports recoverable backlog as catching-up and reserves attention
+or error for quarantine, permanent failure, corruption, or integrity drift.

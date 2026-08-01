@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import os
 import plistlib
 import subprocess
@@ -14,8 +13,10 @@ from typing import Optional, Sequence
 
 try:
     from platform_runtime import executable_entry_path
+    from collector_activation import resolve_activation_since
 except ModuleNotFoundError:
     from scripts.platform_runtime import executable_entry_path
+    from scripts.collector_activation import resolve_activation_since
 
 
 LABEL = "com.memorywuxian.codex-sync"
@@ -78,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--since",
-        help="Only monitor session files modified from this ISO-8601 time; defaults to installation time",
+        help="Initial coverage boundary; upgrades preserve the earliest recorded value",
     )
     parser.add_argument(
         "--debounce-ms",
@@ -124,8 +125,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"Native collector does not exist or is not executable: {collector}. "
             "Run scripts/build_native_collector.sh first."
         )
-    since = args.since or dt.datetime.now().astimezone().isoformat(timespec="seconds")
-    dt.datetime.fromisoformat(since[:-1] + "+00:00" if since.endswith("Z") else since)
+    since = resolve_activation_since(archive_root, args.since)
     environment = {"RUST_BACKTRACE": "1"}
     if args.python_executable:
         python_executable = executable_entry_path(args.python_executable)
@@ -173,6 +173,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             stderr=subprocess.DEVNULL,
         )
         subprocess.run(["/bin/launchctl", "bootstrap", domain, str(output)], check=True)
+        try:
+            from install_maintenance_supervisor import install as install_maintenance
+        except ModuleNotFoundError:
+            from scripts.install_maintenance_supervisor import install as install_maintenance
+        if not args.python_executable:
+            raise SystemExit("--python-executable is required when loading background maintenance")
+        install_maintenance(
+            archive_root,
+            skill_root,
+            executable_entry_path(args.python_executable),
+            platform_name="darwin",
+            load=True,
+            runner=subprocess.run,
+        )
     atomic_write_text(active_root_pointer, f"{archive_root}\n")
     print(output)
     return 0

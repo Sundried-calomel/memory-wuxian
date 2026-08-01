@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.11.0",
+  "work_item_id": "memory-wuxian-v2.11.0",
+  "candidate_id": "v2.11.0-source-candidate",
+  "owner_id": "memory-plane-control-plane",
+  "source_revision": "feature/v2.11-continuous-catchup",
+  "product_evolution_record_id": "memory-wuxian-v2.11.0-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "Continuous source coverage, crash-safe deterministic recovery, and bounded maintenance debt extend the existing Memory Plane and Control Plane contracts without creating a reusable capability outside Memory Wuxian or changing the v3.0 authorization gate.",
+  "evidence_refs": [
+    "outputs/rehearsal/v2.11.0-local-final-rerun/report.json",
+    "references/decisions.md#d-050"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-01T00:00:00Z"
+}

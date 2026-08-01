@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.11.0",
+  "candidate_id": "v2.11.0-source-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-control-plane",
+  "target": "Continuous, resumable source catch-up and bounded debt convergence across installation, upgrade, idle, restart, and temporary model unavailability.",
+  "primary_semantics": "The native collector owns exact source coverage and resumable cursors; the Control Plane owns persistent mechanical and semantic debt; the dashboard renders bounded status projections only.",
+  "invariants": [
+    "Existing raw records remain append-only and are never rewritten, normalized, moved, or deleted.",
+    "Source message IDs, text, source lines, hashes, conversation identities, and completed-round boundaries remain compatible with v2.10.",
+    "An upgrade may preserve or move the activation boundary earlier but can never move it later.",
+    "A cursor advances only after the corresponding bounded archive transaction is durable.",
+    "Mechanical work continues without a model; semantic work remains durable and resumes only when Codex is available.",
+    "Every actual semantic prompt remains below the configured character and UTF-8 byte budgets.",
+    "v3.0 remains prohibited without the separately approved incompatible-contract gate."
+  ],
+  "allowed_changes": [
+    "Add backward-compatible cursor fields for committed lines, byte offsets, observed source size, prefix identity, and completion state.",
+    "Add bounded native streaming batches and a coverage-debt status projection.",
+    "Add idempotent maintenance reconciliation, a low-frequency supervisor, and resumable semantic execution plans.",
+    "Add independent coverage, mechanical, semantic, and backup debt health views.",
+    "Preserve the earliest collector activation boundary across Windows and macOS upgrades."
+  ],
+  "prohibited_changes": [
+    "Delete or replace partially imported raw records to simplify recovery.",
+    "Treat latest source and archive timestamps as proof that every retained rollout is covered.",
+    "Hold the archive lock while parsing an entire large rollout, invoking a model, or copying a complete backup.",
+    "Consume semantic retry attempts while Codex or the network is unavailable.",
+    "Hide quarantined, failed, or uncovered work behind a generic healthy watermark.",
+    "Change archive-v1, environment-v1, or public retrieval semantics incompatibly."
+  ],
+  "before_after_checks": [
+    "Compare bounded streaming output with the established v2.10 source-record contract for multilingual and tool-heavy fixtures.",
+    "Interrupt and resume a rollout after multiple batch boundaries, including a partial pre-v2.11 import with no final cursor.",
+    "Discover an untracked top-level rollout older than the latest installer timestamp while continuing to exclude subagent and exec sessions.",
+    "Reconcile historical summary and backup debt idempotently while a quarantined item exists.",
+    "Prove an oversized single round is summarized through a hash-bound bounded plan without changing its parent job or source coverage.",
+    "Upgrade both platform installations while preserving archive root, activation boundary, cursors, debt, launcher behavior, and rollback evidence."
+  ],
+  "required_evidence": [
+    "source-contract-parity",
+    "large-rollout-bounded-memory",
+    "batch-interruption-recovery",
+    "activation-boundary-upgrade",
+    "coverage-hole-discovery",
+    "mechanical-debt-offline",
+    "semantic-debt-resume",
+    "semantic-prompt-budget",
+    "dashboard-debt-projection",
+    "partial-import-recovery",
+    "full-suite",
+    "windows-candidate",
+    "macos-candidate",
+    "same-sha-ci",
+    "installer-upgrade-rollback",
+    "promotion-review"
+  ],
+  "lifecycle_state": "staged"
+}

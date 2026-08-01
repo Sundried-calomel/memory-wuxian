@@ -68,6 +68,8 @@ def validate_unittest_evidence(path: Path, expected_source_content_sha256: str) 
         raise ValueError("Reusable unittest evidence does not prove the mandatory update-signature case")
     if not re.search(r"(?m)^test_mw210_01_capture_is_deterministic_and_deduplicated .* \.\.\. ok\r?$", text):
         raise ValueError("Reusable unittest evidence does not prove the mandatory v2.10 profile case")
+    if not re.search(r"(?m)^test_mw211_01_continuous_catchup_contract_is_versioned .* \.\.\. ok\r?$", text):
+        raise ValueError("Reusable unittest evidence does not prove the mandatory v2.11 catch-up case")
     return digest(path)
 
 
@@ -291,7 +293,7 @@ def main() -> int:
             [
                 python, "-m", "unittest", "-v",
                 "tests.test_memory_cli.MemoryCliTest.test_semantic_backfill_drains_coalesced_backup_debt_without_summary_jobs",
-                "tests.test_memory_cli.MemoryCliTest.test_dashboard_reports_pending_coalesced_backup",
+                "tests.test_memory_cli.MemoryCliTest.test_dashboard_reports_pending_coalesced_backup_as_recoverable_debt",
             ],
         ),
         (
@@ -460,6 +462,17 @@ def main() -> int:
         (
             "v210-personal-environment-profile-contract",
             [python, "-m", "unittest", "-v", "tests.test_memory_environment_profiles"],
+        ),
+        (
+            "v211-continuous-catchup-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_v211_release_contract",
+                "tests.test_collector_activation",
+                "tests.test_maintenance_scheduler",
+                "tests.test_semantic_plan",
+                "tests.test_semantic_backfill",
+            ],
         ),
         ("diff-check", ["git", "diff", "--check"]),
     ]

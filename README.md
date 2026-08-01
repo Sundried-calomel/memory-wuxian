@@ -1,5 +1,19 @@
 # Memory無限
 
+> **2.11.0:** Continuous catch-up now survives installs and upgrades. The native
+> collector preserves the earliest boundary in `collector-activation.json`,
+> streams retained rollout files in bounded batches, resumes from durable
+> cursors, and publishes `coverage-status.json`. If capture is interrupted
+> between an append and its derived-state commit, the next native pass must
+> complete deterministic `heartbeat --repair` before resuming. A hidden five-minute task
+> installed by `install_maintenance_supervisor.py` runs
+> `maintenance_supervisor.py` so mechanical and backup debt continue while
+> Codex is closed; semantic debt resumes when Codex is available. Oversized
+> jobs use the hash-bound `semantic_plan.py` map-reduce path, with every actual
+> prompt capped below `900,000` characters and UTF-8 bytes. The dashboard
+> distinguishes coverage, mechanical, semantic, and backup debt and reports
+> recoverable backlog as `catching-up`.
+>
 > **2.4.6:** This stable release adds a cross-device semantic runtime contract,
 > explicit local E5 realization, and linear-time raw-pointer construction for
 > first-time semantic indexing. It synchronizes the interface and pinned
