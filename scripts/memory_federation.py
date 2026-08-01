@@ -19,7 +19,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from platform_process import no_window_kwargs
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
+MINIMUM_PROTOCOL_VERSION = 1
 BUNDLE_FORMAT = "memory-wuxian-delta-v1"
 NODE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{2,63}$")
 AGE_PUBLIC_KEY_PATTERN = re.compile(r"^age1[0-9a-z]{50,80}$")
@@ -147,6 +148,7 @@ class FederationManager:
         self.export_ledger_path = self.metadata_root / "export-ledger.jsonl"
         self.peers_dir = self.metadata_root / "peers"
         self.sync_log_path = self.metadata_root / "sync-log.jsonl"
+        self.token_snapshot_dir = self.metadata_root / "token-usage-snapshots"
         configured = (
             store.config.get("federation", {}).get("replica_directory")
             if isinstance(store.config.get("federation"), dict)
@@ -171,6 +173,7 @@ class FederationManager:
     def init_layout(self) -> None:
         for directory in (
             self.metadata_root,
+            self.token_snapshot_dir,
             self.peers_dir,
             self.replica_root / "peers",
             self.global_index_dir,
@@ -218,7 +221,11 @@ class FederationManager:
             raise ValueError("Federation node is not initialized; run init-node first")
         node = read_json(self.node_path)
         safe_node_id(str(node.get("node_id", "")))
-        if int(node.get("protocol_version", 0)) != PROTOCOL_VERSION:
+        protocol_version = int(node.get("protocol_version", 0))
+        if protocol_version == 1:
+            node["protocol_version"] = PROTOCOL_VERSION
+            atomic_write_json(self.node_path, node)
+        elif protocol_version != PROTOCOL_VERSION:
             raise ValueError("Unsupported local federation protocol version")
         return node
 
@@ -358,6 +365,44 @@ class FederationManager:
                 "sha256": digest,
                 "payload": entry,
             }
+        token_usage_dir = self.root / "imports" / "codex" / "token-usage"
+        for ledger_path in sorted(token_usage_dir.glob("*.json")):
+            ledger = read_json(ledger_path)
+            if (
+                ledger.get("format_version") != 2
+                or ledger.get("measurement") != "codex-reported-model-usage"
+                or not isinstance(ledger.get("daily_usage"), dict)
+            ):
+                continue
+            payload = {
+                key: value
+                for key, value in ledger.items()
+                if key not in {"source", "scanned_through_line"}
+            }
+            payload["source"] = {"kind": "codex-rollout-token-count"}
+            digest = canonical_sha256(payload)
+            session_digest = hashlib.sha256(
+                str(payload.get("session_id", "")).encode("utf-8")
+            ).hexdigest()[:24]
+            artifact_id = f"token-usage:{session_digest}:{digest}"
+            snapshot_path = self.token_snapshot_dir / f"{digest}.json"
+            if not snapshot_path.exists():
+                atomic_write_json(snapshot_path, payload)
+        for snapshot_path in sorted(self.token_snapshot_dir.glob("*.json")):
+            payload = read_json(snapshot_path)
+            digest = canonical_sha256(payload)
+            if snapshot_path.stem != digest:
+                raise ValueError(f"Token usage snapshot hash mismatch: {snapshot_path}")
+            session_digest = hashlib.sha256(
+                str(payload.get("session_id", "")).encode("utf-8")
+            ).hexdigest()[:24]
+            artifact_id = f"token-usage:{session_digest}:{digest}"
+            artifacts[artifact_id] = {
+                "artifact_type": "token-usage",
+                "artifact_id": artifact_id,
+                "sha256": digest,
+                "payload": payload,
+            }
         return artifacts
 
     def refresh_export_ledger(self) -> Dict[str, Dict[str, Any]]:
@@ -486,7 +531,7 @@ class FederationManager:
         manifest_base = {
             "format": BUNDLE_FORMAT,
             "protocol_version": PROTOCOL_VERSION,
-            "minimum_protocol_version": 1,
+            "minimum_protocol_version": MINIMUM_PROTOCOL_VERSION,
             "origin_node_id": node["node_id"],
             "target_node_id": safe_node_id(target_node_id) if target_node_id else None,
             "base_event_sequence": int(after_event_sequence),
@@ -584,7 +629,8 @@ class FederationManager:
             payload_bytes = archive.read("payload/artifacts.jsonl")
         if manifest.get("format") != BUNDLE_FORMAT:
             raise ValueError("Unsupported bundle format")
-        if int(manifest.get("protocol_version", 0)) != PROTOCOL_VERSION:
+        bundle_protocol = int(manifest.get("protocol_version", 0))
+        if not MINIMUM_PROTOCOL_VERSION <= bundle_protocol <= PROTOCOL_VERSION:
             raise ValueError("Unsupported bundle protocol version")
         origin_node_id = safe_node_id(str(manifest.get("origin_node_id", "")))
         target_node_id = manifest.get("target_node_id")
@@ -634,7 +680,10 @@ class FederationManager:
             if not artifact_id or artifact_id in seen_ids:
                 raise ValueError("Bundle contains duplicate or empty artifact IDs")
             seen_ids.add(artifact_id)
-            if record.get("artifact_type") not in {"raw", "summary", "title"}:
+            supported_types = {"raw", "summary", "title"}
+            if bundle_protocol >= 2:
+                supported_types.add("token-usage")
+            if record.get("artifact_type") not in supported_types:
                 raise ValueError(f"Unsupported artifact type: {record.get('artifact_type')}")
             if record.get("sha256") != canonical_sha256(record.get("payload")):
                 raise ValueError(f"Artifact SHA-256 mismatch: {artifact_id}")
@@ -651,8 +700,18 @@ class FederationManager:
                 expected_artifact_id = (
                     f"summary:{summary_record.get('summary_id', '')}"
                 )
-            else:
+            elif artifact_type == "title":
                 expected_artifact_id = f"title:{canonical_sha256(payload)}"
+            else:
+                if payload.get("measurement") != "codex-reported-model-usage":
+                    raise ValueError("Token usage artifact has an invalid measurement")
+                if not payload.get("session_id") or not isinstance(payload.get("daily_usage"), dict):
+                    raise ValueError("Token usage artifact is missing daily telemetry")
+                digest = canonical_sha256(payload)
+                session_digest = hashlib.sha256(
+                    str(payload["session_id"]).encode("utf-8")
+                ).hexdigest()[:24]
+                expected_artifact_id = f"token-usage:{session_digest}:{digest}"
             if artifact_id != expected_artifact_id:
                 raise ValueError(
                     f"Artifact ID does not match its payload: {artifact_id}"
@@ -810,6 +869,7 @@ class FederationManager:
         next_raw = list(existing_raw)
         next_titles = list(existing_titles)
         summary_writes: List[Tuple[Path, bytes]] = []
+        token_usage_writes: List[Tuple[Path, bytes]] = []
         artifact_hashes = dict(state.get("artifact_hashes", {}))
         for artifact in artifacts:
             artifact_id = str(artifact["artifact_id"])
@@ -853,6 +913,19 @@ class FederationManager:
                 if title_hash not in title_hashes:
                     title_hashes.add(title_hash)
                     next_titles.append(payload)
+            elif artifact_type == "token-usage":
+                payload_hash = canonical_sha256(payload)
+                destination = peer_root / "token-usage" / f"{payload_hash}.json"
+                content = (
+                    json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+                    + "\n"
+                ).encode("utf-8")
+                if destination.exists() and destination.read_bytes() != content:
+                    raise ValueError(
+                        f"Remote token usage conflict: {payload.get('session_id')}"
+                    )
+                if not destination.exists():
+                    token_usage_writes.append((destination, content))
             artifact_hashes[artifact_id] = artifact_hash
         next_raw.sort(key=lambda record: int(record.get("sequence", 0)))
         next_state = {
@@ -877,6 +950,10 @@ class FederationManager:
             atomic_write_jsonl(raw_path, next_raw)
             atomic_write_jsonl(titles_path, next_titles)
             for destination, content in summary_writes:
+                if destination.exists():
+                    continue
+                atomic_write_bytes(destination, content)
+            for destination, content in token_usage_writes:
                 if destination.exists():
                     continue
                 atomic_write_bytes(destination, content)

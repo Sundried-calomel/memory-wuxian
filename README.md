@@ -1,5 +1,13 @@
 # Memory無限
 
+> **2.12.0:** `daily_metrics.py` adds a nested daily chart for this device and
+> all trusted synchronized devices, with message and Codex-reported token
+> modes, per-device drilldown, stale-sync warnings, and an `Asia/Tokyo` day
+> boundary. Federation protocol v2 exchanges immutable path-sanitized token
+> ledger revisions while retaining protocol v1 read compatibility. Missing
+> peer telemetry remains visibly incomplete and is never replaced by a
+> character estimate or described as an account-global total.
+>
 > **2.11.6:** Windows upgrades now trust a validated package-provided Skill
 > root before consulting the process SID, preventing Codex sandbox profiles
 > from contaminating the desktop shortcut. Shortcut installation atomically

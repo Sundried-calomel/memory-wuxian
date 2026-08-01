@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "capability_id": "federated-daily-metrics",
+  "revision": "2.12.0",
+  "owner_id": "memory-exchange-product-shell",
+  "producer_identity": "memory-wuxian-maintainers",
+  "artifact_sha256": "a5eb0cbd49b9e75a62faf94ec61a2164741ae5a0bde32ff5215d70621424165d",
+  "triggers": [
+    {"trigger_id": "daily-status", "phrase": "Render federated daily archive volume"},
+    {"trigger_id": "token-exchange", "phrase": "Exchange daily token telemetry with trusted peers"}
+  ],
+  "calls": [],
+  "resources": [
+    {"resource_id": "authoritative-memory", "access": "read", "coordination_owner": "memory-plane"},
+    {"resource_id": "federation-metadata", "access": "write", "coordination_owner": "exchange-plane"},
+    {"resource_id": "peer-replicas", "access": "write", "coordination_owner": "exchange-plane"},
+    {"resource_id": "dashboard-status", "access": "write", "coordination_owner": "product-shell"}
+  ],
+  "permissions": ["file-read", "file-write"],
+  "actions": [
+    {
+      "action_id": "aggregate-daily",
+      "risk": "ordinary",
+      "permissions": ["file-read"],
+      "resources": ["authoritative-memory", "peer-replicas"],
+      "authorization_gate": null
+    },
+    {
+      "action_id": "exchange-token-telemetry",
+      "risk": "ordinary",
+      "permissions": ["file-read", "file-write"],
+      "resources": ["authoritative-memory", "federation-metadata", "peer-replicas"],
+      "authorization_gate": null
+    },
+    {
+      "action_id": "render-dashboard",
+      "risk": "ordinary",
+      "permissions": ["file-read", "file-write"],
+      "resources": ["dashboard-status"],
+      "authorization_gate": null
+    }
+  ]
+}

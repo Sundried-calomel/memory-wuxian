@@ -537,6 +537,17 @@ def main() -> int:
                 "tests.test_release_workflow_gate",
             ],
         ),
+        (
+            "v212-federated-daily-metrics-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_v212_release_contract",
+                "tests.test_daily_metrics",
+                "tests.test_token_usage",
+                "tests.test_memory_federation",
+                "tests.test_memory_dashboard_federation",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     if args.contract_profile:

@@ -1,0 +1,20 @@
+{
+  "allowed_actions": [
+    "aggregate-daily",
+    "exchange-token-telemetry",
+    "render-dashboard"
+  ],
+  "authorization_gated_actions": [],
+  "binding_sha256": "28c0970c545c5b80880df54d1450150d797eba9aa1f8d0c39b8219d6a139c332",
+  "candidate_id": "federated-daily-metrics",
+  "candidate_revision": "2.12.0",
+  "deterministic_check_version": 1,
+  "manifest_sha256": "e50412de1c171837d89abeb90d660f5fc5cd48719528bc1a29f7e05662b7d149",
+  "owner_id": "memory-exchange-product-shell",
+  "project_id": "memory-wuxian",
+  "receipt_id": "car:e4c68f560d0299b5efae8c34095d94d9fb36bfa0658e1444f76b0646ea3fa1b2",
+  "registry_sha256": "1969ee0037a96cd0b7e130afdba01fcdc152abe4efd1bf8825876ed480b2af2d",
+  "schema_version": 1,
+  "semantic_review_sha256": "1c4848fcdcc2afab8899f30b94775ad233902fb7c151be726fed0cfe5d9d4c29",
+  "status": "allowed"
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "candidate_id": "federated-daily-metrics",
+  "candidate_revision": "2.12.0",
+  "candidate_manifest_sha256": "e50412de1c171837d89abeb90d660f5fc5cd48719528bc1a29f7e05662b7d149",
+  "registry_sha256": "1969ee0037a96cd0b7e130afdba01fcdc152abe4efd1bf8825876ed480b2af2d",
+  "reviewer_identity": "memory-wuxian-release-quality",
+  "classification": "extension",
+  "owner_id": "memory-exchange-product-shell",
+  "decision": "allow",
+  "evidence": [
+    "Raw history remains read-only and append-only",
+    "Exchanged telemetry removes source paths and has no retrieval authority",
+    "Trusted peer binding and stale coverage are explicit",
+    "All actions stay inside the existing Memory Wuxian project"
+  ],
+  "trigger_resolutions": []
+}

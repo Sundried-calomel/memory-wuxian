@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.12.0",
+  "candidate_id": "v2.12.0-federated-daily-volume-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-exchange-product-shell",
+  "validation_profile": "full",
+  "target": "Render auditable daily message and Codex-reported token volume as an all-trusted-device total with a nested local-device subset.",
+  "primary_semantics": "The Memory Plane derives daily telemetry, the Exchange Plane carries immutable read-only token-ledger revisions, and the Product Shell renders only trusted replicas already synchronized to the current device.",
+  "trigger": "Dashboard status generation and an already-enabled federation export or import.",
+  "scope": "Local archive plus one read-only replica for each currently trusted peer node.",
+  "parameters_and_defaults": "Fourteen visible days, Asia/Tokyo day boundary, messages selected by default, 24-hour stale threshold.",
+  "required_actions": "Deduplicate by origin node and message/session identity, expose token coverage and freshness, retain local and per-device drilldown values.",
+  "evidence_and_validation": "Protocol v1 read compatibility, protocol v2 telemetry exchange, reset-aware daily token tests, trusted-peer aggregation, UI syntax and three-locale browser rehearsal, full release suite and same-SHA CI.",
+  "failure_and_escalation": "Exclude revoked peers, mark missing token telemetry incomplete, mark old or missing sync stale, and never substitute character estimates for reported tokens.",
+  "exit_and_lifecycle": "The feature may be removed by reverting the derived UI and protocol-v2 telemetry reader; append-only raw history and imported read-only replicas remain valid.",
+  "invariants": [
+    "Raw messages, summaries, indexes, and existing replica artifacts remain append-only and are never rewritten or deleted.",
+    "All-devices means the local node plus each currently trusted peer replica exactly once; it never claims account-global completeness.",
+    "Reported tokens are derived only from Codex token_count telemetry and are never estimated from characters.",
+    "Missing or stale peer telemetry is visible and is not converted into a zero-valued proof of complete coverage.",
+    "Protocol v2 accepts v1 bundles; token telemetry is an optional v2 artifact and never becomes retrieval authority.",
+    "v3.0 remains prohibited without the separately approved incompatible-contract gate."
+  ],
+  "allowed_changes": [
+    "Add reset-aware daily_usage to derived token ledgers and force a bounded v2 telemetry backfill.",
+    "Exchange immutable, path-sanitized token-ledger revisions through federation protocol v2.",
+    "Add a read-only federated daily aggregation module and dashboard projection.",
+    "Add nested bars, message/token switching, freshness warnings, and device drilldown in three locales."
+  ],
+  "prohibited_changes": [
+    "Rewrite source rollouts or authoritative raw archive records to obtain daily metrics.",
+    "Aggregate revoked, unknown, or duplicate peer roots.",
+    "Expose source filesystem paths inside exchanged token telemetry.",
+    "Label estimates, summaries, or partial replicas as Codex-reported account totals."
+  ],
+  "before_after_checks": [
+    "Prove a counter reset is assigned once to the correct Asia/Tokyo day.",
+    "Prove duplicate telemetry revisions resolve to one latest session ledger.",
+    "Prove revoked peers are excluded and stale trusted peers remain visible as stale.",
+    "Import a v1 bundle and exchange a v2 token telemetry artifact without changing raw messages.",
+    "Render desktop and mobile charts in Chinese, English, and Japanese with no overlap or blank state."
+  ],
+  "required_evidence": [
+    "capability-admission-receipt",
+    "daily-token-ledger-tests",
+    "federation-v1-v2-compatibility",
+    "trusted-device-aggregation-tests",
+    "three-locale-visual-rehearsal",
+    "full-suite",
+    "same-sha-ci",
+    "installer-upgrade-rollback",
+    "promotion-review"
+  ],
+  "lifecycle_state": "staged"
+}

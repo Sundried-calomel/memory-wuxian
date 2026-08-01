@@ -174,6 +174,27 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             )
             self.assertEqual(cache.get_fast()["health"], "ok")
 
+    def test_fast_cache_does_not_wait_for_a_background_rebuild_lock(self):
+        cache = DashboardSnapshotCache(self.store)
+        cache._payload = {"health": "ok", "archive_health": {}}
+        cache._refreshing = True
+        cache._lock.acquire()
+        completed = threading.Event()
+        result = {}
+
+        def read_fast():
+            result.update(cache.get_fast())
+            completed.set()
+
+        worker = threading.Thread(target=read_fast)
+        worker.start()
+        try:
+            self.assertTrue(completed.wait(0.5), "fast cache waited for rebuild lock")
+            self.assertEqual(result["snapshot"]["persisted"], True)
+        finally:
+            cache._lock.release()
+            worker.join(timeout=2)
+
     def test_federation_activity_does_not_invalidate_archive_snapshot(self):
         root = self.store.root
         directories = {
@@ -205,6 +226,42 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         )
 
         self.assertEqual(cache.source_signature(), before)
+
+    def test_federated_daily_sources_invalidate_archive_snapshot(self):
+        root = self.store.root
+        directories = {
+            name: root / name
+            for name in ("raw", "conversations", "summaries", "indexes", "pending", "retrieval")
+        }
+        for directory in directories.values():
+            directory.mkdir(parents=True)
+        state_path = root / "state.json"
+        state_path.write_text("{}\n", encoding="utf-8")
+        store = SimpleNamespace(
+            root=root,
+            config={},
+            state_path=state_path,
+            raw_dir=directories["raw"],
+            conversation_dir=directories["conversations"],
+            summaries_dir=directories["summaries"],
+            index_dir=directories["indexes"],
+            pending_dir=directories["pending"],
+            retrieval_dir=directories["retrieval"],
+        )
+        cache = DashboardSnapshotCache(store)
+        before = cache.source_signature()
+
+        peer_root = root.parent / f"{root.name}-federation-cache/peers/mw-peer-node"
+        peer_root.mkdir(parents=True)
+        (peer_root / "raw-records.jsonl").write_text(
+            '{"message_id":"peer-message-1"}\n', encoding="utf-8"
+        )
+        (peer_root / "replica-state.json").write_text(
+            '{"last_sync_at":"2026-08-01T10:00:00+09:00"}\n',
+            encoding="utf-8",
+        )
+
+        self.assertNotEqual(cache.source_signature(), before)
 
     def test_devices_api_is_independent_from_archive_snapshot(self):
         federation_status = {
@@ -737,6 +794,14 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "settings.compactMode",
             "settings.cloudFailureAlertsEnabled",
             "memory-wuxian-language",
+            "memory-wuxian-daily-mode",
+            'data-daily-mode="messages"',
+            'data-daily-mode="reported_tokens"',
+            "complete_token_coverage",
+            "renderDailyDrilldown",
+            "全设备",
+            "All devices",
+            "全デバイス",
         ):
             self.assertIn(preserved_contract, html)
 

@@ -29,7 +29,8 @@ use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
 const RAW_MARKER: &str = "<!-- memory-wuxian-record -->";
-const TOKEN_USAGE_FORMAT_VERSION: u64 = 1;
+const TOKEN_USAGE_FORMAT_VERSION: u64 = 2;
+const DAILY_USAGE_TIMEZONE: &str = "Asia/Tokyo";
 const ROLLOUT_BATCH_MAX_LINES: usize = 512;
 const ROLLOUT_BATCH_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const RECOVERY_LOCK_YIELD: Duration = Duration::from_millis(150);
@@ -173,6 +174,32 @@ fn add_usage(left: &BTreeMap<String, u64>, right: &BTreeMap<String, u64>) -> BTr
             )
         })
         .collect()
+}
+
+fn subtract_usage(
+    later: &BTreeMap<String, u64>,
+    earlier: &BTreeMap<String, u64>,
+) -> BTreeMap<String, u64> {
+    TOKEN_USAGE_FIELDS
+        .into_iter()
+        .map(|field| {
+            (
+                field.to_owned(),
+                later
+                    .get(field)
+                    .copied()
+                    .unwrap_or(0)
+                    .saturating_sub(earlier.get(field).copied().unwrap_or(0)),
+            )
+        })
+        .collect()
+}
+
+fn daily_usage_day(timestamp: &str) -> String {
+    let jst = FixedOffset::east_opt(9 * 60 * 60).expect("valid JST offset");
+    DateTime::parse_from_rfc3339(timestamp)
+        .map(|value| value.with_timezone(&jst).date_naive().to_string())
+        .unwrap_or_else(|_| "unknown".to_owned())
 }
 
 fn usage_total(usage: &BTreeMap<String, u64>) -> u64 {
@@ -1329,6 +1356,8 @@ impl Store {
                 "reported_usage": usage_value(&empty_usage()),
                 "latest_request_usage": usage_value(&empty_usage()),
                 "model_context_window": 0,
+                "daily_usage_timezone": DAILY_USAGE_TIMEZONE,
+                "daily_usage": {},
                 "updated_at": null,
             })
         };
@@ -1380,13 +1409,13 @@ impl Store {
                 normalized_usage(ledger.get("current_segment_usage")).unwrap_or_else(empty_usage);
             let mut closed =
                 normalized_usage(ledger.get("closed_segments_usage")).unwrap_or_else(empty_usage);
-            if ledger
+            let reset = ledger
                 .get("token_event_count")
                 .and_then(Value::as_u64)
                 .unwrap_or(0)
                 > 0
-                && usage_total(&cumulative) < usage_total(&current)
-            {
+                && usage_total(&cumulative) < usage_total(&current);
+            if reset {
                 closed = add_usage(&closed, &current);
                 ledger["counter_reset_count"] = json!(
                     ledger
@@ -1407,9 +1436,23 @@ impl Store {
                 );
             }
             previous_signature = Some(signature);
+            let timestamp = event.get("timestamp").and_then(Value::as_str).unwrap_or("");
+            let day = daily_usage_day(timestamp);
+            let delta = if reset {
+                cumulative.clone()
+            } else {
+                subtract_usage(&cumulative, &current)
+            };
+            let previous_day =
+                normalized_usage(ledger.get("daily_usage").and_then(|value| value.get(&day)))
+                    .unwrap_or_else(empty_usage);
+            if !ledger.get("daily_usage").is_some_and(Value::is_object) {
+                ledger["daily_usage"] = json!({});
+            }
+            ledger["daily_usage"][&day] = usage_value(&add_usage(&previous_day, &delta));
             let marker = json!({
                 "line": line_number,
-                "timestamp": event.get("timestamp").and_then(Value::as_str).unwrap_or(""),
+                "timestamp": timestamp,
             });
             if ledger.get("first_token_event").map_or(true, Value::is_null) {
                 ledger["first_token_event"] = marker.clone();
@@ -1446,6 +1489,7 @@ impl Store {
             "kind": "codex-rollout-token-count",
             "path": portable_path(source_path),
         });
+        ledger["daily_usage_timezone"] = json!(DAILY_USAGE_TIMEZONE);
         ledger["scanned_through_line"] = json!(committed_line);
         ledger["updated_at"] = json!(now_iso());
         atomic_write_json(&path, &ledger)?;

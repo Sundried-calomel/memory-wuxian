@@ -129,6 +129,102 @@ safety:
     def add_offline_peer(self, root, node_id):
         return self.run_cli(root, "add-peer", "--node-id", node_id)
 
+    def test_protocol_v2_exchanges_read_only_token_usage_snapshots(self):
+        ledger_dir = self.node_a / "imports" / "codex" / "token-usage"
+        ledger_dir.mkdir(parents=True, exist_ok=True)
+        ledger = {
+            "format_version": 2,
+            "measurement": "codex-reported-model-usage",
+            "conversation_id": "codex:telemetry-session",
+            "session_id": "telemetry-session",
+            "token_event_count": 2,
+            "reported_usage": {
+                "input_tokens": 90,
+                "cached_input_tokens": 20,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 10,
+                "reasoning_output_tokens": 0,
+                "total_tokens": 100,
+            },
+            "daily_usage_timezone": "Asia/Tokyo",
+            "daily_usage": {
+                "2026-08-01": {
+                    "input_tokens": 90,
+                    "cached_input_tokens": 20,
+                    "cache_write_input_tokens": 0,
+                    "output_tokens": 10,
+                    "reasoning_output_tokens": 0,
+                    "total_tokens": 100,
+                }
+            },
+            "updated_at": "2026-08-01T12:00:00+09:00",
+        }
+        (ledger_dir / "telemetry-session.json").write_text(
+            json.dumps(ledger, ensure_ascii=False), encoding="utf-8"
+        )
+        self.add_offline_peer(self.node_a, "node-beta")
+        self.add_offline_peer(self.node_b, "node-alpha")
+        source = FederationManager(
+            MemoryStore(self.node_a, load_simple_yaml(self.config))
+        )
+        destination = FederationManager(
+            MemoryStore(self.node_b, load_simple_yaml(self.config))
+        )
+        bundle = self.base / "telemetry.mwxb"
+        exported = source.export_delta(bundle, target_node_id="node-beta")
+        self.assertEqual(exported["status"], "created")
+        inspected = source.inspect_bundle(bundle)
+        self.assertEqual(inspected["artifact_counts"]["token-usage"], 1)
+        destination.import_delta(bundle, expected_node_id="node-alpha")
+        replicas = list(
+            (destination.replica_peer_root("node-alpha") / "token-usage").glob("*.json")
+        )
+        self.assertEqual(len(replicas), 1)
+        imported = json.loads(replicas[0].read_text(encoding="utf-8"))
+        self.assertNotIn("path", imported.get("source", {}))
+        self.assertEqual(imported["daily_usage"]["2026-08-01"]["total_tokens"], 100)
+
+    def test_protocol_v2_does_not_export_legacy_token_usage_without_daily_data(self):
+        ledger_dir = self.node_a / "imports" / "codex" / "token-usage"
+        ledger_dir.mkdir(parents=True, exist_ok=True)
+        (ledger_dir / "legacy.json").write_text(
+            json.dumps(
+                {
+                    "format_version": 1,
+                    "measurement": "codex-reported-model-usage",
+                    "session_id": "legacy",
+                    "reported_usage": {"total_tokens": 100},
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.add_offline_peer(self.node_a, "node-beta")
+        source = FederationManager(
+            MemoryStore(self.node_a, load_simple_yaml(self.config))
+        )
+        bundle = self.base / "legacy-token.mwxb"
+        exported = source.export_delta(bundle, target_node_id="node-beta")
+        self.assertEqual(exported["status"], "no-change")
+        self.assertFalse(bundle.exists())
+
+    def test_protocol_v2_reader_accepts_a_protocol_v1_bundle(self):
+        self.append_round(self.node_a, "V1-COMPAT")
+        source = FederationManager(
+            MemoryStore(self.node_a, load_simple_yaml(self.config))
+        )
+        bundle_v2 = self.base / "compat-v2.mwxb"
+        source.export_delta(bundle_v2, target_node_id="node-beta")
+        with zipfile.ZipFile(bundle_v2, "r") as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            payload = archive.read("payload/artifacts.jsonl")
+        manifest["protocol_version"] = 1
+        manifest["minimum_protocol_version"] = 1
+        bundle_v1 = self.base / "compat-v1.mwxb"
+        self.write_bundle(bundle_v1, manifest, payload)
+        inspected = source.inspect_bundle(bundle_v1)
+        self.assertEqual(inspected["status"], "valid")
+        self.assertEqual(inspected["manifest"]["protocol_version"], 1)
+
     def test_two_nodes_exchange_read_only_deltas_and_search_globally(self):
         self.add_offline_peer(self.node_a, "node-beta")
         self.add_offline_peer(self.node_b, "node-alpha")

@@ -1,5 +1,11 @@
 # Memory無限
 
+> **2.12.0：**`daily_metrics.py` 在状态台加入本机与全部 trusted synchronized devices
+> 的双层每日柱状图，可切换消息和 Codex-reported Token、查看逐设备明细、同步过期提示，
+> 并统一按 `Asia/Tokyo` 划分日期。federation protocol v2 同步去路径、不可变的 Token
+> 台账修订，同时保留 protocol v1 读取兼容。缺少远端遥测时会明确显示覆盖不完整，
+> 不会用字符估算替代，也不会声称这是账户全局总量。
+>
 > **2.11.6：**Windows 升级现在优先信任经过验证的安装包 Skill 根目录，仅在该目录
 > 无效时才查询进程 SID，避免 Codex 沙箱用户路径污染桌面快捷方式。快捷方式安装会
 > 原子写入并回读核验最终目标、工作目录、图标、参数和启动配置。安装后实际效果门禁

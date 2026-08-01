@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "capability_id": "federated-daily-metrics",
+  "revision": "2.12.0",
+  "owners": ["Memory Plane", "Exchange Plane", "Product Shell"],
+  "inputs": ["append-only raw records", "Codex token_count ledgers", "trusted peer replicas"],
+  "outputs": ["derived daily status JSON", "read-only dashboard visualization"],
+  "day_boundary": "Asia/Tokyo",
+  "identity": "origin_node_id plus message_id or session_id",
+  "token_measurement": "codex-reported-model-usage",
+  "freshness_threshold_seconds": 86400,
+  "authority": "derived-only; never retrieval or archive authority"
+}

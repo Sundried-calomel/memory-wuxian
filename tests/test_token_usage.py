@@ -94,6 +94,8 @@ class TokenUsageTests(unittest.TestCase):
         ledger = json.loads(Path(first["ledger"]).read_text(encoding="utf-8"))
         self.assertEqual(ledger["token_event_count"], 5)
         self.assertEqual(ledger["reported_usage"]["total_tokens"], 370)
+        self.assertEqual(ledger["daily_usage_timezone"], "Asia/Tokyo")
+        self.assertEqual(ledger["daily_usage"]["2026-07-01"]["total_tokens"], 370)
 
         repeated = persist_token_usage(self.root, session)
         self.assertEqual(repeated["status"], "unchanged")

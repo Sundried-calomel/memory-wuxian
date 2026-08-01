@@ -28,6 +28,7 @@ from conversation_titles import (
     codex_thread_metadata,
     codex_thread_titles,
 )
+from daily_metrics import build_federated_daily_metrics
 from memory_cli import (
     MemoryStore,
     atomic_write_json,
@@ -871,6 +872,7 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
     )
     collector = collector_telemetry(store.root)
     debt_status = debt_status_projection(store.root)
+    federated_daily = build_federated_daily_metrics(store, records)
     return {
         "generated_at": now.isoformat(),
         "archive_root": str(store.root),
@@ -938,10 +940,10 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
             "archived_days": max(1, (now - first.astimezone(timezone.utc)).days + 1) if first else 0,
             "first_archived_at": first.isoformat() if first else None,
         },
-        "daily": [
-            {"date": day, "messages": daily_messages[day], "characters": daily_characters[day]}
-            for day in sorted(daily_messages)
-        ],
+        "daily": federated_daily["daily"],
+        "daily_metrics": {
+            key: value for key, value in federated_daily.items() if key != "daily"
+        },
         "conversations": conversations,
         "active_conversations": active_conversations,
         "archived_conversations": archived_conversations,
@@ -953,7 +955,7 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
 class DashboardSnapshotCache:
     """Persist expensive archive statistics and invalidate them by file metadata."""
 
-    FORMAT_VERSION = 3
+    FORMAT_VERSION = 4
 
     def __init__(self, store: MemoryStore):
         self.store = store
@@ -967,6 +969,47 @@ class DashboardSnapshotCache:
     def _file_stamp(path: Path) -> tuple[str, int, int]:
         stat = path.stat()
         return str(path), stat.st_size, stat.st_mtime_ns
+
+    def _federated_daily_sources(self) -> list[Path]:
+        """Return only federation files that can change daily chart totals."""
+        config = getattr(self.store, "config", {})
+        federation_config = (
+            config.get("federation", {}) if isinstance(config, dict) else {}
+        )
+        configured_replica = (
+            federation_config.get("replica_directory")
+            if isinstance(federation_config, dict)
+            else None
+        )
+        replica_root = (
+            Path(str(configured_replica)).expanduser().resolve()
+            if configured_replica
+            else (self.store.root.parent / f"{self.store.root.name}-federation-cache").resolve()
+        )
+        metadata_peers = self.store.root / "federation" / "peers"
+        replica_peers = replica_root / "peers"
+        paths: list[Path] = [metadata_peers, replica_peers]
+        paths.extend(_bounded_archive_files([metadata_peers]))
+        if not replica_peers.is_dir():
+            return paths
+        if is_link_like(replica_peers):
+            raise ValueError("dashboard federation replica root is a link or junction")
+        with os.scandir(replica_peers) as entries:
+            for entry in entries:
+                if entry.is_symlink():
+                    raise ValueError("dashboard federation replica contains a link")
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                peer_root = Path(entry.path)
+                paths.extend(
+                    [
+                        peer_root,
+                        peer_root / "raw-records.jsonl",
+                        peer_root / "replica-state.json",
+                    ]
+                )
+                paths.extend(_bounded_archive_files([peer_root / "token-usage"]))
+        return paths
 
     def source_signature(self) -> str:
         paths = [
@@ -993,6 +1036,7 @@ class DashboardSnapshotCache:
             self.store.root / "imports" / "codex" / "token-usage",
         )
         paths.extend(_bounded_archive_files([token_usage_dir]))
+        paths.extend(self._federated_daily_sources())
         stamps = []
         for path in sorted(set(paths), key=str):
             try:
@@ -1056,6 +1100,26 @@ class DashboardSnapshotCache:
         return response
 
     def get_fast(self) -> dict[str, Any]:
+        payload = self._payload
+        if isinstance(payload, dict):
+            response = self._with_live_status(payload)
+            response["served_at"] = datetime.now(timezone.utc).isoformat()
+            response["snapshot"] = {"persisted": True, "refreshing": True}
+            if not self._refreshing:
+                self._refreshing = True
+
+                def refresh_cached() -> None:
+                    try:
+                        self.get()
+                    finally:
+                        self._refreshing = False
+
+                threading.Thread(
+                    target=refresh_cached,
+                    name="memory-wuxian-dashboard-refresh",
+                    daemon=True,
+                ).start()
+            return response
         with self._lock:
             payload = self._payload
             if payload is None:
