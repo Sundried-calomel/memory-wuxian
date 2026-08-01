@@ -1487,34 +1487,14 @@ impl Store {
                     Ok(value) => value,
                     Err(_) => return Some(Ok(path)),
                 };
-                let key = portable_path(&path);
-                if cursor.get("source_path").and_then(Value::as_str) != Some(key.as_str()) {
-                    return Some(Ok(path));
-                }
                 let metadata = match fs::metadata(&path) {
                     Ok(value) => value,
                     Err(error) => return Some(Err(error.into())),
                 };
-                if cursor.get("source_size").and_then(Value::as_u64) != Some(metadata.len()) {
-                    return Some(Ok(path));
-                }
-                if cursor.get("excluded_reason").is_some() {
-                    return None;
-                }
-                let cursor_modified = cursor
-                    .get("source_mtime")
-                    .and_then(Value::as_str)
-                    .and_then(|value| DateTime::parse_from_rfc3339(value).ok());
-                let current_modified: DateTime<Utc> =
-                    metadata.modified().unwrap_or(SystemTime::now()).into();
-                match cursor_modified {
-                    Some(value)
-                        if value.timestamp_nanos_opt()
-                            == current_modified.timestamp_nanos_opt() =>
-                    {
-                        None
-                    }
-                    _ => Some(Ok(path)),
+                if cursor_requires_sync(&cursor, &path, &metadata) {
+                    Some(Ok(path))
+                } else {
+                    None
                 }
             })
             .collect::<Result<Vec<_>>>()?;
@@ -3079,6 +3059,26 @@ fn cursor_covers_source(cursor: &Value, path: &Path, metadata: &fs::Metadata) ->
                 == Some(metadata.len());
     }
     cursor.get("source_size").and_then(Value::as_u64) == Some(metadata.len()) && same_mtime
+}
+
+fn cursor_requires_sync(cursor: &Value, path: &Path, metadata: &fs::Metadata) -> bool {
+    if cursor.get("source_path").and_then(Value::as_str) != Some(portable_path(path).as_str()) {
+        return true;
+    }
+    let length = metadata.len();
+    if cursor.get("source_size").and_then(Value::as_u64) != Some(length)
+        || cursor.get("committed_byte_offset").and_then(Value::as_u64) != Some(length)
+        || cursor.get("observed_source_size").and_then(Value::as_u64) != Some(length)
+        || cursor.get("complete").and_then(Value::as_bool) != Some(true)
+    {
+        return true;
+    }
+    let current_modified: DateTime<Utc> = metadata.modified().unwrap_or(SystemTime::now()).into();
+    !cursor
+        .get("source_mtime")
+        .and_then(Value::as_str)
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .is_some_and(|value| value.timestamp_nanos_opt() == current_modified.timestamp_nanos_opt())
 }
 
 fn recent_rollouts(
