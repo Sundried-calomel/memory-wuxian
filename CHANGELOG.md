@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 2.12.7 - 2026-08-02
+
+- Prevent Python and native live append paths from advancing a shared legacy
+  round while another conversation with the same round remains pending.
+- Add an adjacent-entry regression that verifies state after the first and
+  last shared-conversation finals.
+
 ## 2.12.6 - 2026-08-02
 
 - Require every user-bearing conversation in a shared legacy round to have a

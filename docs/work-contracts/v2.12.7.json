@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.12.7",
+  "candidate_id": "v2.12.7-live-shared-round-hotfix",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-control-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": ["python-compile", "architecture-contract", "bundled-native-version", "v2127-live-shared-round-contract", "documentation-contract", "diff-check"],
+  "target": "Keep Python and native live state writes consistent with shared-round recovery semantics.",
+  "primary_semantics": "The first final removes only its conversation from a shared pending round; the last final advances global completion.",
+  "invariants": ["Raw dialogue and summaries remain unchanged.", "Python and Rust live paths use the same shared-pending guard.", "Recovery and live state remain stable after collector restart."],
+  "allowed_changes": ["Guard live completion updates, add adjacent-entry regression, version metadata, and release documentation."],
+  "prohibited_changes": ["Rewrite or renumber raw history.", "Run a broad full-release rehearsal."],
+  "before_after_checks": ["Close the first shared conversation and require global incomplete state.", "Close the last shared conversation and require global completion.", "Restart the native collector and require heartbeat ok without a new repair."],
+  "required_evidence": ["live-shared-round-regression", "native-restart-stability", "documentation-contract"],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.12.7-preflight.json",
+    "preflight_sha256": "dd03e46348ee4ce8f53e63d10f8be388ceb56bc0aab97003e2f77e0f7c436744",
+    "completion_receipt": "docs/defect-receipts/v2.12.7-completion.json",
+    "completion_sha256": "9cd797c28072efff844b762219384d2ca2b72b15c484583296a69167ba8c8b8b",
+    "applicable_families": ["MW-R05", "MW-R08", "MW-R10"],
+    "project_workbook_updated": true,
+    "original_triggers": ["The v2.12.6 recovery correction was overwritten by the adjacent native live append path after collector restart."]
+  },
+  "lifecycle_state": "verified"
+}
