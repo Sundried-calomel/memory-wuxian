@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.12.2",
+  "candidate_id": "v2.12.2-dashboard-cursor-summary-job-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-control-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "native-format",
+    "native-check",
+    "candidate-native-version",
+    "documentation-contract",
+    "architecture-contract",
+    "v2122-dashboard-cursor-summary-job-contract",
+    "diff-check"
+  ],
+  "target": "Restore the intended nested daily-chart presentation and recover native capture from token-ledger cursor resets and overlapping pending parent-summary jobs.",
+  "primary_semantics": "Daily metrics remain unchanged while presentation is corrected; native visible-message progress remains independent from derived token-ledger replay; pending parent jobs reserve their child summaries.",
+  "invariants": [
+    "Raw rollout files, append-only raw memory, persisted summaries, trusted devices, and cloud replicas are never rewritten or deleted.",
+    "The daily chart continues to display local values nested inside all-trusted-device values with the existing Asia/Tokyo boundary.",
+    "A repair keeps the earlier pending parent job and preserves every later conflicting derived job in a SHA-256 receipt before removing it from the active queue.",
+    "Token-ledger reconstruction remains derived entirely from retained Codex token_count telemetry."
+  ],
+  "allowed_changes": [
+    "Move bold date labels below the chart baseline, make nested bars equal width, and improve blue/green contrast.",
+    "Recover archived visible-message high-water from immutable raw source metadata independently of token-ledger scan position.",
+    "Exclude children already assigned to pending parent jobs and quarantine later legacy overlaps during explicit repair.",
+    "Add focused regressions, release evidence, version metadata, and three-locale release notes."
+  ],
+  "prohibited_changes": [
+    "Change daily metric aggregation, federation protocol, date boundaries, or token definitions.",
+    "Rewrite, truncate, normalize, or delete raw history or persisted summaries.",
+    "Silence unrelated integrity failures or treat an incomplete repair as healthy."
+  ],
+  "before_after_checks": [
+    "Render desktop and mobile daily charts and assert visible bold dates below the baseline and equal-width nested bars.",
+    "Replay a rollout longer than 512 lines after a token-ledger cursor reset and require zero immutable-message collisions.",
+    "Create overlapping pending parent jobs, repair them, and verify the earlier job remains with a SHA-256 quarantine receipt for the later job.",
+    "Run the candidate against the preserved Windows archive and require caught_up true and audit status ok."
+  ],
+  "required_evidence": [
+    "dashboard-visual-rehearsal",
+    "native-cursor-regression",
+    "pending-parent-job-regression",
+    "windows-runtime-effect",
+    "same-sha-ci",
+    "installer-upgrade",
+    "promotion-review"
+  ],
+  "lifecycle_state": "staged"
+}

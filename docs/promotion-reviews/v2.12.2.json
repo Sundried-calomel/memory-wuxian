@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.12.2",
+  "work_item_id": "memory-wuxian-v2.12.2",
+  "candidate_id": "v2.12.2-dashboard-cursor-summary-job-candidate",
+  "owner_id": "memory-plane-control-plane",
+  "source_revision": "hotfix/v2.12.2-dashboard-and-cursor",
+  "product_evolution_record_id": "memory-wuxian-v2.12.2-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "This targeted patch corrects presentation and recovery defects inside existing dashboard, collector, and summary-scheduler owners without adding a new capability.",
+  "evidence_refs": [
+    "outputs/rehearsal/v2.12.2/report.json",
+    "references/release-rehearsal.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-02T00:00:00Z"
+}
