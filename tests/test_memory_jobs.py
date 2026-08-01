@@ -18,6 +18,7 @@ from memory_jobs import (
     maintenance_projection,
     reconcile_pending_debt,
     run_model_free_tick,
+    stable_path_identity,
 )
 from memory_service_state import service_state
 
@@ -129,6 +130,31 @@ class MaintenanceQueueTests(unittest.TestCase):
         self.assertEqual(final["state"], "quarantined")
         self.assertIsNone(self.queue.claim_semantic(job["job_id"], "semantic-c"))
 
+    def test_quarantined_job_requeue_preserves_failure_receipt(self):
+        job = self.queue.enqueue(
+            "semantic-summary-eligibility",
+            "conversation:complete-round:requeue",
+            {"completed_round": 3, "round_complete": True},
+            max_attempts=1,
+        )
+        self.queue.mark_semantic_ready_bulk()
+        claimed = self.queue.claim_semantic(job["job_id"], "semantic-a")
+        self.queue.fail_semantic(job["job_id"], "semantic-a", "invalid policy output")
+
+        requeued = self.queue.requeue_quarantined(job["job_id"], "worker contract upgraded")
+
+        self.assertEqual(requeued["state"], "semantic-ready")
+        self.assertEqual(requeued["attempts"], 0)
+        receipt = json.loads(Path(requeued["requeue_receipt"]).read_text(encoding="utf-8"))
+        self.assertEqual(receipt["previous_attempts"], 1)
+        self.assertEqual(receipt["previous_last_error"], "invalid policy output")
+        self.assertEqual(receipt["reason"], "worker contract upgraded")
+
+    def test_non_quarantined_job_cannot_be_requeued(self):
+        job = self.queue.enqueue("archive-health", "health:not-quarantined")
+        with self.assertRaisesRegex(ValueError, "Only a quarantined"):
+            self.queue.requeue_quarantined(job["job_id"], "not allowed")
+
     def test_mw27_service_state_001_reads_real_collector_telemetry_shape(self):
         telemetry = self.root / "imports/codex/collector-telemetry.json"
         telemetry.parent.mkdir(parents=True, exist_ok=True)
@@ -218,6 +244,36 @@ class MaintenanceQueueTests(unittest.TestCase):
         self.assertEqual(projection["format"], "memory-wuxian-maintenance-projection-v1")
         self.assertEqual(projection["semantic_debt"]["pending_summary_jobs"], 1)
         self.assertFalse(projection["backup_debt"]["present"])
+
+    def test_mw2115_path_001_extended_windows_path_reconciles_with_normal_path(self):
+        extended = {
+            "summary_job": r"\\?\C:\Archive\pending\job-000318.json",
+            "summary_job_id": "job-000318",
+            "source_signature": "conversation:test:rounds:1-2",
+            "conversation_id": "codex:test",
+            "completed_round": 2,
+            "round_complete": True,
+        }
+        normal = {**extended, "summary_job": r"c:\archive\pending\job-000318.json"}
+        first = self.queue.enqueue(
+            "semantic-summary-eligibility", "summary:stable-path", extended, max_attempts=4
+        )
+        second = self.queue.enqueue(
+            "semantic-summary-eligibility", "summary:stable-path", normal, max_attempts=4
+        )
+        self.assertTrue(first["created"])
+        self.assertFalse(second["created"])
+        self.assertEqual(stable_path_identity(extended["summary_job"]), stable_path_identity(normal["summary_job"]))
+        self.assertFalse(self.queue.jobs()[0]["payload"]["summary_job"].startswith("\\\\?\\"))
+
+    def test_mw2115_projection_002_quarantine_is_explicit_permanent_failure(self):
+        job = self.queue.enqueue("archive-health", "health:terminal", max_attempts=1)
+        self.queue.claim("worker")
+        self.queue.fail(job["job_id"], "worker", "permanent diagnostic")
+        projection = maintenance_projection(self.root, self.queue)
+        category = projection["mechanical_debt"]["archive_health"]
+        self.assertEqual(category["permanent_failures"], 1)
+        self.assertEqual(category["permanent_failure_details"][0]["last_error"], "permanent diagnostic")
 
 
 if __name__ == "__main__":

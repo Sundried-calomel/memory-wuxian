@@ -32,6 +32,7 @@ const RAW_MARKER: &str = "<!-- memory-wuxian-record -->";
 const TOKEN_USAGE_FORMAT_VERSION: u64 = 1;
 const ROLLOUT_BATCH_MAX_LINES: usize = 512;
 const ROLLOUT_BATCH_MAX_BYTES: u64 = 4 * 1024 * 1024;
+const RECOVERY_LOCK_YIELD: Duration = Duration::from_millis(150);
 const TOKEN_USAGE_FIELDS: [&str; 6] = [
     "input_tokens",
     "cached_input_tokens",
@@ -348,23 +349,17 @@ struct Config {
 
 #[derive(Debug, Deserialize)]
 struct AiSummaryConfig {
-    #[serde(default)]
-    enabled: bool,
     #[serde(default = "default_python_path")]
     python_path: String,
     #[serde(default)]
     python_path_windows: Option<String>,
-    #[serde(default = "default_semantic_dispatch_path")]
-    dispatcher_path: String,
 }
 
 impl Default for AiSummaryConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
             python_path: default_python_path(),
             python_path_windows: None,
-            dispatcher_path: default_semantic_dispatch_path(),
         }
     }
 }
@@ -455,9 +450,6 @@ fn default_python_path() -> String {
     }
 }
 
-fn default_semantic_dispatch_path() -> String {
-    "scripts/semantic_dispatch.py".to_owned()
-}
 fn default_true() -> bool {
     true
 }
@@ -528,7 +520,6 @@ struct Store {
     config: Config,
     message_cache: RefCell<Option<HashMap<String, Value>>>,
     python_executable: Option<PathBuf>,
-    codex_cli: Option<PathBuf>,
 }
 
 fn session_metadata(event: &Value) -> Option<(String, Option<String>)> {
@@ -660,7 +651,7 @@ impl Store {
         root: PathBuf,
         config_path: &Path,
         python_executable: Option<PathBuf>,
-        codex_cli: Option<PathBuf>,
+        _codex_cli: Option<PathBuf>,
     ) -> Result<Self> {
         let config_text = fs::read_to_string(config_path)
             .with_context(|| format!("read config {}", config_path.display()))?;
@@ -675,7 +666,6 @@ impl Store {
             config,
             message_cache: RefCell::new(None),
             python_executable,
-            codex_cli,
         };
         store.init()?;
         Ok(store)
@@ -2461,11 +2451,7 @@ impl Store {
         Ok(Some(path))
     }
 
-    fn sync_batch_with_semantic_worker(
-        &self,
-        paths: Vec<PathBuf>,
-        run_semantic_worker: bool,
-    ) -> Result<Value> {
+    fn sync_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
         self.repair_native_recovery_debt()?;
         let path_count = paths.len();
         let completed_before = self.lock("archive.lock", || {
@@ -2554,6 +2540,9 @@ impl Store {
                 if caught_up {
                     break;
                 }
+                // Give maintenance and backup workers a fair chance to acquire
+                // the shared archive lock during sustained history catch-up.
+                std::thread::sleep(RECOVERY_LOCK_YIELD);
             }
             if let Some(session) = accumulated_session {
                 result["sessions"]
@@ -2590,12 +2579,6 @@ impl Store {
         for field in ["created_summary_job", "deterministic_indexes"] {
             result[field] = finalized[field].clone();
         }
-        if run_semantic_worker
-            && self.config.ai_summary.enabled
-            && let Some(job) = result.get("created_summary_job").and_then(Value::as_str)
-        {
-            result["semantic_worker"] = self.run_one_shot_summary(Path::new(job));
-        }
         append_jsonl(
             &self.root.join("dashboard/events.jsonl"),
             &json!({
@@ -2613,12 +2596,8 @@ impl Store {
         Ok(result)
     }
 
-    fn sync_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        self.sync_batch_with_semantic_worker(paths, true)
-    }
-
     fn sync_startup_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        self.sync_batch_with_semantic_worker(paths, false)
+        self.sync_batch(paths)
     }
 
     fn repair_native_recovery_debt(&self) -> Result<()> {
@@ -2697,68 +2676,6 @@ impl Store {
         }
         fs::remove_file(&marker)?;
         Ok(())
-    }
-
-    fn run_one_shot_summary(&self, job_path: &Path) -> Value {
-        let dispatcher_path = PathBuf::from(&self.config.ai_summary.dispatcher_path);
-        let dispatcher_path = if dispatcher_path.is_absolute() {
-            dispatcher_path
-        } else {
-            self.config_path
-                .parent()
-                .unwrap_or(Path::new("."))
-                .join(dispatcher_path)
-        };
-        let python_path = self
-            .python_executable
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned())
-            .or_else(|| std::env::var("MEMORY_WUXIAN_PYTHON").ok())
-            .unwrap_or_else(|| {
-                if cfg!(windows) {
-                    self.config
-                        .ai_summary
-                        .python_path_windows
-                        .as_ref()
-                        .unwrap_or(&self.config.ai_summary.python_path)
-                        .clone()
-                } else {
-                    self.config.ai_summary.python_path.clone()
-                }
-            });
-        let mut command = Command::new(python_path);
-        command
-            .arg(dispatcher_path)
-            .arg("--root")
-            .arg(&self.root)
-            .arg("--config")
-            .arg(&self.config_path)
-            .arg("--job")
-            .arg(job_path)
-            .arg("--no-backup");
-        if let Some(codex_cli) = &self.codex_cli {
-            command.env("MEMORY_WUXIAN_CODEX", codex_cli);
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x08000000);
-        }
-        match command.output() {
-            Ok(output) if output.status.success() => json!({
-                "status": "completed",
-                "output": String::from_utf8_lossy(&output.stdout).trim(),
-            }),
-            Ok(output) => json!({
-                "status": "failed",
-                "exit_code": output.status.code(),
-                "error": String::from_utf8_lossy(&output.stderr).trim(),
-            }),
-            Err(error) => json!({
-                "status": "failed",
-                "error": error.to_string(),
-            }),
-        }
     }
 
     fn sync_batch_unlocked(&self, prepared_files: Vec<PreparedSync>) -> Result<Value> {
@@ -3573,6 +3490,58 @@ fn run_event_loop(
 #[cfg(test)]
 mod adaptive_fallback_tests {
     use super::*;
+
+    #[test]
+    fn collector_has_no_semantic_ai_execution_path() {
+        let source = include_str!("main.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("collector source has a production section");
+        for forbidden in [
+            "semantic_dispatch.py",
+            "run_one_shot_summary",
+            "sync_batch_with_semantic_worker",
+            "result[\"semantic_worker\"]",
+        ] {
+            assert!(
+                !production.contains(forbidden),
+                "native collector must persist semantic jobs without executing AI: {forbidden}"
+            );
+        }
+        assert!(production.contains("self.maybe_create_level_one_job()?"));
+        assert!(production.contains("\"created_summary_job\": created_job.map"));
+    }
+
+    #[test]
+    fn sustained_recovery_yields_the_archive_lock_between_batches() {
+        assert!(RECOVERY_LOCK_YIELD >= Duration::from_millis(100));
+        let source = include_str!("main.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("collector source has a production section");
+        assert!(production.contains("std::thread::sleep(RECOVERY_LOCK_YIELD)"));
+    }
+
+    #[test]
+    fn legacy_ai_summary_settings_remain_parse_compatible() -> Result<()> {
+        let config: Config = serde_yaml::from_str(
+            r#"
+ai_summary:
+  enabled: true
+  python_path: python3
+  python_path_windows: python.exe
+  dispatcher_path: scripts/semantic_dispatch.py
+"#,
+        )?;
+        assert_eq!(config.ai_summary.python_path, "python3");
+        assert_eq!(
+            config.ai_summary.python_path_windows.as_deref(),
+            Some("python.exe")
+        );
+        Ok(())
+    }
 
     #[test]
     fn backs_off_after_idle_periods() {

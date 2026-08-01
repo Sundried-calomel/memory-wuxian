@@ -14,9 +14,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from memory_jobs import MaintenanceQueue, reconcile_pending_debt
 from memory_cli import MemoryStore
+from memory_cli import load_simple_yaml
 from semantic_backfill import run_backfill
 from semantic_dispatch import dispatch_job
-from maintenance_supervisor import run_supervisor
+from maintenance_supervisor import run_supervisor, run_supervisor_tick
 
 
 class SemanticBackfillV211Tests(unittest.TestCase):
@@ -110,7 +111,7 @@ class SemanticBackfillV211Tests(unittest.TestCase):
         self.assertEqual(backfill.call_count, 2)
         self.assertTrue(all(call.kwargs["max_jobs"] == 2 for call in backfill.call_args_list))
         state = json.loads((self.root / "maintenance/supervisor-state.json").read_text(encoding="utf-8"))
-        self.assertEqual(state["status"], "completed")
+        self.assertEqual(state["status"], "healthy")
         self.assertEqual(state["cycle"], 2)
 
     def test_mw211_supervisor_records_runtime_failure_detail(self):
@@ -158,6 +159,126 @@ class SemanticBackfillV211Tests(unittest.TestCase):
         heartbeat.assert_called_once_with(create_jobs=False, repair=True)
         self.assertFalse(marker.exists())
         self.assertEqual(second["native_recovery"]["status"], "ok")
+
+    def test_mw2115_parent_001_ingest_schedules_due_parent_with_store_owner(self):
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+        store.init()
+
+        def add_summary(number: int) -> None:
+            summary_id = f"L1-{number:06d}"
+            relative = f"summaries/level-1/{summary_id}.md"
+            summary_path = self.root / relative
+            summary_path.parent.mkdir(parents=True, exist_ok=True)
+            summary_path.write_text(f"# {summary_id}\n", encoding="utf-8")
+            record = {
+                "event": "created",
+                "summary_id": summary_id,
+                "level": 1,
+                "conversation_id": "codex:test",
+                "path": relative,
+                "source_start": f"msg-{number}-u",
+                "source_end": f"msg-{number}-a",
+                "source_start_sequence": number * 2 - 1,
+                "source_end_sequence": number * 2,
+                "start_time": f"2026-08-01T00:00:0{number}Z",
+                "end_time": f"2026-08-01T00:00:0{number}Z",
+                "source_files": [],
+            }
+            with (self.root / "indexes/summaries.jsonl").open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record) + "\n")
+            with (self.root / "summaries/registry.jsonl").open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"event": "created", "summary_id": summary_id}) + "\n")
+
+        add_summary(1)
+        level_one_job = self.job("job-000010.json", "conversation:test:rounds:3-4", boundary=4)
+
+        def ingest_second(_root, _config, job_path, **_kwargs):
+            add_summary(2)
+            job_path.unlink()
+            return {"status": "ingested", "job_id": "job-000010"}
+
+        heartbeat = {
+            "status": "ok",
+            "integrity_issues": [],
+            "repairable_issues": [],
+            "repairs": [],
+        }
+        with patch.object(MemoryStore, "heartbeat", return_value=heartbeat):
+            with patch("semantic_backfill.dispatch_job", side_effect=ingest_second):
+                result = run_backfill(self.root, self.config, max_jobs=1, dry_run=False)
+
+        parents = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in (self.root / "pending").glob("job-*.json")
+        ]
+        self.assertTrue(any(item.get("summary_level") == 2 for item in parents))
+        self.assertTrue(result["scheduled_summary_jobs"])
+        self.assertFalse(level_one_job.exists())
+
+    def test_mw2115_recovery_002_repairs_internal_conversation_index_hole_without_marker(self):
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+        store.init()
+        for speaker, text in (("user", "question"), ("assistant", "answer")):
+            store.append_message(
+                speaker, text, None, "codex:repair", None, None, False
+            )
+        index_path = self.root / "indexes/conversations.jsonl"
+        lines = index_path.read_text(encoding="utf-8").splitlines()
+        index_path.write_text(lines[0] + "\n", encoding="utf-8")
+
+        result = run_backfill(self.root, self.config, max_jobs=1, dry_run=False)
+
+        repaired = index_path.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(repaired), 2)
+        self.assertEqual(result["native_recovery"]["status"], "ok")
+        self.assertTrue(result["native_recovery"]["repairs"])
+        self.assertFalse((self.root / "pending/native-recovery-debt.json").exists())
+
+    def test_mw2115_recovery_003_integrity_mismatch_is_not_auto_repaired(self):
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+        store.init()
+        store.append_message("user", "original", None, "codex:integrity", None, None, False)
+        raw_path = next((self.root / "raw").rglob("*.md"))
+        corrupted = raw_path.read_text(encoding="utf-8").replace("original", "tampered", 1)
+        raw_path.write_text(corrupted, encoding="utf-8")
+        before = raw_path.read_bytes()
+
+        result = run_backfill(self.root, self.config, max_jobs=1, dry_run=False)
+
+        self.assertEqual(result["status"], "attention")
+        self.assertTrue(result["integrity_issues"])
+        self.assertEqual(result["native_recovery"]["repairs"], [])
+        self.assertEqual(raw_path.read_bytes(), before)
+        self.assertIn("integrity-failure", [item["reason"] for item in result["skipped"]])
+
+    def test_mw2115_status_004_partial_or_permanent_debt_never_reports_completed(self):
+        with patch(
+            "maintenance_supervisor.run_backfill",
+            return_value={
+                "status": "completed",
+                "completed_jobs": 1,
+                "remaining_pending_jobs": 2,
+                "skipped": [{"reason": "runtime-unavailable"}],
+                "permanent_failures": 0,
+                "reconciliation": {"invalid": []},
+            },
+        ):
+            catching_up = run_supervisor_tick(self.root, self.config)
+        self.assertEqual(catching_up["status"], "catching-up")
+
+        with patch(
+            "maintenance_supervisor.run_backfill",
+            return_value={
+                "status": "completed",
+                "completed_jobs": 1,
+                "remaining_pending_jobs": 1,
+                "skipped": [{"reason": "quarantined"}],
+                "permanent_failures": 1,
+                "reconciliation": {"invalid": [{"path": "job.json"}]},
+            },
+        ):
+            attention = run_supervisor_tick(self.root, self.config)
+        self.assertEqual(attention["status"], "attention")
 
 
 if __name__ == "__main__":

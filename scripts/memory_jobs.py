@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import ntpath
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,6 +20,48 @@ STATES = {"queued", "running", "retry", "semantic-ready", "completed", "quaranti
 KINDS = {"backup-debt", "semantic-summary-eligibility", "archive-health"}
 TERMINAL_STATES = {"semantic-ready", "completed", "quarantined"}
 PROJECTION_FORMAT = "memory-wuxian-maintenance-projection-v1"
+
+
+def _strip_windows_extended_prefix(value: str) -> str:
+    if value.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + value[8:]
+    if value.startswith("\\\\?\\"):
+        return value[4:]
+    return value
+
+
+def _is_windows_absolute(value: str) -> bool:
+    drive, _tail = ntpath.splitdrive(value)
+    return bool(drive) and ntpath.isabs(value)
+
+
+def canonical_path_text(value: os.PathLike[str] | str) -> str:
+    """Return one usable path spelling across normal and Windows extended paths."""
+    text = _strip_windows_extended_prefix(os.fspath(value))
+    if _is_windows_absolute(text):
+        return ntpath.normpath(text)
+    return str(Path(text).resolve())
+
+
+def stable_path_identity(value: os.PathLike[str] | str) -> str:
+    """Return a comparison identity that folds Windows path spelling and case."""
+    canonical = canonical_path_text(value)
+    if _is_windows_absolute(canonical):
+        return ntpath.normcase(canonical)
+    return os.path.normcase(os.path.normpath(canonical))
+
+
+def _semantic_payload_equivalent(left: Dict[str, Any], right: Dict[str, Any]) -> bool:
+    left_copy = dict(left)
+    right_copy = dict(right)
+    left_path = left_copy.pop("summary_job", None)
+    right_path = right_copy.pop("summary_job", None)
+    return (
+        left_copy == right_copy
+        and left_path is not None
+        and right_path is not None
+        and stable_path_identity(left_path) == stable_path_identity(right_path)
+    )
 
 
 def now_utc() -> datetime:
@@ -120,8 +163,23 @@ class MaintenanceQueue:
             path = self._path(job_id)
             if path.exists():
                 existing = self._read(path)
-                if existing["payload"] != (payload or {}) or existing["max_attempts"] != max_attempts:
+                requested_payload = payload or {}
+                equivalent_semantic_payload = (
+                    kind == "semantic-summary-eligibility"
+                    and _semantic_payload_equivalent(existing["payload"], requested_payload)
+                )
+                if (
+                    existing["payload"] != requested_payload
+                    and not equivalent_semantic_payload
+                ) or existing["max_attempts"] != max_attempts:
                     raise ValueError("Idempotency key already exists with different parameters")
+                if equivalent_semantic_payload and existing["payload"] != requested_payload:
+                    existing["payload"] = {
+                        **requested_payload,
+                        "summary_job": canonical_path_text(requested_payload["summary_job"]),
+                    }
+                    existing["updated_at"] = iso(self.clock())
+                    self._write(existing)
                 return {**existing, "created": False}
             timestamp = iso(self.clock())
             job = {
@@ -332,6 +390,53 @@ class MaintenanceQueue:
             self._write(job)
             return job
 
+    def requeue_quarantined(self, job_id: str, reason: str) -> Dict[str, Any]:
+        reason = redact_error(reason).strip()
+        if not reason:
+            raise ValueError("A quarantine requeue reason is required")
+        with exclusive_lock(self.lock):
+            job = self._read(self._path(job_id))
+            if job["state"] != "quarantined":
+                raise ValueError("Only a quarantined maintenance job can be requeued")
+            now = self.clock()
+            previous_sha256 = canonical_hash(job)
+            receipt = {
+                "format": "memory-wuxian-maintenance-requeue-receipt-v1",
+                "job_id": job_id,
+                "kind": job["kind"],
+                "requeued_at": iso(now),
+                "reason": reason,
+                "previous_job_sha256": previous_sha256,
+                "previous_attempts": job["attempts"],
+                "previous_last_error": job["last_error"],
+            }
+            receipt_root = self.archive_root / "maintenance" / "requeue-receipts"
+            receipt_name = (
+                f"{job_id}-{now.strftime('%Y%m%dT%H%M%SZ')}-{previous_sha256[:12]}.json"
+            )
+            receipt_path = receipt_root / receipt_name
+            if receipt_path.exists():
+                raise ValueError("Maintenance requeue receipt already exists")
+            atomic_write_canonical_json(receipt_path, receipt)
+            job["state"] = (
+                "semantic-ready"
+                if job["kind"] == "semantic-summary-eligibility"
+                else "retry"
+            )
+            job["attempts"] = 0
+            job["available_at"] = iso(now)
+            job["updated_at"] = iso(now)
+            job["lease_owner"] = None
+            job["lease_expires_at"] = None
+            job["last_error"] = None
+            job["result_sha256"] = (
+                canonical_hash({"eligible": True})
+                if job["kind"] == "semantic-summary-eligibility"
+                else None
+            )
+            self._write(job)
+            return {**job, "requeue_receipt": str(receipt_path)}
+
     def status(self) -> Dict[str, Any]:
         counts = {state: 0 for state in sorted(STATES)}
         for job in self.jobs():
@@ -384,7 +489,7 @@ def semantic_eligibility_payload(job_path: Path) -> Dict[str, Any]:
     if completed_round < 1:
         raise ValueError("Semantic summary job has no completed source boundary")
     return {
-        "summary_job": str(Path(job_path).resolve()),
+        "summary_job": canonical_path_text(job_path),
         "summary_job_id": str(job["job_id"]),
         "source_signature": str(job["source_signature"]),
         "conversation_id": str(job.get("conversation_id") or ""),
@@ -478,7 +583,23 @@ def maintenance_projection(archive_root: Path, queue: Optional[MaintenanceQueue]
         for job in selected:
             counts[job["state"]] += 1
         oldest = min((job["created_at"] for job in selected if job["state"] not in {"completed"}), default=None)
-        return {"total": len(selected), "counts": counts, "oldest_pending_at": oldest}
+        terminal = [
+            {
+                "maintenance_job_id": job["job_id"],
+                "summary_job_id": job["payload"].get("summary_job_id"),
+                "last_error": job["last_error"],
+            }
+            for job in selected
+            if job["state"] == "quarantined"
+        ]
+        return {
+            "total": len(selected),
+            "counts": counts,
+            "oldest_pending_at": oldest,
+            "permanent_failures": len(terminal),
+            "permanent_failure_details": terminal[:50],
+            "permanent_failure_details_truncated": len(terminal) > 50,
+        }
 
     backup = read_backup_debt_generation(root)
     return {

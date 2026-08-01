@@ -30,7 +30,12 @@ MAX_SEMANTIC_INDEX_BYTES = 512 * 1024 * 1024
 MAX_SEMANTIC_LINE_BYTES = 1024 * 1024
 MAX_SEMANTIC_MANIFEST_BYTES = 64 * 1024
 MAX_E5_SCORE_BYTES = 16 * 1024 * 1024
-SEMANTIC_WORKER_TIMEOUT_SECONDS = 120
+SEMANTIC_QUERY_WORKER_TIMEOUT_SECONDS = 120
+SEMANTIC_BUILD_WORKER_TIMEOUT_SECONDS = 3600
+
+
+class SemanticIndexStaleError(ValueError):
+    """Raised when a semantic index does not cover the current raw source."""
 
 
 def raw_record_sha256(record: Dict[str, Any]) -> str:
@@ -46,6 +51,40 @@ def raw_record_sha256(record: Dict[str, Any]) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def raw_source_snapshot(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    ordered = sorted(records, key=lambda item: int(item["sequence"]))
+    source_records = []
+    for record in ordered:
+        sequence = record.get("sequence")
+        message_id = record.get("message_id")
+        if (
+            isinstance(sequence, bool)
+            or not isinstance(sequence, int)
+            or sequence < 1
+            or not isinstance(message_id, str)
+            or not message_id
+        ):
+            raise ValueError("Raw source identity fields are malformed")
+        source_records.append({
+            "sequence": sequence,
+            "message_id": message_id,
+            "record_sha256": raw_record_sha256(record),
+        })
+    canonical = json.dumps(
+        source_records,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    high_watermark = source_records[-1] if source_records else None
+    return {
+        "format": "memory-wuxian-raw-source-snapshot-v1",
+        "record_count": len(source_records),
+        "high_watermark": high_watermark,
+        "identity_sha256": hashlib.sha256(canonical).hexdigest(),
+    }
 
 
 def sha256_file(path: Path) -> str:
@@ -717,8 +756,11 @@ class GuardedFeatures:
                 ],
                 check=True,
                 env=self.e5_environment(),
-                timeout=SEMANTIC_WORKER_TIMEOUT_SECONDS,
+                timeout=SEMANTIC_BUILD_WORKER_TIMEOUT_SECONDS,
             )
+        except (OSError, subprocess.SubprocessError) as exc:
+            output.unlink(missing_ok=True)
+            raise ValueError("semantic index build worker failed") from exc
         finally:
             payload.unlink(missing_ok=True)
 
@@ -747,7 +789,7 @@ class GuardedFeatures:
                     ],
                     check=True,
                     env=self.e5_environment(),
-                    timeout=SEMANTIC_WORKER_TIMEOUT_SECONDS,
+                    timeout=SEMANTIC_QUERY_WORKER_TIMEOUT_SECONDS,
                 )
             except (OSError, subprocess.SubprocessError) as exc:
                 raise ValueError("semantic query worker failed") from exc
@@ -803,13 +845,14 @@ class GuardedFeatures:
         os.replace(temporary, path)
         contract = load_contract() if provider == E5_PROVIDER else None
         atomic_json(directory / "manifest.json", {
-            "format": "memory-wuxian-semantic-index-v1",
+            "format": "memory-wuxian-semantic-index-v2",
             "provider": provider,
             "model_id": contract["model"]["id"] if contract else None,
             "model_revision": contract["model"]["revision"] if contract else None,
             "interface_version": contract["interface_version"] if contract else None,
             "vector_file": vector_path.name if vector_path else None,
             "record_count": len(records),
+            "raw_source": raw_source_snapshot(raw_records),
             "disposable": True,
             "raw_archive_required_for_verification": True,
         })
@@ -855,20 +898,58 @@ class GuardedFeatures:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest_fields = {
             "format", "provider", "model_id", "model_revision", "interface_version",
-            "vector_file", "record_count", "disposable", "raw_archive_required_for_verification",
+            "vector_file", "record_count", "raw_source", "disposable",
+            "raw_archive_required_for_verification",
         }
+        raw_source_fields = {"format", "record_count", "high_watermark", "identity_sha256"}
+        watermark_fields = {"sequence", "message_id", "record_sha256"}
+        indexed_source = manifest.get("raw_source") if isinstance(manifest, dict) else None
+        indexed_watermark = (
+            indexed_source.get("high_watermark")
+            if isinstance(indexed_source, dict)
+            else None
+        )
         if (
             not isinstance(manifest, dict)
             or set(manifest) != manifest_fields
-            or manifest.get("format") != "memory-wuxian-semantic-index-v1"
+            or manifest.get("format") != "memory-wuxian-semantic-index-v2"
             or manifest.get("provider") not in {"local-hash-v1", E5_PROVIDER}
             or isinstance(manifest.get("record_count"), bool)
             or not isinstance(manifest.get("record_count"), int)
             or not 0 <= manifest["record_count"] <= MAX_SEMANTIC_RECORDS
+            or not isinstance(indexed_source, dict)
+            or set(indexed_source) != raw_source_fields
+            or indexed_source.get("format") != "memory-wuxian-raw-source-snapshot-v1"
+            or indexed_source.get("record_count") != manifest.get("record_count")
+            or not isinstance(indexed_source.get("identity_sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", indexed_source["identity_sha256"])
+            or (
+                manifest.get("record_count") == 0
+                and indexed_watermark is not None
+            )
+            or (
+                manifest.get("record_count", 0) > 0
+                and (
+                    not isinstance(indexed_watermark, dict)
+                    or set(indexed_watermark) != watermark_fields
+                    or isinstance(indexed_watermark.get("sequence"), bool)
+                    or not isinstance(indexed_watermark.get("sequence"), int)
+                    or indexed_watermark["sequence"] < 1
+                    or not isinstance(indexed_watermark.get("message_id"), str)
+                    or not indexed_watermark["message_id"]
+                    or not isinstance(indexed_watermark.get("record_sha256"), str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", indexed_watermark["record_sha256"])
+                )
+            )
             or manifest.get("disposable") is not True
             or manifest.get("raw_archive_required_for_verification") is not True
         ):
             raise ValueError("Semantic index manifest is malformed")
+        current_source = raw_source_snapshot(raw.values())
+        if current_source != indexed_source:
+            raise SemanticIndexStaleError(
+                "Semantic index does not cover the current raw archive"
+            )
         provider = manifest["provider"]
         query_vector = self._hash_embedding(query)
         e5_scores = None

@@ -186,6 +186,21 @@ Use Memory無限 to preserve conversation history outside the active context win
     Update metadata must pass the pinned signer contract; downloaded updates
     remain inert until a separate artifact-bound explicit approval, and
     summary-budget checks may enqueue only completed-round work without AI.
+72. Treat `scripts/runtime_effect_gate.py` as a release and post-install hard
+    gate for enabled background capabilities. Process existence, scheduler
+    registration, file existence, mocked completion, and exit code zero are not
+    effect evidence. A stale waterline, hidden fallback, permanent debt,
+    incomplete backup, missing parent-summary job, or stale supervisor fails
+    closed until repaired or explicitly disabled.
+73. Keep the collector and AI execution paths exclusive. The collector may
+    persist a closed semantic job but must never launch or wait for AI; only the
+    independent leased dispatcher may execute it. A completed Level-1 ingest
+    must deterministically enqueue any newly due parent-summary job.
+74. Bind every semantic-index generation to the exact raw-source snapshot.
+    When current raw identity differs, pure semantic retrieval fails closed and
+    hybrid retrieval must expose an explicit keyword fallback. Upgrade
+    transactions merge only missing configuration defaults, preserve user
+    values, and retain an exact rollback copy and migration receipt.
 
 ## Authority order
 

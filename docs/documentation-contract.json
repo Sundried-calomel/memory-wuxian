@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.11.4",
+  "reviewed_version": "2.11.5",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -141,7 +141,7 @@
     },
     {
       "id": "bounded-background-autonomy",
-      "required_tokens": ["maintenance-enqueue", "maintenance-status", "maintenance-tick", "maintenance-diagnostics", "semantic_dispatch.py", "semantic-ready", "quarantined"]
+      "required_tokens": ["maintenance-enqueue", "maintenance-requeue", "maintenance-status", "maintenance-tick", "maintenance-diagnostics", "semantic_dispatch.py", "semantic-ready", "quarantined"]
     },
     {
       "id": "lossless-shadow-sync",
@@ -161,7 +161,7 @@
     },
     {
       "id": "continuous-catch-up-and-debt-convergence",
-      "required_tokens": ["collector-activation.json", "coverage-status.json", "maintenance_supervisor.py", "install_maintenance_supervisor.py", "semantic_plan.py", "900,000", "catching-up"]
+      "required_tokens": ["collector-activation.json", "coverage-status.json", "maintenance_supervisor.py", "install_maintenance_supervisor.py", "semantic_plan.py", "runtime_effect_gate.py", "900,000", "catching-up", "semantic-index-stale-keyword-fallback"]
     }
   ]
 }

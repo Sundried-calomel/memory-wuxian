@@ -19,8 +19,10 @@ from typing import Any, Callable
 import yaml
 
 try:
+    from migrate_config import migrate_config
     from platform_runtime import executable_entry_path
 except ModuleNotFoundError:
+    from scripts.migrate_config import migrate_config
     from scripts.platform_runtime import executable_entry_path
 
 
@@ -235,6 +237,11 @@ def prepare_candidate(source_root: Path, candidate: Path, current: Path) -> None
     )
     if (current / "config.yaml").is_file():
         shutil.copy2(current / "config.yaml", candidate / "config.yaml")
+        migrate_config(
+            candidate / "config.yaml",
+            source_root / "config.yaml",
+            apply=True,
+        )
     for executable in (
         candidate / "bin" / "memory-wuxian-collector",
         candidate / "bin" / "memory-wuxian-envelope",

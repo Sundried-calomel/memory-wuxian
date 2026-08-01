@@ -161,6 +161,30 @@ Required scenarios:
     alone is not effect evidence. Backend optimizations must likewise expose a
     route counter or before/after metric proving the intended production path
     ran; silent fallback to the legacy path fails the release gate.
+46. The v2.11.5 runtime-effect matrix must exercise the production Owner paths,
+    not substitute mocks for the effect being claimed. Fixed cases must prove:
+    the collector persists work without launching or waiting for AI; ingesting
+    the threshold number of Level-1 summaries creates a Level-2 job, while a
+    bounded serial parent backlog reports catching-up only when at least one
+    parent job is really pending; an index
+    built before a new raw record is rejected as stale and hybrid retrieval
+    emits an explicit keyword-fallback warning; an interrupted backup removes
+    its own temporary directory and reports failure; internal conversation-index
+    holes are repaired while source-integrity failures remain untouched;
+    quarantined, invalid, transient, waiting-ack, and remaining debt cannot be
+    reported as healthy or completed; waiting for a cloud acknowledgement does
+    not advance the publication observation; duplicate no-change imports do not
+    count as new imports; and an upgrade adds missing configuration defaults
+    without replacing user values. A legacy Environment receipt may be upgraded
+    only when its committed transaction, replica state, complete event ledger,
+    and every materialized output hash agree; changed or missing evidence must
+    remain rejected. The exact candidate must also pass
+    `runtime_effect_gate.py` against an isolated installed archive. Any hidden
+    fallback, stale waterline, permanent debt, orphan backup, or stale supervisor
+    state is a release failure even when every process exits with code zero.
+    Sustained native history recovery must also release the archive lock and
+    yield between bounded batches so maintenance, repair, and backup workers
+    cannot remain alive but make no observable progress.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

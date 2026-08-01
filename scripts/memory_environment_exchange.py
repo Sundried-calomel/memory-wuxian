@@ -836,6 +836,103 @@ class EnvironmentExchangeManager:
             key=lambda output: output["relative_path"],
         )
 
+    def _migrate_legacy_committed_receipt(
+        self,
+        receipt_path: Path,
+        receipt: Any,
+        *,
+        origin: str,
+        expected_bundle_id: str,
+        expected_bundle_sha256: str,
+    ) -> Dict[str, Any]:
+        legacy_fields = {
+            "format_version", "stream_id", "bundle_sha256", "manifest",
+            "overlap_recovery", "received_at",
+        }
+        if not isinstance(receipt, dict) or set(receipt) != legacy_fields:
+            return receipt
+        manifest = receipt.get("manifest")
+        if (
+            receipt.get("format_version") != 1
+            or receipt.get("stream_id") != "environment-v1"
+            or receipt.get("bundle_sha256") != expected_bundle_sha256
+            or not isinstance(manifest, dict)
+            or manifest.get("bundle_id") != expected_bundle_id
+            or manifest.get("origin_node_id") != origin
+            or type(receipt.get("overlap_recovery")) is not bool
+        ):
+            raise ValueError("legacy environment import receipt is invalid")
+        marker_path = self.registry._resolve_relative(
+            f"replicas/peers/{origin}/transactions/{expected_bundle_id}/transaction.json",
+            "legacy environment import transaction marker",
+        )
+        if not marker_path.is_file():
+            raise ValueError("legacy environment import transaction marker is missing")
+        marker = read_json(marker_path)
+        legacy_marker_fields = {
+            "bundle_id", "bundle_sha256", "created_at", "format_version",
+            "new_state", "outputs", "previous_state", "status", "stream_id",
+        }
+        if (
+            not isinstance(marker, dict)
+            or set(marker) != legacy_marker_fields
+            or marker.get("format_version") != 1
+            or marker.get("stream_id") != "environment-v1"
+            or marker.get("status") != "committed"
+            or marker.get("bundle_id") != expected_bundle_id
+            or marker.get("bundle_sha256") != expected_bundle_sha256
+            or not isinstance(marker.get("outputs"), list)
+        ):
+            raise ValueError("legacy environment import transaction marker is invalid")
+        current_state = self.replica_state(origin)
+        if current_state != marker.get("new_state"):
+            raise ValueError("legacy environment import state is inconsistent")
+        ledger = self._read_replica_events(origin)
+        if (
+            int(manifest.get("to_event_sequence", -1))
+            != int(current_state.get("last_event_sequence", -2))
+            or len(ledger) != int(current_state.get("last_event_sequence", -1))
+            or any(
+                int(item.get("event_sequence", -1)) != index
+                for index, item in enumerate(ledger, start=1)
+            )
+        ):
+            raise ValueError("legacy environment import ledger is inconsistent")
+        outputs = self._receipt_outputs(marker["outputs"])
+        allowed_prefixes = (
+            f"staging/incoming/{origin}/",
+            f"replicas/peers/{origin}/governance-proposals/",
+            f"replicas/peers/{origin}/product-evolution/",
+            f"replicas/peers/{origin}/projects/",
+            f"replicas/peers/{origin}/profiles/",
+        )
+        for output in outputs:
+            if (
+                not output["relative_path"].startswith(allowed_prefixes)
+                or re.fullmatch(r"[0-9a-f]{64}", output["sha256"]) is None
+            ):
+                raise ValueError("legacy environment import output is invalid")
+            target = self.registry._resolve_relative(
+                output["relative_path"], "legacy environment import output"
+            )
+            if not target.is_file() or bytes_sha256(target.read_bytes()) != output["sha256"]:
+                raise ValueError("legacy environment import output is missing or changed")
+        upgraded = {
+            **receipt,
+            "state_sha256": canonical_sha256(current_state),
+            "ledger_sha256": canonical_sha256(ledger),
+            "ledger_count": len(ledger),
+            "outputs": outputs,
+            "outputs_sha256": canonical_sha256(outputs),
+        }
+        backup_path = marker_path.parent / "legacy-receipt.json"
+        if backup_path.exists() and read_json(backup_path) != receipt:
+            raise ValueError("legacy environment receipt backup conflicts")
+        if not backup_path.exists():
+            atomic_write_json(backup_path, receipt)
+        atomic_write_json(receipt_path, upgraded)
+        return upgraded
+
     def _validate_committed_receipt(
         self,
         receipt: Any,
@@ -976,6 +1073,13 @@ class EnvironmentExchangeManager:
         )
         if receipt_path.exists():
             receipt = read_json(receipt_path)
+            receipt = self._migrate_legacy_committed_receipt(
+                receipt_path,
+                receipt,
+                origin=origin,
+                expected_bundle_id=str(manifest["bundle_id"]),
+                expected_bundle_sha256=bundle_hash,
+            )
             self._validate_committed_receipt(
                 receipt,
                 origin=origin,
@@ -1037,8 +1141,16 @@ class EnvironmentExchangeManager:
                 f"replicas/peers/{origin}/receipts/{state['last_bundle_id']}.json",
                 "previous environment import receipt",
             )
+            prior_receipt_payload = read_json(prior_receipt_path)
+            prior_receipt_payload = self._migrate_legacy_committed_receipt(
+                prior_receipt_path,
+                prior_receipt_payload,
+                origin=origin,
+                expected_bundle_id=str(state["last_bundle_id"]),
+                expected_bundle_sha256=str(state["last_bundle_sha256"]),
+            )
             prior_receipt = self._validate_committed_receipt(
-                read_json(prior_receipt_path),
+                prior_receipt_payload,
                 origin=origin,
                 expected_bundle_id=str(state["last_bundle_id"]),
                 expected_bundle_sha256=str(state["last_bundle_sha256"]),

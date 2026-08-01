@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.11.5",
+  "work_item_id": "memory-wuxian-v2.11.5",
+  "candidate_id": "v2.11.5-runtime-effect-candidate",
+  "owner_id": "memory-plane-control-plane",
+  "source_revision": "hotfix/v2.11.5-runtime-effect-gates",
+  "product_evolution_record_id": "memory-wuxian-v2.11.5-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "Effect-based health gates are now part of Memory Wuxian's existing Release Evidence Contract and Control Plane; they do not create a separate cross-product capability owner.",
+  "evidence_refs": [
+    "outputs/rehearsal/v2.11.5/report.json",
+    "references/release-rehearsal.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-01T00:00:00Z"
+}

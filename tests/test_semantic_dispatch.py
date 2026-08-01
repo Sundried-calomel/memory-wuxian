@@ -103,6 +103,37 @@ class SemanticDispatchTests(unittest.TestCase):
             worker.assert_not_called()
             self.assertEqual(MaintenanceQueue(archive).jobs(), [])
 
+    def test_mw2115_dispatch_003_terminal_failure_returns_quarantine_without_rethrow(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            archive = base / "archive"
+            pending = archive / "pending"
+            pending.mkdir(parents=True)
+            job_path = pending / "job-000003.json"
+            job_path.write_text(
+                json.dumps({
+                    "job_id": "job-000003",
+                    "summary_level": 1,
+                    "source_signature": "conversation:test:rounds:3-4",
+                    "conversation_id": "codex:test",
+                    "source_round_end": 4,
+                }),
+                encoding="utf-8",
+            )
+            config = base / "config.yaml"
+            config.write_text(
+                f'ai_summary:\n  worker_path: "{(ROOT / "scripts/semantic_worker.py").as_posix()}"\n',
+                encoding="utf-8",
+            )
+            with patch("semantic_dispatch.run_job", side_effect=RuntimeError("permanent failure")):
+                for _ in range(3):
+                    with self.assertRaises(RuntimeError):
+                        dispatch_job(archive, config, job_path, retry_delay_seconds=0)
+                terminal = dispatch_job(archive, config, job_path, retry_delay_seconds=0)
+            self.assertEqual(terminal["status"], "quarantined")
+            self.assertIn("permanent failure", terminal["error"])
+            self.assertEqual(MaintenanceQueue(archive).status()["quarantined"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

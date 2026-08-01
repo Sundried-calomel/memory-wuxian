@@ -37,6 +37,11 @@ if (-not $bootstrap.ready) { throw "MemoryWuxian runtime requirements are incomp
 $python = $bootstrap.checks.python.path
 $codexCli = $bootstrap.checks.codex_cli.path
 New-Item -ItemType Directory -Force -Path $archiveRoot, $sessionsRoot | Out-Null
+& $python (Join-Path $SkillRoot "scripts\migrate_config.py") `
+  --current (Join-Path $SkillRoot "config.yaml") `
+  --defaults (Join-Path $SkillRoot "config.defaults.yaml") `
+  --apply | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian configuration migration failed." }
 & $python (Join-Path $SkillRoot "scripts\memory_cli.py") --root $archiveRoot --config (Join-Path $SkillRoot "config.yaml") init | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian archive initialization failed." }
 

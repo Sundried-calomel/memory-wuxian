@@ -15,6 +15,22 @@ from platform_transaction import atomic_write_canonical_json
 from semantic_backfill import run_backfill
 
 
+def _supervisor_status(result: dict) -> str:
+    status = str(result.get("status") or "")
+    if (
+        result.get("integrity_issues")
+        or result.get("repairable_issues")
+        or result.get("permanent_failures")
+        or (result.get("reconciliation") or {}).get("invalid")
+    ):
+        return "attention"
+    if result.get("skipped") or result.get("remaining_pending_jobs"):
+        return "catching-up"
+    if status in {"catching-up", "attention"}:
+        return status
+    return "healthy"
+
+
 def run_supervisor_tick(root: Path, config_path: Path, *, maximum_semantic_jobs: int = 4) -> dict:
     if maximum_semantic_jobs < 1 or maximum_semantic_jobs > 20:
         raise ValueError("maximum_semantic_jobs must be between 1 and 20")
@@ -26,7 +42,7 @@ def run_supervisor_tick(root: Path, config_path: Path, *, maximum_semantic_jobs:
     )
     return {
         "format": "memory-wuxian-maintenance-supervisor-state-v1",
-        "status": "completed",
+        "status": _supervisor_status(result),
         "process_id": os.getpid(),
         "result": result,
     }

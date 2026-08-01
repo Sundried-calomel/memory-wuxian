@@ -1,5 +1,14 @@
 # Memory無限
 
+> **2.11.5:** バックグラウンドの正常性は、プロセスの存在ではなく実際の効果で
+> 検証されます。ネイティブコレクターは AI を起動も待機もせず、独立した保守
+> スケジューラが Level-2 以上の要約ジョブ作成、安全な派生索引修復、恒久的負債の
+> 明示を担当します。意味索引は現在の raw ソース水位に拘束され、古い場合は閉じるか
+> `semantic-index-stale-keyword-fallback` としてキーワード検索への降格を明示します。
+> 中断バックアップの一時ディレクトリを清掃し、
+> クラウド待機や部分失敗を成功扱いせず、既存ユーザー値を保持した設定移行を行います。
+> `runtime_effect_gate.py` は隠れたフォールバックと古い水位を拒否します。
+>
 > **2.11.4:** 継続的な追従はインストールとアップグレードをまたいで維持されます。
 > ネイティブコレクターは最古の対象境界を `collector-activation.json` に保存し、
 > 保持された rollout を制限付きバッチでストリーミングし、永続カーソルから再開して
@@ -701,6 +710,7 @@ Memory無限は、モデルを呼び出さない保守処理を、安定した�
 
 ```powershell
 python scripts/memory_cli.py maintenance-enqueue --kind archive-health --idempotency-key health:manual
+python scripts/memory_cli.py maintenance-requeue --job-id job-<sha256> --reason "worker contract upgraded"
 python scripts/memory_cli.py maintenance-status
 python scripts/memory_cli.py maintenance-tick --maximum-jobs 20
 python scripts/memory_cli.py maintenance-diagnostics

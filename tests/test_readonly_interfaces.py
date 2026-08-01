@@ -126,6 +126,37 @@ class ReadOnlyInterfaceTests(unittest.TestCase):
             self.service.query({"query": "anything", "mode": "semantic", "limit": 5})
         self.assertEqual("index-unavailable", caught.exception.code)
 
+    def test_mw2115_new_raw_record_marks_semantic_index_stale(self):
+        from memory_guarded_features import GuardedFeatures
+        GuardedFeatures(self.store).semantic_build("local-hash-v1")
+        self.store.append_message(
+            "user",
+            "newly archived semantic sentinel",
+            "2026-08-01T00:01:00+09:00",
+            "codex:test",
+            "message-2",
+            None,
+            False,
+        )
+
+        hybrid = self.service.query({
+            "query": "newly archived semantic sentinel",
+            "mode": "hybrid",
+            "limit": 5,
+        })
+        self.assertIn("semantic-index-stale-keyword-fallback", hybrid["warnings"])
+        self.assertIsNone(hybrid["semantic_provider"])
+        self.assertEqual("message-2", hybrid["results"][0]["message_id"])
+        self.assertEqual("verified", hybrid["confidence"])
+
+        with self.assertRaises(ReadRequestError) as caught:
+            self.service.query({
+                "query": "newly archived semantic sentinel",
+                "mode": "semantic",
+                "limit": 5,
+            })
+        self.assertEqual("index-stale", caught.exception.code)
+
     def test_mw29_provenance_001_tamper_is_not_verified(self):
         raw_path = next((self.store.root / "raw").rglob("*.md"))
         lines = raw_path.read_text(encoding="utf-8").splitlines()

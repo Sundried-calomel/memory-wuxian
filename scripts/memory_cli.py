@@ -301,6 +301,15 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def filesystem_native_path(path: Path) -> str:
+    value = str(path.resolve())
+    if os.name != "nt" or value.startswith("\\\\?\\"):
+        return value
+    if value.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + value[2:]
+    return "\\\\?\\" + value
+
+
 def raw_record_sha256(record: Dict[str, Any]) -> str:
     return guarded_raw_record_sha256(record)
 
@@ -972,7 +981,23 @@ class MemoryStore:
         for path in snapshots:
             if path.resolve() in retained:
                 continue
-            shutil.rmtree(path)
+            shutil.rmtree(filesystem_native_path(path))
+            removed.append(path.name)
+        return removed
+
+    def prune_incomplete_backup_snapshots(self, backup_root: Path) -> List[str]:
+        temporary_pattern = re.compile(
+            r"^\.\d{4}-\d{2}-\d{2}_\d{6}_\d{6}\.tmp-\d+$"
+        )
+        removed = []
+        for path in sorted(backup_root.iterdir()):
+            if (
+                not temporary_pattern.fullmatch(path.name)
+                or not path.is_dir()
+                or path.is_symlink()
+            ):
+                continue
+            shutil.rmtree(filesystem_native_path(path))
             removed.append(path.name)
         return removed
 
@@ -986,39 +1011,61 @@ class MemoryStore:
             return None
         backup_root.mkdir(parents=True, exist_ok=True)
         with exclusive_lock(self.locks_dir / "desktop-backup.lock"):
+            removed_incomplete = self.prune_incomplete_backup_snapshots(backup_root)
             stamp = dt.datetime.now().astimezone().strftime("%Y-%m-%d_%H%M%S_%f")
             final_path = backup_root / stamp
             temporary = backup_root / f".{stamp}.tmp-{os.getpid()}"
             if temporary.exists() or final_path.exists():
                 raise RuntimeError(f"Backup destination already exists: {final_path}")
-            shutil.copytree(
-                self.root,
-                temporary,
-                ignore=shutil.ignore_patterns(".locks", ".DS_Store"),
-            )
-            copied_files = []
-            for path in sorted(temporary.rglob("*")):
-                if path.is_file():
-                    copied_files.append({
-                        "path": str(path.relative_to(temporary)),
-                        "sha256": file_sha256(path),
-                        "bytes": path.stat().st_size,
-                    })
-            manifest = {
-                "format_version": 1,
-                "created_at": now_iso(),
-                "source_root": str(self.root),
-                "reason": reason,
-                "metadata": metadata or {},
-                "state": self.load_state(),
-                "files": copied_files,
-            }
-            atomic_write_json(temporary / "backup-manifest.json", manifest)
-            os.replace(temporary, final_path)
+            try:
+                source_native = Path(filesystem_native_path(self.root))
+                temporary_native = Path(filesystem_native_path(temporary))
+                final_native = Path(filesystem_native_path(final_path))
+                shutil.copytree(
+                    source_native,
+                    temporary_native,
+                    ignore=shutil.ignore_patterns(".locks", ".DS_Store"),
+                )
+                copied_files = []
+                for path in sorted(temporary_native.rglob("*")):
+                    if path.is_file():
+                        copied_files.append({
+                            "path": str(path.relative_to(temporary_native)),
+                            "sha256": file_sha256(path),
+                            "bytes": path.stat().st_size,
+                        })
+                manifest = {
+                    "format_version": 1,
+                    "created_at": now_iso(),
+                    "source_root": str(self.root),
+                    "reason": reason,
+                    "metadata": metadata or {},
+                    "state": self.load_state(),
+                    "files": copied_files,
+                }
+                atomic_write_json(temporary_native / "backup-manifest.json", manifest)
+                os.replace(temporary_native, final_native)
+            except BaseException as exc:
+                if temporary.is_dir() and not temporary.is_symlink():
+                    shutil.rmtree(filesystem_native_path(temporary), ignore_errors=True)
+                append_jsonl(
+                    backup_root / "backup-log.jsonl",
+                    {
+                        "created_at": now_iso(),
+                        "status": "failed",
+                        "reason": reason,
+                        "source_root": str(self.root),
+                        "error_type": type(exc).__name__,
+                        "temporary_cleaned": not temporary.exists(),
+                        "orphaned_incomplete_removed": removed_incomplete,
+                    },
+                )
+                raise
             append_jsonl(
                 backup_root / "backup-log.jsonl",
                 {
                     "created_at": manifest["created_at"],
+                    "status": "completed",
                     "snapshot": final_path.name,
                     "reason": reason,
                     "source_root": str(self.root),
@@ -1026,6 +1073,7 @@ class MemoryStore:
                     "total_messages": manifest["state"].get("total_messages"),
                     "completed_rounds": manifest["state"].get("completed_rounds"),
                     "metadata": metadata or {},
+                    "orphaned_incomplete_removed": removed_incomplete,
                 },
             )
             self.prune_backup_snapshots(backup_root, [final_path])
@@ -4260,6 +4308,12 @@ def build_parser() -> argparse.ArgumentParser:
     maintenance_enqueue_parser.add_argument("--idempotency-key", required=True)
     maintenance_enqueue_parser.add_argument("--payload-json")
     maintenance_enqueue_parser.add_argument("--max-attempts", type=int, default=3)
+    maintenance_requeue_parser = subparsers.add_parser(
+        "maintenance-requeue",
+        help="Explicitly requeue one quarantined job with an immutable audit receipt",
+    )
+    maintenance_requeue_parser.add_argument("--job-id", required=True)
+    maintenance_requeue_parser.add_argument("--reason", required=True)
     subparsers.add_parser(
         "maintenance-status",
         help="Show desired-versus-actual service and maintenance queue state",
@@ -5076,6 +5130,11 @@ def dispatch_command(
         )
     elif args.command == "maintenance-status":
         result = service_state(store.root, store.config)
+    elif args.command == "maintenance-requeue":
+        result = MaintenanceQueue(store.root).requeue_quarantined(
+            args.job_id,
+            args.reason,
+        )
     elif args.command == "maintenance-tick":
         queue = MaintenanceQueue(store.root)
 

@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from memory_guarded_features import GuardedFeatures
+from memory_guarded_features import GuardedFeatures, SemanticIndexStaleError
 
 
 MODES = {"keyword", "semantic", "hybrid"}
@@ -277,6 +277,13 @@ class ReadOnlyMemoryService:
                     max(limit * 3, 30),
                     raw_records=raw_records,
                 )
+            except SemanticIndexStaleError as exc:
+                if mode == "semantic":
+                    raise ReadRequestError(
+                        "index-stale",
+                        "semantic index does not cover the current raw archive",
+                    ) from exc
+                warnings.append("semantic-index-stale-keyword-fallback")
             except (FileNotFoundError, OSError, ValueError) as exc:
                 if mode == "semantic":
                     raise ReadRequestError("index-unavailable", "semantic index is unavailable or stale") from exc

@@ -161,6 +161,13 @@ def dispatch_job(
         failed = queue.fail_semantic(
             current["job_id"], owner, exc, retry_delay_seconds=retry_delay_seconds
         )
+        if failed["state"] == "quarantined":
+            return {
+                "status": "quarantined",
+                "maintenance_job_id": current["job_id"],
+                "error": redact_error(exc),
+                "ai_invocations": 1,
+            }
         raise RuntimeError(f"semantic dispatch {failed['state']}: {exc}") from exc
 
 

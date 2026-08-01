@@ -38,14 +38,26 @@ def service_state(archive_root: Path, config: Dict[str, Any]) -> Dict[str, Any]:
         except (TypeError, ValueError):
             last_heartbeat = 0
     collector_fresh = bool(last_heartbeat and time.time() - last_heartbeat <= 600)
+    supervisor_path = root / "maintenance" / "supervisor-state.json"
+    supervisor = _json(supervisor_path)
+    supervisor_age = (
+        time.time() - supervisor_path.stat().st_mtime
+        if supervisor_path.is_file()
+        else None
+    )
+    maintenance_fresh = bool(
+        supervisor_age is not None
+        and supervisor_age <= 900
+        and supervisor.get("status") in {"healthy", "catching-up"}
+    )
     desired = {
         "collector": "running" if collector_desired else "stopped",
-        "maintenance_queue": "available",
+        "maintenance_queue": "running",
         "semantic_worker": "on-demand" if semantic_enabled else "disabled",
     }
     actual = {
         "collector": "running" if collector_fresh else "stale-or-stopped",
-        "maintenance_queue": "available",
+        "maintenance_queue": "running" if maintenance_fresh else "stale-or-stopped",
         "semantic_worker": "not-persistent",
     }
     mismatches = []
@@ -53,6 +65,8 @@ def service_state(archive_root: Path, config: Dict[str, Any]) -> Dict[str, Any]:
         mismatches.append("collector is desired but telemetry is stale or unavailable")
     if not collector_desired and collector_fresh:
         mismatches.append("collector telemetry is active while desired state is stopped")
+    if not maintenance_fresh:
+        mismatches.append("maintenance supervisor state is stale, unhealthy, or unavailable")
     return {
         "format": "memory-wuxian-service-state-v1",
         "desired": desired,
@@ -60,5 +74,7 @@ def service_state(archive_root: Path, config: Dict[str, Any]) -> Dict[str, Any]:
         "mismatches": mismatches,
         "queue": queue.status(),
         "collector_last_heartbeat_epoch": last_heartbeat or None,
+        "maintenance_supervisor_status": supervisor.get("status"),
+        "maintenance_supervisor_age_seconds": supervisor_age,
         "semantic_ai_policy": "one-shot-explicit-worker-only",
     }

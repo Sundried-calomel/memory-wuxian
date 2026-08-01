@@ -798,6 +798,87 @@ class EnvironmentExchangeTests(unittest.TestCase):
         )
         self.assertTrue(receipt["overlap_recovery"])
 
+    def test_legacy_committed_receipt_is_upgraded_only_from_matching_evidence(self):
+        self.register_rule()
+        bundle = self.base / "legacy-receipt.mwxb"
+        exported = self.a.export_delta(bundle, target_node_id="node-b")
+        verified_import(self.b, bundle, expected_node_id="node-a")
+        peer_root = self.b._peer_root("node-a")
+        receipt_path = peer_root / "receipts" / f"{exported['bundle_id']}.json"
+        receipt = json.loads(receipt_path.read_text())
+        legacy_receipt = {
+            key: receipt[key]
+            for key in (
+                "format_version", "stream_id", "bundle_sha256", "manifest",
+                "overlap_recovery", "received_at",
+            )
+        }
+        receipt_path.write_text(json.dumps(legacy_receipt), encoding="utf-8")
+        marker_path = (
+            peer_root / "transactions" / exported["bundle_id"] / "transaction.json"
+        )
+        marker = json.loads(marker_path.read_text())
+        legacy_marker = {
+            key: marker[key]
+            for key in (
+                "bundle_id", "bundle_sha256", "created_at", "format_version",
+                "new_state", "outputs", "previous_state", "status", "stream_id",
+            )
+        }
+        marker_path.write_text(json.dumps(legacy_marker), encoding="utf-8")
+
+        repeated = verified_import(self.b, bundle, expected_node_id="node-a")
+
+        self.assertEqual(repeated["status"], "no-change")
+        upgraded = json.loads(receipt_path.read_text())
+        self.assertIn("ledger_sha256", upgraded)
+        self.assertIn("outputs_sha256", upgraded)
+        self.assertEqual(upgraded["ledger_count"], exported["to_event_sequence"])
+        self.assertEqual(
+            json.loads((marker_path.parent / "legacy-receipt.json").read_text()),
+            legacy_receipt,
+        )
+
+    def test_legacy_committed_receipt_rejects_changed_output(self):
+        self.register_rule()
+        bundle = self.base / "legacy-receipt-tampered.mwxb"
+        exported = self.a.export_delta(bundle, target_node_id="node-b")
+        verified_import(self.b, bundle, expected_node_id="node-a")
+        peer_root = self.b._peer_root("node-a")
+        receipt_path = peer_root / "receipts" / f"{exported['bundle_id']}.json"
+        receipt = json.loads(receipt_path.read_text())
+        receipt_path.write_text(
+            json.dumps(
+                {
+                    key: receipt[key]
+                    for key in (
+                        "format_version", "stream_id", "bundle_sha256", "manifest",
+                        "overlap_recovery", "received_at",
+                    )
+                }
+            ),
+            encoding="utf-8",
+        )
+        marker_path = (
+            peer_root / "transactions" / exported["bundle_id"] / "transaction.json"
+        )
+        marker = json.loads(marker_path.read_text())
+        legacy_marker = {
+            key: marker[key]
+            for key in (
+                "bundle_id", "bundle_sha256", "created_at", "format_version",
+                "new_state", "outputs", "previous_state", "status", "stream_id",
+            )
+        }
+        marker_path.write_text(json.dumps(legacy_marker), encoding="utf-8")
+        changed = self.b.registry._resolve_relative(
+            legacy_marker["outputs"][0]["relative_path"], "test output"
+        )
+        changed.write_text("changed", encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "missing or changed"):
+            verified_import(self.b, bundle, expected_node_id="node-a")
+
     def test_overlap_recovery_rejects_conflicting_persisted_prefix(self):
         self.register_rule()
         first_bundle = self.base / "first.mwxb"

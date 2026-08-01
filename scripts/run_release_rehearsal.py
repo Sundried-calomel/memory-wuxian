@@ -281,10 +281,14 @@ def main() -> int:
                 (
                     "from pathlib import Path;"
                     "s=Path('native-collector/src/main.rs').read_text('utf-8');"
+                    "p=s.split('#[cfg(test)]',1)[0];"
                     "assert 'fn sync_startup_batch' in s;"
-                    "assert 'self.sync_batch_with_semantic_worker(paths, false)' in s;"
+                    "assert 'self.sync_batch(paths)' in p;"
                     "assert 'store.sync_startup_batch(initial_paths)?' in s;"
-                    "assert '.arg(\"--no-backup\")' in s"
+                    "assert 'self.maybe_create_level_one_job()?' in p;"
+                    "assert 'semantic_dispatch.py' not in p;"
+                    "assert 'run_one_shot_summary' not in p;"
+                    "assert 'sync_batch_with_semantic_worker' not in p"
                 ),
             ],
         ),
@@ -472,6 +476,17 @@ def main() -> int:
                 "tests.test_maintenance_scheduler",
                 "tests.test_semantic_plan",
                 "tests.test_semantic_backfill",
+            ],
+        ),
+        (
+            "v2115-runtime-effect-gate-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_runtime_effect_gate",
+                "tests.test_memory_environment_exchange.EnvironmentExchangeTests.test_legacy_committed_receipt_is_upgraded_only_from_matching_evidence",
+                "tests.test_memory_environment_exchange.EnvironmentExchangeTests.test_legacy_committed_receipt_rejects_changed_output",
+                "tests.test_memory_cli.MemoryCliTest.test_backup_failure_cleans_current_and_orphaned_temporary_directories",
+                "tests.test_memory_configuration.MemoryConfigurationTests.test_upgrade_migration_adds_defaults_without_overwriting_user_values",
             ],
         ),
         ("diff-check", ["git", "diff", "--check"]),
