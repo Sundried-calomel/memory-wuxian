@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,7 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from memory_jobs import MaintenanceQueue, reconcile_pending_debt
 from memory_cli import MemoryStore
 from memory_cli import load_simple_yaml
-from semantic_backfill import run_backfill
+from semantic_backfill import recent_recovery_audit, run_backfill
 from semantic_dispatch import dispatch_job
 from maintenance_supervisor import run_supervisor, run_supervisor_tick
 
@@ -250,6 +251,74 @@ class SemanticBackfillV211Tests(unittest.TestCase):
         self.assertEqual(result["native_recovery"]["repairs"], [])
         self.assertEqual(raw_path.read_bytes(), before)
         self.assertIn("integrity-failure", [item["reason"] for item in result["skipped"]])
+
+    def test_mw2123_repairable_projection_drift_does_not_block_frozen_jobs(self):
+        job = self.job("job-000011.json", "conversation:test:rounds:5-6", boundary=6)
+        recovery = {
+            "status": "attention",
+            "integrity_issues": [],
+            "repairable_issues": ["conversation transcripts differ from raw records"],
+            "repairs": [],
+        }
+
+        def ingest(_root, _config, job_path, **_kwargs):
+            job_path.unlink()
+            return {"status": "ingested", "job_id": job_path.stem}
+
+        with patch.object(MemoryStore, "heartbeat", return_value=recovery):
+            with patch("semantic_backfill.dispatch_job", side_effect=ingest) as dispatch:
+                result = run_backfill(self.root, self.config, max_jobs=1, dry_run=False)
+
+        dispatch.assert_called_once()
+        self.assertFalse(job.exists())
+        self.assertEqual(result["completed_jobs"], 1)
+        self.assertEqual(result["status"], "attention")
+        self.assertEqual(result["scheduled_summary_jobs"], [])
+        self.assertFalse(any(item["reason"] == "repair-incomplete" for item in result["skipped"]))
+
+    def test_mw2123_recent_recovery_audit_avoids_repeating_full_rebuild(self):
+        timestamp = datetime.now(timezone.utc) - timedelta(minutes=10)
+        state = {
+            "result": {
+                "native_recovery": {
+                    "status": "attention",
+                    "timestamp": timestamp.isoformat(),
+                    "integrity_issues": [],
+                    "repairable_issues": ["conversation transcripts differ from raw records"],
+                    "repairs": [{"conversations": {"changed": True}}],
+                }
+            }
+        }
+        state_path = self.root / "maintenance/supervisor-state.json"
+        state_path.parent.mkdir(parents=True)
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+
+        cached = recent_recovery_audit(self.root)
+
+        self.assertEqual(cached["mode"], "cached-recovery-audit")
+        self.assertEqual(cached["repairs"], [])
+        self.assertEqual(cached["repairable_issues"], state["result"]["native_recovery"]["repairable_issues"])
+
+    def test_mw2123_recovery_debt_marker_forces_fresh_audit(self):
+        job = self.job("job-000012.json", "conversation:test:rounds:7-8", boundary=8)
+        marker = self.root / "pending/native-recovery-debt.json"
+        marker.write_text('{"format_version": 1}', encoding="utf-8")
+        recovery = {
+            "status": "attention",
+            "integrity_issues": ["raw content SHA-256 mismatch: msg-1"],
+            "repairable_issues": [],
+            "repairs": [],
+        }
+
+        with patch.object(MemoryStore, "heartbeat", return_value=recovery) as heartbeat:
+            with patch("semantic_backfill.dispatch_job") as dispatch:
+                result = run_backfill(self.root, self.config, max_jobs=1, dry_run=False)
+
+        heartbeat.assert_called_once_with(create_jobs=False, repair=True)
+        dispatch.assert_not_called()
+        self.assertTrue(job.exists())
+        self.assertTrue(marker.exists())
+        self.assertEqual(result["status"], "attention")
 
     def test_mw2115_status_004_partial_or_permanent_debt_never_reports_completed(self):
         with patch(

@@ -1,5 +1,11 @@
 # Memory無限
 
+> **2.12.3:** Automatic semantic catch-up now continues through transient,
+> rebuildable transcript/index/state drift while Codex capture remains active.
+> Recent deep-recovery evidence is reused for up to one hour unless recovery
+> debt is present, while each frozen source SHA-256 is still checked at ingest.
+> Immutable raw-history integrity failures still stop semantic execution.
+
 > **2.12.2:** Daily chart dates are bold and visible below the baseline, nested
 > local/all-device bars share one width, and the palette has clearer blue and
 > green contrast. Native recovery now preserves an independent archived-message

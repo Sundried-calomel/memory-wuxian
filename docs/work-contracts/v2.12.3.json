@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.12.3",
+  "candidate_id": "v2.12.3-semantic-drain-hotfix-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-control-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "architecture-contract",
+    "semantic-backfill-regression",
+    "windows-scheduled-semantic-drain-effect",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "target": "Restore automatic draining of frozen semantic-summary jobs while native capture produces rebuildable projection drift.",
+  "primary_semantics": "Raw-integrity failures fail closed; rebuildable derived-view drift remains visible as attention but does not block source-hash-bound pending jobs.",
+  "invariants": [
+    "Raw rollout files, append-only raw memory, persisted summaries, cloud replicas, and trusted-device records are never rewritten or deleted.",
+    "Every semantic ingest revalidates the frozen job source SHA-256 before commit.",
+    "A deep recovery audit is reused for at most one hour and explicit recovery debt always forces a fresh audit.",
+    "Repairable projection drift cannot be reported as healthy and cannot authorize creation of a new compensating summary job.",
+    "No manual dispatcher invocation may satisfy the automatic scheduled-drain effect gate."
+  ],
+  "allowed_changes": [
+    "Separate raw-integrity blocking from rebuildable projection-repair reporting in semantic backfill.",
+    "Reuse recent deep-recovery evidence so the five-minute scheduler does not rebuild all derived views before every batch.",
+    "Add focused regression tests, runtime evidence, version metadata, and three-locale release notes."
+  ],
+  "prohibited_changes": [
+    "Relax raw-source hash validation or raw-history integrity checks.",
+    "Rewrite, truncate, normalize, or delete raw history, persisted summaries, or pending job source assignments.",
+    "Treat repairable drift as healthy or run a broad full-release rehearsal for this narrow patch."
+  ],
+  "before_after_checks": [
+    "Reproduce pending semantic debt remaining constant while supervisor reports repair-incomplete.",
+    "Run the focused semantic-backfill suite and preserve raw-integrity blocking coverage.",
+    "Install the candidate without manually dispatching a summary and require the next Windows scheduled tick to reduce pending debt."
+  ],
+  "required_evidence": [
+    "semantic-backfill-regression",
+    "windows-scheduled-semantic-drain-effect",
+    "architecture-contract",
+    "documentation-contract",
+    "promotion-review"
+  ],
+  "lifecycle_state": "verified"
+}

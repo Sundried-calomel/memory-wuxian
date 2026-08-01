@@ -213,3 +213,10 @@ Platform-specific live installation checks must be recorded separately. A
 desktop-affecting release is not complete until the installed dashboard has
 been replaced, its version and launcher configuration have been verified, and
 the dashboard has successfully opened against the preserved active archive.
+# v2.12.3 targeted semantic-drain hotfix
+
+The Windows production task was observed without a manual dispatcher call.
+It started at 03:01:10 JST, invoked ephemeral Codex at 03:01:11, and reduced
+pending semantic debt from 158 to 157 at 03:04:10. Focused regressions preserve
+raw-integrity blocking, force fresh recovery when explicit debt exists, and
+reuse recent deep-recovery evidence for no more than one hour.
