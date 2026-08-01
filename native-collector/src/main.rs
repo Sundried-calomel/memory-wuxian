@@ -522,6 +522,7 @@ struct PreparedSync {
     source_path: PathBuf,
     hinted_cursor: Value,
     last_line: u64,
+    message_last_line: u64,
     backfill_file_changes: bool,
     backfill_token_usage: bool,
     resume_line: u64,
@@ -1197,6 +1198,28 @@ impl Store {
         Ok(records)
     }
 
+    fn archived_source_line_high_water(&self, session_id: &str) -> Result<u64> {
+        let conversation_id = format!("codex:{session_id}");
+        Ok(self
+            .read_records(&self.conversation_path(&conversation_id))?
+            .into_iter()
+            .filter(|record| {
+                record
+                    .get("source")
+                    .and_then(|source| source.get("session_id"))
+                    .and_then(Value::as_str)
+                    == Some(session_id)
+            })
+            .filter_map(|record| {
+                record
+                    .get("source")
+                    .and_then(|source| source.get("line"))
+                    .and_then(Value::as_u64)
+            })
+            .max()
+            .unwrap_or(0))
+    }
+
     fn read_all_raw(&self) -> Result<Vec<Value>> {
         let mut records = Vec::new();
         let raw_root = self.root.join("raw");
@@ -1554,6 +1577,17 @@ impl Store {
             .get("last_line")
             .and_then(Value::as_u64)
             .unwrap_or(0);
+        let message_last_line = hinted_cursor
+            .get("message_last_line")
+            .and_then(Value::as_u64)
+            .unwrap_or(last_line)
+            .max(
+                hinted_session_id
+                    .as_deref()
+                    .map(|session_id| self.archived_source_line_high_water(session_id))
+                    .transpose()?
+                    .unwrap_or(0),
+            );
         let backfill_file_changes = hinted_cursor
             .get("file_change_format_version")
             .and_then(Value::as_u64)
@@ -1622,6 +1656,7 @@ impl Store {
             source_path,
             hinted_cursor,
             last_line,
+            message_last_line,
             backfill_file_changes,
             backfill_token_usage,
             resume_line,
@@ -1634,6 +1669,7 @@ impl Store {
             source_path,
             hinted_cursor,
             last_line,
+            message_last_line,
             backfill_file_changes,
             backfill_token_usage,
             resume_line,
@@ -1683,6 +1719,7 @@ impl Store {
                     "session_id": session_id,
                     "source_path": portable_path(&source_path),
                     "last_line": committed_line,
+                    "message_last_line": message_last_line.max(committed_line),
                     "file_change_format_version": 1,
                     "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
                     "source_size": batch.committed_byte_offset,
@@ -1739,7 +1776,7 @@ impl Store {
             } else {
                 None
             };
-            if line_number <= last_line && file_change.is_none() {
+            if line_number <= message_last_line && file_change.is_none() {
                 continue;
             }
             let (speaker, phase, complete_round, message) =
@@ -1839,6 +1876,7 @@ impl Store {
                 "session_id": session_id,
                 "source_path": portable_path(&source_path),
                 "last_line": committed_line,
+                "message_last_line": message_last_line.max(committed_line),
                 "file_change_format_version": 1,
                 "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
                 "source_size": batch.committed_byte_offset,

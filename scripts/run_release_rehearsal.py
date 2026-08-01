@@ -558,6 +558,17 @@ def main() -> int:
                 "tests.test_daily_metrics",
             ],
         ),
+        (
+            "v2122-dashboard-cursor-summary-job-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_v2122_release_contract",
+                "tests.test_memory_cli.MemoryCliTest.test_native_collector_matches_python_storage_contract",
+                "tests.test_memory_cli.MemoryCliTest.test_pending_parent_jobs_reserve_children_and_repair_legacy_overlap",
+                "tests.test_memory_cli.MemoryCliTest.test_dashboard_achievement_settings_are_local_and_hide_empty_levels",
+                "tests.test_memory_dashboard_federation",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     if args.contract_profile:

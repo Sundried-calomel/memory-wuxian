@@ -2054,6 +2054,14 @@ class MemoryStore:
             for entry in self.summary_registry()
             if entry.get("event") == "grouped"
         }
+        pending_children = {
+            str(summary_id)
+            for job in existing
+            if int(job.get("summary_level", 0)) > 1
+            for summary_id in job.get("source_summaries", [])
+            if summary_id
+        }
+        unavailable_children = grouped_children | pending_children
         summaries = self.summary_records()
         for level in range(1, self.maximum_depth):
             conversation_ids = sorted({
@@ -2065,7 +2073,7 @@ class MemoryStore:
                 candidates = [
                     entry for entry in summaries
                     if int(entry["level"]) == level
-                    and entry["summary_id"] not in grouped_children
+                    and entry["summary_id"] not in unavailable_children
                     and entry.get("conversation_id") == conversation_id
                 ]
                 candidates.sort(key=lambda entry: (
@@ -2095,6 +2103,74 @@ class MemoryStore:
                 )
                 return self.persist_job(state, job)
         return None
+
+    def repair_overlapping_pending_parent_jobs(self, apply: bool) -> Dict[str, Any]:
+        with (
+            exclusive_lock(self.locks_dir / "summary-jobs.lock"),
+            exclusive_lock(self.locks_dir / "summary-ingest.lock"),
+        ):
+            jobs = sorted(
+                self.pending_jobs(),
+                key=lambda job: (str(job.get("created_at", "")), str(job.get("job_id", ""))),
+            )
+            claimed: Dict[Tuple[int, str, str], str] = {}
+            conflicts = []
+            for job in jobs:
+                level = int(job.get("summary_level", 0))
+                source_summaries = [
+                    str(value) for value in job.get("source_summaries", []) if value
+                ]
+                if level <= 1 or not source_summaries:
+                    continue
+                conversation_id = str(job.get("conversation_id") or "legacy-global")
+                owners = sorted({
+                    claimed[(level, conversation_id, summary_id)]
+                    for summary_id in source_summaries
+                    if (level, conversation_id, summary_id) in claimed
+                })
+                if owners:
+                    conflicts.append({
+                        "job_id": str(job.get("job_id")),
+                        "path": str(job.get("_path")),
+                        "kept_jobs": owners,
+                        "shared_source_summaries": sorted({
+                            summary_id
+                            for summary_id in source_summaries
+                            if (level, conversation_id, summary_id) in claimed
+                        }),
+                    })
+                    continue
+                for summary_id in source_summaries:
+                    claimed[(level, conversation_id, summary_id)] = str(job.get("job_id"))
+
+            if not apply or not conflicts:
+                return {"mode": "apply" if apply else "preview", "changed": False, "conflicts": conflicts}
+
+            paths = [Path(item["path"]) for item in conflicts]
+            backup = self.backup_derived_files("summary-job-overlap", paths)
+            receipt = {
+                "format_version": 1,
+                "created_at": now_iso(),
+                "reason": "later pending parent job reused child summaries already assigned to an earlier pending job",
+                "raw_archive_modified": False,
+                "quarantined_jobs": [
+                    {
+                        **item,
+                        "sha256": file_sha256(Path(item["path"])),
+                    }
+                    for item in conflicts
+                ],
+            }
+            atomic_write_json(backup / "receipt.json", receipt)
+            for path in paths:
+                path.unlink()
+            self.refresh_unsummarized_registry()
+            return {
+                "mode": "apply",
+                "changed": True,
+                "backup": str(backup),
+                "conflicts": conflicts,
+            }
 
     def build_level_1_job(
         self,
@@ -3992,6 +4068,20 @@ class MemoryStore:
         self.init()
         before = self.audit()
         repairs = []
+        pending_overlap_issues = [
+            issue for issue in before["integrity_issues"]
+            if issue.startswith("pending job level ")
+            or issue.startswith("duplicate pending source assignments=")
+        ]
+        if (
+            repair
+            and pending_overlap_issues
+            and len(pending_overlap_issues) == len(before["integrity_issues"])
+        ):
+            overlap_repair = self.repair_overlapping_pending_parent_jobs(apply=True)
+            if overlap_repair["changed"]:
+                repairs.append({"pending_parent_jobs": overlap_repair})
+                before = self.audit()
         if repair and not before["integrity_issues"]:
             needs_conversation_rebuild = any(
                 "conversation transcript" in issue

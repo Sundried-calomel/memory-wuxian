@@ -606,6 +606,11 @@ safety:
         self.assertIn('class="chart-tooltip"', html)
         self.assertIn('tabindex="0"', html)
         self.assertIn("dailyTip:", html)
+        self.assertIn('.bar.local{left:0;right:0;', html)
+        self.assertIn('.bar-date{position:absolute;left:50%;bottom:2px;', html)
+        self.assertIn('font-size:10px;font-weight:700;color:#36433d', html)
+        self.assertIn('background:#2f86c1', html)
+        self.assertIn('background:#18a668', html)
         self.assertIn(".bar-wrap:first-child .chart-tooltip{left:0", html)
         self.assertIn(".bar-wrap:last-child .chart-tooltip{left:auto;right:0", html)
         self.assertIn("collector-telemetry-stale", html)
@@ -799,6 +804,72 @@ safety:
         status = self.run_cli("status")
         self.assertEqual(status["last_summarized_round"], 2)
         self.assertEqual(status["pending_summary_jobs"], 0)
+
+    def test_pending_parent_jobs_reserve_children_and_repair_legacy_overlap(self):
+        for number in range(1, 5):
+            self.append_round(number)
+            if number % 2 == 0:
+                self.ingest_due_summary(f"concept-{number}")
+
+        first_parent_path = Path(self.run_cli("make-summary-job")["job"])
+        first_parent = json.loads(first_parent_path.read_text(encoding="utf-8"))
+        self.assertEqual(first_parent["summary_level"], 2)
+
+        summary_index = self.root / "indexes/summaries.jsonl"
+        summary_records = [
+            json.loads(line)
+            for line in summary_index.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        discovered = dict(summary_records[0])
+        discovered["summary_id"] = "L1-999999"
+        discovered["source_start_sequence"] = 0
+        discovered["source_end_sequence"] = 0
+        source_path = self.root / discovered["path"]
+        discovered_path = source_path.with_name("L1-999999.md")
+        discovered["path"] = discovered_path.relative_to(self.root).as_posix()
+        discovered_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+        with summary_index.open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(discovered, ensure_ascii=False, sort_keys=True) + "\n")
+
+        self.assertEqual(self.run_cli("make-summary-job")["status"], "not-due")
+        self.assertEqual(len(list((self.root / "pending").glob("job-*.json"))), 1)
+        summary_index.write_text(
+            "".join(
+                json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
+                for record in summary_records
+            ),
+            encoding="utf-8",
+        )
+        discovered_path.unlink()
+
+        overlapping = dict(first_parent)
+        overlapping["job_id"] = "job-999999"
+        overlapping["target_summary_id"] = "L2-999999"
+        overlapping["created_at"] = "9999-12-31T23:59:59+00:00"
+        overlapping["source_summaries"] = list(first_parent["source_summaries"])
+        overlapping["source_signature"] = (
+            f"conversation:{first_parent['conversation_id']}:children:"
+            + ",".join(overlapping["source_summaries"])
+        )
+        overlap_path = self.root / "pending/job-999999.json"
+        overlap_path.write_text(
+            json.dumps(overlapping, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        repaired = self.run_cli("heartbeat", "--repair", "--no-create-jobs")
+        self.assertEqual(repaired["status"], "ok")
+        self.assertTrue(first_parent_path.exists())
+        self.assertFalse(overlap_path.exists())
+        repair = repaired["repairs"][0]["pending_parent_jobs"]
+        receipt = Path(repair["backup"]) / "receipt.json"
+        receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+        self.assertFalse(receipt_payload["raw_archive_modified"])
+        self.assertEqual(
+            receipt_payload["quarantined_jobs"][0]["job_id"],
+            "job-999999",
+        )
 
     def test_current_policy_retrieval_tracks_explicit_revision(self):
         for number in (1, 2):
@@ -2068,6 +2139,44 @@ summaries:
                         "model_context_window": 258400,
                     },
                 },
+            )
+            + "".join(
+                event(
+                    "2026-07-16T10:02:00Z",
+                    "response_item",
+                    {
+                        "type": "function_call",
+                        "name": "wait",
+                        "arguments": json.dumps({"cell_id": f"migration-{index}"}),
+                    },
+                )
+                for index in range(520)
+            )
+            + event(
+                "2026-07-16T10:02:01Z",
+                "event_msg",
+                {
+                    "type": "token_count",
+                    "info": {
+                        "total_token_usage": {
+                            "input_tokens": 220,
+                            "cached_input_tokens": 120,
+                            "cache_write_input_tokens": 0,
+                            "output_tokens": 30,
+                            "reasoning_output_tokens": 8,
+                            "total_tokens": 250,
+                        },
+                        "last_token_usage": {
+                            "input_tokens": 130,
+                            "cached_input_tokens": 80,
+                            "cache_write_input_tokens": 0,
+                            "output_tokens": 20,
+                            "reasoning_output_tokens": 5,
+                            "total_tokens": 150,
+                        },
+                        "model_context_window": 258400,
+                    },
+                },
             ),
             encoding="utf-8",
         )
@@ -2115,8 +2224,8 @@ summaries:
         )
         self.assertEqual(native.returncode, 0, native.stderr)
         native_result = json.loads(native.stdout)
-        self.assertEqual(python_result["imported_messages"], 7)
-        self.assertEqual(native_result["imported_messages"], 7)
+        self.assertEqual(python_result["imported_messages"], 527)
+        self.assertEqual(native_result["imported_messages"], 527)
         self.assertFalse(worker_marker.exists())
         self.assertIsNotNone(native_result["created_summary_job"])
         self.assertNotIn("semantic_worker", native_result)
@@ -2172,6 +2281,26 @@ summaries:
         self.assertEqual(migrated_usage["format_version"], 2)
         self.assertEqual(migrated_usage["reported_usage"]["total_tokens"], 250)
         self.assertEqual(migrated_usage["daily_usage"]["2026-07-16"]["total_tokens"], 250)
+        migrated_cursor = json.loads(native_cursor_path.read_text(encoding="utf-8"))
+        self.assertEqual(migrated_cursor["message_last_line"], migrated_cursor["last_line"])
+        damaged_cursor = dict(migrated_cursor)
+        damaged_cursor.pop("message_last_line")
+        damaged_cursor.pop("committed_byte_offset")
+        damaged_cursor["last_line"] = 512
+        damaged_cursor["source_size"] = 0
+        damaged_cursor["complete"] = False
+        native_cursor_path.write_text(json.dumps(damaged_cursor), encoding="utf-8")
+        recovered = subprocess.run(
+            native_args,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        self.assertEqual(json.loads(recovered.stdout)["imported_messages"], 0)
+        recovered_cursor = json.loads(native_cursor_path.read_text(encoding="utf-8"))
+        self.assertEqual(recovered_cursor["message_last_line"], recovered_cursor["last_line"])
         file_change = next(
             record for record in python_records
             if record.get("source", {}).get("phase") == "file_change"

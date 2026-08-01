@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2.12.2 - 2026-08-02
+
+- Restored the daily chart's bold date labels below the baseline, matched the local and all-device bar widths, and refreshed the blue and green palette.
+- Fixed native token-ledger backfill so a reset scan cursor retains an independent archived-message high-water mark and cannot replay already archived visible events with changed round state.
+- Reserved child summaries used by pending parent jobs and added a receipt-backed repair that quarantines only later overlapping derived jobs without modifying raw history or persisted summaries.
+
 ## 2.12.1 - 2026-08-01
 
 - Fixed native collector upgrades from format-v1 token ledgers: retained rollout telemetry now rebuilds the derived format-v2 daily ledger instead of aborting collection.
