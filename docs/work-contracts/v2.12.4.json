@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.12.4",
+  "candidate_id": "v2.12.4-lossless-parent-and-audit-lock-hotfix",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-control-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "architecture-contract",
+    "bundled-native-version",
+    "v2124-lossless-audit-lock-contract",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "target": "Restore quarantined parent-summary jobs with sparse legacy metadata and prevent heartbeat from auditing an in-flight native archive transaction.",
+  "primary_semantics": "Lossless payloads preserve field presence independently from null values, and heartbeat observes or repairs one transactionally consistent archive state.",
+  "invariants": [
+    "Raw dialogue, persisted summaries, pending source assignments, cloud replicas, and trusted-device records are never rewritten or deleted.",
+    "Presence metadata changes only the ephemeral AI prompt representation and remains backward-readable when absent.",
+    "Raw-integrity and frozen-source SHA-256 checks remain fail closed.",
+    "Heartbeat owns the archive lock; callers do not nest the same lock.",
+    "A quarantined job is requeued only after the exact saved payload passes the repaired local round trip."
+  ],
+  "allowed_changes": [
+    "Add field-presence bitmaps to lossless raw-record and child-summary payloads.",
+    "Move archive-lock ownership into heartbeat and remove its duplicate maintenance caller lock.",
+    "Add focused regressions, installed-runtime evidence, version metadata, and three-locale release notes."
+  ],
+  "prohibited_changes": [
+    "Relax semantic result schemas, source hashes, raw-history integrity checks, or summary ingestion validation.",
+    "Rewrite, normalize, delete, or regenerate raw history or existing persisted summaries.",
+    "Run a broad full-release rehearsal for this narrow patch."
+  ],
+  "before_after_checks": [
+    "Reproduce job-000372 failing before AI because missing metadata keys are restored as null.",
+    "Round-trip the exact ten-child saved payload without changing its source files.",
+    "Prove heartbeat audit executes while the shared archive lock is held.",
+    "Install the candidate, repair only derived views, requeue the one isolated task, and observe a real Level-2 ingest or an evidence-backed downstream failure."
+  ],
+  "required_evidence": [
+    "lossless-sparse-field-regression",
+    "heartbeat-transaction-lock-regression",
+    "real-parent-payload-round-trip",
+    "windows-installed-quarantine-recovery-effect",
+    "architecture-contract",
+    "documentation-contract",
+    "promotion-review"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.12.4-preflight.json",
+    "preflight_sha256": "9e5960ea85ac1d89cbb22fe344c61dfb71c2307aed0c03c45563e2f14dded461",
+    "completion_receipt": "docs/defect-receipts/v2.12.4-completion.json",
+    "completion_sha256": "5ceb405a42b814235bbfd46d4f546afb8c03078b35cfe85a940bc4c4dadcf362",
+    "applicable_families": [
+      "MW-R05",
+      "MW-R07",
+      "MW-R08",
+      "MW-R10"
+    ],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "A real Level-2 job with mixed legacy Level-1 metadata failed lossless packing four times before AI invocation and entered quarantine.",
+      "Heartbeat could read raw records between the native collector raw append and its derived transcript, index, and state writes."
+    ]
+  },
+  "lifecycle_state": "verified"
+}

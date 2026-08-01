@@ -1,5 +1,10 @@
 # Memory無限
 
+> **2.12.4:** Lossless semantic payloads now distinguish absent fields from
+> explicit JSON `null`, allowing mixed legacy Level-1 metadata to form parent
+> summaries. Heartbeat audits now share the collector archive lock so an
+> in-flight native batch cannot create a cached false projection-drift alert.
+
 > **2.12.3:** Automatic semantic catch-up now continues through transient,
 > rebuildable transcript/index/state drift while Codex capture remains active.
 > Recent deep-recovery evidence is reused for up to one hour unless recovery
