@@ -1,5 +1,9 @@
 # Memory無限
 
+> **2.12.1:** ネイティブコレクターは、アップグレード時に保持済み rollout から
+> format-v2 日次 Token 台帳を再構築し、format-v1 派生台帳があっても収集を中断しません。
+> 元の rollout と追記専用メモリ記録は変更されません。
+
 > **2.12.0:** `daily_metrics.py` はこの端末とすべての trusted synchronized devices
 > を重ねた日別棒グラフを追加します。メッセージと Codex-reported Token の切替、
 > 端末別内訳、同期の古さを表示し、日付境界は `Asia/Tokyo` です。federation

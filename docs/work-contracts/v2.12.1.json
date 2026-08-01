@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.12.1",
+  "candidate_id": "v2.12.1-token-ledger-upgrade-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-control-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "native-format",
+    "native-check",
+    "candidate-native-version",
+    "documentation-contract",
+    "architecture-contract",
+    "v2121-token-ledger-v1-upgrade-contract",
+    "diff-check"
+  ],
+  "target": "Restore native collection when a retained format-v1 token ledger must be upgraded and make concurrent recovery-marker cleanup idempotent.",
+  "primary_semantics": "A token ledger is derived data. An older derived format is rebuilt from the retained authoritative rollout instead of aborting capture or mutating raw memory; an already-removed recovery marker means cleanup is complete.",
+  "invariants": [
+    "Raw rollouts, raw archive records, summaries, indexes, device trust, and cloud replicas remain unchanged.",
+    "The rebuilt ledger is derived only from retained Codex token_count telemetry.",
+    "The v2 daily ledger preserves cumulative totals and uses the existing Asia/Tokyo day boundary.",
+    "The patch does not change federation protocol or dashboard aggregation semantics."
+  ],
+  "allowed_changes": [
+    "Replace an unsupported old derived token ledger with a fresh in-memory v2 ledger before replay.",
+    "Treat a missing recovery marker during final cleanup as an idempotent success while preserving all other I/O failures.",
+    "Add a native v1-to-v2 regression and targeted release evidence.",
+    "Update patch version and three-locale release notes."
+  ],
+  "prohibited_changes": [
+    "Delete, rewrite, or truncate source rollouts or append-only memory records.",
+    "Treat old cumulative values as daily values without replaying source telemetry.",
+    "Change trusted-device scope, token estimation rules, or federation protocol."
+  ],
+  "before_after_checks": [
+    "Create a real format-v1 ledger and format-v1 cursor from a completed native sync.",
+    "Replay the retained rollout with the native binary and require a successful format-v2 daily ledger.",
+    "Verify cumulative and daily totals match the original token_count telemetry.",
+    "Remove a recovery marker twice and require the second cleanup to succeed without recreating it.",
+    "Verify the installed Windows collector reaches ready and continues capture."
+  ],
+  "required_evidence": [
+    "native-v1-v2-token-ledger-regression",
+    "targeted-impact-suite",
+    "windows-runtime-effect",
+    "same-sha-ci",
+    "installer-upgrade",
+    "promotion-review"
+  ],
+  "lifecycle_state": "staged"
+}

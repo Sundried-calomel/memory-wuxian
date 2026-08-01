@@ -2150,6 +2150,28 @@ summaries:
             value.pop("updated_at", None)
         self.assertEqual(python_usage, native_usage)
         self.assertEqual(python_usage["reported_usage"]["total_tokens"], 250)
+        legacy_native_usage = dict(native_usage)
+        legacy_native_usage["format_version"] = 1
+        legacy_native_usage.pop("daily_usage", None)
+        legacy_native_usage.pop("daily_usage_timezone", None)
+        native_usage_path = native_root / "imports/codex/token-usage/native-parity.json"
+        native_usage_path.write_text(json.dumps(legacy_native_usage), encoding="utf-8")
+        native_cursor_path = native_root / "imports/codex/native-parity.json"
+        legacy_cursor = json.loads(native_cursor_path.read_text(encoding="utf-8"))
+        legacy_cursor["token_usage_format_version"] = 1
+        native_cursor_path.write_text(json.dumps(legacy_cursor), encoding="utf-8")
+        migrated = subprocess.run(
+            native_args,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(migrated.returncode, 0, migrated.stderr)
+        migrated_usage = json.loads(native_usage_path.read_text(encoding="utf-8"))
+        self.assertEqual(migrated_usage["format_version"], 2)
+        self.assertEqual(migrated_usage["reported_usage"]["total_tokens"], 250)
+        self.assertEqual(migrated_usage["daily_usage"]["2026-07-16"]["total_tokens"], 250)
         file_change = next(
             record for record in python_records
             if record.get("source", {}).get("phase") == "file_change"
@@ -2187,7 +2209,6 @@ summaries:
             json.loads((self.root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
             json.loads((native_root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
         )
-        native_cursor_path = native_root / "imports/codex/native-parity.json"
         stale_cursor = json.loads(native_cursor_path.read_text(encoding="utf-8"))
         stale_cursor["source_path"] = "C:/stale/path/rollout-native-parity.jsonl"
         stale_cursor["complete"] = False

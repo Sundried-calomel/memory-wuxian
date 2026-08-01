@@ -1,5 +1,8 @@
 # Memory無限
 
+> **2.12.1:** 原生采集器在升级时会从保留的 rollout 重新构建 format-v2 每日 Token
+> 账本，不再因已有 format-v1 派生账本而中止采集。原始 rollout 与追加式记忆记录保持不变。
+
 > **2.12.0：**`daily_metrics.py` 在状态台加入本机与全部 trusted synchronized devices
 > 的双层每日柱状图，可切换消息和 Codex-reported Token、查看逐设备明细、同步过期提示，
 > 并统一按 `Asia/Tokyo` 划分日期。federation protocol v2 同步去路径、不可变的 Token

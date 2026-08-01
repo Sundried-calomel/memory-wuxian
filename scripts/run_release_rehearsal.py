@@ -548,6 +548,16 @@ def main() -> int:
                 "tests.test_memory_dashboard_federation",
             ],
         ),
+        (
+            "v2121-token-ledger-v1-upgrade-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_cli.MemoryCliTest.test_native_collector_matches_python_storage_contract",
+                "tests.test_v2121_release_contract",
+                "tests.test_token_usage",
+                "tests.test_daily_metrics",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     if args.contract_profile:
