@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Sequence
 
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+DAILY_USAGE_TIMEZONE = "Asia/Tokyo"
+DAILY_USAGE_TZINFO = dt.timezone(dt.timedelta(hours=9), name="JST")
 USAGE_FIELDS = (
     "input_tokens",
     "cached_input_tokens",
@@ -52,6 +54,23 @@ def normalize_usage(value: Any) -> Optional[Dict[str, int]]:
 
 def add_usage(left: Dict[str, int], right: Dict[str, int]) -> Dict[str, int]:
     return {field: int(left.get(field, 0)) + int(right.get(field, 0)) for field in USAGE_FIELDS}
+
+
+def subtract_usage(later: Dict[str, int], earlier: Dict[str, int]) -> Dict[str, int]:
+    return {
+        field: max(0, int(later.get(field, 0)) - int(earlier.get(field, 0)))
+        for field in USAGE_FIELDS
+    }
+
+
+def usage_day(timestamp: str) -> str:
+    try:
+        parsed = dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt.timezone.utc)
+        return parsed.astimezone(DAILY_USAGE_TZINFO).date().isoformat()
+    except (TypeError, ValueError):
+        return "unknown"
 
 
 def usage_signature(value: Optional[Dict[str, int]]) -> tuple[int, ...]:
@@ -114,6 +133,8 @@ def new_ledger(session_id: str, source_path: Path) -> Dict[str, Any]:
         "reported_usage": empty_usage(),
         "latest_request_usage": empty_usage(),
         "model_context_window": 0,
+        "daily_usage_timezone": DAILY_USAGE_TIMEZONE,
+        "daily_usage": {},
         "updated_at": None,
     }
 
@@ -158,17 +179,24 @@ def update_ledger(
         cumulative, latest_request, context_window = parsed
         current = normalize_usage(ledger.get("current_segment_usage")) or empty_usage()
         closed = normalize_usage(ledger.get("closed_segments_usage")) or empty_usage()
+        reset = False
         if (
             int(ledger.get("token_event_count") or 0) > 0
             and cumulative["total_tokens"] < current["total_tokens"]
         ):
             closed = add_usage(closed, current)
             ledger["counter_reset_count"] = int(ledger.get("counter_reset_count") or 0) + 1
+            reset = True
         signature = usage_signature(cumulative)
         if signature != previous_signature:
             ledger["model_request_count"] = int(ledger.get("model_request_count") or 0) + 1
         previous_signature = signature
         timestamp = str(event.get("timestamp") or "")
+        daily_usage = ledger.setdefault("daily_usage", {})
+        day = usage_day(timestamp)
+        previous_day_usage = normalize_usage(daily_usage.get(day)) or empty_usage()
+        delta = cumulative if reset else subtract_usage(cumulative, current)
+        daily_usage[day] = add_usage(previous_day_usage, delta)
         marker = {"line": line_number, "timestamp": timestamp}
         if ledger.get("first_token_event") is None:
             ledger["first_token_event"] = marker
@@ -184,6 +212,7 @@ def update_ledger(
         "kind": "codex-rollout-token-count",
         "path": str(source_path),
     }
+    ledger["daily_usage_timezone"] = DAILY_USAGE_TIMEZONE
     ledger["scanned_through_line"] = max(
         int(ledger.get("scanned_through_line") or 0),
         int(scanned_through_line),
@@ -239,6 +268,9 @@ def persist_token_usage(
         }
     destination = token_usage_path(root, session_id)
     ledger = load_token_usage(destination) or new_ledger(session_id, source_path)
+    rebuilt_daily_usage = "daily_usage" not in ledger
+    if rebuilt_daily_usage:
+        ledger = new_ledger(session_id, source_path)
     ledger_line = int(ledger.get("scanned_through_line") or 0)
     effective_start = max(ledger_line, int(start_line or 0))
     events = []
@@ -277,6 +309,7 @@ def persist_token_usage(
         ),
         "session_id": session_id,
         "changed_events": changed_events,
+        "rebuilt_daily_usage": rebuilt_daily_usage,
         "has_measurement": has_measurement,
         "ledger": (
             str(destination)
@@ -307,8 +340,16 @@ def token_usage_ledgers(root: Path) -> list[Dict[str, Any]]:
         return []
     ledgers = []
     for path in sorted(directory.glob("*.json")):
-        value = load_token_usage(path)
-        if value is not None:
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if (
+            isinstance(value, dict)
+            and value.get("format_version") in {1, FORMAT_VERSION}
+            and value.get("measurement") == "codex-reported-model-usage"
+            and normalize_usage(value.get("reported_usage")) is not None
+        ):
             ledgers.append(value)
     return ledgers
 

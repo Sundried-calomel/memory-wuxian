@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 2.12.0 - 2026-08-01
+
+- Added nested local/all-trusted-device daily message and Codex-reported token bars with three-locale labels, per-device drilldown, coverage warnings, and `Asia/Tokyo` day boundaries.
+- Added reset-aware daily token ledgers and bounded format-v2 backfill in both Python and the native collector.
+- Extended federation protocol v2 with immutable path-sanitized token-usage revisions while preserving v1 bundle reads and read-only peer replicas.
+- Added hash-bound capability admission, full release rehearsal, architecture ownership, and documentation contracts for federated daily metrics.
+
 ## 2.11.6 - 2026-08-01
 
 - Fixed Windows upgrade activation under Codex sandbox launchers by preferring

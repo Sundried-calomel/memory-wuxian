@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "binding_id": "memory-wuxian-v2-12-binding",
+  "project_id": "memory-wuxian",
+  "registry_sha256": "1969ee0037a96cd0b7e130afdba01fcdc152abe4efd1bf8825876ed480b2af2d",
+  "capabilities": [
+    {
+      "capability_id": "federated-daily-metrics",
+      "revision": "2.12.0",
+      "manifest_sha256": "e50412de1c171837d89abeb90d660f5fc5cd48719528bc1a29f7e05662b7d149",
+      "allowed_actions": ["aggregate-daily", "exchange-token-telemetry", "render-dashboard"],
+      "allowed_permissions": ["file-read", "file-write"],
+      "allowed_resources": ["authoritative-memory", "federation-metadata", "peer-replicas", "dashboard-status"]
+    }
+  ]
+}

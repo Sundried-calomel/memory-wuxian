@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.11.6",
+  "reviewed_version": "2.12.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -162,6 +162,10 @@
     {
       "id": "continuous-catch-up-and-debt-convergence",
       "required_tokens": ["collector-activation.json", "coverage-status.json", "maintenance_supervisor.py", "install_maintenance_supervisor.py", "semantic_plan.py", "runtime_effect_gate.py", "900,000", "catching-up", "semantic-index-stale-keyword-fallback"]
+    },
+    {
+      "id": "federated-daily-volume",
+      "required_tokens": ["daily_metrics.py", "trusted synchronized devices", "Codex-reported", "Asia/Tokyo", "protocol v2"]
     }
   ]
 }

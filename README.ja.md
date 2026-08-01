@@ -1,5 +1,12 @@
 # Memory無限
 
+> **2.12.0:** `daily_metrics.py` はこの端末とすべての trusted synchronized devices
+> を重ねた日別棒グラフを追加します。メッセージと Codex-reported Token の切替、
+> 端末別内訳、同期の古さを表示し、日付境界は `Asia/Tokyo` です。federation
+> protocol v2 はパスを除いた不変 Token 台帳リビジョンを交換し、protocol v1 の
+> 読み取り互換性も保持します。未取得テレメトリを文字数推定やアカウント全体値として
+> 扱いません。
+>
 > **2.11.6:** Windows 更新は検証済みのパッケージ指定 Skill ルートをプロセス SID
 > より優先し、Codex サンドボックスのユーザーパスがデスクトップショートカットへ
 > 混入することを防ぎます。ショートカットは原子的に作成され、最終ターゲット、作業

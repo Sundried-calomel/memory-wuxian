@@ -1170,7 +1170,7 @@ class MemoryStore:
         cursor = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
         last_line = int(cursor.get("last_line", 0))
         backfill_file_changes = int(cursor.get("file_change_format_version", 0)) < 1
-        backfill_token_usage = int(cursor.get("token_usage_format_version", 0)) < 1
+        backfill_token_usage = int(cursor.get("token_usage_format_version", 0)) < 2
         imported = 0
         duplicates = 0
         repaired_transcripts = 0
@@ -1192,7 +1192,7 @@ class MemoryStore:
                     "source_path": str(source_path),
                     "last_line": total_lines,
                     "file_change_format_version": 1,
-                    "token_usage_format_version": 1,
+                    "token_usage_format_version": 2,
                     "excluded_reason": excluded_reason,
                     "updated_at": now_iso(),
                 },
@@ -1320,7 +1320,7 @@ class MemoryStore:
                 "source_path": str(source_path),
                 "last_line": total_lines,
                 "file_change_format_version": 1,
-                "token_usage_format_version": 1,
+                "token_usage_format_version": 2,
                 "source_size": source_path.stat().st_size,
                 "source_mtime": dt.datetime.fromtimestamp(
                     source_path.stat().st_mtime,

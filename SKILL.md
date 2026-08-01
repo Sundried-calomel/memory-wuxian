@@ -181,6 +181,13 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     semantic, and backup debt with a hidden bounded supervisor; model
     unavailability must defer semantic work without consuming retries. Every
     actual semantic prompt must satisfy both character and UTF-8 byte budgets.
+67. Daily archive-volume reporting is a derived, read-only projection. Define
+    all devices as the local node plus each currently trusted synchronized peer
+    exactly once, use the Asia/Tokyo day boundary, and label Codex token values
+    only from `token_count` telemetry. Exchange only immutable path-sanitized
+    token-ledger revisions through federation protocol v2, retain v1 bundle
+    read compatibility, and expose missing or stale peer telemetry instead of
+    converting partial coverage into a zero or account-global claim.
 
 ## Operating workflow
 

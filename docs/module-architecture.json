@@ -54,6 +54,7 @@
       "architecture_owner": "Memory Plane",
       "patterns": [
         "scripts/conversation_titles.py",
+        "scripts/daily_metrics.py",
         "scripts/memory_indexing.py",
         "scripts/memory_content_store.py",
         "scripts/memory_guarded_features.py",
