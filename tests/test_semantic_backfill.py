@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -88,7 +89,7 @@ class SemanticBackfillV211Tests(unittest.TestCase):
             result = run_backfill(self.root, self.config, max_jobs=1, dry_run=False)
 
         dispatch.assert_called_once()
-        self.assertEqual(dispatch.call_args.args[2], second)
+        self.assertTrue(os.path.samefile(dispatch.call_args.args[2], second))
         self.assertEqual(result["completed_jobs"], 1)
         self.assertTrue(any(item["reason"] == "quarantined" for item in result["skipped"]))
 
