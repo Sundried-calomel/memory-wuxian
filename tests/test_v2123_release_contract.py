@@ -18,7 +18,7 @@ class V2123ReleaseContractTest(unittest.TestCase):
         )
         self.assertEqual(contract["validation_profile"], "targeted-patch")
         self.assertIn(
-            "windows-scheduled-semantic-drain-effect",
+            "v2123-semantic-drain-contract",
             contract["required_rehearsal_scenarios"],
         )
 

@@ -9,8 +9,7 @@
   "required_rehearsal_scenarios": [
     "python-compile",
     "architecture-contract",
-    "semantic-backfill-regression",
-    "windows-scheduled-semantic-drain-effect",
+    "v2123-semantic-drain-contract",
     "documentation-contract",
     "diff-check"
   ],

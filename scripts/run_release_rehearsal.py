@@ -569,6 +569,14 @@ def main() -> int:
                 "tests.test_memory_dashboard_federation",
             ],
         ),
+        (
+            "v2123-semantic-drain-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_semantic_backfill",
+                "tests.test_v2123_release_contract",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     if args.contract_profile:
