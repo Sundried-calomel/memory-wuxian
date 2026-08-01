@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 class V211ReleaseContractTest(unittest.TestCase):
     def test_mw211_01_continuous_catchup_contract_is_versioned(self):
         version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertEqual(version, "2.11.2")
+        self.assertEqual(version, "2.11.3")
         contract = json.loads((ROOT / "docs/work-contracts/v2.11.0.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["work_item_id"], "memory-wuxian-v2.11.0")
         review = json.loads((ROOT / "docs/promotion-reviews/v2.11.0.json").read_text(encoding="utf-8"))
@@ -37,6 +37,8 @@ class V211ReleaseContractTest(unittest.TestCase):
         self.assertNotIn("write_coverage_status", batch)
         self.assertEqual(source.count("store.write_coverage_status(&current_paths)?;"), 2)
         self.assertEqual(source.count("store.write_coverage_status(&scoped_paths)?;"), 2)
+        self.assertIn("fn cursor_requires_sync", source)
+        self.assertNotIn('if cursor.get("excluded_reason").is_some()', source)
 
 
 if __name__ == "__main__":

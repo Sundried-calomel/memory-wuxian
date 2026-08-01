@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2.11.3 - 2026-08-01
+
+- Included excluded and pre-v2.11 cursors in one-time metadata convergence when
+  completion, byte-offset, observed-size, or mtime fields are absent, instead
+  of permanently skipping them as already synchronized.
+
 ## 2.11.2 - 2026-08-01
 
 - Made every successfully verified source converge legacy cursor identity and
