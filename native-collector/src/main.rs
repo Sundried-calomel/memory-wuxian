@@ -2487,8 +2487,7 @@ impl Store {
         run_semantic_worker: bool,
     ) -> Result<Value> {
         self.repair_native_recovery_debt()?;
-        self.write_coverage_status(&paths)?;
-        let coverage_paths = paths.clone();
+        let path_count = paths.len();
         let completed_before = self.lock("archive.lock", || {
             Ok(completed_round_total(&self.load_state()?))
         })?;
@@ -2583,7 +2582,7 @@ impl Store {
                     .push(session);
             }
         }
-        result["session_count"] = json!(coverage_paths.len());
+        result["session_count"] = json!(path_count);
         let imported = result
             .get("imported_messages")
             .and_then(Value::as_u64)
@@ -2611,7 +2610,6 @@ impl Store {
         for field in ["created_summary_job", "deterministic_indexes"] {
             result[field] = finalized[field].clone();
         }
-        self.write_coverage_status(&coverage_paths)?;
         if run_semantic_worker
             && self.config.ai_summary.enabled
             && let Some(job) = result.get("created_summary_job").and_then(Value::as_str)
@@ -3468,6 +3466,7 @@ fn run_event_loop(
             .cloned()
             .collect();
         let sync_succeeded = changed_paths.is_empty() || sync_and_emit(store, changed_paths);
+        store.write_coverage_status(&current_paths)?;
         if sync_succeeded && known_stamps != current_stamps {
             telemetry.record_archive(source_watermark);
         }
@@ -3556,6 +3555,7 @@ fn run_event_loop(
         );
         let sync_succeeded =
             candidates.is_empty() || sync_and_emit(store, candidates.into_iter().collect());
+        store.write_coverage_status(&current_paths)?;
         if sync_succeeded && known_stamps != current_stamps {
             telemetry.record_archive(source_watermark);
         }
@@ -3817,6 +3817,8 @@ fn run() -> Result<()> {
             .map(|path| expand_tilde(path).and_then(|p| Ok(p.canonicalize()?)))
             .collect::<Result<Vec<_>>>()?
     };
+    let scoped_paths = initial_paths.clone();
+    store.write_coverage_status(&scoped_paths)?;
     eprintln!(
         "memory-wuxian-collector startup: discovered {} rollout files",
         initial_paths.len()
@@ -3834,6 +3836,7 @@ fn run() -> Result<()> {
     // Startup and explicit recovery must never block exact capture on a model.
     // The maintenance supervisor drains any summary job created by this pass.
     let initial = store.sync_startup_batch(initial_paths)?;
+    store.write_coverage_status(&scoped_paths)?;
     eprintln!("memory-wuxian-collector startup: synchronization completed");
     if args.once {
         emit(&initial)?;

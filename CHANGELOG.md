@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2.11.1 - 2026-08-01
+
+- Kept global coverage projection ownership with startup and event loops that
+  hold the complete activation scope, preventing one changed rollout from
+  replacing the 213-source catch-up view with a false one-source healthy view.
+
 ## 2.11.0 - 2026-08-01
 
 - Added upgrade-safe collector activation state so reinstalls never move the
