@@ -103,6 +103,91 @@ class RuntimeEffectGateTest(unittest.TestCase):
             {item["code"] for item in result["failures"]},
         )
 
+    def test_windows_activation_fails_on_sandbox_profile_shortcut(self):
+        skill = self.base / ".codex" / "skills" / "memory-wuxian"
+        launcher = skill / "bin" / "memory-wuxian-dashboard-launcher.exe"
+        icon = skill / "assets" / "memory-wuxian.ico"
+        inspector = skill / "scripts" / "inspect_dashboard_shortcut_windows.ps1"
+        for path in (launcher, icon, inspector):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"test")
+        python = self.base / "python.exe"
+        python.write_bytes(b"test")
+        launcher_config = self.base / "launcher.json"
+        launcher_config.write_text(
+            json.dumps({
+                "python_executable": str(python),
+                "archive_root": str(self.archive),
+            }),
+            encoding="utf-8",
+        )
+        shortcut_path = self.base / "Memory.lnk"
+        shortcut_path.write_bytes(b"test")
+        with patch(
+            "runtime_effect_gate.inspect_windows_shortcut",
+            return_value={
+                "exists": True,
+                "target_exists": True,
+                "target": r"C:\Users\CodexSandboxOffline\.codex\skills\memory-wuxian\bin\memory-wuxian-dashboard-launcher.exe",
+                "working_directory": r"C:\Users\CodexSandboxOffline\.codex\skills\memory-wuxian",
+                "icon": r"C:\Users\CodexSandboxOffline\.codex\skills\memory-wuxian\assets\memory-wuxian.ico,0",
+                "arguments": "",
+            },
+        ):
+            result = check_runtime_effects(
+                self.archive,
+                self.config,
+                skill_root=skill,
+                launcher_config=launcher_config,
+                windows_shortcut=shortcut_path,
+            )
+
+        self.assertIn(
+            "windows-shortcut-activation-invalid",
+            {item["code"] for item in result["failures"]},
+        )
+
+    def test_windows_activation_passes_only_for_exact_live_paths(self):
+        skill = self.base / ".codex" / "skills" / "memory-wuxian"
+        launcher = skill / "bin" / "memory-wuxian-dashboard-launcher.exe"
+        icon = skill / "assets" / "memory-wuxian.ico"
+        inspector = skill / "scripts" / "inspect_dashboard_shortcut_windows.ps1"
+        for path in (launcher, icon, inspector):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"test")
+        python = self.base / "python.exe"
+        python.write_bytes(b"test")
+        launcher_config = self.base / "launcher.json"
+        launcher_config.write_text(
+            json.dumps({
+                "python_executable": str(python),
+                "archive_root": str(self.archive.resolve()),
+            }),
+            encoding="utf-8",
+        )
+        shortcut_path = self.base / "Memory.lnk"
+        shortcut_path.write_bytes(b"test")
+        with patch(
+            "runtime_effect_gate.inspect_windows_shortcut",
+            return_value={
+                "exists": True,
+                "target_exists": True,
+                "target": str(launcher.resolve()),
+                "working_directory": str(skill.resolve()),
+                "icon": f"{icon.resolve()},0",
+                "arguments": "",
+            },
+        ):
+            result = check_runtime_effects(
+                self.archive,
+                self.config,
+                skill_root=skill,
+                launcher_config=launcher_config,
+                windows_shortcut=shortcut_path,
+            )
+
+        self.assertEqual(result["status"], "pass")
+
 
 if __name__ == "__main__":
     unittest.main()

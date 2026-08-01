@@ -1,12 +1,30 @@
 param([Parameter(Mandatory = $true)][string]$SkillRoot)
 
 $ErrorActionPreference = "Stop"
-$currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-$profileKey = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$currentSid"
-$profileImagePath = (Get-ItemProperty -LiteralPath $profileKey -Name ProfileImagePath).ProfileImagePath
-$realUserProfile = [Environment]::ExpandEnvironmentVariables($profileImagePath)
-$expectedSkillRoot = Join-Path $realUserProfile ".codex\skills\memory-wuxian"
-if (Test-Path -LiteralPath $expectedSkillRoot) {
+function Test-MemoryWuxianSkillRoot([string]$Candidate) {
+  if (-not $Candidate) { return $false }
+  $resolved = [IO.Path]::GetFullPath($Candidate)
+  if (-not (Test-Path -LiteralPath $resolved -PathType Container)) { return $false }
+  if ((Split-Path -Leaf $resolved) -ne "memory-wuxian") { return $false }
+  $skills = Split-Path -Parent $resolved
+  if ((Split-Path -Leaf $skills) -ne "skills") { return $false }
+  $codex = Split-Path -Parent $skills
+  if ((Split-Path -Leaf $codex) -ne ".codex") { return $false }
+  return (Test-Path -LiteralPath (Join-Path $resolved "SKILL.md") -PathType Leaf)
+}
+
+# The package-provided path is authoritative when it is a complete installed
+# Skill root. Sandboxed launchers can have a service SID whose ProfileList entry
+# is not the interactive user's profile.
+if (-not (Test-MemoryWuxianSkillRoot $SkillRoot)) {
+  $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  $profileKey = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$currentSid"
+  $profileImagePath = (Get-ItemProperty -LiteralPath $profileKey -Name ProfileImagePath).ProfileImagePath
+  $realUserProfile = [Environment]::ExpandEnvironmentVariables($profileImagePath)
+  $expectedSkillRoot = Join-Path $realUserProfile ".codex\skills\memory-wuxian"
+  if (-not (Test-MemoryWuxianSkillRoot $expectedSkillRoot)) {
+    throw "MemoryWuxian installed Skill root was not found."
+  }
   $SkillRoot = $expectedSkillRoot
 }
 $resolvedSkillRoot = [IO.Path]::GetFullPath($SkillRoot)

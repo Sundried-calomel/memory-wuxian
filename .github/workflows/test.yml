@@ -18,16 +18,21 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
+      - id: validation-profile
+        shell: bash
+        run: echo "profile=$(python scripts/run_release_rehearsal.py --print-validation-profile)" >> "$GITHUB_OUTPUT"
       - run: python -m pip install --disable-pip-version-check "PyYAML>=6.0,<7"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
       - run: cargo fmt --check --manifest-path native-collector/Cargo.toml
       - run: cargo check --locked --all-targets --manifest-path native-collector/Cargo.toml
-      - run: cargo test --locked --manifest-path native-collector/Cargo.toml
+      - if: steps.validation-profile.outputs.profile != 'targeted-patch'
+        run: cargo test --locked --manifest-path native-collector/Cargo.toml
       - run: cargo build --locked --bins --manifest-path native-collector/Cargo.toml
       - run: python scripts/check_documentation_contract.py
       - name: Run full Python suite once
+        if: steps.validation-profile.outputs.profile != 'targeted-patch'
         shell: bash
         run: |
           mkdir -p outputs/baseline
@@ -37,11 +42,18 @@ jobs:
           python -m unittest discover -s tests -v 2>&1 \
             | tee -a outputs/baseline/unittest.log
       - name: Build rehearsal evidence without rerunning unittest modules
+        if: steps.validation-profile.outputs.profile != 'targeted-patch'
         run: >-
           python scripts/run_release_rehearsal.py
           --output outputs/rehearsal/ubuntu-latest
           --exclude-baseline
           --reuse-unittest-evidence outputs/baseline/unittest.log
+      - name: Run bounded patch impact rehearsal
+        if: steps.validation-profile.outputs.profile == 'targeted-patch'
+        run: >-
+          python scripts/run_release_rehearsal.py
+          --contract-profile
+          --output outputs/rehearsal/ubuntu-latest
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -56,15 +68,22 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
+      - id: validation-profile
+        shell: pwsh
+        run: |
+          "profile=$(& python scripts/run_release_rehearsal.py --print-validation-profile)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       - run: python -m pip install --disable-pip-version-check "PyYAML>=6.0,<7"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
       - run: cargo fmt --check --manifest-path native-collector/Cargo.toml
       - run: cargo check --locked --all-targets --manifest-path native-collector/Cargo.toml
-      - run: cargo test --locked --manifest-path native-collector/Cargo.toml
+      - if: steps.validation-profile.outputs.profile != 'targeted-patch'
+        run: cargo test --locked --manifest-path native-collector/Cargo.toml
       - run: cargo build --locked --bins --manifest-path native-collector/Cargo.toml
       - name: Run full Python suite once
+        if: steps.validation-profile.outputs.profile != 'targeted-patch'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force outputs/baseline | Out-Null
@@ -74,11 +93,18 @@ jobs:
             Tee-Object -Append outputs/baseline/unittest.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build rehearsal evidence without rerunning unittest modules
+        if: steps.validation-profile.outputs.profile != 'targeted-patch'
         run: >-
           python scripts/run_release_rehearsal.py
           --output outputs/rehearsal/windows-2022
           --exclude-baseline
           --reuse-unittest-evidence outputs/baseline/unittest.log
+      - name: Run bounded patch impact rehearsal
+        if: steps.validation-profile.outputs.profile == 'targeted-patch'
+        run: >-
+          python scripts/run_release_rehearsal.py
+          --contract-profile
+          --output outputs/rehearsal/windows-2022
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -93,18 +119,22 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
+      - id: validation-profile
+        shell: bash
+        run: echo "profile=$(python scripts/run_release_rehearsal.py --print-validation-profile)" >> "$GITHUB_OUTPUT"
       - run: python -m pip install --disable-pip-version-check "PyYAML>=6.0,<7"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
       - run: cargo fmt --check --manifest-path native-collector/Cargo.toml
       - run: cargo check --locked --all-targets --manifest-path native-collector/Cargo.toml
-      - run: cargo test --locked --manifest-path native-collector/Cargo.toml
+      - if: steps.validation-profile.outputs.profile != 'targeted-patch'
+        run: cargo test --locked --manifest-path native-collector/Cargo.toml
       - run: cargo build --locked --bins --manifest-path native-collector/Cargo.toml
       - name: Build packaged macOS candidate binaries
         run: ./scripts/build_native_collector.sh
       - name: Run macOS platform contracts on pull requests
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.validation-profile.outputs.profile != 'targeted-patch'
         run: >-
           python -m unittest -v
           tests.test_platform_runtime
@@ -112,7 +142,7 @@ jobs:
           tests.test_auto_update
           tests.test_cloud_scheduler
       - name: Run full Python suite once on main
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.validation-profile.outputs.profile != 'targeted-patch'
         shell: bash
         run: |
           mkdir -p outputs/baseline
@@ -122,14 +152,20 @@ jobs:
           python -m unittest discover -s tests -v 2>&1 \
             | tee -a outputs/baseline/unittest.log
       - name: Run complete macOS rehearsal on main
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.validation-profile.outputs.profile != 'targeted-patch'
         run: >-
           python scripts/run_release_rehearsal.py
           --output outputs/rehearsal/macos-latest
           --exclude-baseline
           --reuse-unittest-evidence outputs/baseline/unittest.log
+      - name: Run bounded patch impact rehearsal
+        if: steps.validation-profile.outputs.profile == 'targeted-patch'
+        run: >-
+          python scripts/run_release_rehearsal.py
+          --contract-profile
+          --output outputs/rehearsal/macos-latest
       - uses: actions/upload-artifact@v7
-        if: always() && github.event_name == 'push'
+        if: always() && (github.event_name == 'push' || steps.validation-profile.outputs.profile == 'targeted-patch')
         with:
           name: candidate-evidence-macos
           path: outputs

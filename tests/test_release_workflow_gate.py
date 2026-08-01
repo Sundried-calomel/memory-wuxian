@@ -4,6 +4,8 @@ import re
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
@@ -22,6 +24,11 @@ def job_block(source: str, job_name: str) -> str:
 
 
 class ReleaseWorkflowGateTests(unittest.TestCase):
+    def test_candidate_workflow_is_valid_yaml(self):
+        workflow = ROOT / ".github/workflows/test.yml"
+        parsed = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+        self.assertIsInstance(parsed.get("jobs"), dict)
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.source = RELEASE_WORKFLOW.read_text(encoding="utf-8")

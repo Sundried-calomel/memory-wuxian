@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 class V211ReleaseContractTest(unittest.TestCase):
     def test_mw211_01_continuous_catchup_contract_is_versioned(self):
         version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertEqual(version, "2.11.5")
+        self.assertEqual(version, "2.11.6")
         contract = json.loads((ROOT / "docs/work-contracts/v2.11.0.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["work_item_id"], "memory-wuxian-v2.11.0")
         review = json.loads((ROOT / "docs/promotion-reviews/v2.11.0.json").read_text(encoding="utf-8"))
@@ -63,6 +63,21 @@ class V211ReleaseContractTest(unittest.TestCase):
             "maintenance-supervisor-not-healthy",
         ):
             self.assertIn(token, (ROOT / "scripts/runtime_effect_gate.py").read_text(encoding="utf-8"))
+
+    def test_mw2116_patch_rehearsal_is_explicitly_bounded(self):
+        contract = json.loads(
+            (ROOT / "docs/work-contracts/v2.11.6.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(contract["validation_profile"], "targeted-patch")
+        scenarios = set(contract["required_rehearsal_scenarios"])
+        self.assertIn("v2116-runtime-effect-gate-contract", scenarios)
+        self.assertIn("candidate-native-version", scenarios)
+        self.assertIn("architecture-contract", scenarios)
+        self.assertNotIn("bundled-native-version", scenarios)
+        self.assertNotIn("python-regressions", scenarios)
+        rehearsal = (ROOT / "scripts/run_release_rehearsal.py").read_text(encoding="utf-8")
+        self.assertIn("--contract-profile", rehearsal)
+        self.assertIn("--print-validation-profile", rehearsal)
 
 
 if __name__ == "__main__":

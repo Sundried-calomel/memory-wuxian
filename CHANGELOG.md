@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 2.11.6 - 2026-08-01
+
+- Fixed Windows upgrade activation under Codex sandbox launchers by preferring
+  a validated explicit Skill root over the process SID profile.
+- Made desktop-shortcut replacement self-verifying and rollback-capable, and
+  added exact post-install checks for target, working directory, icon,
+  arguments, launcher configuration, and target existence.
+- Extended the runtime-effect and release rehearsal gates so a present but
+  misdirected `.lnk` is a release failure rather than false activation health.
+
 ## 2.11.5 - 2026-08-01
 
 - Removed the collector's legacy synchronous AI execution path so capture only

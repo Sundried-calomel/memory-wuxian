@@ -4,9 +4,14 @@
 
 Use a release-candidate branch before assigning an immutable formal version.
 Run targeted tests while the candidate changes, then run one three-platform
-candidate CI matrix after the changes stabilize. A separate complete local
-rehearsal is optional when the same commit and platform are already represented
-by that matrix. Repair failures without creating formal tags or installers.
+candidate CI matrix after the changes stabilize. A bounded patch may declare
+`validation_profile: targeted-patch` and an explicit affected scenario list in
+its version work contract; `--contract-profile` and CI then run that impact
+matrix instead of unrelated historical suites. Missing, ambiguous, structural,
+cross-owner, or platform-expanding scope defaults to the complete gate. A
+separate complete local rehearsal is optional when the same commit and platform
+are already represented by that matrix. Repair failures without creating
+formal tags or installers.
 
 Only a candidate that has passed the required matrix, installer builds,
 package-content checks, and applicable live installation rehearsal may be
@@ -185,6 +190,14 @@ Required scenarios:
     Sustained native history recovery must also release the archive lock and
     yield between bounded batches so maintenance, repair, and backup workers
     cannot remain alive but make no observable progress.
+47. The Windows post-install gate must resolve the installed `.lnk` through the
+    Windows Shell and compare its target, working directory, icon, arguments,
+    launcher configuration, and target existence with the exact candidate
+    Skill root and active archive. A shortcut that merely exists is not effect
+    evidence. Rehearsal must include a Codex sandbox process whose SID resolves
+    to a service profile and prove that a validated package-provided Skill root
+    remains authoritative; `CodexSandboxOffline` or another process profile
+    must never replace the interactive user's installed path.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid
