@@ -210,6 +210,18 @@ Use Memory無限 to preserve conversation history outside the active context win
     service profile. Post-install evidence must resolve the final `.lnk` and
     verify its exact target, working directory, icon, empty arguments, launcher
     configuration, and live target; file existence alone is not activation.
+76. Before changing a module, read
+    `docs/retrospectives/memory-wuxian-defect-workbook.md` and identify every
+    applicable recurrence family. A bug fix is incomplete until the workbook
+    records its trigger, escaped boundary, regression test, installed-runtime
+    effect check, and evidence. New evidence appends or corrects a record; it
+    never erases an earlier incident.
+77. Test the user-visible route introduced by the change, not only the route
+    that originally received a fix. Changes to launchers, installers,
+    background workers, migrations, dashboards, synchronization, or runtime
+    selection must include the original trigger, an adjacent-entry regression
+    case, and a real installed or production-sized effect check appropriate to
+    the affected platform.
 
 ## Authority order
 
