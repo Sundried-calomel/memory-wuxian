@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class V2125ReleaseContractTest(unittest.TestCase):
     def test_duplicate_pending_round_recovery_is_version_bound(self) -> None:
         version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertEqual(version, "2.12.6")
+        self.assertEqual(version, "2.12.7")
         contract = json.loads((ROOT / "docs/work-contracts/v2.12.5.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["validation_profile"], "targeted-patch")
         self.assertIn("v2125-duplicate-pending-round-contract", contract["required_rehearsal_scenarios"])

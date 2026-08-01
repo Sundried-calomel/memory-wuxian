@@ -169,6 +169,19 @@
   completed states.
 - Families: `MW-R05`, `MW-R08`, `MW-R10`.
 
+### MW-WIN-013: recovery fix did not cover the native live-write path
+
+- Evidence: v2.12.6 repaired recovered state, but the running native collector
+  again advanced a shared round after the first conversation final and
+  reintroduced the same derived drift.
+- Escape boundary: recovery tests covered reconstruction only; they did not
+  exercise the adjacent live append entry point that owns normal state writes.
+- Permanent gate: Python and Rust live append paths must suppress global round
+  completion while another pending conversation shares the same round number.
+  The regression must close the first conversation, inspect partial state,
+  then close the last conversation and inspect completed state.
+- Families: `MW-R05`, `MW-R08`, `MW-R10`.
+
 ## macOS 事故账
 
 ### MW-MAC-001：不稳定 Python 身份使后台权限失效

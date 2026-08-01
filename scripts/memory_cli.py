@@ -920,21 +920,27 @@ class MemoryStore:
                 pending["latest_user_message_id"] = message_id
                 pending_rounds[conversation_id] = pending
             elif speaker == "assistant" and pending is not None and complete_round:
-                completed = int(state["completed_rounds"])
-                out_of_order = {
-                    int(number)
-                    for number in state["completed_rounds_out_of_order"]
-                    if int(number) > completed
-                }
-                if round_number == completed + 1:
-                    completed = round_number
-                    while completed + 1 in out_of_order:
-                        out_of_order.remove(completed + 1)
-                        completed += 1
-                elif round_number > completed + 1:
-                    out_of_order.add(round_number)
-                state["completed_rounds"] = completed
-                state["completed_rounds_out_of_order"] = sorted(out_of_order)
+                shared_pending = any(
+                    other_conversation_id != conversation_id
+                    and int(details.get("number", 0)) == round_number
+                    for other_conversation_id, details in pending_rounds.items()
+                )
+                if not shared_pending:
+                    completed = int(state["completed_rounds"])
+                    out_of_order = {
+                        int(number)
+                        for number in state["completed_rounds_out_of_order"]
+                        if int(number) > completed
+                    }
+                    if round_number == completed + 1:
+                        completed = round_number
+                        while completed + 1 in out_of_order:
+                            out_of_order.remove(completed + 1)
+                            completed += 1
+                    elif round_number > completed + 1:
+                        out_of_order.add(round_number)
+                    state["completed_rounds"] = completed
+                    state["completed_rounds_out_of_order"] = sorted(out_of_order)
                 pending_rounds.pop(conversation_id, None)
             state["pending_rounds"] = pending_rounds
             self.save_state(state)

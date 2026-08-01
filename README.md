@@ -1,5 +1,8 @@
 # Memory無限
 
+> **2.12.7:** Python and native live capture now wait for the last pending
+> conversation sharing a legacy round before advancing global completion.
+
 > **2.12.6:** A shared legacy round is complete only after every conversation
 > with a user message has its own final answer, keeping recovered completion
 > and pending state consistent.

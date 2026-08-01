@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "version": "2.12.7",
+  "observed_at": "2026-08-02T06:42:00+09:00",
+  "native_version": "memory-wuxian-collector 2.12.7",
+  "repair_status": "ok",
+  "post_restart_heartbeat_status": "ok",
+  "integrity_issue_count": 0,
+  "repairable_issue_count": 0,
+  "collector_restarted": true,
+  "raw_history_rewritten": false
+}

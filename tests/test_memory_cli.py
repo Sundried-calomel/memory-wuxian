@@ -2146,6 +2146,27 @@ summaries:
         self.assertEqual(completed["completed_rounds"], 1)
         self.assertEqual(completed["pending_rounds"], {})
 
+    def test_live_append_waits_for_last_conversation_sharing_round(self):
+        first = self.run_cli("append", "--speaker", "user", "--conversation-id", "codex:a", "--text", "A user")
+        state_path = self.root / "state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["pending_rounds"]["codex:b"] = {
+            "number": first["round_number"],
+            "first_user_message_id": "legacy-b-user",
+            "latest_user_message_id": "legacy-b-user",
+        }
+        state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        self.run_cli("append", "--speaker", "assistant", "--conversation-id", "codex:a", "--text", "A final")
+        partial = self.run_cli("status")
+        self.assertEqual(partial["completed_rounds"], 0)
+        self.assertEqual(set(partial["pending_rounds"]), {"codex:b"})
+
+        self.run_cli("append", "--speaker", "assistant", "--conversation-id", "codex:b", "--text", "B final")
+        complete = self.run_cli("status")
+        self.assertEqual(complete["completed_rounds"], 1)
+        self.assertEqual(complete["pending_rounds"], {})
+
     def test_native_collector_matches_python_storage_contract(self):
         self.config.write_text(
             self.config.read_text(encoding="utf-8")

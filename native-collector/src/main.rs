@@ -1150,25 +1150,31 @@ impl Store {
                     }),
                 );
             } else if speaker == "assistant" && pending.is_some() && complete_round {
-                let mut completed = completed_rounds;
-                let mut out_of_order: BTreeSet<u64> = state
-                    .get("completed_rounds_out_of_order")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_u64)
-                    .filter(|number| *number > completed)
-                    .collect();
-                if round_number == completed + 1 {
-                    completed = round_number;
-                    while out_of_order.remove(&(completed + 1)) {
-                        completed += 1;
+                let shared_pending = pending_rounds.iter().any(|(other_id, details)| {
+                    other_id != conversation_id
+                        && details.get("number").and_then(Value::as_u64) == Some(round_number)
+                });
+                if !shared_pending {
+                    let mut completed = completed_rounds;
+                    let mut out_of_order: BTreeSet<u64> = state
+                        .get("completed_rounds_out_of_order")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_u64)
+                        .filter(|number| *number > completed)
+                        .collect();
+                    if round_number == completed + 1 {
+                        completed = round_number;
+                        while out_of_order.remove(&(completed + 1)) {
+                            completed += 1;
+                        }
+                    } else if round_number > completed + 1 {
+                        out_of_order.insert(round_number);
                     }
-                } else if round_number > completed + 1 {
-                    out_of_order.insert(round_number);
+                    state["completed_rounds"] = json!(completed);
+                    state["completed_rounds_out_of_order"] = json!(out_of_order);
                 }
-                state["completed_rounds"] = json!(completed);
-                state["completed_rounds_out_of_order"] = json!(out_of_order);
                 pending_rounds.remove(conversation_id);
             }
             state["pending_rounds"] = Value::Object(pending_rounds);

@@ -256,3 +256,12 @@ attempt. `L2-000005` was created with SHA-256
 - Add the missing final and require recovered completion with no pending entry.
 - Repair only derived state with backup, then require heartbeat `ok`, zero
   integrity issues, and zero repairable issues.
+
+# v2.12.7 targeted live shared-round guard hotfix
+
+- Exercise the Python live append path with two pending conversations sharing
+  one legacy round.
+- Require the first final to keep global completion unchanged and the last
+  final to advance it.
+- Install the native candidate, restart collector, and require heartbeat `ok`
+  without another derived repair.

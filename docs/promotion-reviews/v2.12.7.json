@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "version": "2.12.7",
+  "candidate": "live-shared-round-guard",
+  "decision": "promote-after-targeted-ci",
+  "scope": "Python and Rust live completion state updates",
+  "raw_history_changed": false,
+  "installed_effect": "outputs/rehearsal/v2.12.7/windows-installed-effect.json",
+  "rollback": "Restore the previous Skill package and generated state backup; raw history requires no rollback."
+}
