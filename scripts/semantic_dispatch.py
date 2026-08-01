@@ -27,7 +27,8 @@ def codex_runtime_available(config_path: Path, *, timeout_seconds: int = 10) -> 
     config = load_simple_yaml(config_path)
     codex_key = "codex_cli_path_windows" if os.name == "nt" else "codex_cli_path"
     configured = str(nested_get(config, ["ai_summary", codex_key], "codex.exe" if os.name == "nt" else "codex"))
-    executable = shutil.which(configured) or (configured if Path(configured).expanduser().is_file() else None)
+    expanded = Path(configured).expanduser()
+    executable = shutil.which(configured) or (str(expanded) if expanded.is_file() else None)
     if not executable:
         return False, "Codex CLI executable is unavailable"
     try:

@@ -583,6 +583,31 @@ def debt_status_projection(root: Path) -> dict[str, Any]:
         for kind in DEBT_KINDS
     }
 
+    supervisor_path = root / "maintenance/supervisor-state.json"
+    try:
+        if supervisor_path.stat().st_size > MAX_DEBT_PROJECTION_BYTES:
+            raise ValueError("projection-too-large")
+        supervisor = json.loads(supervisor_path.read_text(encoding="utf-8"))
+        result = supervisor.get("result", {}) if isinstance(supervisor, dict) else {}
+        skipped = result.get("skipped", []) if isinstance(result, dict) else []
+        runtime_failure = next(
+            (
+                item for item in skipped
+                if isinstance(item, dict) and item.get("reason") == "runtime-unavailable"
+            ),
+            None,
+        )
+        semantic = debts["semantic_debt"]
+        if runtime_failure and semantic["count"] > 0 and not result.get("completed_jobs"):
+            semantic["state"] = "blocked"
+            semantic["last_error"] = str(
+                runtime_failure.get("error") or "Codex runtime is unavailable"
+            )[:500]
+    except FileNotFoundError:
+        pass
+    except (OSError, json.JSONDecodeError, ValueError):
+        projection_error = projection_error or "supervisor-projection-invalid"
+
     coverage_path = root / "imports/codex/coverage-status.json"
     try:
         if coverage_path.stat().st_size > MAX_DEBT_PROJECTION_BYTES:
@@ -616,7 +641,11 @@ def debt_status_projection(root: Path) -> dict[str, Any]:
     return {
         "format": str((payload or {}).get("format") or "memory-wuxian-debt-status-v1"),
         "updated_at": (payload or {}).get("updated_at"),
-        "health": (payload or {}).get("health"),
+        "health": (
+            "attention"
+            if debts["semantic_debt"].get("state") == "blocked"
+            else (payload or {}).get("health")
+        ),
         "source": source,
         "projection_error": projection_error,
         "debts": debts,

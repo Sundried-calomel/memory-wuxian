@@ -119,6 +119,43 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         self.assertEqual(dashboard_health({}, {"alerts": []}, quarantined), "attention")
         self.assertEqual(dashboard_health({}, {"alerts": []}, corrupt), "error")
 
+    def test_dashboard_exposes_runtime_blocked_semantic_debt(self):
+        root = self.store.root
+        maintenance = root / "maintenance/status-projection.json"
+        maintenance.parent.mkdir(parents=True)
+        maintenance.write_text(
+            json.dumps(
+                {
+                    "semantic_debt": {
+                        "pending_summary_jobs": 2,
+                        "maintenance": {"counts": {"semantic-ready": 2}},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "maintenance/supervisor-state.json").write_text(
+            json.dumps(
+                {
+                    "result": {
+                        "completed_jobs": 0,
+                        "skipped": [
+                            {
+                                "reason": "runtime-unavailable",
+                                "error": "Codex CLI executable is unavailable",
+                            }
+                        ],
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        projection = debt_status_projection(root)
+        semantic = projection["debts"]["semantic_debt"]
+        self.assertEqual(semantic["state"], "blocked")
+        self.assertIn("Codex CLI", semantic["last_error"])
+        self.assertEqual(projection["health"], "attention")
+
     def test_live_cache_health_can_downgrade_after_debt_clears(self):
         cache = DashboardSnapshotCache(self.store)
         cache._payload = {"health": "attention", "archive_health": {}}

@@ -1,6 +1,6 @@
 # Memory無限
 
-> **2.11.3:** Continuous catch-up now survives installs and upgrades. The native
+> **2.11.4:** Continuous catch-up now survives installs and upgrades. The native
 > collector preserves the earliest boundary in `collector-activation.json`,
 > streams retained rollout files in bounded batches, resumes from durable
 > cursors, and publishes `coverage-status.json`. If capture is interrupted
@@ -19,6 +19,11 @@
 > completion metadata, so zero-byte metadata debt does not remain permanent.
 > This one-time convergence also covers legacy excluded subagent/exec cursors
 > without importing their content into top-level memory.
+> On Windows, the semantic-runtime probe now executes the expanded absolute
+> Codex path instead of passing a literal `~` path to the operating system.
+> Runtime-blocked semantic debt exposes its redacted cause in the dashboard.
+> Background-executor releases now require a synthetic live scheduler canary
+> that proves pending `1 -> 0` and summary registry `0 -> 1`.
 >
 > **2.4.6:** This stable release adds a cross-device semantic runtime contract,
 > explicit local E5 realization, and linear-time raw-pointer construction for

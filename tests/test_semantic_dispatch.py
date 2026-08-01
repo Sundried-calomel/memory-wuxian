@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -12,10 +14,31 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from memory_jobs import MaintenanceQueue
-from semantic_dispatch import dispatch_job
+from semantic_dispatch import codex_runtime_available, dispatch_job
 
 
 class SemanticDispatchTests(unittest.TestCase):
+    def test_mw211_runtime_probe_executes_expanded_home_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            executable = home / ".codex" / ".sandbox-bin" / "codex.exe"
+            executable.parent.mkdir(parents=True)
+            executable.write_bytes(b"candidate")
+            config = home / "config.yaml"
+            config.write_text(
+                'ai_summary:\n  codex_cli_path_windows: "~/.codex/.sandbox-bin/codex.exe"\n'
+                '  codex_cli_path: "~/.codex/.sandbox-bin/codex.exe"\n',
+                encoding="utf-8",
+            )
+            completed = subprocess.CompletedProcess([], 0, stdout="", stderr="Logged in")
+            with patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
+                with patch("semantic_dispatch.shutil.which", return_value=None):
+                    with patch("semantic_dispatch.subprocess.run", return_value=completed) as run:
+                        available, reason = codex_runtime_available(config)
+            self.assertTrue(available)
+            self.assertEqual(reason, "available")
+            self.assertEqual(Path(run.call_args.args[0][0]), executable)
+
     def test_mw27_dispatch_001_persists_eligibility_before_one_shot_worker(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
