@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 2.12.5 - 2026-08-02
+
+- Recover unresolved rounds by conversation identity across the complete raw
+  history, even when a legacy race caused two conversations to share one
+  global round number.
+- Keep the Python auditor and native collector recovery algorithms equivalent;
+  repair only derived state and preserve an automatic rollback backup.
+- Add a regression for one completed and one still-open conversation sharing
+  the same historical round number.
+
 ## 2.12.4 - 2026-08-02
 
 - Preserve sparse fields in lossless raw-record and child-summary tabular

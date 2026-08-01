@@ -1,6 +1,6 @@
 [package]
 name = "memory-wuxian-collector"
-version = "2.12.4"
+version = "2.12.5"
 edition = "2024"
 license = "MIT"
 description = "Event-driven native Codex conversation collector for Memory Wuxian"

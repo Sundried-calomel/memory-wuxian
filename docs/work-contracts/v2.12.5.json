@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.12.5",
+  "candidate_id": "v2.12.5-duplicate-pending-round-recovery-hotfix",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-control-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "architecture-contract",
+    "bundled-native-version",
+    "v2125-duplicate-pending-round-contract",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "target": "Recover every unresolved conversation after legacy state races caused a global round number to be reused.",
+  "primary_semantics": "Pending-round identity is conversation ID plus round number; global completion watermarks never hide an unresolved conversation.",
+  "invariants": [
+    "Raw dialogue and existing summaries remain append-only and are never rewritten.",
+    "Recovery scans every positive-numbered raw record in sequence order.",
+    "Python and Rust apply the same per-conversation completion rule.",
+    "Applied state repair preserves a rollback backup."
+  ],
+  "allowed_changes": [
+    "Remove global completed-watermark filtering from pending-round recovery.",
+    "Add the duplicate-round regression, installed evidence, version metadata, and three-locale release notes."
+  ],
+  "prohibited_changes": [
+    "Renumber, normalize, delete, or regenerate any raw record or persisted summary.",
+    "Run a broad full-release rehearsal for this narrow patch."
+  ],
+  "before_after_checks": [
+    "Reproduce one completed and one unresolved conversation sharing a round number.",
+    "Restore the missing pending conversation from raw history.",
+    "Verify heartbeat status is ok, quarantine remains zero, and existing raw bytes remain unchanged in a bounded collector pause."
+  ],
+  "required_evidence": [
+    "duplicate-pending-round-regression",
+    "python-rust-recovery-equivalence",
+    "windows-installed-state-repair-effect",
+    "documentation-contract"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.12.5-preflight.json",
+    "preflight_sha256": "9c66b1f8134aa8bccedc7a1abec33104679f00807f026c7650f6795b9dcb953d",
+    "completion_receipt": "docs/defect-receipts/v2.12.5-completion.json",
+    "completion_sha256": "24364ea20191737f55cf1590c34c3d311f7735fc2fd7b4744bb43af838fa5748",
+    "applicable_families": ["MW-R05", "MW-R07", "MW-R10"],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "A pre-v2.12.4 unlocked repair dropped an open conversation from derived pending state while raw history retained it.",
+      "A later conversation reused the same global round number and the watermark-filtered auditor could eventually hide the unresolved legacy conversation."
+    ]
+  },
+  "lifecycle_state": "verified"
+}

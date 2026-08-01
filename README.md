@@ -1,5 +1,9 @@
 # Memory無限
 
+> **2.12.5:** Legacy duplicate-round recovery now tracks unresolved rounds per
+> conversation across all immutable raw records. Repair rebuilds only derived
+> state and preserves source dialogue unchanged.
+
 > **2.12.4:** Lossless semantic payloads now distinguish absent fields from
 > explicit JSON `null`, allowing mixed legacy Level-1 metadata to form parent
 > summaries. Heartbeat audits now share the collector archive lock so an

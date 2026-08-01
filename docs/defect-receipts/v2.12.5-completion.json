@@ -1,0 +1,20 @@
+{
+  "change_kind": "repair",
+  "changed_workbook_entries": [
+    "memory-wuxian-project-defects"
+  ],
+  "created_at": "2026-08-01T20:45:54+00:00",
+  "no_applicable_family_reason": null,
+  "preflight_path": "C:\\Users\\56453\\Documents\\本地文件整理\\Memory无限更新审计\\memory-wuxian\\docs\\defect-receipts\\v2.12.5-preflight.json",
+  "preflight_sha256": "d3d5ddb3ad639c12ca5d055507eeb23a75713a7eb152b4c85e4a6324ce4c7a97",
+  "receipt_sha256": "3bd42581e8f4b64e58c753a865bac76ad0579daf134348313770557f5c698f4f",
+  "receipt_type": "defect-workbook-completion",
+  "schema_version": 1,
+  "selected_families": [
+    "MW-R05",
+    "MW-R07",
+    "MW-R10"
+  ],
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\本地文件整理\\Memory无限更新审计\\memory-wuxian"
+}

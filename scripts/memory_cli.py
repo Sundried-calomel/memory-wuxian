@@ -741,7 +741,7 @@ class MemoryStore:
         pending_rounds: Dict[str, Dict[str, Any]] = {}
         for record in records:
             number = int(record.get("round_number", 0))
-            if number <= completed_high_watermark:
+            if number <= 0:
                 continue
             conversation_id = str(record["conversation_id"])
             if record["speaker"] == "user":
