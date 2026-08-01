@@ -1327,15 +1327,7 @@ impl Store {
             .root
             .join("imports/codex/token-usage")
             .join(format!("{}.json", Self::safe_session_id(session_id)));
-        let mut ledger = if path.exists() {
-            let value = read_json(&path)?;
-            if value.get("format_version").and_then(Value::as_u64)
-                != Some(TOKEN_USAGE_FORMAT_VERSION)
-            {
-                bail!("unsupported token usage ledger format: {}", path.display());
-            }
-            value
-        } else {
+        let new_ledger = || {
             json!({
                 "format_version": TOKEN_USAGE_FORMAT_VERSION,
                 "measurement": "codex-reported-model-usage",
@@ -1360,6 +1352,18 @@ impl Store {
                 "daily_usage": {},
                 "updated_at": null,
             })
+        };
+        let mut ledger = if path.exists() {
+            let value = read_json(&path)?;
+            if value.get("format_version").and_then(Value::as_u64)
+                == Some(TOKEN_USAGE_FORMAT_VERSION)
+            {
+                value
+            } else {
+                new_ledger()
+            }
+        } else {
+            new_ledger()
         };
         let ledger_line = ledger
             .get("scanned_through_line")
@@ -2744,7 +2748,7 @@ impl Store {
             }
             let result = self.sync_prepared_file(prepared)?;
             if !inherited_recovery_debt {
-                fs::remove_file(&recovery_debt)?;
+                remove_file_if_present(&recovery_debt)?;
             }
             imported += result.imported_messages;
             duplicates += result.duplicate_messages;
@@ -2796,6 +2800,14 @@ impl Store {
             "backup": Value::Null,
             "backup_debt": backup_debt.map(|path| path.to_string_lossy().into_owned()),
         }))
+    }
+}
+
+fn remove_file_if_present(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -3592,6 +3604,17 @@ ai_summary:
         assert_eq!(adaptive_fallback(Duration::from_secs(0)), ACTIVE_FALLBACK);
         assert_eq!(adaptive_fallback(IDLE_AFTER), IDLE_FALLBACK);
         assert_eq!(adaptive_fallback(DEEP_IDLE_AFTER), DEEP_IDLE_FALLBACK);
+    }
+
+    #[test]
+    fn recovery_marker_cleanup_is_idempotent() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let marker = temporary.path().join("native-recovery-debt.json");
+        fs::write(&marker, b"{}")?;
+        remove_file_if_present(&marker)?;
+        remove_file_if_present(&marker)?;
+        assert!(!marker.exists());
+        Ok(())
     }
 
     #[cfg(target_os = "macos")]

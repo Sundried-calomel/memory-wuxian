@@ -1,5 +1,9 @@
 # Memory無限
 
+> **2.12.1:** The native collector now rebuilds a retained format-v1 token
+> ledger into the format-v2 daily ledger instead of aborting collection during
+> an upgrade. Raw rollout files and append-only memory records remain unchanged.
+
 > **2.12.0:** `daily_metrics.py` adds a nested daily chart for this device and
 > all trusted synchronized devices, with message and Codex-reported token
 > modes, per-device drilldown, stale-sync warnings, and an `Asia/Tokyo` day

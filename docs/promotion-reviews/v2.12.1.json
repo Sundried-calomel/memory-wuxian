@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.12.1",
+  "work_item_id": "memory-wuxian-v2.12.1",
+  "candidate_id": "v2.12.1-token-ledger-upgrade-candidate",
+  "owner_id": "memory-plane-control-plane",
+  "source_revision": "hotfix/v2.12.1-token-ledger-upgrade",
+  "product_evolution_record_id": "memory-wuxian-v2.12.1-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The repair closes a format migration defect inside the existing token-ledger Owner and does not create a new capability.",
+  "evidence_refs": [
+    "outputs/rehearsal/v2.12.1/report.json",
+    "references/release-rehearsal.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-01T00:00:00Z"
+}

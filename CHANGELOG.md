@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2.12.1 - 2026-08-01
+
+- Fixed native collector upgrades from format-v1 token ledgers: retained rollout telemetry now rebuilds the derived format-v2 daily ledger instead of aborting collection.
+- Made recovery-marker cleanup idempotent when the concurrent maintenance supervisor has already verified and removed the marker.
+- Added a real native v1-to-v2 migration regression and a targeted patch release gate.
+
 ## 2.12.0 - 2026-08-01
 
 - Added nested local/all-trusted-device daily message and Codex-reported token bars with three-locale labels, per-device drilldown, coverage warnings, and `Asia/Tokyo` day boundaries.
