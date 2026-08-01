@@ -85,7 +85,11 @@ def run_backfill(
             skipped.append({"job": str(job_path), "reason": "dispatch-failed", "error": redact_error(exc)})
             continue
         if result.get("status") == "unavailable":
-            skipped.append({"job": str(job_path), "reason": "runtime-unavailable"})
+            skipped.append({
+                "job": str(job_path),
+                "reason": "runtime-unavailable",
+                "error": redact_error(str(result.get("reason") or "Codex runtime is unavailable")),
+            })
             break
         if result.get("status") in {"deferred", "quarantined"}:
             skipped.append({"job": str(job_path), "reason": str(result["status"])})

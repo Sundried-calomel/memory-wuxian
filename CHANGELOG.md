@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 2.11.4 - 2026-08-01
+
+- Fixed the Windows semantic-runtime availability probe so a configured
+  `~/.codex/...` executable is launched through its expanded absolute path.
+- Preserved the redacted runtime failure in maintenance state and surfaced
+  blocked semantic debt as dashboard attention instead of silent backlog.
+- Added a live-effect release gate for background executors: a synthetic task
+  must move pending `1 -> 0` and summary registry `0 -> 1` under the installed
+  scheduler identity; process existence and mocked success are insufficient.
+
 ## 2.11.3 - 2026-08-01
 
 - Included excluded and pre-v2.11 cursors in one-time metadata convergence when

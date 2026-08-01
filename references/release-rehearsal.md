@@ -152,6 +152,15 @@ Required scenarios:
     maintenance uses hidden bounded schedulers, deferred semantic work does not
     consume retries, oversized prompts satisfy character and UTF-8 byte limits,
     and the dashboard distinguishes four independent debt classes.
+45. Any release that changes a background executor or runtime resolver must run
+    a synthetic live semantic canary under the installed scheduler identity.
+    The receipt must prove the pending count decreases from 1 to 0, the summary
+    registry increases from 0 to 1, the generated summary is indexable, no real
+    archive content entered the canary, and the temporary task was removed.
+    Process existence, task registration, mocked completion, or a zero exit code
+    alone is not effect evidence. Backend optimizations must likewise expose a
+    route counter or before/after metric proving the intended production path
+    ran; silent fallback to the legacy path fails the release gate.
 
 Every version uses a dedicated output directory such as
 `outputs/rehearsal/v1.9.0`. A report generated for another version is not valid

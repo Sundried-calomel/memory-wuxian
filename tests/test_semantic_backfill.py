@@ -113,6 +113,21 @@ class SemanticBackfillV211Tests(unittest.TestCase):
         self.assertEqual(state["status"], "completed")
         self.assertEqual(state["cycle"], 2)
 
+    def test_mw211_supervisor_records_runtime_failure_detail(self):
+        job = self.job("job-000006.json", "conversation:test:rounds:11-12", boundary=12)
+        with patch(
+            "semantic_backfill.dispatch_job",
+            return_value={
+                "status": "unavailable",
+                "reason": "Codex CLI executable is unavailable",
+            },
+        ):
+            result = run_backfill(self.root, self.config, max_jobs=1, dry_run=False)
+        self.assertEqual(result["completed_jobs"], 0)
+        self.assertEqual(result["skipped"][0]["reason"], "runtime-unavailable")
+        self.assertIn("Codex CLI executable", result["skipped"][0]["error"])
+        self.assertTrue(job.exists())
+
     def test_mw211_dispatch_004_runtime_drop_after_probe_restores_attempt(self):
         job = self.job("job-000004.json", "conversation:test:rounds:7-8", boundary=8)
         probes = iter([(True, "available"), (False, "network unavailable")])
