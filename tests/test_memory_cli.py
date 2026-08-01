@@ -2121,6 +2121,11 @@ summaries:
             json.loads((self.root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
             json.loads((native_root / "imports/codex/native-parity.json").read_text(encoding="utf-8"))["last_line"],
         )
+        native_cursor_path = native_root / "imports/codex/native-parity.json"
+        stale_cursor = json.loads(native_cursor_path.read_text(encoding="utf-8"))
+        stale_cursor["source_path"] = "C:/stale/path/rollout-native-parity.jsonl"
+        stale_cursor["complete"] = False
+        native_cursor_path.write_text(json.dumps(stale_cursor), encoding="utf-8")
         repeated = subprocess.run(
             native.args,
             text=True,
@@ -2130,6 +2135,9 @@ summaries:
         )
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["imported_messages"], 0)
+        converged_cursor = json.loads(native_cursor_path.read_text(encoding="utf-8"))
+        self.assertEqual(str(session.resolve()), converged_cursor["source_path"])
+        self.assertTrue(converged_cursor["complete"])
 
         guardian = sessions_root / "rollout-guardian.jsonl"
         guardian.write_text(

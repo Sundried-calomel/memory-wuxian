@@ -1811,26 +1811,26 @@ impl Store {
         result.token_usage_changed_events = token_usage.changed_events;
         result.reported_total_tokens = token_usage.reported_total_tokens;
         result.token_usage_ledger = token_usage.ledger_path;
-        if committed_line != last_line || backfill_file_changes || backfill_token_usage {
-            let modified: DateTime<Utc> = batch.observed_source_mtime.into();
-            atomic_write_json(
-                &cursor_path,
-                &json!({
-                    "format_version": 1,
-                    "session_id": session_id,
-                    "source_path": portable_path(&source_path),
-                    "last_line": committed_line,
-                    "file_change_format_version": 1,
-                    "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
-                    "source_size": batch.committed_byte_offset,
-                    "committed_byte_offset": batch.committed_byte_offset,
-                    "observed_source_size": batch.observed_source_size,
-                    "complete": batch.complete,
-                    "source_mtime": modified.to_rfc3339(),
-                    "updated_at": now_iso(),
-                }),
-            )?;
-        }
+        // A successful verification also converges legacy or path-drifted cursor
+        // metadata even when no source line was newly appended.
+        let modified: DateTime<Utc> = batch.observed_source_mtime.into();
+        atomic_write_json(
+            &cursor_path,
+            &json!({
+                "format_version": 1,
+                "session_id": session_id,
+                "source_path": portable_path(&source_path),
+                "last_line": committed_line,
+                "file_change_format_version": 1,
+                "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
+                "source_size": batch.committed_byte_offset,
+                "committed_byte_offset": batch.committed_byte_offset,
+                "observed_source_size": batch.observed_source_size,
+                "complete": batch.complete,
+                "source_mtime": modified.to_rfc3339(),
+                "updated_at": now_iso(),
+            }),
+        )?;
         Ok(result)
     }
 

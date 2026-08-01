@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2.11.2 - 2026-08-01
+
+- Made every successfully verified source converge legacy cursor identity and
+  completion metadata even when no new line is appended, allowing zero-byte
+  coverage debt to reach a stable covered state.
+
 ## 2.11.1 - 2026-08-01
 
 - Kept global coverage projection ownership with startup and event loops that
