@@ -1,0 +1,102 @@
+{
+  "format_version": 1,
+  "release_version": "2.12.4",
+  "source_revision": "d881e21c0763fd0b7f2cbb56c60976cb3f3ea4be",
+  "source_clean": false,
+  "source_content_sha256": "43f1cad5e3479e15afc30a5958d5a0fb754d396e09b1e038af210f1324d26d9a",
+  "generated_at": "2026-08-01T20:16:15.762446+00:00",
+  "status": "passed",
+  "required_scenarios": 6,
+  "completed_scenarios": 6,
+  "scenario_catalog_size": 6,
+  "validation_profile": "targeted-patch",
+  "scenario_shard_index": null,
+  "scenario_shard_count": null,
+  "baseline_excluded": false,
+  "scenarios": [
+    {
+      "id": "python-compile",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "C:\\Users\\56453\\AppData\\Local\\Programs\\Python\\Python314\\python.exe",
+        "-m",
+        "compileall",
+        "-q",
+        "scripts"
+      ],
+      "evidence": "python-compile.log",
+      "evidence_sha256": "82d1b2b13999b8f588f318cd1b65d8568e513d05727adbb3ac20995217674825"
+    },
+    {
+      "id": "architecture-contract",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "C:\\Users\\56453\\AppData\\Local\\Programs\\Python\\Python314\\python.exe",
+        "scripts/check_architecture_contract.py"
+      ],
+      "evidence": "architecture-contract.log",
+      "evidence_sha256": "55d51b85fbbc23df2285e1f46e226d0ff550bad8a01440e7a1d70b33a3112128"
+    },
+    {
+      "id": "bundled-native-version",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "C:\\Users\\56453\\AppData\\Local\\Programs\\Python\\Python314\\python.exe",
+        "-c",
+        "import subprocess,sys,tomllib\nfrom pathlib import Path\nversion=tomllib.loads(Path('pyproject.toml').read_text('utf-8'))['project']['version']\nif sys.platform not in ('darwin','win32'):\n raise SystemExit(0)\nsuffix='.exe' if sys.platform=='win32' else ''\nfor name in ('memory-wuxian-collector','memory-wuxian-envelope'):\n path=Path('bin')/(name+suffix)\n assert path.is_file(), f'missing bundled executable: {path}'\n result=subprocess.run([str(path),'--version'],text=True,capture_output=True)\n assert result.returncode==0, result.stderr\n assert result.stdout.strip()==f'{name} {version}', f'{path}: {result.stdout.strip()} != {name} {version}'\n"
+      ],
+      "evidence": "bundled-native-version.log",
+      "evidence_sha256": "59276b890f1f01a683edb43e8f7ff31c9d5c480ed90cd8753540dd99746c6459"
+    },
+    {
+      "id": "v2124-lossless-audit-lock-contract",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "C:\\Users\\56453\\AppData\\Local\\Programs\\Python\\Python314\\python.exe",
+        "-m",
+        "unittest",
+        "-v",
+        "tests.test_memory_cli.MemoryCliTest.test_lossless_summary_payload_round_trip",
+        "tests.test_memory_cli.MemoryCliTest.test_lossless_summary_payload_preserves_sparse_and_null_fields",
+        "tests.test_memory_cli.MemoryCliTest.test_lossless_parent_summary_payload_round_trip",
+        "tests.test_memory_cli.MemoryCliTest.test_lossless_parent_summary_payload_preserves_sparse_and_null_fields",
+        "tests.test_memory_cli.MemoryCliTest.test_lossless_payload_rejects_malformed_presence_bitmap",
+        "tests.test_memory_cli.MemoryCliTest.test_heartbeat_owns_archive_lock_for_consistent_audit",
+        "tests.test_memory_cli.MemoryCliTest.test_heartbeat_cli_does_not_wrap_its_owned_archive_lock",
+        "tests.test_semantic_backfill",
+        "tests.test_memory_jobs",
+        "tests.test_defect_workbook_contract",
+        "tests.test_v2124_release_contract"
+      ],
+      "evidence": "v2124-lossless-audit-lock-contract.log",
+      "evidence_sha256": "8c4887996340739ef165171f467d1097e4ca79ce0c69c94806c37a62fc283a10"
+    },
+    {
+      "id": "documentation-contract",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "C:\\Users\\56453\\AppData\\Local\\Programs\\Python\\Python314\\python.exe",
+        "scripts/check_documentation_contract.py"
+      ],
+      "evidence": "documentation-contract.log",
+      "evidence_sha256": "9fe4575e1e0d6b72ef325639f320a9fb6baadd4ac2202e53db6926640d100be0"
+    },
+    {
+      "id": "diff-check",
+      "status": "passed",
+      "exit_code": 0,
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "evidence": "diff-check.log",
+      "evidence_sha256": "2186a779f268c9340c47bc75f64342c94df301ea13ad232aee3ba52bf21fed3e"
+    }
+  ]
+}

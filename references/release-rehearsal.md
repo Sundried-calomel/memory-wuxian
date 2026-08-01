@@ -220,3 +220,19 @@ It started at 03:01:10 JST, invoked ephemeral Codex at 03:01:11, and reduced
 pending semantic debt from 158 to 157 at 03:04:10. Focused regressions preserve
 raw-integrity blocking, force fresh recovery when explicit debt exists, and
 reuse recent deep-recovery evidence for no more than one hour.
+
+# v2.12.4 targeted lossless-parent and audit-lock hotfix
+
+The focused candidate must round-trip sparse and explicit-null fields for both
+raw records and child summaries, reject malformed presence maps, and prove that
+heartbeat performs audit and repair while holding the same archive lock as the
+native collector. Installed-runtime evidence must use the saved ten-child
+parent payload, requeue only its quarantined maintenance job, and observe the
+Level-2 summary ingest without rewriting raw history or existing summaries.
+
+The Windows installed effect check completed on 2026-08-02 JST. Nineteen raw
+archive files retained identical before/after hashes, heartbeat repaired three
+derived categories with no remaining integrity or repairable issue, and the
+audited requeue moved the real parent job from quarantined to completed in one
+attempt. `L2-000005` was created with SHA-256
+`84bbd0e9ad73a642fc2319d3ec4118087bc984389b6fc7931b20d4e1bc46e7e3`.

@@ -577,6 +577,23 @@ def main() -> int:
                 "tests.test_v2123_release_contract",
             ],
         ),
+        (
+            "v2124-lossless-audit-lock-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_cli.MemoryCliTest.test_lossless_summary_payload_round_trip",
+                "tests.test_memory_cli.MemoryCliTest.test_lossless_summary_payload_preserves_sparse_and_null_fields",
+                "tests.test_memory_cli.MemoryCliTest.test_lossless_parent_summary_payload_round_trip",
+                "tests.test_memory_cli.MemoryCliTest.test_lossless_parent_summary_payload_preserves_sparse_and_null_fields",
+                "tests.test_memory_cli.MemoryCliTest.test_lossless_payload_rejects_malformed_presence_bitmap",
+                "tests.test_memory_cli.MemoryCliTest.test_heartbeat_owns_archive_lock_for_consistent_audit",
+                "tests.test_memory_cli.MemoryCliTest.test_heartbeat_cli_does_not_wrap_its_owned_archive_lock",
+                "tests.test_semantic_backfill",
+                "tests.test_memory_jobs",
+                "tests.test_defect_workbook_contract",
+                "tests.test_v2124_release_contract",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     if args.contract_profile:

@@ -64,7 +64,7 @@ def pack_source_records(records: list[dict]) -> dict:
     variable = []
     for column in columns:
         values = [item.get(column) for item in flattened]
-        if values and all(value == values[0] for value in values):
+        if all(column in item for item in flattened) and values and all(value == values[0] for value in values):
             constants[column] = values[0]
         else:
             variable.append(column)
@@ -74,6 +74,7 @@ def pack_source_records(records: list[dict]) -> dict:
         "constants": constants,
         "columns": variable,
         "rows": [[item.get(column) for column in variable] for item in flattened],
+        "presence": [[column in item for column in variable] for item in flattened],
         "derived_fields": ["content_sha256"],
     }
     restored = unpack_source_records(packed)
@@ -87,11 +88,25 @@ def unpack_source_records(packed: dict) -> list[dict]:
         raise ValueError("Unsupported lossless summary payload format")
     columns = list(packed.get("columns", []))
     constants = dict(packed.get("constants", {}))
+    presence = packed.get("presence")
+    rows = list(packed.get("rows", []))
+    if presence is not None and len(presence) != len(rows):
+        raise ValueError("Lossless summary payload presence row count mismatch")
     records = []
-    for row in packed.get("rows", []):
+    for index, row in enumerate(rows):
         if len(row) != len(columns):
             raise ValueError("Lossless summary payload row width mismatch")
-        flat = {**constants, **dict(zip(columns, row))}
+        row_presence = presence[index] if presence is not None else [True] * len(columns)
+        if len(row_presence) != len(columns):
+            raise ValueError("Lossless summary payload presence width mismatch")
+        flat = {
+            **constants,
+            **{
+                column: value
+                for column, value, present in zip(columns, row, row_presence)
+                if present
+            },
+        }
         source = {
             key.removeprefix("source."): value
             for key, value in flat.items()
@@ -123,7 +138,7 @@ def pack_source_summaries(summaries: list[dict]) -> dict:
     variable = []
     for column in columns:
         values = [item.get(column) for item in flattened]
-        if values and all(value == values[0] for value in values):
+        if all(column in item for item in flattened) and values and all(value == values[0] for value in values):
             constants[column] = values[0]
         else:
             variable.append(column)
@@ -133,6 +148,7 @@ def pack_source_summaries(summaries: list[dict]) -> dict:
         "constants": constants,
         "columns": variable,
         "rows": [[item.get(column) for column in variable] for item in flattened],
+        "presence": [[column in item for column in variable] for item in flattened],
     }
     restored = unpack_source_summaries(packed)
     if canonical_sha256(restored) != canonical_sha256(summaries):
@@ -145,11 +161,25 @@ def unpack_source_summaries(packed: dict) -> list[dict]:
         raise ValueError("Unsupported lossless child-summary payload format")
     columns = list(packed.get("columns", []))
     constants = dict(packed.get("constants", {}))
+    presence = packed.get("presence")
+    rows = list(packed.get("rows", []))
+    if presence is not None and len(presence) != len(rows):
+        raise ValueError("Lossless child-summary payload presence row count mismatch")
     summaries = []
-    for row in packed.get("rows", []):
+    for index, row in enumerate(rows):
         if len(row) != len(columns):
             raise ValueError("Lossless child-summary payload row width mismatch")
-        flat = {**constants, **dict(zip(columns, row))}
+        row_presence = presence[index] if presence is not None else [True] * len(columns)
+        if len(row_presence) != len(columns):
+            raise ValueError("Lossless child-summary payload presence width mismatch")
+        flat = {
+            **constants,
+            **{
+                column: value
+                for column, value, present in zip(columns, row, row_presence)
+                if present
+            },
+        }
         metadata = {
             key.removeprefix("metadata."): value
             for key, value in flat.items()
@@ -230,7 +260,8 @@ def build_prompt(job: dict) -> str:
     else:
         source_contract = (
             "The following JSON contains a lossless tabular representation of the complete "
-            "assigned source. Apply constants to every row and map columns to row values. "
+            "assigned source. Apply constants to every row, map columns to row values, and "
+            "use each presence bitmap to distinguish an absent field from a present null. "
             "For lossless_source_records, restore source.* keys under source and "
             "deterministically recompute content_sha256. For lossless_source_summaries, "
             "restore metadata.* keys under metadata. No source text or state meaning has been removed. "

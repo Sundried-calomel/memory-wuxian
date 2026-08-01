@@ -125,6 +125,34 @@ safety:
             records,
         )
 
+    def test_lossless_summary_payload_preserves_sparse_and_null_fields(self):
+        records = [
+            {
+                "record_type": "raw_message",
+                "sequence": 1,
+                "message_id": "message-1",
+                "source": {"kind": "codex", "optional": None},
+            },
+            {
+                "record_type": "raw_message",
+                "sequence": 2,
+                "message_id": "message-2",
+                "source": {"kind": "codex"},
+            },
+        ]
+        from memory_cli import raw_record_sha256
+        for record in records:
+            record["content_sha256"] = raw_record_sha256(record)
+
+        packed = pack_source_records(records)
+
+        self.assertEqual(unpack_source_records(packed), records)
+        optional_index = packed["columns"].index("source.optional")
+        self.assertEqual(
+            [row[optional_index] for row in packed["presence"]],
+            [True, False],
+        )
+
     def test_lossless_parent_summary_payload_round_trip(self):
         summaries = [
             {
@@ -154,6 +182,77 @@ safety:
             unpack_source_summaries(prompt_payload["lossless_source_summaries"]),
             summaries,
         )
+
+    def test_lossless_parent_summary_payload_preserves_sparse_and_null_fields(self):
+        summaries = [
+            {
+                "summary_id": "L1-000001",
+                "metadata": {"level": 1, "source_round_numbers": None},
+                "content": "first",
+            },
+            {
+                "summary_id": "L1-000002",
+                "metadata": {"level": 1},
+                "content": "second",
+            },
+        ]
+
+        packed = pack_source_summaries(summaries)
+
+        self.assertEqual(unpack_source_summaries(packed), summaries)
+        optional_index = packed["columns"].index("metadata.source_round_numbers")
+        self.assertEqual(
+            [row[optional_index] for row in packed["presence"]],
+            [True, False],
+        )
+
+    def test_lossless_payload_rejects_malformed_presence_bitmap(self):
+        packed = pack_source_summaries([
+            {"summary_id": "L1-000001", "metadata": {"level": 1}},
+            {"summary_id": "L1-000002", "metadata": {"level": 2}},
+        ])
+        packed["presence"][0].pop()
+
+        with self.assertRaisesRegex(ValueError, "presence width mismatch"):
+            unpack_source_summaries(packed)
+
+    def test_heartbeat_owns_archive_lock_for_consistent_audit(self):
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+        events = []
+
+        class RecordingLock:
+            def __enter__(self):
+                events.append("locked")
+
+            def __exit__(self, *_args):
+                events.append("unlocked")
+
+        def audit_inside_lock():
+            self.assertEqual(events, ["locked"])
+            return {
+                "status": "ok",
+                "integrity_issues": [],
+                "repairable_issues": [],
+                "warnings": [],
+                "missing_sources": [],
+                "state_differences": {},
+                "failed_jobs": 0,
+            }
+
+        with patch("memory_cli.exclusive_lock", return_value=RecordingLock()):
+            with patch.object(store, "audit", side_effect=audit_inside_lock):
+                result = store.heartbeat(create_jobs=False)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(events, ["locked", "unlocked"])
+
+    def test_heartbeat_cli_does_not_wrap_its_owned_archive_lock(self):
+        completed = self.invoke_cli("heartbeat", "--check-only", timeout=5)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(json.loads(completed.stdout)["status"], "ok")
 
     def test_semantic_backfill_prioritizes_higher_summary_levels(self):
         from memory_cli import MemoryStore, load_simple_yaml

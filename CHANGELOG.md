@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 2.12.4 - 2026-08-02
+
+- Preserve sparse fields in lossless raw-record and child-summary tabular
+  payloads by encoding field presence separately from JSON `null` values.
+  Parent summaries with mixed legacy metadata can now enter the existing
+  bounded semantic map/reduce path instead of being quarantined before AI is
+  invoked.
+- Serialize heartbeat audit and repair with native collection through the
+  shared archive lock. A collector batch can no longer be observed between
+  its raw append and derived transcript/index/state writes and cached as false
+  projection drift.
+- Add focused regressions for sparse-versus-null round trips, malformed
+  presence maps, heartbeat lock ownership, and the real quarantined parent-job
+  payload. Raw history and persisted summaries remain unchanged.
+
 ## 2.12.3 - 2026-08-02
 
 - Fixed continuous semantic catch-up being blocked indefinitely by rebuildable

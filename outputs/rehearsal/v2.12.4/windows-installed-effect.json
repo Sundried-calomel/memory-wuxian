@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "release_version": "2.12.4",
+  "platform": "Windows",
+  "status": "passed",
+  "observed_at": "2026-08-02T05:09:04+09:00",
+  "source_job": {
+    "maintenance_job_id": "job-2cec1050b08b0ab042743315fe06a54aac5c04ba272a3805b864eb10c6b85e71",
+    "summary_job_id": "job-000372",
+    "child_summary_count": 10,
+    "before_state": "quarantined",
+    "before_attempts": 4,
+    "before_error": "Lossless child-summary payload verification failed",
+    "installed_round_trip": true,
+    "after_state": "completed",
+    "after_attempts": 1,
+    "completed_at": "2026-08-01T20:08:51Z"
+  },
+  "requeue_receipt": {
+    "name": "job-2cec1050b08b0ab042743315fe06a54aac5c04ba272a3805b864eb10c6b85e71-20260801T195839Z-e46b4b914337.json",
+    "sha256": "055fe44cacb2435aa7d1b1b42f69ffcbe6f050690854f9ea69bb84336215ba7b"
+  },
+  "result_summary": {
+    "summary_id": "L2-000005",
+    "bytes": 8288,
+    "sha256": "84bbd0e9ad73a642fc2319d3ec4118087bc984389b6fc7931b20d4e1bc46e7e3"
+  },
+  "archive_repair": {
+    "derived_categories_repaired": 3,
+    "integrity_issues_after": 0,
+    "repairable_issues_after": 0,
+    "raw_file_count": 19,
+    "raw_before_after_manifest_equal": true,
+    "pending_before_repair": 146,
+    "pending_after_parent_ingest": 141
+  },
+  "collector": {
+    "restored": true,
+    "telemetry_last_write": "2026-08-02T05:09:04.7386528+09:00"
+  }
+}

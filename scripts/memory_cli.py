@@ -4064,7 +4064,7 @@ class MemoryStore:
         atomic_write_json(self.context_refresh_state_path, state)
         return {"status": "acknowledged", **state["conversations"][telemetry["conversation_id"]]}
 
-    def heartbeat(self, create_jobs: bool, repair: bool = False) -> Dict[str, Any]:
+    def _heartbeat_unlocked(self, create_jobs: bool, repair: bool = False) -> Dict[str, Any]:
         self.init()
         before = self.audit()
         repairs = []
@@ -4118,6 +4118,10 @@ class MemoryStore:
             "created_job": created_job,
             "repairs": repairs,
         }
+
+    def heartbeat(self, create_jobs: bool, repair: bool = False) -> Dict[str, Any]:
+        with exclusive_lock(self.locks_dir / "archive.lock"):
+            return self._heartbeat_unlocked(create_jobs, repair)
 
 
 def resolve_config(path: Path) -> Dict[str, Any]:
@@ -5229,8 +5233,7 @@ def dispatch_command(
         queue = MaintenanceQueue(store.root)
 
         def archive_health(_payload):
-            with exclusive_lock(store.root / ".locks" / "archive.lock"):
-                return store.heartbeat(False)
+            return store.heartbeat(False)
 
         result = run_model_free_tick(
             queue,
@@ -5877,6 +5880,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         }:
             return dispatch_command(args, parser, store)
         if args.command.startswith("maintenance-"):
+            return dispatch_command(args, parser, store)
+        if args.command == "heartbeat":
             return dispatch_command(args, parser, store)
         if args.command == "content-shadow-status" or (
             args.command in {"content-shadow-build", "content-shadow-reconstruct", "content-shadow-disable", "content-transfer"}

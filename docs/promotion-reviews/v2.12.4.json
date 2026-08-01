@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.12.4",
+  "work_item_id": "memory-wuxian-v2.12.4",
+  "candidate_id": "v2.12.4-lossless-parent-and-audit-lock-hotfix",
+  "owner_id": "memory-plane-control-plane",
+  "source_revision": "hotfix/v2.12.4-lossless-parent-audit-lock",
+  "product_evolution_record_id": "memory-wuxian-v2.12.4-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The reusable lessons are already represented by registered families MW-R05, MW-R07, MW-R08, and MW-R10; this patch adds project-specific evidence without creating a new global capability.",
+  "evidence_refs": [
+    "outputs/rehearsal/v2.12.4/report.json",
+    "docs/retrospectives/memory-wuxian-defect-workbook.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-02T00:00:00Z"
+}
