@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "version": "2.12.6",
+  "observed_at": "2026-08-02T06:16:08+09:00",
+  "legacy_duplicate_round": 1133,
+  "heartbeat_status": "ok",
+  "integrity_issue_count": 0,
+  "repairable_issue_count": 0,
+  "state_repairs": 1,
+  "desktop_backup": "2026-08-02_061608_517173",
+  "collector_restarted": true,
+  "raw_history_rewritten": false
+}

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 2.12.6 - 2026-08-02
+
+- Require every user-bearing conversation in a shared legacy round to have a
+  final answer before recovered global round tracking marks it complete.
+- Correct the duplicate-round regression to assert both partial and complete
+  states, closing the post-install `completed_rounds_out_of_order` drift.
+
 ## 2.12.5 - 2026-08-02
 
 - Recover unresolved rounds by conversation identity across the complete raw
