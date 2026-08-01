@@ -13,6 +13,7 @@ from memory_jobs import (
     read_backup_debt_generation,
     reconcile_pending_debt,
     redact_error,
+    stable_path_identity,
     write_maintenance_projection,
 )
 from semantic_dispatch import dispatch_job
@@ -43,11 +44,19 @@ def run_backfill(
     store.init()
     recovery_debt_path = root / "pending" / "native-recovery-debt.json"
     recovery = None
-    if recovery_debt_path.exists() and not dry_run:
+    if not dry_run:
         recovery = store.heartbeat(create_jobs=False, repair=True)
-        if recovery.get("status") == "ok":
+        if recovery_debt_path.exists() and recovery.get("status") == "ok":
             recovery_debt_path.unlink(missing_ok=True)
+    integrity_issues = list((recovery or {}).get("integrity_issues") or [])
+    repairable_issues = list((recovery or {}).get("repairable_issues") or [])
+    recovery_blocked = bool(integrity_issues or repairable_issues)
     queue = MaintenanceQueue(root)
+    scheduled = []
+    if not recovery_blocked:
+        due_job = store.make_summary_job()
+        if due_job is not None:
+            scheduled.append(str(due_job))
     reconciliation = reconcile_pending_debt(root, queue)
     queue.mark_semantic_ready_bulk(maximum_jobs=10000)
     completed = []
@@ -55,16 +64,23 @@ def run_backfill(
     attempted = 0
     pending = ordered_pending_jobs(store)
     maintenance_by_path = {
-        str(Path(job["payload"].get("summary_job", "")).resolve()): job
+        stable_path_identity(job["payload"].get("summary_job", "")): job
         for job in queue.jobs()
         if job["kind"] == "semantic-summary-eligibility"
         and job["payload"].get("summary_job")
     }
     limit = len(pending) if max_jobs == 0 else max_jobs
-    for job_path in pending:
+    if recovery_blocked:
+        skipped.append({
+            "reason": "integrity-failure" if integrity_issues else "repair-incomplete",
+            "error": redact_error(
+                "; ".join(str(item) for item in (integrity_issues or repairable_issues))
+            ),
+        })
+    for job_path in ([] if recovery_blocked else pending):
         if attempted >= limit:
             break
-        maintenance = maintenance_by_path.get(str(job_path.resolve()))
+        maintenance = maintenance_by_path.get(stable_path_identity(job_path))
         if maintenance is None:
             skipped.append({"job": str(job_path), "reason": "not-reconciled"})
             continue
@@ -92,9 +108,17 @@ def run_backfill(
             })
             break
         if result.get("status") in {"deferred", "quarantined"}:
-            skipped.append({"job": str(job_path), "reason": str(result["status"])})
+            skipped.append({
+                "job": str(job_path),
+                "reason": str(result["status"]),
+                **({"error": redact_error(result["error"])} if result.get("error") else {}),
+            })
             continue
         completed.append(result)
+        if result.get("status") == "ingested" and not recovery_blocked:
+            due_job = store.make_summary_job()
+            if due_job is not None:
+                scheduled.append(str(due_job))
         if dry_run:
             break
 
@@ -134,16 +158,31 @@ def run_backfill(
             except Exception as exc:
                 queue.fail(backup_job["job_id"], owner, exc, retry_delay_seconds=300)
             break
+    remaining_pending_jobs = len(store.pending_jobs())
+    queue_status = queue.status()
+    permanent_failures = queue_status["quarantined"]
+    if dry_run:
+        status = "dry-run"
+    elif recovery_blocked or reconciliation["invalid"] or permanent_failures:
+        status = "attention"
+    elif skipped or remaining_pending_jobs or read_backup_debt_generation(root) is not None:
+        status = "catching-up"
+    else:
+        status = "completed"
     projection = write_maintenance_projection(root, queue)
     return {
-        "status": "dry-run" if dry_run else "completed",
+        "status": status,
         "timestamp": now_iso(),
         "completed_jobs": len(completed),
         "attempted_jobs": attempted,
         "job_ids": [item["job_id"] for item in completed],
         "backup": str(backup) if backup else None,
         "backup_debt_drained": backup_debt_drained,
-        "remaining_pending_jobs": len(store.pending_jobs()),
+        "remaining_pending_jobs": remaining_pending_jobs,
+        "scheduled_summary_jobs": scheduled,
+        "permanent_failures": permanent_failures,
+        "integrity_issues": integrity_issues,
+        "repairable_issues": repairable_issues,
         "native_recovery": recovery,
         "reconciliation": reconciliation,
         "skipped": skipped,

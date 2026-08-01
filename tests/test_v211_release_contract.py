@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 class V211ReleaseContractTest(unittest.TestCase):
     def test_mw211_01_continuous_catchup_contract_is_versioned(self):
         version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertEqual(version, "2.11.4")
+        self.assertEqual(version, "2.11.5")
         contract = json.loads((ROOT / "docs/work-contracts/v2.11.0.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["work_item_id"], "memory-wuxian-v2.11.0")
         review = json.loads((ROOT / "docs/promotion-reviews/v2.11.0.json").read_text(encoding="utf-8"))
@@ -31,8 +31,8 @@ class V211ReleaseContractTest(unittest.TestCase):
 
     def test_mw211_02_incremental_sync_cannot_overwrite_global_coverage(self):
         source = (ROOT / "native-collector/src/main.rs").read_text(encoding="utf-8")
-        batch = source.split("fn sync_batch_with_semantic_worker", 1)[1].split(
-            "fn sync_batch(", 1
+        batch = source.split("fn sync_batch(&self", 1)[1].split(
+            "fn sync_batch_unlocked", 1
         )[0]
         self.assertNotIn("write_coverage_status", batch)
         self.assertEqual(source.count("store.write_coverage_status(&current_paths)?;"), 2)
@@ -40,12 +40,29 @@ class V211ReleaseContractTest(unittest.TestCase):
         self.assertIn("fn cursor_requires_sync", source)
         self.assertNotIn('if cursor.get("excluded_reason").is_some()', source)
 
+    def test_mw2115_legacy_ai_path_is_absent_from_collector_production(self):
+        source = (ROOT / "native-collector/src/main.rs").read_text(encoding="utf-8")
+        production = source.split("#[cfg(test)]", 1)[0]
+        self.assertNotIn("run_one_shot_summary", production)
+        self.assertNotIn("semantic_dispatch.py", production)
+        self.assertNotIn("command.output()", production)
+        self.assertIn("self.maybe_create_level_one_job()?", production)
+
     def test_mw211_03_background_effect_gate_is_explicit(self):
         rehearsal = (ROOT / "references/release-rehearsal.md").read_text(encoding="utf-8")
         self.assertIn("synthetic live semantic canary", rehearsal)
         self.assertIn("pending count decreases from 1 to 0", rehearsal)
         dispatch = (ROOT / "scripts/semantic_dispatch.py").read_text(encoding="utf-8")
         self.assertIn("str(expanded) if expanded.is_file()", dispatch)
+        self.assertTrue((ROOT / "scripts/runtime_effect_gate.py").is_file())
+        for token in (
+            "semantic-parent-job-missing",
+            "semantic-index-stale",
+            "incomplete-backup-residue",
+            "permanent-maintenance-debt",
+            "maintenance-supervisor-not-healthy",
+        ):
+            self.assertIn(token, (ROOT / "scripts/runtime_effect_gate.py").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

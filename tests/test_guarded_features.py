@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -10,7 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from memory_cli import MemoryStore, load_simple_yaml
-from memory_guarded_features import GuardedFeatures, archive_manifest
+from memory_guarded_features import (
+    GuardedFeatures,
+    SemanticIndexStaleError,
+    archive_manifest,
+)
 
 
 class GuardedFeaturesTest(unittest.TestCase):
@@ -85,6 +90,29 @@ class GuardedFeaturesTest(unittest.TestCase):
         }
         self.assertEqual(raw_before, raw_after)
 
+    def test_semantic_index_fails_closed_after_raw_source_advances(self):
+        self.features.semantic_build("local-hash-v1")
+        manifest = json.loads(
+            (self.store.index_dir / "semantic" / "manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual("memory-wuxian-semantic-index-v2", manifest["format"])
+        self.assertEqual(2, manifest["raw_source"]["record_count"])
+        self.assertEqual(2, manifest["raw_source"]["high_watermark"]["sequence"])
+        self.assertRegex(manifest["raw_source"]["identity_sha256"], r"^[0-9a-f]{64}$")
+
+        self.store.append_message(
+            "user", "new semantic source", "2026-07-28T10:02:00+09:00",
+            "project-a", "m3", None, False,
+        )
+
+        with self.assertRaisesRegex(
+            SemanticIndexStaleError,
+            "does not cover the current raw archive",
+        ):
+            self.features.semantic_retrieve("new semantic source", 2)
+
     def test_semantic_pointer_index_reads_each_raw_file_once(self):
         records = self.store.read_all_raw()
         raw_path = self.store.root / records[0]["_path"]
@@ -133,6 +161,28 @@ class GuardedFeaturesTest(unittest.TestCase):
             retrieved = self.features.semantic_retrieve("保留原始归档", 2)
         self.assertEqual("multilingual-e5-small", retrieved["provider"])
         self.assertEqual("m1", retrieved["matches"][0]["message_id"])
+
+    def test_e5_build_timeout_is_long_running_but_cleans_partial_artifacts(self):
+        model = self.base / "model"
+        runtime = self.base / "python.exe"
+        model.mkdir()
+        runtime.write_bytes(b"runtime")
+        output = self.base / ".vectors.npy"
+
+        def timed_out(command, **kwargs):
+            self.assertEqual(kwargs["timeout"], 3600)
+            output.write_bytes(b"partial")
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+        with (
+            patch.object(self.features, "validate_e5_install", return_value=(model, runtime)),
+            patch("memory_guarded_features.subprocess.run", side_effect=timed_out),
+        ):
+            with self.assertRaisesRegex(ValueError, "index build worker failed"):
+                self.features.e5_embed(["text"], "passage", output)
+
+        self.assertFalse(output.exists())
+        self.assertFalse(output.with_suffix(".input.json").exists())
 
     def test_retrieval_evaluation_is_human_readable(self):
         dataset = self.base / "evaluation.jsonl"

@@ -51,6 +51,12 @@ class MaintenanceSchedulerTest(unittest.TestCase):
         self.assertEqual(root.findtext(".//t:Interval", namespaces=ns), "PT5M")
         self.assertEqual(root.findtext(".//t:Command", namespaces=ns), str(self.pythonw))
         self.assertIn("--once", root.findtext(".//t:Arguments", namespaces=ns))
+        self.assertEqual(root.findtext(".//t:ExecutionTimeLimit", namespaces=ns), "PT70M")
+        self.assertGreaterEqual(
+            scheduler.WINDOWS_EXECUTION_LIMIT_SECONDS,
+            scheduler.DEFAULT_MAXIMUM_SEMANTIC_JOBS * scheduler.SEMANTIC_JOB_TIMEOUT_SECONDS
+            + scheduler.MAINTENANCE_CLOSEOUT_MARGIN_SECONDS,
+        )
 
     def test_windows_job_fails_closed_without_pythonw(self):
         self.pythonw.unlink()

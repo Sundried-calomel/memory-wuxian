@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.11.5",
+  "candidate_id": "v2.11.5-runtime-effect-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane-control-plane",
+  "target": "Make every enabled v2.11 background capability prove its real effect and fail closed on hidden fallback, stale coverage, permanent debt, or partial failure.",
+  "primary_semantics": "Capture persists work without AI; the independent scheduler owns semantic execution and hierarchy; derived indexes and backups expose exact waterlines and failures; runtime health is an effect verdict rather than a process-exit verdict.",
+  "invariants": [
+    "Raw conversation records, source hashes, device authority, and completed-round boundaries remain unchanged.",
+    "The native collector never launches or waits for an AI worker.",
+    "No stale semantic index is presented as current and keyword retrieval remains available.",
+    "No failed backup may leave an unreported Memory Wuxian temporary directory.",
+    "Archive-v1 and environment-v1 failures remain isolated and neither stream may report partial failure as success.",
+    "Existing user configuration values are preserved during default migration.",
+    "v3.0 remains prohibited without its separate incompatible-contract decision."
+  ],
+  "allowed_changes": [
+    "Remove the legacy collector AI execution path.",
+    "Create due parent-summary work after successful child-summary ingestion.",
+    "Normalize legacy Windows maintenance-job path identities and terminate permanent debt explicitly.",
+    "Bind semantic indexes to a stable raw-source snapshot and expose stale fallback.",
+    "Clean only product-owned incomplete backup directories under the configured backup root.",
+    "Correct cloud acknowledgement and partial-failure accounting.",
+    "Merge missing release configuration defaults with an exact rollback copy.",
+    "Add deterministic runtime-effect and rehearsal gates."
+  ],
+  "prohibited_changes": [
+    "Rewrite, normalize, delete, or vectorize authoritative raw history in place.",
+    "Treat a process, scheduled task, file existence, mocked result, or zero exit code as effect evidence.",
+    "Automatically download a model, install a peer Environment item, or advance device trust.",
+    "Delete a formal backup snapshot or a directory not matching the product-owned incomplete-backup contract.",
+    "Hide quarantined, invalid, waiting-ack, transient, stale, or uncovered work behind healthy or completed."
+  ],
+  "before_after_checks": [
+    "Prove collector capture and ready telemetry advance while AI execution is impossible.",
+    "Ingest enough Level-1 summaries to trigger a Level-2 job through the production maintenance path.",
+    "Append raw history after semantic indexing and prove semantic failure plus explicit hybrid keyword fallback.",
+    "Inject backup interruption and prove the exact temporary directory is removed and logged.",
+    "Inject an internal conversation-index hole and an integrity mismatch; repair only the former.",
+    "Exercise cloud waiting acknowledgement, no-change replay, transient failure, quarantine, and stream isolation.",
+    "Upgrade an old configuration and prove user values, rollback bytes, and added defaults.",
+    "Run runtime_effect_gate.py against the exact installed candidate and an isolated archive."
+  ],
+  "required_evidence": [
+    "targeted-regressions",
+    "runtime-effect-matrix",
+    "full-suite",
+    "architecture-contract",
+    "documentation-contract",
+    "windows-candidate",
+    "macos-candidate",
+    "same-sha-ci",
+    "installer-upgrade-rollback",
+    "promotion-review"
+  ],
+  "lifecycle_state": "staged"
+}

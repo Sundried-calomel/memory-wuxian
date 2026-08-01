@@ -1,5 +1,16 @@
 # Memory無限
 
+> **2.11.5:** Background health now means verified effects, not merely running
+> processes. The collector never launches or waits for AI; the independent
+> scheduler creates Level-2+ summary work, repairs safe derived-index holes,
+> and reports permanent debt explicitly. Semantic indexes are bound to the
+> current raw-source snapshot and stale indexes fail closed or visibly fall
+> back to keyword retrieval with `semantic-index-stale-keyword-fallback`.
+> Interrupted backups clean their own temporary
+> directories, cloud waiting and partial failures no longer report success,
+> upgrades merge missing configuration defaults without replacing user values,
+> and `runtime_effect_gate.py` rejects hidden fallback or stale waterlines.
+>
 > **2.11.4:** Continuous catch-up now survives installs and upgrades. The native
 > collector preserves the earliest boundary in `collector-activation.json`,
 > streams retained rollout files in bounded batches, resumes from durable
@@ -790,9 +801,13 @@ without raw dialogue, credentials, or local user paths. A completed dialogue
 boundary must first become `semantic-ready` through `semantic_dispatch.py`
 before the existing one-shot AI worker may run. Mechanical ticks invoke no AI,
 and summary failure does not stop native capture.
+`maintenance-requeue` is an explicit operator action for one quarantined job.
+It preserves the prior job hash, attempts, and redacted error in an immutable
+receipt before returning that same job to the bounded retry path.
 
 ```bash
 python scripts/memory_cli.py maintenance-enqueue --kind archive-health --idempotency-key health:manual
+python scripts/memory_cli.py maintenance-requeue --job-id job-<sha256> --reason "worker contract upgraded"
 python scripts/memory_cli.py maintenance-status
 python scripts/memory_cli.py maintenance-tick --maximum-jobs 20
 python scripts/memory_cli.py maintenance-diagnostics

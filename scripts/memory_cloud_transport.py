@@ -1291,7 +1291,7 @@ class CloudFolderTransport:
         local_identity: Dict[str, str],
         timestamp: float,
         result: Dict[str, Any],
-    ) -> bool:
+    ) -> str:
         state = self._peer_state(peer_id)
         outstanding = state.get("outstanding")
         if not outstanding:
@@ -1339,7 +1339,7 @@ class CloudFolderTransport:
                 result["waiting_ack"].append(
                     {"peer": peer_id, "bundle_id": outstanding["bundle_id"]}
                 )
-                return True
+                return "waiting-ack"
             state["outstanding"] = None
         acknowledged = state["acknowledged"]
         with tempfile.TemporaryDirectory(prefix="memory-wuxian-cloud-export-") as temp:
@@ -1357,7 +1357,7 @@ class CloudFolderTransport:
                     previous_bundle_sha256=acknowledged["last_bundle_sha256"],
                 )
             if exported["status"] == "no-change":
-                return True
+                return "no-change"
             destination = self._outbox(peer_id) / (
                 f"{int(exported['from_event_sequence']):020d}-"
                 f"{int(exported['to_event_sequence']):020d}-"
@@ -1393,7 +1393,7 @@ class CloudFolderTransport:
                 "has_more": bool(exported.get("has_more")),
             }
         )
-        return True
+        return "published"
 
     def _cleanup(self, peers: Dict[str, Dict[str, Any]], timestamp: float) -> List[str]:
         removed: List[str] = []
@@ -1444,6 +1444,7 @@ class CloudFolderTransport:
         timestamp = float(self.clock() if now is None else now)
         result: Dict[str, Any] = {
             "status": "disabled" if not self.config.get("enabled") else "ok",
+            "stream_id": self.stream_id or "archive-v1",
             "acks": [],
             "imports": [],
             "published": [],
@@ -1479,10 +1480,11 @@ class CloudFolderTransport:
             all_handled = True
             for peer_id, peer in peers.items():
                 try:
+                    publish_status = self._publish_peer(
+                        peer_id, peer, local_identity, timestamp, result
+                    )
                     all_handled = (
-                        self._publish_peer(
-                            peer_id, peer, local_identity, timestamp, result
-                        )
+                        publish_status in {"published", "no-change"}
                         and all_handled
                     )
                 except (OSError, RuntimeError) as exc:
@@ -1505,11 +1507,40 @@ class CloudFolderTransport:
                 {"type": "cleanup-scan", "reason": str(exc)}
             )
         self.save_config()
+        result["counts"] = {
+            "acknowledged": len(result["acks"]),
+            "imported": sum(
+                item.get("status") == "imported" for item in result["imports"]
+            ),
+            "no_change": sum(
+                item.get("status") == "no-change" for item in result["imports"]
+            ),
+            "published": len(result["published"]),
+            "waiting_ack": len(result["waiting_ack"]),
+            "transient": len(result["transient"]),
+            "quarantined": len(result["quarantined"]),
+        }
+        if result["transient"] or result["quarantined"]:
+            result["status"] = "degraded"
+        elif result["waiting_ack"]:
+            result["status"] = "waiting-ack"
         for peer_id in peers:
+            imported_count = sum(
+                item["peer"] == peer_id and item.get("status") == "imported"
+                for item in result["imports"]
+            )
+            transient_count = sum(
+                item.get("peer") == peer_id for item in result["transient"]
+            )
+            quarantined_count = sum(
+                item.get("peer") == peer_id for item in result["quarantined"]
+            )
             peer_activity = (
                 any(item["peer"] == peer_id for item in result["published"])
-                or any(item["peer"] == peer_id for item in result["imports"])
+                or imported_count > 0
                 or any(item["peer"] == peer_id for item in result["acks"])
+                or transient_count > 0
+                or quarantined_count > 0
             )
             if peer_activity:
                 self.manager.log_sync(
@@ -1519,12 +1550,13 @@ class CloudFolderTransport:
                         "published": sum(
                             item["peer"] == peer_id for item in result["published"]
                         ),
-                        "imported": sum(
-                            item["peer"] == peer_id for item in result["imports"]
-                        ),
+                        "imported": imported_count,
                         "acknowledged": sum(
                             item["peer"] == peer_id for item in result["acks"]
                         ),
+                        "transient": transient_count,
+                        "quarantined": quarantined_count,
+                        "stream_id": result["stream_id"],
                     },
                 )
         return result

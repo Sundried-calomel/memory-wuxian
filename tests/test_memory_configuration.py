@@ -22,6 +22,7 @@ from memory_configuration import (  # noqa: E402
     compile_configuration,
     explain_configuration,
 )
+from migrate_config import migrate_config  # noqa: E402
 
 
 class MemoryConfigurationTests(unittest.TestCase):
@@ -285,6 +286,34 @@ class MemoryConfigurationTests(unittest.TestCase):
             self.assertIsInstance(json.loads(completed.stdout), dict)
             self.assertEqual("", completed.stderr)
         self.assertEqual(before, sorted(item.name for item in self.base.iterdir()))
+
+    def test_upgrade_migration_adds_defaults_without_overwriting_user_values(self):
+        current = self.write_config(
+            "summaries:\n  level_1_trigger_rounds: 99\nbackup:\n  enabled: false\n"
+        )
+        defaults = self.base / "defaults.yaml"
+        defaults.write_text(
+            "summaries:\n  level_1_trigger_rounds: 5\n  level_1_trigger_tokens: 5000\n"
+            "governance_ai:\n  enabled: false\n",
+            encoding="utf-8",
+        )
+        before = current.read_bytes()
+
+        preview = migrate_config(current, defaults, apply=False)
+        self.assertEqual(preview["status"], "preview")
+        self.assertEqual(current.read_bytes(), before)
+
+        applied = migrate_config(current, defaults, apply=True)
+        value = yaml.safe_load(current.read_text(encoding="utf-8"))
+        self.assertEqual(value["summaries"]["level_1_trigger_rounds"], 99)
+        self.assertEqual(value["summaries"]["level_1_trigger_tokens"], 5000)
+        self.assertFalse(value["governance_ai"]["enabled"])
+        rollback = Path(applied["rollback"])
+        self.assertEqual(rollback.read_bytes(), before)
+        self.assertEqual(
+            json.loads(Path(applied["receipt"]).read_text(encoding="utf-8"))["after_sha256"],
+            applied["after_sha256"],
+        )
 
     @classmethod
     def leaf_paths(cls, value, parts=()):

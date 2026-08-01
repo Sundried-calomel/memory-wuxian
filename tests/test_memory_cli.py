@@ -26,7 +26,7 @@ from memory_dashboard import (
     debt_status_projection,
     estimate_context_tokens,
 )
-from memory_cli import resolve_root
+from memory_cli import filesystem_native_path, resolve_root
 from semantic_worker import (
     build_prompt_payload,
     pack_source_records,
@@ -116,6 +116,10 @@ safety:
         })
         self.assertNotIn("source_records", prompt_payload["task"])
         self.assertNotIn("source_message_ids", prompt_payload["task"])
+        self.assertEqual(
+            prompt_payload["allowed_source_message_ids"],
+            [record["message_id"] for record in records],
+        )
         self.assertEqual(
             unpack_source_records(prompt_payload["lossless_source_records"]),
             records,
@@ -1550,6 +1554,68 @@ summaries:
         refused = self.invoke_cli("rebuild-indexes", "--apply")
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn("Refusing to rebuild indexes over integrity failures", refused.stderr)
+
+    def test_backup_failure_cleans_current_and_orphaned_temporary_directories(self):
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        backup_root = self.base / "failure-backups"
+        with self.config.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f'backup:\n  enabled: true\n  directory: "{backup_root}"\n'
+            )
+        orphan = backup_root / ".2026-08-01_120000_000001.tmp-1234"
+        orphan.mkdir(parents=True)
+        orphan.joinpath("partial.bin").write_bytes(b"partial")
+        unrelated = backup_root / ".not-memory-wuxian.tmp-1234"
+        unrelated.mkdir()
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+
+        def fail_after_partial(source, destination, **kwargs):
+            destination.mkdir(parents=True)
+            destination.joinpath("partial.bin").write_bytes(b"partial")
+            raise OSError("synthetic interrupted backup")
+
+        with patch("memory_cli.shutil.copytree", side_effect=fail_after_partial):
+            with self.assertRaisesRegex(OSError, "synthetic interrupted backup"):
+                store.create_backup_snapshot("failure-injection")
+
+        self.assertFalse(orphan.exists())
+        self.assertTrue(unrelated.exists())
+        temporary = list(backup_root.glob(".*.tmp-*"))
+        self.assertEqual(temporary, [unrelated])
+        log = [
+            json.loads(line)
+            for line in (backup_root / "backup-log.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertEqual(log[-1]["status"], "failed")
+        self.assertTrue(log[-1]["temporary_cleaned"])
+        self.assertEqual(log[-1]["orphaned_incomplete_removed"], [orphan.name])
+
+    @unittest.skipUnless(os.name == "nt", "Windows extended-path behavior")
+    def test_backup_copies_paths_longer_than_legacy_windows_limit(self):
+        from memory_cli import MemoryStore, load_simple_yaml
+
+        backup_root = self.base / "long-path-backups"
+        with self.config.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f'backup:\n  enabled: true\n  directory: "{backup_root}"\n'
+            )
+        relative = Path("environment")
+        for index in range(7):
+            relative /= f"segment-{index}-" + ("x" * 32)
+        relative /= "payload.json"
+        source = Path(filesystem_native_path(self.root / relative))
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text('{"status":"long-path"}\n', encoding="utf-8")
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+
+        snapshot = store.create_backup_snapshot("windows-long-path")
+
+        self.assertIsNotNone(snapshot)
+        copied = Path(filesystem_native_path(Path(snapshot) / relative))
+        self.assertEqual(copied.read_bytes(), source.read_bytes())
+        shutil.rmtree(filesystem_native_path(self.root / "environment"))
+        shutil.rmtree(filesystem_native_path(backup_root))
 
     def test_codex_incremental_sync_filters_internal_events_and_backs_up(self):
         backup_root = self.base / "desktop-backups"

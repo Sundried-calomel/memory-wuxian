@@ -195,7 +195,11 @@ def build_prompt_payload(job: dict) -> dict:
         }
         return {
             "task": metadata,
-            "source_message_ids_derivation": "Decode records and read message_id in order.",
+            "allowed_source_message_ids": job.get("source_message_ids", []),
+            "source_message_ids_derivation": (
+                "Decode records and read message_id in order. Any policy-event citation "
+                "must be copied exactly from allowed_source_message_ids."
+            ),
             "lossless_source_records": pack_source_records(records),
         }
     summaries = job.get("source_summary_payload")

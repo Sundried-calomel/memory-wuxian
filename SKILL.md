@@ -298,6 +298,18 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     `index-generation-status`, and keep activation and rollback preview-first.
     Never use an index generation to rewrite raw history, and never activate a
     received generation without an explicit `--apply` operation.
+47. Run `scripts/runtime_effect_gate.py` for release and post-install effect
+    verification. Do not equate a running process, registered scheduler,
+    created file, mocked result, or zero exit code with a working background
+    feature. Stale waterlines, hidden fallbacks, permanent debt, incomplete
+    backups, missing parent-summary work, and stale supervisor state fail the
+    gate.
+48. Keep native capture independent from AI execution. The collector may
+    persist a semantic job but only the independent leased dispatcher may run
+    it. After a Level-1 summary is ingested, deterministically enqueue any due
+    parent summary. Bind semantic indexes to the exact raw-source snapshot and
+    expose keyword fallback when stale. During upgrades, add only missing
+    configuration defaults and preserve the prior bytes as rollback evidence.
 
 ## Commands
 

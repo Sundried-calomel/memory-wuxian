@@ -1,5 +1,13 @@
 # Memory無限
 
+> **2.11.5：**后台健康现在必须由实际效果证明，不能只看进程是否运行。原生采集器
+> 不再启动或等待 AI；独立维护调度器负责创建二级及以上摘要任务、安全修复派生索引
+> 空洞，并显式报告永久债务。语义索引绑定当前原始归档水位，陈旧时必须关闭语义路径
+> 或以 `semantic-index-stale-keyword-fallback` 明确降级到关键词检索。中断的备份会清理
+> 自身临时目录，云同步等待与部分失败不再
+> 报成功，升级只补齐缺失配置而不覆盖用户值；`runtime_effect_gate.py` 会拒绝隐藏回退、
+> 陈旧水位、孤儿备份及虚假健康状态。
+>
 > **2.11.4：**持续追平现在可以跨安装和升级保留。原生采集器把最早覆盖边界保存到
 > `collector-activation.json`，以有界批次流式读取仍保留的 rollout，从持久游标续跑，
 > 并生成 `coverage-status.json`。如果采集在原始追加和派生状态提交之间中断，下一次原生
@@ -656,6 +664,7 @@ worker 的期望状态和实际状态；`maintenance-diagnostics` 生成经过�
 
 ```powershell
 python scripts/memory_cli.py maintenance-enqueue --kind archive-health --idempotency-key health:manual
+python scripts/memory_cli.py maintenance-requeue --job-id job-<sha256> --reason "worker contract upgraded"
 python scripts/memory_cli.py maintenance-status
 python scripts/memory_cli.py maintenance-tick --maximum-jobs 20
 python scripts/memory_cli.py maintenance-diagnostics

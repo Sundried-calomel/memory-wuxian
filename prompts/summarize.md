@@ -32,7 +32,9 @@ Rules:
 - Use `revised`, `withdrawn`, or `reaffirmed` only when the source explicitly
   identifies the prior statement. Copy that prior statement into
   `prior_statement`; otherwise use `uncertain`.
-- Every `source_message_ids` value must come from the assigned Level-1 source.
+- Every `source_message_ids` value must be copied exactly from the supplied
+  `allowed_source_message_ids` list (or the fragment payload's explicit
+  `source_message_ids` list). Never infer, shorten, increment, or invent an ID.
 - Do not infer that the newest statement supersedes an older one merely because
   it is newer.
 - Do not include prose outside the JSON object.

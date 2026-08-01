@@ -515,9 +515,20 @@ safety:
 
         acknowledged_b = self.transport_b.sync(force=True, now=1030)
         self.assertEqual(len(acknowledged_b["acks"]), 1)
+        sync_log_before_replay = self.manager_a.sync_log_path.read_text(
+            encoding="utf-8"
+        ).splitlines()
         repeated = self.transport_a.sync(force=False, now=1040)
         self.assertEqual(repeated["acks"], [])
         self.assertEqual(repeated["imports"][0]["status"], "no-change")
+        self.assertEqual(repeated["counts"]["imported"], 0)
+        self.assertEqual(repeated["counts"]["no_change"], 1)
+        self.assertEqual(
+            self.manager_a.sync_log_path.read_text(
+                encoding="utf-8"
+            ).splitlines(),
+            sync_log_before_replay,
+        )
 
         peer_after = read_json(self.manager_a.peer_path("node-beta"))
         self.assertEqual(peer_after, peer_before)
@@ -640,9 +651,38 @@ safety:
         self.assertEqual(len(first["published"]), 1)
         self.assertEqual(second["published"], [])
         self.assertEqual(len(second["waiting_ack"]), 1)
+        self.assertEqual(second["status"], "waiting-ack")
         self.assertEqual(
             len(list(self.own_outbox("node-alpha", "node-beta").glob("*.mwxe"))),
             1,
+        )
+
+    def test_waiting_ack_does_not_advance_observation_watermark(self):
+        self.append_round(self.node_a, "FIRST")
+        first = self.transport_a.sync(force=True, now=2100)
+        first_state = read_json(self.node_a / "federation/cloud.json")
+        published_before_wait = first_state["schedule"]["published"]
+
+        self.append_round(self.node_a, "SECOND")
+        waiting = self.transport_a.sync(force=True, now=2110)
+        waiting_state = read_json(self.node_a / "federation/cloud.json")
+
+        self.assertEqual(waiting["status"], "waiting-ack")
+        self.assertEqual(waiting["published"], [])
+        self.assertEqual(len(waiting["waiting_ack"]), 1)
+        self.assertEqual(
+            waiting_state["schedule"]["published"], published_before_wait
+        )
+        self.assertTrue(waiting["schedule"]["changed"])
+
+        received = self.transport_b.sync(force=False, now=2120)
+        self.assertEqual(received["counts"]["imported"], 1)
+        resumed = self.transport_a.sync(force=False, now=3011)
+        self.assertEqual(len(resumed["acks"]), 1)
+        self.assertEqual(len(resumed["published"]), 1)
+        self.assertEqual(
+            resumed["published"][0]["from_event_sequence"],
+            first["published"][0]["to_event_sequence"] + 1,
         )
 
     def test_outstanding_is_recovered_after_state_write_interruption(self):
@@ -726,6 +766,9 @@ safety:
         self.assertEqual(result["quarantined"], [])
         self.assertEqual(len(result["transient"]), 1)
         self.assertEqual(result["transient"][0]["type"], "bundle")
+        self.assertEqual(result["status"], "degraded")
+        self.assertEqual(result["stream_id"], "archive-v1")
+        self.assertEqual(result["counts"]["transient"], 1)
         self.assertTrue(envelope.exists())
 
     def test_tampered_bundle_is_quarantined_without_moving_peer_file(self):
@@ -737,6 +780,9 @@ safety:
         envelope.write_text(json.dumps(payload), encoding="utf-8")
 
         received = self.transport_b.sync(force=False, now=4010)
+        self.assertEqual(received["status"], "degraded")
+        self.assertEqual(received["stream_id"], "archive-v1")
+        self.assertEqual(received["counts"]["quarantined"], 1)
         self.assertEqual(len(received["quarantined"]), 1)
         self.assertEqual(received["imports"], [])
         self.assertTrue(envelope.exists())
@@ -744,6 +790,38 @@ safety:
             (self.node_b / "federation/cloud-quarantine").glob("bundle-*.json")
         )
         self.assertEqual(len(records), 1)
+
+    def test_archive_and_environment_errors_are_isolated_and_identified(self):
+        environment_a = CloudFolderTransport(
+            self.manager_a,
+            crypto=self.crypto,
+            config_path=self.node_a / "federation/environment-cloud-test.json",
+            stream_id="environment-v1",
+        )
+        environment_b = CloudFolderTransport(
+            self.manager_b,
+            crypto=self.crypto,
+            config_path=self.node_b / "federation/environment-cloud-test.json",
+            stream_id="environment-v1",
+        )
+        environment_a.configure(self.exchange, self.key_a, enabled=True)
+        environment_b.configure(self.exchange, self.key_b, enabled=True)
+        self.append_round(self.node_a, "ENVIRONMENT-TAMPER")
+        sent = environment_a.sync(force=True, now=4100)
+        envelope = Path(sent["published"][0]["path"])
+        payload = json.loads(envelope.read_text(encoding="utf-8"))
+        payload["signature"] = "0" * 64
+        envelope.write_text(json.dumps(payload), encoding="utf-8")
+
+        environment_result = environment_b.sync(force=False, now=4110)
+        archive_result = self.transport_b.sync(force=False, now=4110)
+
+        self.assertEqual(environment_result["stream_id"], "environment-v1")
+        self.assertEqual(environment_result["status"], "degraded")
+        self.assertEqual(environment_result["counts"]["quarantined"], 1)
+        self.assertEqual(archive_result["stream_id"], "archive-v1")
+        self.assertEqual(archive_result["status"], "ok")
+        self.assertEqual(archive_result["quarantined"], [])
 
     def test_revoked_peer_is_not_read_or_written(self):
         self.append_round(self.node_a, "REVOKED")

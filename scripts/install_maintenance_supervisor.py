@@ -28,7 +28,20 @@ except ModuleNotFoundError:
 MACOS_LABEL = "com.openai.codex.memory-wuxian-maintenance"
 WINDOWS_TASK_NAME = "MemoryWuxianMaintenance"
 INTERVAL_SECONDS = 300
+DEFAULT_MAXIMUM_SEMANTIC_JOBS = 4
+SEMANTIC_JOB_TIMEOUT_SECONDS = 900
+MAINTENANCE_CLOSEOUT_MARGIN_SECONDS = 600
+WINDOWS_EXECUTION_LIMIT_SECONDS = (
+    DEFAULT_MAXIMUM_SEMANTIC_JOBS * SEMANTIC_JOB_TIMEOUT_SECONDS
+    + MAINTENANCE_CLOSEOUT_MARGIN_SECONDS
+)
 Runner = Callable[..., subprocess.CompletedProcess]
+
+
+def iso8601_duration(seconds: int) -> str:
+    if seconds <= 0 or seconds % 60:
+        raise ValueError("task duration must be a positive whole number of minutes")
+    return f"PT{seconds // 60}M"
 
 
 def maintenance_command(python: Path, skill: Path, archive: Path) -> list[str]:
@@ -94,7 +107,7 @@ def windows_xml(python: Path, skill: Path, archive: Path) -> bytes:
         ("RunOnlyIfNetworkAvailable", "false"),
         ("Enabled", "true"),
         ("Hidden", "true"),
-        ("ExecutionTimeLimit", "PT20M"),
+        ("ExecutionTimeLimit", iso8601_duration(WINDOWS_EXECUTION_LIMIT_SECONDS)),
         ("Priority", "7"),
     ):
         ET.SubElement(settings, f"{{{TASK_XML_NAMESPACE}}}{name}").text = value

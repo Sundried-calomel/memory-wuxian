@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 2.11.5 - 2026-08-01
+
+- Removed the collector's legacy synchronous AI execution path so capture only
+  persists semantic work and the independent maintenance scheduler owns it;
+  sustained history recovery now yields the shared lock between batches so
+  maintenance and backup work cannot be starved.
+- Connected automatic Level-2+ summary creation, normalized legacy Windows job
+  paths, repaired derived-index holes, and exposed permanent debt as attention.
+  Operators can explicitly requeue one quarantined job only after its previous
+  hash, attempts, and redacted failure are preserved in an immutable receipt.
+  Level-1 prompts now carry an explicit citation allow-list so models copy exact
+  message IDs while the existing out-of-scope rejection remains fail closed.
+- Bound semantic indexes to the current raw-source snapshot and made stale
+  semantic search fail closed or explicitly fall back to keyword retrieval.
+  Full local E5 builds now receive a bounded one-hour worker window and remove
+  partial vectors on timeout instead of failing at the query-sized limit.
+- Cleaned interrupted backup directories, lengthened the Windows maintenance
+  execution budget, corrected cloud waiting/partial-failure accounting, and
+  added rollback-safe configuration-default migration. Legacy committed
+  Environment receipts now upgrade only from matching state, ledger,
+  transaction, and output-hash evidence.
+- Added a shared runtime-effect gate and fixed rehearsal cases that reject
+  hidden fallback, stale waterlines, orphan backups, false success, and missing
+  parent-summary work even when processes exit successfully.
+
 ## 2.11.4 - 2026-08-01
 
 - Fixed the Windows semantic-runtime availability probe so a configured
