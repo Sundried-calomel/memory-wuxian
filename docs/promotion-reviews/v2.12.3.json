@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.12.3",
+  "work_item_id": "memory-wuxian-v2.12.3",
+  "candidate_id": "v2.12.3-semantic-drain-hotfix-candidate",
+  "owner_id": "memory-plane-control-plane",
+  "source_revision": "hotfix/v2.12.3-semantic-drain",
+  "product_evolution_record_id": "memory-wuxian-v2.12.3-release-record",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "This targeted patch corrects one scheduler gate inside the existing maintenance owner and adds no new capability.",
+  "evidence_refs": [
+    "outputs/rehearsal/v2.12.3/report.json",
+    "references/release-rehearsal.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-02T00:00:00Z"
+}

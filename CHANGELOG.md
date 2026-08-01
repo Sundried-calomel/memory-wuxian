@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 2.12.3 - 2026-08-02
+
+- Fixed continuous semantic catch-up being blocked indefinitely by rebuildable
+  transcript, index, or state drift while the native collector remained active.
+- Existing source-hash-bound summary jobs now continue draining through
+  repairable projection drift; raw-integrity failures still fail closed.
+- Reuses a recent deep-recovery result for up to one hour unless explicit
+  recovery debt exists, avoiding a full derived-view rebuild before every
+  five-minute summary batch.
+- Added a targeted regression and a live scheduled-task effect gate requiring
+  pending semantic debt to decrease without a manual dispatcher invocation.
+
 ## 2.12.2 - 2026-08-02
 
 - Restored the daily chart's bold date labels below the baseline, matched the local and all-device bar widths, and refreshed the blue and green palette.

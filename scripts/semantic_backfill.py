@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from memory_cli import MemoryStore, load_simple_yaml, now_iso
@@ -17,6 +18,31 @@ from memory_jobs import (
     write_maintenance_projection,
 )
 from semantic_dispatch import dispatch_job
+
+
+RECOVERY_AUDIT_INTERVAL_SECONDS = 3600
+
+
+def recent_recovery_audit(
+    root: Path,
+    *,
+    maximum_age_seconds: int = RECOVERY_AUDIT_INTERVAL_SECONDS,
+    current_time: datetime | None = None,
+) -> dict | None:
+    state_path = root / "maintenance" / "supervisor-state.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        recovery = state["result"]["native_recovery"]
+        timestamp = datetime.fromisoformat(str(recovery["timestamp"]).replace("Z", "+00:00"))
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    now = current_time or datetime.now(timezone.utc)
+    age_seconds = (now.astimezone(timezone.utc) - timestamp.astimezone(timezone.utc)).total_seconds()
+    if age_seconds < 0 or age_seconds > maximum_age_seconds:
+        return None
+    return {**recovery, "mode": "cached-recovery-audit", "repairs": []}
 
 
 def ordered_pending_jobs(store: MemoryStore) -> list[Path]:
@@ -45,15 +71,18 @@ def run_backfill(
     recovery_debt_path = root / "pending" / "native-recovery-debt.json"
     recovery = None
     if not dry_run:
-        recovery = store.heartbeat(create_jobs=False, repair=True)
+        recovery = None if recovery_debt_path.exists() else recent_recovery_audit(root)
+        if recovery is None:
+            recovery = store.heartbeat(create_jobs=False, repair=True)
         if recovery_debt_path.exists() and recovery.get("status") == "ok":
             recovery_debt_path.unlink(missing_ok=True)
     integrity_issues = list((recovery or {}).get("integrity_issues") or [])
     repairable_issues = list((recovery or {}).get("repairable_issues") or [])
-    recovery_blocked = bool(integrity_issues or repairable_issues)
+    dispatch_blocked = bool(integrity_issues)
+    scheduling_blocked = bool(integrity_issues or repairable_issues)
     queue = MaintenanceQueue(root)
     scheduled = []
-    if not recovery_blocked:
+    if not scheduling_blocked:
         due_job = store.make_summary_job()
         if due_job is not None:
             scheduled.append(str(due_job))
@@ -70,14 +99,14 @@ def run_backfill(
         and job["payload"].get("summary_job")
     }
     limit = len(pending) if max_jobs == 0 else max_jobs
-    if recovery_blocked:
+    if dispatch_blocked:
         skipped.append({
-            "reason": "integrity-failure" if integrity_issues else "repair-incomplete",
+            "reason": "integrity-failure",
             "error": redact_error(
-                "; ".join(str(item) for item in (integrity_issues or repairable_issues))
+                "; ".join(str(item) for item in integrity_issues)
             ),
         })
-    for job_path in ([] if recovery_blocked else pending):
+    for job_path in ([] if dispatch_blocked else pending):
         if attempted >= limit:
             break
         maintenance = maintenance_by_path.get(stable_path_identity(job_path))
@@ -115,7 +144,7 @@ def run_backfill(
             })
             continue
         completed.append(result)
-        if result.get("status") == "ingested" and not recovery_blocked:
+        if result.get("status") == "ingested" and not scheduling_blocked:
             due_job = store.make_summary_job()
             if due_job is not None:
                 scheduled.append(str(due_job))
@@ -163,7 +192,7 @@ def run_backfill(
     permanent_failures = queue_status["quarantined"]
     if dry_run:
         status = "dry-run"
-    elif recovery_blocked or reconciliation["invalid"] or permanent_failures:
+    elif integrity_issues or repairable_issues or reconciliation["invalid"] or permanent_failures:
         status = "attention"
     elif skipped or remaining_pending_jobs or read_backup_debt_generation(root) is not None:
         status = "catching-up"

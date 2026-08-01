@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "release": "2.12.3",
+  "validation_profile": "targeted-patch",
+  "status": "passed",
+  "scenarios": [
+    {
+      "id": "semantic-backfill-regression",
+      "status": "passed",
+      "evidence": "15 focused semantic-backfill and v2.12.3 contract tests passed"
+    },
+    {
+      "id": "windows-scheduled-semantic-drain-effect",
+      "status": "passed",
+      "manual_dispatch_invoked": false,
+      "scheduled_task": "MemoryWuxianMaintenance",
+      "scheduled_start": "2026-08-02T03:01:10+09:00",
+      "codex_exec_observed": "2026-08-02T03:01:11+09:00",
+      "first_pending_decrease_observed": "2026-08-02T03:04:10+09:00",
+      "pending_before": 158,
+      "pending_after": 157
+    },
+    {
+      "id": "architecture-contract",
+      "status": "passed",
+      "evidence": "Every production file has one owner"
+    },
+    {
+      "id": "documentation-contract",
+      "status": "passed",
+      "evidence": "118 CLI commands and 40 feature groups in 3 READMEs"
+    },
+    {
+      "id": "native-check",
+      "status": "passed",
+      "evidence": "cargo fmt --check and cargo check --locked passed"
+    },
+    {
+      "id": "diff-check",
+      "status": "passed",
+      "evidence": "git diff --check passed"
+    }
+  ],
+  "raw_history_modified_by_patch": false,
+  "notes": [
+    "Repairable derived-view drift remains visible as attention and does not authorize new compensating jobs.",
+    "Frozen job source SHA-256 is still revalidated before semantic ingest.",
+    "Explicit recovery debt forces a fresh deep audit; otherwise a successful or attention recovery result is reused for at most one hour."
+  ]
+}
