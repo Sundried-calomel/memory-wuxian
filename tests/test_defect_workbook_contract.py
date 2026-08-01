@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import unittest
 from pathlib import Path
@@ -43,6 +45,25 @@ class DefectWorkbookContractTests(unittest.TestCase):
         )
         self.assertIn("adjacent-entry regression", rules)
         self.assertIn("installed or production-sized effect check", rules)
+
+    def test_future_release_contracts_bind_defect_gate_receipts(self) -> None:
+        for path in sorted((ROOT / "docs" / "work-contracts").glob("v*.json")):
+            match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)\.json", path.name)
+            if not match or tuple(map(int, match.groups())) <= (2, 12, 3):
+                continue
+            contract = json.loads(path.read_text(encoding="utf-8"))
+            gate = contract.get("defect_workbook")
+            self.assertIsInstance(gate, dict, path.name)
+            self.assertTrue(gate.get("applicable_families"), path.name)
+            self.assertTrue(gate.get("original_triggers"), path.name)
+            self.assertIsInstance(gate.get("project_workbook_updated"), bool, path.name)
+            if "hotfix" in contract.get("candidate_id", "").lower():
+                self.assertTrue(gate["project_workbook_updated"], path.name)
+            for field in ("preflight", "completion"):
+                receipt = ROOT / gate[f"{field}_receipt"]
+                self.assertTrue(receipt.is_file(), f"{path.name}: missing {receipt}")
+                actual = hashlib.sha256(receipt.read_bytes()).hexdigest()
+                self.assertEqual(actual, gate[f"{field}_sha256"], path.name)
 
 
 if __name__ == "__main__":
