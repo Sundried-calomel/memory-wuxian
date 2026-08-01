@@ -171,3 +171,17 @@
 4. 后台、安装器、UI、同步必须加入安装后或生产量级的真实效果检查。
 5. 同一变更更新本文件；只有去掉项目路径、权限和版本后仍成立的教训，才提升到本设备
    Skill 错题本。
+
+## 未来版本机器门禁
+
+从 v2.12.4 起，每个 `docs/work-contracts/vX.Y.Z.json` 必须包含
+`defect_workbook` 对象：
+
+- `preflight_receipt` 与 `preflight_sha256`；
+- `completion_receipt` 与 `completion_sha256`；
+- 非空 `applicable_families`；
+- `project_workbook_updated` 布尔值；
+- `original_triggers`，说明继承了哪些历史触发器。
+
+两个收据必须存在且哈希匹配。修复类版本的 `project_workbook_updated` 必须为
+`true`。这样发布门禁读取机器证据，不依赖当前对话是否记得本文件。
