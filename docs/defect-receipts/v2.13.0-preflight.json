@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "receipt_type": "defect-workbook-preflight",
+  "created_at": "2026-08-02T10:15:00+00:00",
+  "change_kind": "feature",
+  "target": "memory-wuxian-v2.13.0-project-evidence",
+  "workbook": "docs/retrospectives/memory-wuxian-defect-workbook.md",
+  "selected_families": ["MW-R06", "MW-R09", "MW-R10", "MW-R12"],
+  "result": "applicable-families-reviewed"
+}

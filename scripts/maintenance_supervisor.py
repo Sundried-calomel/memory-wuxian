@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 from memory_jobs import write_maintenance_projection
+from memory_project_evidence import ProjectEvidenceStore
 from platform_transaction import atomic_write_canonical_json
 from semantic_backfill import run_backfill
 
@@ -40,11 +41,16 @@ def run_supervisor_tick(root: Path, config_path: Path, *, maximum_semantic_jobs:
         max_jobs=maximum_semantic_jobs,
         dry_run=False,
     )
+    project_evidence = ProjectEvidenceStore(root).refresh_owners(
+        maximum_owners=20,
+        apply=True,
+    )
     return {
         "format": "memory-wuxian-maintenance-supervisor-state-v1",
         "status": _supervisor_status(result),
         "process_id": os.getpid(),
         "result": result,
+        "project_evidence_owners": project_evidence,
     }
 
 

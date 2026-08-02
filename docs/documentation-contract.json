@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.12.7",
+  "reviewed_version": "2.14.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -114,6 +114,10 @@
     {
       "id": "environment-exchange",
       "required_tokens": ["environment-export-delta", "cloud-sync", "environment-process-incoming", "environment-accept-incoming"]
+    },
+    {
+      "id": "project-evidence-packages",
+      "required_tokens": ["project-evidence-build", "project-evidence-list", "project-evidence-query", "project-evidence-reconstruct", "project-evidence-status", "project-evidence-owner-register", "project-evidence-owner-refresh", "project-evidence-owner-status", "project-evidence-v1"]
     },
     {
       "id": "environment-installation",

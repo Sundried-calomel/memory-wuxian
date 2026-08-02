@@ -53,6 +53,11 @@ Memory無限
 │   ├── Conflict Manager
 │   ├── Promotion Manager
 │   └── Governance Proposal Replica
+├── Project Evidence Plane
+│   ├── Explicit Package Builder
+│   ├── Immutable Generation Store
+│   ├── Bounded Query / Reconstruction
+│   └── Read-Only Peer Replica
 ├── Exchange Plane
 │   ├── Federation Protocol
 │   ├── Cloud-Folder Transport
@@ -77,6 +82,12 @@ The Environment Plane owns registered Rules and Skills, immutable revisions,
 local bindings, installation transactions, conflicts, promotion review,
 receipts, and rollback evidence.
 
+The Project Evidence Plane owns explicitly selected bounded project records,
+their exact-byte immutable generations, predecessor references, bounded query,
+conflict-safe reconstruction, and read-only peer replicas. It never scans a
+workspace, installs a capability, activates a Rule or Skill, or treats a report
+as proof of current external state.
+
 The Exchange Plane owns transport identities, envelopes, event sequences,
 predecessor chains, acknowledgements, replica delivery, and diagnostics. It
 does not own the meaning of a conversation, summary, Rule, or Skill.
@@ -87,9 +98,9 @@ Plane transports them. `work-system-governor` owns semantic abstraction,
 classification, validation, and acceptance. A transported or imported proposal
 does not authorize a Rule or Skill revision.
 
-`archive-v1` and `environment-v1` remain independent streams. A fault,
-conflict, or acknowledgement delay in one stream must not advance or block the
-other.
+`archive-v1`, `environment-v1`, and `project-evidence-v1` remain independent
+streams. A fault, conflict, or acknowledgement delay in one stream must not
+advance or block another.
 
 ## Dependency Direction
 

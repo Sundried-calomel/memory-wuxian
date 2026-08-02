@@ -13,8 +13,14 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timezone
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable
+
+if sys.platform == "darwin":
+    import fcntl
+else:  # pragma: no cover - the installer is macOS-only
+    fcntl = None
 
 import yaml
 
@@ -27,6 +33,7 @@ except ModuleNotFoundError:
 
 
 COLLECTOR_LABEL = "com.memorywuxian.codex-sync"
+COLLECTOR_READY_TIMEOUT_SECONDS = 900
 Runner = Callable[..., subprocess.CompletedProcess]
 
 
@@ -219,6 +226,95 @@ def wait_for_launch_agent(
     raise RuntimeError(f"{label} was not restored under launchd")
 
 
+@contextmanager
+def quiesce_collector_for_cutover(
+    archive_root: Path,
+    plist: Path,
+    *,
+    runner: Runner = subprocess.run,
+    timeout_seconds: float = 900,
+):
+    """Drain the current archive transaction, then stop the old collector."""
+    if fcntl is None:
+        raise RuntimeError("collector cutover is supported only on macOS")
+    lock_path = archive_root / ".locks" / "archive.lock"
+    recovery_debt = archive_root / "pending" / "native-recovery-debt.json"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout_seconds
+    booted_out = False
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        while True:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        "current collector did not reach an idle archive boundary "
+                        f"within {timeout_seconds:.0f} seconds"
+                    )
+                time.sleep(0.5)
+        yielded = False
+        try:
+            if recovery_debt.exists():
+                raise RuntimeError(
+                    "native recovery debt remains after the archive became idle"
+                )
+            previous_pid = launchctl_pid(COLLECTOR_LABEL, runner)
+            if previous_pid is not None and not plist.is_file():
+                raise RuntimeError(
+                    "current collector is running but its LaunchAgent plist is missing"
+                )
+            if previous_pid is not None:
+                completed = runner(
+                    [
+                        "/bin/launchctl",
+                        "bootout",
+                        f"gui/{os.getuid()}",
+                        str(plist),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                if completed.returncode != 0:
+                    detail = (completed.stderr or completed.stdout or "").strip()
+                    raise RuntimeError(
+                        "failed to stop the current collector at an idle boundary"
+                        + (f": {detail}" if detail else "")
+                    )
+                booted_out = True
+                deadline = time.monotonic() + 30
+                while launchctl_pid(COLLECTOR_LABEL, runner) is not None:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError(
+                            "current collector did not stop after idle cutover"
+                        )
+                    time.sleep(0.25)
+            yielded = True
+            yield {
+                "status": "quiesced",
+                "previous_pid": previous_pid,
+                "recovery_debt_present": False,
+            }
+        except Exception:
+            if booted_out and not yielded and plist.is_file():
+                runner(
+                    [
+                        "/bin/launchctl",
+                        "bootstrap",
+                        f"gui/{os.getuid()}",
+                        str(plist),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+            raise
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def prepare_candidate(source_root: Path, candidate: Path, current: Path) -> None:
     shutil.rmtree(candidate, ignore_errors=True)
     shutil.copytree(
@@ -285,12 +381,23 @@ def install(
     prepare_candidate(source_root, candidate, skill_root)
     probe = probe_candidate(candidate, runner)
 
-    shutil.rmtree(rollback, ignore_errors=True)
-    shutil.rmtree(failed, ignore_errors=True)
-    if skill_root.exists():
-        os.replace(skill_root, rollback)
+    with quiesce_collector_for_cutover(
+        archive_root,
+        plist,
+        runner=runner,
+    ) as cutover:
+        pass
+
+    moved_current = False
+    candidate_active = False
     try:
+        shutil.rmtree(rollback, ignore_errors=True)
+        shutil.rmtree(failed, ignore_errors=True)
+        if skill_root.exists():
+            os.replace(skill_root, rollback)
+            moved_current = True
         os.replace(candidate, skill_root)
+        candidate_active = True
         runner(
             [
                 str(python_executable),
@@ -306,13 +413,35 @@ def install(
                 "--codex-cli",
                 str(codex_cli),
                 "--load",
+                "--defer-maintenance",
             ],
             check=True,
             capture_output=True,
             text=True,
             timeout=90,
         )
-        telemetry = wait_for_collector(archive_root, previous_pid=old_pid)
+        telemetry = wait_for_collector(
+            archive_root,
+            previous_pid=old_pid,
+            timeout_seconds=COLLECTOR_READY_TIMEOUT_SECONDS,
+        )
+        runner(
+            [
+                str(python_executable),
+                str(skill_root / "scripts" / "install_maintenance_supervisor.py"),
+                "--archive-root",
+                str(archive_root),
+                "--skill-root",
+                str(skill_root),
+                "--python-executable",
+                str(python_executable),
+                "--load",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=90,
+        )
         runner(
             [
                 str(python_executable),
@@ -331,7 +460,12 @@ def install(
         )
     except Exception as error:
         runner(
-            ["/bin/launchctl", "bootout", f"gui/{os.getuid()}", str(maintenance_plist)],
+            [
+                "/bin/launchctl",
+                "bootout",
+                f"gui/{os.getuid()}",
+                str(maintenance_plist),
+            ],
             check=False,
             capture_output=True,
             text=True,
@@ -342,19 +476,19 @@ def install(
             capture_output=True,
             text=True,
         )
-        if skill_root.exists():
+        if candidate_active and skill_root.exists():
             os.replace(skill_root, failed)
-        if rollback.exists():
+        if moved_current and rollback.exists():
             os.replace(rollback, skill_root)
         if old_plist is not None:
             atomic_bytes(plist, old_plist)
-            runner(
-                ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            wait_for_launch_agent(COLLECTOR_LABEL, runner=runner)
+        runner(
+            ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        wait_for_launch_agent(COLLECTOR_LABEL, runner=runner)
         if old_maintenance_plist is None:
             maintenance_plist.unlink(missing_ok=True)
         else:
@@ -388,6 +522,7 @@ def install(
     return {
         "status": "installed",
         "probe": probe,
+        "cutover": cutover,
         "previous_pid": old_pid,
         "active_pid": int(telemetry["pid"]),
         "telemetry_updated_at": telemetry["updated_at"],

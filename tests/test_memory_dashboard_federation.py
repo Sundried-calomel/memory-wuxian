@@ -326,6 +326,14 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         }
         environment_cloud_transport = Mock()
         environment_cloud_transport.status.return_value = environment_cloud_status
+        project_evidence_status = {
+            **cloud_status,
+            "stream_id": "project-evidence-v1",
+            "peers": [],
+            "inventory": {"status": "ok", "local_packages": 0, "local_event_sequence": 0},
+        }
+        project_evidence_transport = Mock()
+        project_evidence_transport.status.return_value = project_evidence_status
         with (
             patch("memory_dashboard.FederationManager", return_value=manager),
             patch(
@@ -336,6 +344,13 @@ class MemoryDashboardFederationTest(unittest.TestCase):
                 "memory_dashboard.environment_cloud_transport",
                 return_value=environment_cloud_transport,
             ),
+            patch(
+                "memory_dashboard.project_evidence_cloud_transport",
+                return_value=project_evidence_transport,
+            ),
+            patch(
+                "memory_dashboard.ProjectEvidenceExchangeManager"
+            ) as evidence_manager,
             patch(
                 "memory_dashboard.cloud_scheduler_status",
                 return_value={
@@ -349,6 +364,11 @@ class MemoryDashboardFederationTest(unittest.TestCase):
                 side_effect=AssertionError("devices API must not build the archive snapshot"),
             ),
         ):
+            evidence_manager.return_value.status.return_value = {
+                "status": "ok",
+                "local_packages": 0,
+                "local_event_sequence": 0,
+            }
             server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.store))
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
@@ -377,6 +397,7 @@ class MemoryDashboardFederationTest(unittest.TestCase):
                             **cloud_status,
                         },
                         "environment-v1": environment_cloud_status,
+                        "project-evidence-v1": project_evidence_status,
                     },
                     "scheduler": {
                         "platform": "macos",
@@ -389,6 +410,7 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         manager.status.assert_called_once_with()
         cloud_factory.assert_called_once_with(manager)
         cloud_transport.status.assert_called_once_with()
+        evidence_manager.return_value.status.assert_called_once_with()
 
     def test_devices_api_does_not_create_federation_cloud_or_snapshot_files(self):
         root = self.store.root
@@ -432,6 +454,12 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "enabled": True,
             "stream_id": "environment-v1",
         }
+        project_evidence_transport = Mock()
+        project_evidence_transport.status.return_value = {
+            "configured": True,
+            "enabled": True,
+            "stream_id": "project-evidence-v1",
+        }
         scheduler = {
             "platform": "macos",
             "installed": True,
@@ -446,6 +474,10 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             patch(
                 "memory_dashboard.environment_cloud_transport",
                 return_value=environment_transport,
+            ),
+            patch(
+                "memory_dashboard.project_evidence_cloud_transport",
+                return_value=project_evidence_transport,
             ),
             patch("memory_dashboard.set_cloud_scheduler", return_value=scheduler),
             patch("memory_dashboard.cloud_scheduler_status", return_value=scheduler),
@@ -473,6 +505,7 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         self.assertEqual(payload["result"]["status"], "enabled")
         transport.set_enabled.assert_called_once_with(True)
         environment_transport.set_enabled.assert_called_once_with(True)
+        project_evidence_transport.set_enabled.assert_called_once_with(True)
 
     def test_cloud_sync_serializes_concurrent_dashboard_requests(self):
         manager = Mock()
@@ -506,6 +539,13 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "stream_id": "environment-v1",
         }
         environment_transport.sync.return_value = {"status": "ok"}
+        project_evidence_transport = Mock()
+        project_evidence_transport.status.return_value = {
+            "configured": True,
+            "enabled": True,
+            "stream_id": "project-evidence-v1",
+        }
+        project_evidence_transport.sync.return_value = {"status": "ok"}
         with (
             patch("memory_dashboard.FederationManager", return_value=manager),
             patch(
@@ -515,6 +555,10 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             patch(
                 "memory_dashboard.environment_cloud_transport",
                 return_value=environment_transport,
+            ),
+            patch(
+                "memory_dashboard.project_evidence_cloud_transport",
+                return_value=project_evidence_transport,
             ),
             patch(
                 "memory_dashboard.cloud_scheduler_status",
@@ -566,6 +610,7 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         self.assertEqual(maximum_active, 1)
         self.assertTrue(all(status == 200 for status, _ in responses))
         self.assertEqual(transport.sync.call_count, 2)
+        self.assertEqual(project_evidence_transport.sync.call_count, 2)
 
     def test_cloud_sync_reports_partial_success_per_stream(self):
         manager = Mock()
@@ -586,6 +631,13 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         environment_transport.sync.side_effect = RuntimeError(
             "environment unavailable"
         )
+        project_evidence_transport = Mock()
+        project_evidence_transport.status.return_value = {
+            "configured": True,
+            "enabled": True,
+            "stream_id": "project-evidence-v1",
+        }
+        project_evidence_transport.sync.return_value = {"status": "ok"}
         with (
             patch("memory_dashboard.FederationManager", return_value=manager),
             patch(
@@ -595,6 +647,10 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             patch(
                 "memory_dashboard.environment_cloud_transport",
                 return_value=environment_transport,
+            ),
+            patch(
+                "memory_dashboard.project_evidence_cloud_transport",
+                return_value=project_evidence_transport,
             ),
             patch(
                 "memory_dashboard.cloud_scheduler_status",
@@ -632,6 +688,10 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         self.assertEqual(
             payload["result"]["streams"]["environment"],
             {"status": "error", "error": "environment unavailable"},
+        )
+        self.assertEqual(
+            payload["result"]["streams"]["project_evidence"],
+            {"status": "ok", "result": {"status": "ok"}},
         )
 
     def test_cloud_api_rejects_cross_origin_requests(self):

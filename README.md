@@ -1,6 +1,9 @@
 # Memory無限
 
-> **2.12.7:** Python and native live capture now wait for the last pending
+> **2.14.0 candidate:** Adds device-local Project Evidence Owners that maintain
+> explicit closed file selections through bounded model-free refresh. **2.13.0** adds explicit immutable Project Evidence Packages and
+> an independent encrypted `project-evidence-v1` stream. It retains the
+> **2.12.7** live-capture correction, where Python and native capture wait for the last pending
 > conversation sharing a legacy round before advancing global completion.
 
 > **2.12.6:** A shared legacy round is complete only after every conversation
@@ -304,6 +307,8 @@ The collector publishes lightweight runtime telemetry under `imports/codex/colle
 
 Existing macOS installations update through `scripts/install_macos_transaction.py`. It stages a candidate, runs an isolated candidate probe that must capture exact synthetic user and assistant messages, and cuts over only after that proof passes. It then verifies a replacement collector PID, fresh telemetry, and the current dashboard. Any post-switch failure restores the previous Skill, LaunchAgent, and collector. Routine updates use this user-space transaction and do not require the full installer or an administrator password.
 
+Before switching files, the transaction waits for the shared archive lock, verifies that no native recovery debt remains, and stops the old collector while still holding that lock. It releases the lock before starting the replacement collector and loads scheduled maintenance only after the replacement reports ready. This idle-boundary handoff prevents an interrupted write or maintenance race from turning a routine update into a full-history recovery audit. If the handoff or first directory switch fails, the previous collector is restored immediately.
+
 Initial collector synchronization never waits for an AI summary. If startup
 crosses a summary threshold, it persists the immutable summary job and lets the
 existing semantic-backfill worker process that queue after collector readiness.
@@ -533,6 +538,40 @@ five-minute scheduler. Sync now performs one immediate encrypted exchange pass.
 The panel displays the configured provider directory and the observed scheduler
 state, so ordinary operation does not require an AI conversation or terminal
 commands.
+
+## Project evidence packages
+
+Memory Wuxian can preserve and exchange an explicit, bounded set of project
+rules, status and next-plan records, decisions, QA, reports, templates, and
+compact supporting artifacts. It does not scan or upload a whole workspace.
+Every package preserves exact bytes and SHA-256 hashes, names its predecessor
+when applicable, and is stored as an immutable generation. Source-root paths
+are not persisted, probable text secrets are rejected, and peer copies remain
+read-only.
+
+Project evidence uses its own signed and target-encrypted
+`project-evidence-v1` stream. This leaves `archive-v1` and `environment-v1`
+unchanged, and older clients can ignore the new stream safely. The dashboard
+shows package and stream cursors. Use `project-evidence-query` for bounded
+location results and `project-evidence-reconstruct` for exact complete bytes.
+See [the project evidence contract](references/project-evidence.md).
+
+```text
+project-evidence-build
+project-evidence-list
+project-evidence-query
+project-evidence-reconstruct
+project-evidence-status
+project-evidence-owner-register
+project-evidence-owner-refresh
+project-evidence-owner-status
+```
+
+A device-local Project Evidence Owner can maintain one explicit closed file
+selection. The five-minute model-free supervisor refreshes at most 20 owners
+per pass. Unchanged content creates no record; changed stable content creates a
+predecessor-linked immutable generation. Source paths remain local, failures
+are isolated, and imported packages never create owners.
 
 ## Memory無限 2.0 environment convergence
 

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "receipt_type": "defect-workbook-completion",
+  "created_at": "2026-08-02T10:15:00+00:00",
+  "change_kind": "feature",
+  "target": "memory-wuxian-v2.13.0-project-evidence",
+  "preflight_path": "docs/defect-receipts/v2.13.0-preflight.json",
+  "selected_families": ["MW-R06", "MW-R09", "MW-R10", "MW-R12"],
+  "changed_workbook_entries": [],
+  "no_applicable_family_reason": "Existing recurrence families already cover the feature and no new defect family was introduced.",
+  "status": "passed"
+}

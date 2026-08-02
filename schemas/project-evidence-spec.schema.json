@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/project-evidence-spec.schema.json",
+  "title": "Memory Wuxian project evidence specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_id", "title", "source_root", "files"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 240},
+    "source_root": {"type": "string", "minLength": 1},
+    "predecessor_generation_id": {
+      "type": ["string", "null"],
+      "pattern": "^project-evidence:[0-9a-f]{64}$"
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "role": {
+            "enum": [
+              "project-rule", "status", "next-plan", "decision", "qa",
+              "daily-report", "weekly-report", "phase-report", "template",
+              "figure", "table", "artifact-index", "other-evidence"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

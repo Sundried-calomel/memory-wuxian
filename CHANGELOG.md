@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.14.0 - 2026-08-02
+
+- Added explicit device-local Project Evidence Owners for closed file
+  selections, idempotent registration, stable-byte refresh, automatic
+  predecessor linkage, and per-owner failure isolation.
+- Added bounded model-free owner refresh to the five-minute maintenance
+  supervisor and equivalent CLI and dashboard status/manual-refresh controls.
+- Kept source roots local, imported evidence read-only, unchanged refreshes
+  mutation-free, and the existing archive, Environment, and project-evidence
+  exchange contracts independent.
+
+## 2.13.0 - 2026-08-02
+
+- Added explicit immutable Project Evidence Packages for bounded project rules,
+  status, plans, decisions, QA, reports, templates, and compact supporting
+  artifacts. Exact bytes and SHA-256 hashes are preserved without persisting
+  source-root paths.
+- Added a separate signed and target-encrypted `project-evidence-v1` cloud
+  stream, read-only peer replicas, bounded query, conflict-safe reconstruction,
+  CLI controls, and dashboard stream status. Existing archive and Environment
+  protocols remain unchanged for older clients.
+- Corrected the heartbeat idempotency regression assertion: a repeated pass
+  reports no newly created job while preserving the existing pending job.
+- Made macOS update cutover wait for an idle archive-lock boundary, reject
+  unresolved native recovery debt, and restore the previous collector if the
+  handoff or first directory switch fails.
+- Deferred the macOS maintenance LaunchAgent until the replacement collector
+  reports ready, preventing maintenance from consuming the startup lock window.
+- Increased the bounded replacement-collector readiness window to 15 minutes
+  for very large active rollouts while retaining PID, liveness, freshness, and
+  ready-phase validation.
+
 ## Unreleased
 
 ## 2.12.7 - 2026-08-02

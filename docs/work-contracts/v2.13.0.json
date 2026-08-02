@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.13.0",
+  "candidate_id": "v2.13.0-project-evidence-packages",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "project-evidence-plane",
+  "validation_profile": "full",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "architecture-contract",
+    "documentation-contract",
+    "exact-byte-reconstruction",
+    "conflict-zero-write",
+    "authenticated-project-evidence-exchange",
+    "corrupt-bundle-rejection",
+    "old-stream-compatibility",
+    "quiesced-macos-collector-cutover",
+    "macos-dashboard",
+    "windows-installer-and-dashboard",
+    "rollback"
+  ],
+  "target": "Share bounded project rules, status, plans, reports, QA, and compact evidence across trusted devices.",
+  "primary_semantics": "An explicit file manifest creates an immutable exact-byte generation; transport produces read-only peer evidence and never activates content.",
+  "invariants": [
+    "Raw conversation history and existing archive summaries remain unchanged.",
+    "archive-v1 and environment-v1 payload contracts remain unchanged.",
+    "Every selected file is size bounded, hashed, and reconstructed without overwriting conflicts.",
+    "A macOS update switches files only after the archive reaches an idle locked boundary with no native recovery debt.",
+    "No whole-workspace scan, automatic installation, activation, or execution is permitted."
+  ],
+  "allowed_changes": [
+    "Add project evidence schema, domain module, CLI, independent exchange stream, dashboard status, tests, synchronized documentation, and a quiesced macOS collector cutover."
+  ],
+  "prohibited_changes": [
+    "Upload raw datasets, caches, bulk logs, or secrets.",
+    "Publish a GitHub release without separate authorization.",
+    "Mutate peer evidence or existing archive and Environment streams."
+  ],
+  "before_after_checks": [
+    "Build and reconstruct exact bytes for text and CRLF evidence.",
+    "Reject conflicts and corrupt event ranges before any write.",
+    "Verify independent stream operation on macOS and Windows rehearsals.",
+    "Verify idle-boundary cutover plus previous-collector restoration on handoff and first-switch failures.",
+    "Verify rollback to v2.12.7 without changing archives."
+  ],
+  "required_evidence": [
+    "unit-and-integration-tests",
+    "release-rehearsal",
+    "dashboard-visual-rehearsal",
+    "transactional-install-receipt"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.13.0-preflight.json",
+    "preflight_sha256": "f8885ac7b2fbf8d485560973efd3b8ffcd37c189b45281932715be8b92305a66",
+    "completion_receipt": "docs/defect-receipts/v2.13.0-completion.json",
+    "completion_sha256": "b449fd806fc61c458ebe315a04061d2dec7a883909299c9f90edcdfcac035f81",
+    "applicable_families": ["MW-R06", "MW-R09", "MW-R10", "MW-R12"],
+    "project_workbook_updated": false,
+    "original_triggers": [
+      "A new encrypted stream must preserve independent cursors and old-reader compatibility.",
+      "Explicit structured manifests and three-language documentation must remain synchronized."
+    ]
+  },
+  "rollback_version": "2.12.7",
+  "lifecycle_state": "candidate"
+}

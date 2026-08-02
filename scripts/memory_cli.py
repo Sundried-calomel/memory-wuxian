@@ -42,6 +42,7 @@ import memory_indexing
 from memory_content_store import ContentStore
 from memory_diagnostics import create_diagnostic_bundle
 from memory_jobs import KINDS as MAINTENANCE_JOB_KINDS, MaintenanceQueue, run_model_free_tick
+from memory_project_evidence import ProjectEvidenceExchangeManager, ProjectEvidenceStore
 from memory_resumable_sync import ResumableTransfer
 from memory_readonly_http import create_server as create_readonly_server
 from memory_readonly_mcp import serve_lines as serve_readonly_mcp
@@ -154,6 +155,41 @@ def environment_cloud_transport(
             cleanup_grace_seconds=int(
                 archive_config.get("cleanup_grace_seconds", 24 * 60 * 60)
             ),
+        )
+    return transport
+
+
+def project_evidence_cloud_transport(
+    store: "MemoryStore",
+    archive_transport: CloudFolderTransport,
+    *,
+    bootstrap: bool,
+) -> CloudFolderTransport:
+    manager = ProjectEvidenceExchangeManager(store)
+    transport = CloudFolderTransport(
+        manager,
+        config_path=manager.metadata_root / "cloud.json",
+        stream_id="project-evidence-v1",
+    )
+    if (
+        bootstrap
+        and not transport.config_path.exists()
+        and archive_transport.status()["configured"]
+    ):
+        archive_config = archive_transport.config
+        transport.configure(
+            Path(str(archive_config["exchange_root"])),
+            Path(str(archive_config["identity_private_path"])),
+            (
+                Path(str(archive_config["envelope_binary"]))
+                if archive_config.get("envelope_binary")
+                else None
+            ),
+            enabled=bool(archive_config.get("enabled")),
+            merge_window_seconds=int(archive_config.get("merge_window_seconds", 900)),
+            early_flush_bytes=int(archive_config.get("early_flush_bytes", 1024 * 1024)),
+            maximum_pending_seconds=int(archive_config.get("maximum_pending_seconds", 3600)),
+            cleanup_grace_seconds=int(archive_config.get("cleanup_grace_seconds", 24 * 60 * 60)),
         )
     return transport
 
@@ -4541,6 +4577,51 @@ def build_parser() -> argparse.ArgumentParser:
         "cloud-disable",
         help="Disable cloud-folder synchronization without deleting data or keys",
     )
+    project_evidence_build = subparsers.add_parser(
+        "project-evidence-build",
+        help="Preview or record one explicit immutable project evidence package",
+    )
+    project_evidence_build.add_argument("--spec", required=True)
+    project_evidence_build.add_argument("--apply", action="store_true")
+    project_evidence_list = subparsers.add_parser(
+        "project-evidence-list",
+        help="List local and read-only peer project evidence packages",
+    )
+    project_evidence_list.add_argument("--project-id")
+    project_evidence_query = subparsers.add_parser(
+        "project-evidence-query",
+        help="Search bounded local and peer project evidence metadata and text excerpts",
+    )
+    project_evidence_query.add_argument("--query", required=True)
+    project_evidence_query.add_argument("--project-id")
+    project_evidence_query.add_argument("--role")
+    project_evidence_reconstruct = subparsers.add_parser(
+        "project-evidence-reconstruct",
+        help="Preview or reconstruct exact project evidence bytes into a destination",
+    )
+    project_evidence_reconstruct.add_argument("--generation-id", required=True)
+    project_evidence_reconstruct.add_argument("--destination", required=True)
+    project_evidence_reconstruct.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "project-evidence-status",
+        help="Show project evidence package and exchange cursors",
+    )
+    project_evidence_owner_register = subparsers.add_parser(
+        "project-evidence-owner-register",
+        help="Preview or register one device-local explicit project evidence owner",
+    )
+    project_evidence_owner_register.add_argument("--spec", required=True)
+    project_evidence_owner_register.add_argument("--apply", action="store_true")
+    project_evidence_owner_refresh = subparsers.add_parser(
+        "project-evidence-owner-refresh",
+        help="Preview or create one changed immutable generation for a registered owner",
+    )
+    project_evidence_owner_refresh.add_argument("--project-id", required=True)
+    project_evidence_owner_refresh.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "project-evidence-owner-status",
+        help="Show device-local project evidence owners and their current generation",
+    )
     migration_preview = subparsers.add_parser(
         "migration-preview", help="Preview a verified copy-only archive migration"
     )
@@ -5389,6 +5470,9 @@ def dispatch_command(
             store, transport, bootstrap=True
         )
         result["environment"] = environment_transport.status()
+        result["project_evidence"] = project_evidence_cloud_transport(
+            store, transport, bootstrap=True
+        ).status()
         result["scheduler_install_command"] = [
             sys.executable,
             str(SKILL_ROOT / "scripts" / "install_cloud_sync.py"),
@@ -5460,6 +5544,9 @@ def dispatch_command(
             platform=local_platform_name(),
             runtime_versions=local_runtime_versions([]),
         ).process(apply=True)
+        result["project_evidence"] = project_evidence_cloud_transport(
+            store, archive_transport, bootstrap=True
+        ).sync(force=args.force)
     elif args.command == "cloud-status":
         archive_transport = CloudFolderTransport(FederationManager(store))
         result = archive_transport.status()
@@ -5471,10 +5558,16 @@ def dispatch_command(
             platform=local_platform_name(),
             runtime_versions=local_runtime_versions([]),
         ).status()
+        result["project_evidence"] = project_evidence_cloud_transport(
+            store, archive_transport, bootstrap=False
+        ).status()
     elif args.command == "cloud-enable":
         archive_transport = CloudFolderTransport(FederationManager(store))
         result = archive_transport.set_enabled(True)
         result["environment"] = environment_cloud_transport(
+            store, archive_transport, bootstrap=True
+        ).set_enabled(True)
+        result["project_evidence"] = project_evidence_cloud_transport(
             store, archive_transport, bootstrap=True
         ).set_enabled(True)
     elif args.command == "cloud-disable":
@@ -5483,6 +5576,48 @@ def dispatch_command(
         result["environment"] = environment_cloud_transport(
             store, archive_transport, bootstrap=True
         ).set_enabled(False)
+        result["project_evidence"] = project_evidence_cloud_transport(
+            store, archive_transport, bootstrap=True
+        ).set_enabled(False)
+    elif args.command == "project-evidence-build":
+        result = ProjectEvidenceStore(store).build(
+            read_json(Path(args.spec).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "project-evidence-list":
+        result = ProjectEvidenceStore(store).list(args.project_id)
+    elif args.command == "project-evidence-query":
+        result = ProjectEvidenceStore(store).query(
+            args.query,
+            project_id=args.project_id,
+            role=args.role,
+        )
+    elif args.command == "project-evidence-reconstruct":
+        result = ProjectEvidenceStore(store).reconstruct(
+            args.generation_id,
+            Path(args.destination),
+            apply=args.apply,
+        )
+    elif args.command == "project-evidence-status":
+        evidence = ProjectEvidenceStore(store)
+        result = {
+            "status": "ok",
+            "packages": evidence.list(),
+            "exchange": ProjectEvidenceExchangeManager(store).status(),
+            "owners": evidence.owner_status(),
+        }
+    elif args.command == "project-evidence-owner-register":
+        result = ProjectEvidenceStore(store).register_owner(
+            read_json(Path(args.spec).expanduser().resolve()),
+            apply=args.apply,
+        )
+    elif args.command == "project-evidence-owner-refresh":
+        result = ProjectEvidenceStore(store).refresh_owner(
+            args.project_id,
+            apply=args.apply,
+        )
+    elif args.command == "project-evidence-owner-status":
+        result = ProjectEvidenceStore(store).owner_status()
     elif args.command == "migration-preview":
         result = GuardedFeatures(store).migration_preview(Path(args.destination))
     elif args.command == "migration-apply":
@@ -5859,6 +5994,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "federation-status",
             "cloud-pair-export",
             "cloud-status",
+            "project-evidence-list",
+            "project-evidence-query",
+            "project-evidence-status",
+            "project-evidence-owner-status",
             "migration-preview",
             "as-of",
             "decision-graph",
@@ -5879,6 +6018,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "environment-convergence-plan",
         }:
             return dispatch_command(args, parser, store)
+        if args.command == "project-evidence-build" and not args.apply:
+            return dispatch_command(args, parser, store)
+        if args.command in {"project-evidence-owner-register", "project-evidence-owner-refresh"} and not args.apply:
+            return dispatch_command(args, parser, store)
+        if args.command == "project-evidence-reconstruct" and not args.apply:
+            return dispatch_command(args, parser, store)
+        if args.command.startswith("project-evidence-"):
+            with exclusive_lock(store.root / ".locks" / "project-evidence-command.lock"):
+                return dispatch_command(args, parser, store)
         if args.command in {"environment-init", "environment-register"}:
             return dispatch_command(args, parser, store)
         if args.command in {

@@ -213,6 +213,81 @@ def main() -> int:
             ],
         ),
         (
+            "owner-registration-preview-and-apply",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_owner_refresh_is_explicit_idempotent_and_predecessor_linked",
+            ],
+        ),
+        (
+            "stable-file-refresh",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_owner_refresh_rejects_unstable_source",
+            ],
+        ),
+        (
+            "no-change-zero-write",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_owner_refresh_is_explicit_idempotent_and_predecessor_linked",
+            ],
+        ),
+        (
+            "predecessor-chain",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_predecessor_query_marks_old_generation_as_superseded",
+            ],
+        ),
+        (
+            "secret-and-conflict-rejection",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_secret_and_unregistered_predecessor_are_rejected",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_reconstruct_conflict_has_no_partial_writes",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_owner_rejects_missing_linked_and_oversized_sources",
+            ],
+        ),
+        (
+            "maintenance-restart-and-idempotency",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_owner_maintenance_restart_is_idempotent",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_bounded_owner_refresh_is_failure_isolated",
+            ],
+        ),
+        (
+            "authenticated-project-evidence-exchange",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_independent_stream_imports_read_only_and_old_environment_is_unchanged",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_imported_evidence_does_not_create_owner",
+            ],
+        ),
+        (
+            "macos-dashboard",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_dashboard_federation.MemoryDashboardFederationTest.test_dashboard_html_keeps_existing_features_and_adds_federation_views",
+            ],
+        ),
+        (
+            "windows-installer-and-dashboard",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_v214_release_contract.V214ReleaseContractTest.test_cross_platform_surfaces_remain_registered",
+            ],
+        ),
+        (
+            "rollback",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_rollback_boundary_preserves_existing_evidence",
+                "tests.test_macos_transaction.MacosTransactionTest.test_post_switch_failure_restores_old_skill_and_plist",
+            ],
+        ),
+        (
             "archive-red-lines",
             [
                 python, "-m", "unittest", "-v", "tests.test_guarded_features",
