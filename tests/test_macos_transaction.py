@@ -70,7 +70,7 @@ class FakeRunner:
         return subprocess.CompletedProcess(command, 0, "", "")
 
 
-@unittest.skipIf(os.name == "nt", "macOS transaction contract")
+@unittest.skipUnless(sys.platform == "darwin", "macOS transaction contract")
 class MacosTransactionTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

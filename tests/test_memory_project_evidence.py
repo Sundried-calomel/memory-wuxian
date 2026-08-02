@@ -79,6 +79,8 @@ class ProjectEvidenceTests(unittest.TestCase):
 
     def test_build_is_explicit_immutable_and_exactly_reconstructable(self):
         store = ProjectEvidenceStore(self.store_a)
+        expected_rules = (self.source / "PROJECT_AGENTS.md").read_bytes()
+        expected_status = (self.source / "status.txt").read_bytes()
         preview = store.build(self.spec())
         self.assertEqual(preview["status"], "preview")
         recorded = store.build(self.spec(), apply=True)
@@ -89,8 +91,8 @@ class ProjectEvidenceTests(unittest.TestCase):
         destination = self.base / "restored"
         restored = store.reconstruct(recorded["generation_id"], destination, apply=True)
         self.assertEqual(restored["status"], "completed")
-        self.assertEqual((destination / "PROJECT_AGENTS.md").read_bytes(), b"# Rules\n")
-        self.assertEqual((destination / "status.txt").read_bytes(), b"ready\r\n")
+        self.assertEqual((destination / "PROJECT_AGENTS.md").read_bytes(), expected_rules)
+        self.assertEqual((destination / "status.txt").read_bytes(), expected_status)
         matched = store.query("Rules", project_id="project-alpha", role="project-rule")
         self.assertEqual(len(matched["results"]), 1)
         self.assertEqual(matched["results"][0]["path"], "PROJECT_AGENTS.md")
