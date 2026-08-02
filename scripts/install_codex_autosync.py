@@ -97,6 +97,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Bootstrap and start the LaunchAgent after writing the plist",
     )
+    parser.add_argument(
+        "--defer-maintenance",
+        action="store_true",
+        help="Start only the collector; the transaction owner loads maintenance after readiness",
+    )
     return parser
 
 
@@ -173,20 +178,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             stderr=subprocess.DEVNULL,
         )
         subprocess.run(["/bin/launchctl", "bootstrap", domain, str(output)], check=True)
-        try:
-            from install_maintenance_supervisor import install as install_maintenance
-        except ModuleNotFoundError:
-            from scripts.install_maintenance_supervisor import install as install_maintenance
-        if not args.python_executable:
-            raise SystemExit("--python-executable is required when loading background maintenance")
-        install_maintenance(
-            archive_root,
-            skill_root,
-            executable_entry_path(args.python_executable),
-            platform_name="darwin",
-            load=True,
-            runner=subprocess.run,
-        )
+        if not args.defer_maintenance:
+            try:
+                from install_maintenance_supervisor import install as install_maintenance
+            except ModuleNotFoundError:
+                from scripts.install_maintenance_supervisor import install as install_maintenance
+            if not args.python_executable:
+                raise SystemExit("--python-executable is required when loading background maintenance")
+            install_maintenance(
+                archive_root,
+                skill_root,
+                executable_entry_path(args.python_executable),
+                platform_name="darwin",
+                load=True,
+                runner=subprocess.run,
+            )
     atomic_write_text(active_root_pointer, f"{archive_root}\n")
     print(output)
     return 0

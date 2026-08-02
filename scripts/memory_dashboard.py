@@ -33,6 +33,7 @@ from memory_cli import (
     MemoryStore,
     atomic_write_json,
     environment_cloud_transport,
+    project_evidence_cloud_transport,
     load_simple_yaml,
     local_platform_name,
     local_runtime_versions,
@@ -49,6 +50,7 @@ from memory_environment_promotions import PromotionStore
 from memory_environment_profiles import EnvironmentProfileManager
 from memory_federation import FederationManager
 from memory_governance_ai import GovernanceAIQueue
+from memory_project_evidence import ProjectEvidenceExchangeManager, ProjectEvidenceStore
 from memory_readonly_service import ReadOnlyMemoryService
 from platform_lock import exclusive_lock
 from platform_process import no_window_kwargs
@@ -1681,9 +1683,18 @@ def make_handler(
             environment_transport = environment_cloud_transport(
                 store, archive_transport, bootstrap=False
             )
+            project_evidence_transport = project_evidence_cloud_transport(
+                store, archive_transport, bootstrap=False
+            )
+            project_evidence_status = project_evidence_transport.status()
+            project_evidence_status["inventory"] = ProjectEvidenceExchangeManager(
+                store
+            ).status()
+            project_evidence_status["owners"] = ProjectEvidenceStore(store).owner_status()
             cloud["streams"] = {
                 "archive-v1": archive_stream,
                 "environment-v1": environment_transport.status(),
+                "project-evidence-v1": project_evidence_status,
             }
             cloud["scheduler"] = cloud_scheduler_status()
             devices["cloud"] = cloud
@@ -1828,6 +1839,7 @@ def make_handler(
                 "/api/cloud",
                 "/api/import-chatgpt",
                 "/api/environment",
+                "/api/project-evidence",
             }:
                 self.send_error(404)
                 return
@@ -1851,6 +1863,15 @@ def make_handler(
                     raise ValueError("invalid request length")
                 request = json.loads(self.rfile.read(length))
                 action = request.get("action")
+                if path == "/api/project-evidence":
+                    if action != "refresh-owners":
+                        raise ValueError("unsupported project evidence action")
+                    result = ProjectEvidenceStore(store).refresh_owners(
+                        maximum_owners=20,
+                        apply=True,
+                    )
+                    self.send_json(200, {"result": result, "devices": self.cloud_payload()})
+                    return
                 if path == "/api/environment":
                     if action == "process-incoming":
                         result = EnvironmentIncomingProcessor(
@@ -1917,6 +1938,9 @@ def make_handler(
                 environment_transport = environment_cloud_transport(
                     store, transport, bootstrap=True
                 )
+                project_evidence_transport = project_evidence_cloud_transport(
+                    store, transport, bootstrap=True
+                )
                 if action == "enable":
                     if not transport.status().get("configured"):
                         raise ValueError("cloud transport is not configured")
@@ -1924,18 +1948,25 @@ def make_handler(
                         raise ValueError(
                             "environment cloud transport is not configured"
                         )
+                    if not project_evidence_transport.status().get("configured"):
+                        raise ValueError(
+                            "project evidence cloud transport is not configured"
+                        )
                     transport.set_enabled(True)
                     environment_transport.set_enabled(True)
+                    project_evidence_transport.set_enabled(True)
                     try:
                         scheduler = set_cloud_scheduler(store, True)
                     except Exception:
                         transport.set_enabled(False)
                         environment_transport.set_enabled(False)
+                        project_evidence_transport.set_enabled(False)
                         raise
                     result = {"status": "enabled", "scheduler": scheduler}
                 elif action == "disable":
                     transport.set_enabled(False)
                     environment_transport.set_enabled(False)
+                    project_evidence_transport.set_enabled(False)
                     result = {
                         "status": "disabled",
                         "scheduler": set_cloud_scheduler(store, False),
@@ -1947,6 +1978,10 @@ def make_handler(
                         raise ValueError(
                             "environment cloud transport is disabled"
                         )
+                    if not project_evidence_transport.status().get("enabled"):
+                        raise ValueError(
+                            "project evidence cloud transport is disabled"
+                        )
                     streams: dict[str, dict[str, Any]] = {}
                     with exclusive_lock(
                         store.root / ".locks" / "federation.lock"
@@ -1954,6 +1989,7 @@ def make_handler(
                         for name, stream_transport in (
                             ("archive", transport),
                             ("environment", environment_transport),
+                            ("project_evidence", project_evidence_transport),
                         ):
                             try:
                                 stream_result = stream_transport.sync(force=True)

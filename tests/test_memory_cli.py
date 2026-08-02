@@ -712,6 +712,7 @@ safety:
         self.assertIn('background:#18a668', html)
         self.assertIn(".bar-wrap:first-child .chart-tooltip{left:0", html)
         self.assertIn(".bar-wrap:last-child .chart-tooltip{left:auto;right:0", html)
+        self.assertIn(".device-overview,.environment-overview,.system-overview{grid-template-columns:1fr}", html)
         self.assertIn("collector-telemetry-stale", html)
         self.assertIn("id:`conversation-rounds-${rounds}`", html)
         self.assertIn("id:`project-conversations-${count}`", html)
@@ -1346,7 +1347,7 @@ summaries:
         pending_after = self.run_cli("status")["pending_summary_jobs"]
         self.assertEqual(pending_before, 1)
         self.assertEqual(pending_after, 1)
-        self.assertEqual(repeated["created_job"], heartbeat["created_job"])
+        self.assertIsNone(repeated["created_job"])
         job = json.loads(Path(heartbeat["created_job"]).read_text(encoding="utf-8"))
         self.assertEqual(job["summary_level"], 2)
         self.assertEqual(job["source_summaries"], ["L1-000001", "L1-000002"])

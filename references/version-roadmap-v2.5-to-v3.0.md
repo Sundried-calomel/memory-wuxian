@@ -30,8 +30,9 @@ must have passed its stated release and recovery gates.
    index, derived representation, or runtime compression never replaces it.
 2. Devices write only their local archive. A remote archive replica is
    read-only unless a separately approved transport contract says otherwise.
-3. `archive-v1` and `environment-v1` remain separate payload and failure
-   domains even when they share lower-level transport machinery.
+3. `archive-v1`, `environment-v1`, and `project-evidence-v1` remain separate
+   payload and failure domains even when they share lower-level transport
+   machinery.
 4. Content addressing is exact-byte and hash based only. No AI, semantic,
    normalization, near-duplicate, or approximate deduplication may rewrite,
    merge, delete, or garbage-collect raw memory.
@@ -81,6 +82,8 @@ For every versioned work item:
 | v2.9.0 | Released | v2.8.0 | Unified read-only interfaces and update governance. |
 | v2.10.0 | Candidate | v2.9.0 | Personal Environment inventory, comparison, and review-first convergence. |
 | v2.11.0 | Candidate | v2.10.0 | Continuous source catch-up and bounded debt convergence. |
+| v2.12.7 | Released | v2.11.0 | Stable live capture, catch-up, repair, and cross-platform activation baseline. |
+| v2.13.0 | Candidate | v2.12.7 | Explicit immutable project evidence packages and independent encrypted exchange. |
 | v3.0.0 | Conditional | v2.11.0 plus an accepted incompatibility decision | Cross-platform integration only when a real breaking public contract requires a major version. |
 
 ## v2.5.0: completed foundation
@@ -384,6 +387,32 @@ Release gate: exact source-contract parity, interruption and restart recovery,
 old no-cursor discovery, partial-import recovery, prompt-budget proof, hidden
 background scheduling, full cross-platform rehearsal, same-SHA CI, and
 installer rollback all pass on one frozen candidate.
+
+## v2.14.0: device-local Project Evidence Owners
+
+### Objective
+
+Extend the explicit v2.13 project evidence package contract with persistent,
+device-local owners that maintain a closed project evidence selection without
+scanning a workspace or exporting local source paths.
+
+### Required behavior
+
+1. Registration is preview-first, explicit, and idempotent.
+2. The five-minute model-free supervisor processes at most 20 owners per pass.
+3. No-change creates no generation, event, receipt, backup, or model call.
+4. Changed files must remain byte-stable through capture and create exactly one
+   immutable successor linked to the current local head.
+5. Missing, linked, oversized, secret-bearing, or conflicting inputs fail per
+   owner without blocking archives, summaries, cloud sync, or other owners.
+6. Imported packages remain read-only and never create a local owner.
+7. CLI and the macOS/Windows dashboard expose equivalent bounded status and
+   manual refresh behavior without displaying source-root paths.
+
+Release gate: focused domain and scheduler tests, authenticated exchange
+regressions, architecture and documentation contracts, browser rehearsal,
+same-candidate macOS and Windows package rehearsal, transactional update, and
+rollback to v2.13.0 all pass.
 
 ## v3.0.0: conditional major-version integration
 

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "version": "2.13.0",
+  "candidate": "project-evidence-packages",
+  "decision": "promote-only-after-full-candidate-and-transactional-install",
+  "scope": "Independent bounded project evidence package stream, CLI, cloud exchange, dashboard, and synchronized documentation",
+  "raw_history_changed": false,
+  "installed_effect": "outputs/rehearsal/v2.13.0/transactional-install.json",
+  "rollback": "Restore the v2.12.7 Skill package and runtime launch artifacts; preserve archives, Environment records, and project evidence generations."
+}

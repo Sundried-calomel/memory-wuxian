@@ -1,6 +1,7 @@
 # Memory無限
 
-> **2.12.7：**Python 与原生实时归档入口都会等待共享旧轮次号的最后一个对话
+> **2.14.0 候选版：**新增本机 Project Evidence Owner，通过有界、无需模型的刷新维护显式封闭文件清单。**2.13.0** 新增显式、不可变的项目证据包及独立加密的
+> `project-evidence-v1` 流，并保留 **2.12.7** 的实时归档修正：Python 与原生入口都会等待共享旧轮次号的最后一个对话
 > 闭合后，才推进全局完成状态。
 
 > **2.12.6：**共享同一旧轮次号的多个对话，必须各自都有最终回答后，该轮次才算
@@ -250,6 +251,8 @@ LaunchAgent 保持一个优化后的 Rust 进程，接收操作系统文件变�
 
 macOS 既有安装通过 `scripts/install_macos_transaction.py` 更新。它先暂存候选版，在隔离档案中证明候选采集器能够精确写入合成的用户与助手消息，通过后才切换；切换后还要验证采集器 PID 已替换、遥测新鲜且当前操作台自检通过。任何切换后失败都会恢复旧 Skill、旧 LaunchAgent 和旧采集器。日常更新使用该用户级事务，不需要重新运行完整安装器，也不需要管理员密码。
 
+切换文件前，事务会等待共享档案锁，确认不存在原生恢复债务，并在继续持有该锁时停止旧采集器。启动替代采集器前会释放档案锁，且只有替代采集器报告 ready 后才加载定时维护任务。这个空闲边界交接可避免中断中的写入或维护抢锁把日常更新变成全历史恢复审计。若交接或首次目录切换失败，旧采集器会立即恢复。
+
 采集器首次同步不会等待 AI 摘要。如果启动追赶过程达到摘要阈值，系统会持久化不可变的摘要任务，并在采集器进入 ready 后交给既有 semantic-backfill worker 处理。这样既不丢失原文和摘要债务，也不会让一次较长的 Codex CLI 调用阻塞事务切换。
 
 按时间范围生成报告前，先运行 `scripts/archive_waterline.py --cutoff <ISO-8601>`。它核对报告截止时间之前保留的来源是否已被持久化游标覆盖。`--backfill` 必须显式调用，并且只处理被判定为滞后的保留来源文件；只有最终结果为 `covered` 时，报告才可继续使用 Memory无限。
@@ -416,6 +419,35 @@ python3 scripts/install_cloud_sync.py \
 在 macOS 上，OneDrive“文件按需”信封可能已经显示在目录中，但本地尚无可读字节。Memory無限 会先探测文件以触发有界下载，并把暂时性的 File Provider 可用性错误作为可重试状态，而不是损坏文件。对于 `environment-v1`，如果发送端从更早游标重发了覆盖范围更大的包，只有在已持久化前缀逐事件完全一致时才会安全接续；任何冲突仍会失败关闭并隔离。
 
 1.6.1 起，这些操作也显示在状态台设置页。云同步开关同时控制加密交换和五分钟后台任务；“立即同步”执行一次即时加密交换。面板显示已配置云目录和后台任务状态，日常操作无需 AI 对话或终端命令。
+
+## 项目证据包
+
+Memory无限可以保存并交换一组显式、受限的项目规则、当前状态、下一步计划、
+决策、QA、报告、模板和小型辅助产物。它不会扫描或上传整个工作区。每个证据包
+保留精确字节与 SHA-256，并在适用时记录前一代，作为不可变代次保存。源目录
+路径不会被持久化，疑似含密钥的文本会被拒绝，对端副本始终只读。
+
+项目证据使用独立的、签名且面向目标加密的 `project-evidence-v1` 流，既不改变
+`archive-v1`，也不改变 `environment-v1`；旧客户端可安全忽略新流。操作台显示
+证据包数量与流游标。使用 `project-evidence-query` 做有界定位，使用
+`project-evidence-reconstruct` 取得完整精确字节。详见
+[项目证据合同](references/project-evidence.md)。
+
+```text
+project-evidence-build
+project-evidence-list
+project-evidence-query
+project-evidence-reconstruct
+project-evidence-status
+project-evidence-owner-register
+project-evidence-owner-refresh
+project-evidence-owner-status
+```
+
+本机 Project Evidence Owner 可以维护一组显式、封闭的文件清单。五分钟后台任务
+每轮最多刷新 20 个 owner；内容不变时零写入，稳定变化时生成一个带前代链接的
+不可变代次。源路径始终只留在本机，失败按 owner 隔离，对端证据不会创建本机
+owner。
 
 ## Memory無限 2.0 环境趋同
 

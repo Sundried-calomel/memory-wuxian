@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.14.0",
+  "candidate_id": "v2.14.0-project-evidence-owners",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "project-evidence-plane",
+  "validation_profile": "full",
+  "required_rehearsal_scenarios": [
+    "owner-registration-preview-and-apply",
+    "stable-file-refresh",
+    "no-change-zero-write",
+    "predecessor-chain",
+    "secret-and-conflict-rejection",
+    "maintenance-restart-and-idempotency",
+    "authenticated-project-evidence-exchange",
+    "macos-dashboard",
+    "windows-installer-and-dashboard",
+    "rollback"
+  ],
+  "target": "Let each explicitly registered project evidence owner maintain bounded current project context across trusted devices.",
+  "primary_semantics": "A device-local owner binds one explicit source root and closed evidence selection to immutable project evidence generations; deterministic maintenance creates a successor only after selected files are stable and changed.",
+  "invariants": [
+    "Raw conversations, summaries, archive-v1, and environment-v1 remain unchanged.",
+    "Project source roots remain device-local and are never exported.",
+    "Owners never scan a whole workspace or discover files outside the explicit selection.",
+    "No-change refresh creates no generation, event, receipt, backup, or model call.",
+    "Every changed generation names the current local predecessor and preserves exact bytes.",
+    "Incoming evidence remains read-only and never creates a local owner.",
+    "The five-minute scheduler is model-free and bounded."
+  ],
+  "allowed_changes": [
+    "Add project evidence owner schema, local owner registry, CLI, bounded maintenance integration, dashboard controls and status, tests, architecture registration, and synchronized documentation."
+  ],
+  "prohibited_changes": [
+    "Automatic workspace discovery or upload.",
+    "Automatic Rule or Skill installation or activation.",
+    "Persisting source-root paths in exchanged packages or peer replicas.",
+    "Publishing or installing before the frozen candidate passes the full release gate."
+  ],
+  "before_after_checks": [
+    "Registering an owner twice is idempotent.",
+    "An unchanged source produces zero persistent mutations.",
+    "A stable selected-file change produces exactly one successor generation.",
+    "A changing, missing, oversized, linked, secret-bearing, or conflicting source produces no partial generation.",
+    "Maintenance restart resumes safely without duplicate generations.",
+    "macOS and Windows dashboards expose equivalent owner state and controls.",
+    "Rollback to 2.13.0 preserves all existing evidence generations and archives."
+  ],
+  "required_evidence": [
+    "unit-and-integration-tests",
+    "maintenance-restart-rehearsal",
+    "dashboard-visual-rehearsal",
+    "cross-platform-release-rehearsal",
+    "transactional-install-receipt"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.14.0-preflight.json",
+    "preflight_sha256": "bd47d6fa67fffecab9c8a8cfe6918602cd74932dfb4b893a4362ee4632c2d93a",
+    "completion_receipt": "docs/defect-receipts/v2.14.0-completion.json",
+    "completion_sha256": "b76ea22a26880648ef05ca6bd1672082bd05f12045cf2f998d73c34f084a6256",
+    "applicable_families": ["MW-R06", "MW-R09", "MW-R10", "MW-R12"],
+    "project_workbook_updated": false,
+    "original_triggers": [
+      "A persistent owner must not turn explicit project evidence into workspace scanning.",
+      "Background refresh must be idempotent, bounded, cross-platform, and effect-verified."
+    ]
+  },
+  "rollback_version": "2.13.0",
+  "lifecycle_state": "candidate-validation"
+}

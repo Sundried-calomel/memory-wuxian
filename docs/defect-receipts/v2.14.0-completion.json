@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "receipt_type": "defect-workbook-completion",
+  "created_at": "2026-08-02T12:00:00+00:00",
+  "change_kind": "feature",
+  "target": "memory-wuxian-v2.14.0-project-evidence-owners",
+  "preflight_path": "docs/defect-receipts/v2.14.0-preflight.json",
+  "selected_families": ["MW-R06", "MW-R09", "MW-R10", "MW-R12"],
+  "changed_workbook_entries": [],
+  "no_applicable_family_reason": "Existing recurrence families cover this compatible owner extension; no new recurrence family was required.",
+  "validation": {
+    "profile": "full",
+    "release_version": "2.14.0",
+    "required_scenarios": 72,
+    "completed_scenarios": 72,
+    "result": "passed",
+    "pre_receipt_source_content_sha256": "a528323350408b0ca61066cf3d4c61a3668cc6fadc7c338964139a8523b6350e",
+    "report_sha256": "d153b8eb7c8c6555c1f361bef0a55c4cac1dfb54c305ca3a209fbc51f1956ad3"
+  },
+  "status": "passed"
+}

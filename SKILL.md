@@ -133,8 +133,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     privacy identity and can trigger repeated Desktop or Documents prompts.
 58. Apply an existing macOS installation only through the user-space candidate
     transaction. Probe exact-message capture in an isolated archive before
-    cutover; after cutover verify a new live collector and the current
-    dashboard; on failure restore the previous Skill, plist, and collector.
+    cutover; acquire the shared archive lock, require zero native recovery
+    debt, and stop the previous collector at that idle boundary before replacing
+    files. After cutover verify a new live collector and the current dashboard;
+    on any handoff or post-switch failure restore the previous Skill, plist, and
+    collector.
 59. Publish collector telemetry on every monitoring interval, including idle
     intervals. Keep source and archive watermarks separate, expose stale
     telemetry and archive lag, and never infer archive freshness only from a
@@ -233,7 +236,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 29. Use `environment-init`, explicit root and project bindings, and
     `environment-register` to establish Environment Registry state. Preview
     every registration or install before `--apply`.
-30. Let `cloud-sync` process both archive and Environment streams. Incoming
+30. Let `cloud-sync` process archive, Environment, and project-evidence streams. Incoming
     Environment material is validated into staging first; use
     `environment-incoming-status` and the dashboard Environment view before an
     explicit acceptance or installation.
@@ -242,82 +245,91 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     it. Use `environment-profile-compare` and `environment-convergence-plan`
     for trusted peer evidence. These commands never install, bind, enable, or
     overwrite a Rule or Skill.
-32. Use `environment-conflicts` and `environment-promotions` for current
+32. Build Project Evidence Packages only from an explicit bounded manifest.
+    Preserve exact bytes and hashes, keep imported copies read-only, never
+    activate them, and use the independent `project-evidence-v1` stream so old
+    clients can ignore it safely. Follow `references/project-evidence.md`.
+    Keep Project Evidence Owners device-local and explicit. Each owner binds a
+    closed file selection to one source root, never discovers a workspace, and
+    never exports its source path. A five-minute model-free pass may refresh at
+    most 20 owners; unchanged content creates no record, changed stable content
+    creates one predecessor-linked generation, and failures remain isolated.
+33. Use `environment-conflicts` and `environment-promotions` for current
     governance state. Resolve a conflict or advance a promotion only with
     explicit reviewer and evidence fields; never infer approval from recency or
     successful transfer.
-33. Validate a governance insight with `work-system-governor`, then use
+34. Validate a governance insight with `work-system-governor`, then use
     `environment-governance-propose` to preview and persist the immutable local
     envelope. Use `environment-governance-proposals` to inspect local and peer
     proposals; acceptance remains a separate global Owner workflow.
-34. Validate product evolution reports with `work-system-governor`, then use
+35. Validate product evolution reports with `work-system-governor`, then use
     `environment-product-evolution-record` to preserve and exchange the
     immutable evidence record. Peer records stay read-only and never trigger
     product remediation or governance acceptance.
-35. Use `environment-governance-ai-discover` for model-free discovery,
+36. Use `environment-governance-ai-discover` for model-free discovery,
     `environment-governance-ai-status` for inspection, and
     `environment-governance-ai-tick` for a bounded one-shot review. Configure
     or enqueue only through preview-first CLI commands. Human review remains
     mandatory before any downstream acceptance or installation.
-36. Before implementing a product change, identify its canonical owner in
+37. Before implementing a product change, identify its canonical owner in
     `PRODUCT_ARCHITECTURE.md`. If it adds or relocates production code, update
     `docs/module-architecture.json` first, then run the architecture contract
     before focused behavioral tests.
-37. On macOS, run `scripts/install_macos_transaction.py` for an existing
+38. On macOS, run `scripts/install_macos_transaction.py` for an existing
     installation. Treat its isolated candidate probe, live PID replacement,
     telemetry freshness, dashboard self-check, and rollback proof as one
     indivisible update contract.
-38. Before a time-bounded report reads Memory無限, run
+39. Before a time-bounded report reads Memory無限, run
     `scripts/archive_waterline.py --cutoff <ISO-8601>`. Use `--backfill` only
     for the exact lagging retained rollout files and require a final `covered`
     result.
-39. During collector startup, persist any due semantic job but defer AI
+40. During collector startup, persist any due semantic job but defer AI
     execution to the independent semantic-backfill scheduler. Do not hold
     collector readiness or update cutover open while a Codex CLI summary runs.
-40. Let native capture atomically record coalescing backup debt instead of
+41. Let native capture atomically record coalescing backup debt instead of
     copying the complete archive inline. Let the maintenance worker create one
     complete snapshot for all pending mutations, and clear the debt only after
     that snapshot succeeds.
-41. Register the bundled E5 interface with
+42. Register the bundled E5 interface with
     `environment-register-semantic-runtime --origin-node-id <node>`, let the
     existing `environment-v1` stream transport it, and use
     `environment-realize-semantic-runtime --apply` only after explicit review
     on the receiving device. Use `semantic-runtime-status` to verify the
     bundled contract, registered revision, model artifacts, and local runtime.
-42. Treat `configuration-compile`, `configuration-explain`, and
+43. Treat `configuration-compile`, `configuration-explain`, and
     `environment-capability-status` as stateless read-only diagnostics. They
     must not construct `MemoryStore`, initialize an archive, take an archive
     lock, alter trust, grant permissions, install capabilities, or start
     synchronization.
-43. Keep the v2.5 effective-configuration contract closed and deterministic.
+44. Keep the v2.5 effective-configuration contract closed and deterministic.
     Unknown or duplicate keys and invalid values fail closed. Preserve
     `--root`, `MEMORY_WUXIAN_ROOT`, active-root pointer, then configured-root
     precedence.
-44. Memory-sharing scopes are design-only until a separately approved
+45. Memory-sharing scopes are design-only until a separately approved
     multi-user, third-party-write, partial-sharing, hosted-service,
     non-shareable-data, or cross-identity requirement activates the review.
     Do not add runtime scope fields or controls before that decision.
-45. For v2.6-or-later work, report the target version, predecessor evidence,
+46. For v2.6-or-later work, report the target version, predecessor evidence,
     canonical owner, changed contracts, preserved invariants, test gates, and
     rollback path from `references/version-roadmap-v2.5-to-v3.0.md` before
     implementation or handoff.
-46. Build v2.6 shadow indexes with `index-generation-build`, verify them with
+47. Build v2.6 shadow indexes with `index-generation-build`, verify them with
     `index-generation-status`, and keep activation and rollback preview-first.
     Never use an index generation to rewrite raw history, and never activate a
     received generation without an explicit `--apply` operation.
-47. Run `scripts/runtime_effect_gate.py` for release and post-install effect
+48. Run `scripts/runtime_effect_gate.py` for release and post-install effect
     verification. Do not equate a running process, registered scheduler,
     created file, mocked result, or zero exit code with a working background
     feature. Stale waterlines, hidden fallbacks, permanent debt, incomplete
     backups, missing parent-summary work, and stale supervisor state fail the
     gate.
-48. Keep native capture independent from AI execution. The collector may
+49. Keep native capture independent from AI execution. The collector may
     persist a semantic job but only the independent leased dispatcher may run
     it. After a Level-1 summary is ingested, deterministically enqueue any due
     parent summary. Bind semantic indexes to the exact raw-source snapshot and
     expose keyword fallback when stale. During upgrades, add only missing
     configuration defaults and preserve the prior bytes as rollback evidence.
-49. On Windows, prefer a validated explicit installed Skill root over the
+50. On Windows, prefer a validated explicit installed Skill root over the
     process SID profile. After every install or upgrade, resolve the final
     desktop `.lnk` through Windows Shell and verify its exact launcher target,
     working directory, icon, empty arguments, launcher configuration, and live

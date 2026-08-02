@@ -73,6 +73,13 @@
       ]
     },
     {
+      "id": "project-evidence-plane",
+      "architecture_owner": "Project Evidence Plane",
+      "patterns": [
+        "scripts/memory_project_evidence.py"
+      ]
+    },
+    {
       "id": "exchange-plane",
       "architecture_owner": "Exchange Plane",
       "patterns": [

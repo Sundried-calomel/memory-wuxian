@@ -449,11 +449,11 @@ class EnvironmentDashboardCacheTest(unittest.TestCase):
             "@media(max-width:850px)",
             "@media(max-width:480px)",
             ".conversation,.device-row,.environment-row{grid-template-columns:1fr 1fr}",
-            ".conversation,.environment-row{grid-template-columns:1fr}",
+            ".conversation,.device-row,.environment-row{grid-template-columns:1fr}",
             'id="environment-profiles"',
             'id="environment-profile-peer"',
             "fetch(`/api/environment-profile?peer_node_id=",
-            ".environment-overview{grid-template-columns:1fr}",
+            ".device-overview,.environment-overview,.system-overview{grid-template-columns:1fr}",
             "planned?.artifact?` / `+esc(planned.artifact.artifact_id)",
         ):
             self.assertIn(marker, html)
