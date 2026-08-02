@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.14.2",
+  "candidate_id": "v2.14.2-source-identity-and-update-timeout-hotfix",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "codex-capture-and-release-installation-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "native-format",
+    "native-check",
+    "native-tests",
+    "bundled-native-version",
+    "macos-routine-auto-update-contract",
+    "desktop-dashboard-contract",
+    "architecture-contract",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "target": "Recover collection after a same-size rollout metadata rewrite and allow the macOS user transaction to finish its readiness and rollback window.",
+  "primary_semantics": "Persist a full-file SHA-256 for complete rollout cursors, verify later same-size metadata changes against it, and keep the outer updater alive longer than the complete inner transaction.",
+  "invariants": [
+    "Raw conversations, summaries, indexes, configuration, and the active archive root remain unchanged by installation.",
+    "A persisted source byte hash mismatch fails closed.",
+    "Legacy complete cursors may acquire a baseline byte hash only while their committed byte count still equals the source size.",
+    "Routine macOS updates remain user-space transactions with rollback."
+  ],
+  "allowed_changes": [
+    "Add an optional source byte hash to Codex cursor metadata, align the outer update timeout, update release metadata, and add focused regression coverage."
+  ],
+  "prohibited_changes": [
+    "Rewrite rollout files, raw archive records, summaries, or indexes.",
+    "Remove rollback, invoke the system Installer for routine updates, or add installation-time downloads."
+  ],
+  "before_after_checks": [
+    "A same-size mtime-only change seeds or verifies the source byte hash and collection reaches ready.",
+    "A same-size content change fails when a prior source byte hash exists.",
+    "The macOS updater timeout exceeds the collector readiness timeout plus post-switch checks.",
+    "Version, documentation, architecture, and platform tests remain consistent."
+  ],
+  "required_evidence": [
+    "native-source-identity-regression",
+    "macos-user-transaction-regression",
+    "targeted-release-rehearsal",
+    "cross-platform-ci",
+    "installed-effect-verification"
+  ],
+  "rollback_version": "2.14.1",
+  "lifecycle_state": "candidate-validation"
+}

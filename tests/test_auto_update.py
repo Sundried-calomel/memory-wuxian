@@ -307,6 +307,7 @@ class AutoUpdateTest(unittest.TestCase):
             command = run.call_args.args[0]
             self.assertIn("install_macos_transaction.py", command[1])
             self.assertNotIn("/usr/sbin/installer", command)
+            self.assertEqual(1_500, run.call_args.kwargs["timeout"])
 
     def test_macos_scheduler_passes_the_stable_python_entry(self):
         installer = (

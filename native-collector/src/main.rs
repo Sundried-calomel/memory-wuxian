@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 #[cfg(not(target_os = "macos"))]
@@ -526,6 +526,7 @@ struct PreparedSync {
     backfill_file_changes: bool,
     backfill_token_usage: bool,
     resume_line: u64,
+    source_byte_sha256: Option<String>,
     batch: RolloutBatch,
 }
 
@@ -1604,6 +1605,7 @@ impl Store {
             .and_then(Value::as_u64)
             .unwrap_or(0)
             < TOKEN_USAGE_FORMAT_VERSION;
+        let mut source_byte_sha256 = None;
         if last_line > 0 {
             let metadata = fs::metadata(&source_path)?;
             let committed = hinted_cursor
@@ -1629,10 +1631,18 @@ impl Store {
                     value.timestamp_nanos_opt() != current_modified.timestamp_nanos_opt()
                 })
             {
-                bail!(
-                    "Codex session identity changed without an append: {}",
-                    source_path.display()
-                );
+                let current_sha256 = file_sha256(&source_path)?;
+                if hinted_cursor
+                    .get("source_byte_sha256")
+                    .and_then(Value::as_str)
+                    .is_some_and(|expected| expected != current_sha256)
+                {
+                    bail!(
+                        "Codex session content changed without an append: {}",
+                        source_path.display()
+                    );
+                }
+                source_byte_sha256 = Some(current_sha256);
             }
         }
         let resume_line = if backfill_file_changes || backfill_token_usage {
@@ -1648,6 +1658,9 @@ impl Store {
             None
         };
         let batch = read_rollout_batch(&source_path, resume_line, resume_offset)?;
+        if batch.complete && source_byte_sha256.is_none() {
+            source_byte_sha256 = Some(file_sha256(&source_path)?);
+        }
         let session_id = batch.session_id.clone();
         if hinted_session_id
             .as_deref()
@@ -1666,6 +1679,7 @@ impl Store {
             backfill_file_changes,
             backfill_token_usage,
             resume_line,
+            source_byte_sha256,
             batch,
         })
     }
@@ -1679,6 +1693,7 @@ impl Store {
             backfill_file_changes,
             backfill_token_usage,
             resume_line,
+            source_byte_sha256,
             batch,
         } = prepared;
         let session_id = batch.session_id.clone();
@@ -1733,6 +1748,7 @@ impl Store {
                     "observed_source_size": batch.observed_source_size,
                     "complete": batch.complete,
                     "source_mtime": modified.to_rfc3339(),
+                    "source_byte_sha256": source_byte_sha256,
                     "excluded_reason": excluded_reason,
                     "updated_at": now_iso(),
                 }),
@@ -1890,6 +1906,7 @@ impl Store {
                 "observed_source_size": batch.observed_source_size,
                 "complete": batch.complete,
                 "source_mtime": modified.to_rfc3339(),
+                "source_byte_sha256": source_byte_sha256,
                 "updated_at": now_iso(),
             }),
         )?;
@@ -2900,6 +2917,20 @@ fn compact_json(value: &Value) -> Result<String> {
 
 fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn file_sha256(path: &Path) -> Result<String> {
+    let mut file = File::open(path)?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0u8; 1024 * 1024];
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+    }
+    Ok(format!("{:x}", digest.finalize()))
 }
 
 fn deterministic_excerpt(text: &str, limit: usize) -> String {
