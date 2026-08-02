@@ -1,6 +1,6 @@
 # Memory無限
 
-> **2.14.1:** Fixes macOS installation with an offline isolated PyYAML fallback. **2.14.0** adds device-local Project Evidence Owners that maintain
+> **2.14.2:** Verifies same-size rollout rewrites by byte hash and lets the macOS user transaction finish its full readiness window. **2.14.1** fixes macOS installation with an offline isolated PyYAML fallback. **2.14.0** adds device-local Project Evidence Owners that maintain
 > explicit closed file selections through bounded model-free refresh. **2.13.0** adds explicit immutable Project Evidence Packages and
 > an independent encrypted `project-evidence-v1` stream. It retains the
 > **2.12.7** live-capture correction, where Python and native capture wait for the last pending

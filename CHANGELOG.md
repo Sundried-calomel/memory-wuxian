@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.14.2 - 2026-08-02
+
+- Verify a same-size rollout metadata change against a persisted full-file SHA-256 before accepting it as unchanged.
+- Seed the byte hash for legacy complete cursors without rewriting archived conversation records.
+- Extend the macOS automatic-update wrapper timeout so the inner readiness and rollback transaction can finish.
+
 ## 2.14.1 - 2026-08-02
 
 - Fixed the macOS PKG runtime probe to evaluate PyYAML as the logged-in user

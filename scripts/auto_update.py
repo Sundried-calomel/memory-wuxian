@@ -228,7 +228,7 @@ def stage_install(
             check=True,
             capture_output=True,
             text=True,
-            timeout=420,
+            timeout=1_500,
         )
         result = json.loads(completed.stdout)
         if result.get("status") != "installed":
