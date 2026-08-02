@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.14.1 - 2026-08-02
+
+- Fixed the macOS PKG runtime probe to evaluate PyYAML as the logged-in user
+  instead of the root installer process.
+- Added an offline isolated Python 3.14 fallback using the PyYAML sources
+  bundled in the PKG; the installer no longer writes to Homebrew's managed
+  Python environment or downloads dependencies during installation.
+- Preserved the existing user-transaction auto-update path, archive data,
+  indexes, configuration, and synchronization protocols.
+
 ## 2.14.0 - 2026-08-02
 
 - Added explicit device-local Project Evidence Owners for closed file

@@ -53,10 +53,28 @@ if [[ ! -x "$codex_cli" ]]; then
   echo "MemoryWuxian requires the Codex desktop application." >&2
   exit 1
 fi
-if ! "$python_executable" -c 'import yaml; assert yaml.__version__.split(".", 1)[0] == "6"' 2>/dev/null; then
+if ! /usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
+  "$python_executable" -c 'import yaml; assert yaml.__version__.split(".", 1)[0] == "6"' 2>/dev/null; then
+  bundled_yaml="$source_root/vendor/yaml"
+  runtime_root="$user_home/.codex/runtimes/memory-wuxian-python-3.14"
+  if [[ ! -f "$bundled_yaml/__init__.py" ]]; then
+    echo "MemoryWuxian package is missing its offline PyYAML runtime." >&2
+    exit 1
+  fi
   /usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
-    "$python_executable" -m pip install --user --disable-pip-version-check \
-    'PyYAML>=6.0,<7'
+    "$python_executable" -m venv --without-pip --clear "$runtime_root"
+  runtime_python="$runtime_root/bin/python"
+  site_packages="$(/usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
+    "$runtime_python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+  /usr/bin/sudo -u "$console_user" /bin/mkdir -p "$site_packages/yaml"
+  /usr/bin/sudo -u "$console_user" /usr/bin/rsync -a --delete \
+    "$bundled_yaml/" "$site_packages/yaml/"
+  python_executable="$runtime_python"
+  if ! /usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
+    "$python_executable" -c 'import yaml; assert yaml.__version__.split(".", 1)[0] == "6"' 2>/dev/null; then
+    echo "MemoryWuxian isolated PyYAML runtime verification failed." >&2
+    exit 1
+  fi
 fi
 
 /bin/mkdir -p "$archive_root" "$sessions_root" "$user_home/.codex"

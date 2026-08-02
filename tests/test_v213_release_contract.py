@@ -13,7 +13,7 @@ class V213ReleaseContractTest(unittest.TestCase):
     def test_project_evidence_candidate_contract(self) -> None:
         version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
         native_version = tomllib.loads((ROOT / "native-collector/Cargo.toml").read_text(encoding="utf-8"))["package"]["version"]
-        self.assertEqual(version, "2.14.0")
+        self.assertEqual(version, "2.14.1")
         self.assertEqual(native_version, version)
         contract = json.loads((ROOT / "docs/work-contracts/v2.13.0.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["owner_id"], "project-evidence-plane")
