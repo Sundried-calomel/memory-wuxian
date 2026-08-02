@@ -315,6 +315,19 @@ class AutoUpdateTest(unittest.TestCase):
         self.assertIn('"--python-executable"', installer)
         self.assertIn("executable_entry_path", installer)
 
+    def test_macos_pkg_uses_offline_isolated_yaml_fallback(self):
+        postinstall = (
+            SKILL_ROOT / "packaging/macos/scripts/postinstall"
+        ).read_text(encoding="utf-8")
+        builder = (
+            SKILL_ROOT / "packaging/macos/build_pkg.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"$python_executable" -m venv --without-pip --clear', postinstall)
+        self.assertIn('vendor/yaml', postinstall)
+        self.assertIn('vendor/yaml', builder)
+        self.assertNotIn('pip install', postinstall)
+        self.assertNotIn('--break-system-packages', postinstall)
+
     def test_schedulers_persist_governed_update_inputs(self):
         installer = (SKILL_ROOT / "scripts" / "install_auto_update.py").read_text(encoding="utf-8")
         self.assertIn('"--channel"', installer)

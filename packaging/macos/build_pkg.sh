@@ -40,6 +40,18 @@ rsync -a \
   --exclude '*.pyc' \
   "$repo_root/" "$payload_skill/"
 
+package_python="${PYTHON_EXECUTABLE:-python3}"
+yaml_source="$($package_python -c 'from pathlib import Path; import yaml; print(Path(yaml.__file__).resolve().parent)')"
+if [[ ! -f "$yaml_source/__init__.py" ]]; then
+  echo "PyYAML source package is unavailable for the offline macOS runtime." >&2
+  exit 1
+fi
+mkdir -p "$payload_skill/vendor"
+rsync -a \
+  --exclude __pycache__/ \
+  --exclude '*.pyc' \
+  "$yaml_source/" "$payload_skill/vendor/yaml/"
+
 dashboard_app="$payload_skill/assets/macos/Memory無限操作台.app"
 "$repo_root/packaging/macos/build_dashboard_app.sh" \
   "$version" "$dashboard_app" universal

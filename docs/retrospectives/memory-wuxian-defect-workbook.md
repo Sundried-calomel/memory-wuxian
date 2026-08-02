@@ -188,6 +188,17 @@
 
 - 证据：`Mac 已核验`。Mac 副本中记录了将硬编码或 Homebrew Cellar 版本路径改为
   LaunchAgent 和事务更新共用的稳定 Python 入口。
+
+### MW-MAC-002：root 依赖探测误判并触发 PEP 668
+
+- 症状：macOS PKG 已取得管理员授权，但 `postinstall` 以 root 身份探测
+  PyYAML，忽略登录用户可用的 site-packages，随后用 `pip --user` 写入
+  Homebrew 管理环境并被 PEP 668 拒绝。
+- 根因：安装脚本把登录用户运行时与 root 安装器环境混为一体，且安装包
+  没有离线依赖后备路径。
+- 永久门槛：依赖探测必须以登录用户身份执行；缺依赖时只能使用 PKG 内置
+  源码创建隔离运行时，禁止全局 pip、`--break-system-packages` 和安装时联网。
+- 回归：静态断言无 pip 写入，并模拟用户态事务更新继续绕过系统 Installer。
 - 复发机制：解释器路径技术上存在，但升级后进程身份改变，Full Disk Access 不随之继承。
 - 永久门禁：LaunchAgent 使用稳定入口；切换前证明候选采集；切换后验证真实归档写入。
 

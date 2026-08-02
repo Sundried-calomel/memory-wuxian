@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.14.1",
+  "candidate_id": "v2.14.1-macos-offline-runtime-hotfix",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "release-installation-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "macos-routine-auto-update-contract",
+    "architecture-contract",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "target": "Make macOS first-install and repair PKGs independent from global or network PyYAML installation while retaining user-transaction updates.",
+  "primary_semantics": "Probe dependencies as the logged-in user and create an offline isolated Python 3.14 runtime from PKG-bundled PyYAML sources only when required.",
+  "invariants": [
+    "Archive records, summaries, indexes, configuration, and synchronization protocols remain unchanged.",
+    "Routine macOS updates continue through the user transaction and never invoke the system Installer.",
+    "The installer never writes to Homebrew's externally managed Python environment.",
+    "Installation does not download Python dependencies."
+  ],
+  "allowed_changes": [
+    "Bundle pure Python PyYAML sources in the macOS PKG, create a user-owned isolated fallback runtime, update release metadata, and add focused regression coverage."
+  ],
+  "prohibited_changes": [
+    "Use pip --user, --break-system-packages, global package writes, or installation-time dependency downloads.",
+    "Change Windows installation, archive formats, synchronization, summaries, dashboard behavior, or project evidence semantics."
+  ],
+  "before_after_checks": [
+    "A logged-in user's existing PyYAML is accepted without creating a runtime.",
+    "Missing PyYAML uses only bundled sources in an isolated venv.",
+    "Routine updates install through install_macos_transaction.py without /usr/sbin/installer.",
+    "Version, documentation, and architecture contracts remain consistent."
+  ],
+  "required_evidence": [
+    "macos-pkg-runtime-regression",
+    "macos-user-transaction-regression",
+    "targeted-release-rehearsal",
+    "cross-platform-ci",
+    "installed-effect-verification"
+  ],
+  "rollback_version": "2.13.0",
+  "lifecycle_state": "candidate-validation"
+}

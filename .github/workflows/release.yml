@@ -91,6 +91,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Prepare offline PKG dependency source
+        run: python -m pip install --disable-pip-version-check "PyYAML>=6.0,<7"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
@@ -123,6 +128,8 @@ jobs:
           done
       - name: Build PKG
         shell: bash
+        env:
+          PYTHON_EXECUTABLE: python
         run: |
           version="${{ needs.metadata.outputs.version }}"
           packaging/macos/build_pkg.sh "$version" dist
