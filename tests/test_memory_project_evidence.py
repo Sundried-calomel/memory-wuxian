@@ -126,6 +126,9 @@ class ProjectEvidenceTests(unittest.TestCase):
         exported = manager_a.export_delta(bundle, target_node_id="node-b")
         imported = authenticated_import(manager_b, bundle)
         self.assertEqual(exported["artifact_count"], 1)
+        expected_bundle_sha256 = hashlib.sha256(bundle.read_bytes()).hexdigest()
+        self.assertEqual(exported["sha256"], expected_bundle_sha256)
+        self.assertEqual(exported["bundle_sha256"], expected_bundle_sha256)
         self.assertEqual(imported["imported"], 1)
         remote = ProjectEvidenceStore(self.store_b).list("project-alpha")["remote"]
         self.assertEqual(remote[0]["package"]["generation_id"], local["generation_id"])

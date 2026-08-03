@@ -1,5 +1,7 @@
 # Memory無限
 
+> **2.14.5:** Completes the Project Evidence cloud contract with stream-bound native encryption kinds and a transport-compatible bundle hash. Cross-stream rejection remains mandatory.
+
 > **2.14.4:** Makes runtime context-capsule loading fully read-only and acknowledgement-free, derives refreshes from the latest deterministic telemetry transition, and keeps the legacy ACK command as a no-write compatibility no-op. **2.14.3** repairs L2 semantic-job replay, raises the bounded five-minute batch to eight, allows at most three concurrent model calls with serialized ingestion, keeps full recovery audit off the five-minute hot path, reports stage timing in the dashboard, and retires the obsolete macOS semantic-backfill launcher after a successful transaction. **2.14.2** verifies same-size rollout rewrites by byte hash and lets the macOS user transaction finish its full readiness window. **2.14.1** fixes macOS installation with an offline isolated PyYAML fallback. **2.14.0** adds device-local Project Evidence Owners that maintain
 > explicit closed file selections through bounded model-free refresh. **2.13.0** adds explicit immutable Project Evidence Packages and
 > an independent encrypted `project-evidence-v1` stream. It retains the

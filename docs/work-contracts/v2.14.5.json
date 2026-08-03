@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.14.5",
+  "candidate_id": "v2.14.5-project-evidence-encryption",
+  "artifact_profile": "software-feature",
+  "classification": "repair",
+  "owner_id": "project-evidence-v1",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "project-evidence-export-hash",
+    "native-project-evidence-round-trip",
+    "native-cross-stream-rejection",
+    "authorized-real-encrypted-publish",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "target": "Complete the signed and target-encrypted project-evidence-v1 cloud path.",
+  "primary_semantics": "Use explicit project-evidence envelope kinds and the common transport sha256 field without weakening archive or Environment stream binding.",
+  "invariants": [
+    "Raw conversations, summaries, indexes, Environment records, and project evidence package bytes remain unchanged.",
+    "Archive, Environment, and project-evidence envelopes cannot be opened as one another.",
+    "Only trusted target nodes receive signed and encrypted project evidence bundles.",
+    "The legacy bundle_sha256 export field remains available as a compatibility alias."
+  ],
+  "allowed_changes": [
+    "Add explicit project-evidence envelope kinds, normalize export hash fields, add focused tests, update documentation, defect evidence, and release metadata."
+  ],
+  "prohibited_changes": [
+    "Rewrite archives or evidence packages, reuse another stream kind, relax identity or target checks, change trust, or bypass encryption."
+  ],
+  "before_after_checks": [
+    "The native helper advertises project-evidence-v1-bundle and project-evidence-v1-ack.",
+    "A project evidence envelope round-trips only with its exact stream kind.",
+    "Exported sha256 and bundle_sha256 both equal the actual bundle bytes.",
+    "The authorized Windows-to-Mac production outbox publishes events 1 through 8 without quarantine or transient failure."
+  ],
+  "required_evidence": [
+    "focused-python-regressions",
+    "native-envelope-tests",
+    "documentation-contract",
+    "authorized-real-cloud-publish",
+    "transactional-installer-failure-record"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.14.5-preflight.json",
+    "preflight_sha256": "2da9cbd3288a35393398331752063e68f0d7e86716f7e1104dc2c905d87b3155",
+    "completion_receipt": "docs/defect-receipts/v2.14.5-completion.json",
+    "completion_sha256": "3e1993dccdec7308d88d50d37402c533c8855a20c7da4e323cae7fc7ecc60330",
+    "applicable_families": ["G03", "MW-R06", "MW-R09"],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "The project evidence exporter returned bundle_sha256 while the common cloud transport required sha256.",
+      "The native envelope helper rejected the declared project-evidence-v1 bundle kind."
+    ]
+  },
+  "rollback_version": "2.14.4",
+  "lifecycle_state": "candidate-validation"
+}

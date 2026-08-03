@@ -622,7 +622,14 @@ class ProjectEvidenceExchangeManager:
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("manifest.json", canonical_bytes(manifest) + b"\n")
             archive.writestr(manifest["payload_path"], payload)
-        return {"status": "exported", **manifest, "output": str(output), "bundle_sha256": bytes_sha256(output.read_bytes())}
+        bundle_sha256 = bytes_sha256(output.read_bytes())
+        return {
+            "status": "exported",
+            **manifest,
+            "output": str(output),
+            "sha256": bundle_sha256,
+            "bundle_sha256": bundle_sha256,
+        }
 
     def read_bundle_manifest(self, bundle: Path) -> Dict[str, Any]:
         with zipfile.ZipFile(bundle, "r") as archive:
