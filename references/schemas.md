@@ -158,9 +158,9 @@ New summary files persist `source_sha256` in frontmatter. Summary indexes and re
 
 ## Context refresh state
 
-`retrieval/context-refresh-state.json` is derived runtime state keyed by conversation ID. Each acknowledgement records timestamp, completed-round count, utilization stage, detected compaction count, last used tokens, and effective model context window. Deleting this file causes a safe initial refresh; it never removes raw history or summaries.
+Context refresh has no persisted acknowledgement state. A legacy `retrieval/context-refresh-state.json`, when present from an older release, is ignored and may remain until ordinary derived-state maintenance removes it. It is never raw history or summary authority.
 
-`context-refresh-status` reports the selected top-level session, due reasons, latest token usage, utilization, compaction count, and capsule budget. `context-capsule` emits derived Markdown plus machine-readable metadata. It prefers higher-level summaries over their covered children and is not a raw-message record.
+`context-refresh-status` reports the selected top-level session, the latest-event trigger reasons, a stable `refresh_id`, token usage, utilization, compaction count, and capsule budget. `context-capsule` emits deterministic derived Markdown plus machine-readable metadata. It prefers higher-level summaries over their covered children, is not a raw-message record, and performs no write.
 
 ## Federation node
 

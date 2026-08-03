@@ -215,7 +215,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 12. When desktop backup is configured, confirm the returned snapshot path after each successful mutation.
 13. Use `backup` to create a verified recovery snapshot on demand and prune snapshots beyond configured retention.
 14. Before editing this Skill, refresh one replaceable workspace code backup instead of adding timestamped copies. Never place a full live archive in development outputs.
-15. At the start of each user turn, run `context-refresh-status`. When due, load `context-capsule` into the current reasoning context and run `ack-context-refresh` only after the capsule was read. Do not quote the capsule to the user unless requested, and never archive it as a source message.
+15. At the start of each user turn, run `context-refresh-status`. When due, load `context-capsule` only if its `refresh_id` is not already present in the active reasoning context. Capsule reads are fully read-only and require no acknowledgement. Never run `ack-context-refresh` as part of normal operation, never stop or request permission for an acknowledgement, and never archive a capsule as a source message. The legacy ACK command is a compatibility no-op.
 16. When the user names another or historical Codex conversation and asks to continue it or restore its latest messages, run `conversation-tail --title "..." --exclude-conversation-id "codex:<active-task-id>" --messages N`. Resolve the title after excluding the active task and before selecting messages. Never substitute the latest conversation when the title is missing or ambiguous. When the user confirms a title-to-task relationship, persist it with `register-title` so later retrieval does not depend on mutable client title metadata.
 17. Let the dashboard render its last successful browser-local response immediately. Serve `memory/dashboard/status-snapshot.json` without blocking the first paint, rebuild it from authoritative records in the background, and animate changed values when the refreshed snapshot arrives. On Windows, dashboard status reads must not create visible console subprocesses.
 18. For federation, run `init-node` once, register only explicitly trusted peers, and use `export-delta`, `inspect-bundle`, and `import-delta` for offline exchange.
@@ -351,7 +351,6 @@ python3 scripts/memory_cli.py import-chatgpt --export /path/to/chatgpt-export.zi
 python3 scripts/memory_cli.py status
 python3 scripts/memory_cli.py context-refresh-status
 python3 scripts/memory_cli.py context-capsule
-python3 scripts/memory_cli.py ack-context-refresh
 python3 scripts/memory_dashboard.py --root /path/to/archive --config /path/to/config.yaml --window
 python3 scripts/memory_cli.py backup
 python3 scripts/memory_cli.py make-summary-job

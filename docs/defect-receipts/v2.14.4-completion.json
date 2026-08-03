@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "receipt_type": "defect-workbook-completion",
+  "created_at": "2026-08-03T09:30:00+00:00",
+  "change_kind": "repair",
+  "target": "memory-wuxian-v2.14.4-readonly-context-refresh",
+  "preflight_path": "docs/defect-receipts/v2.14.4-preflight.json",
+  "selected_families": ["MW-R05", "MW-R07", "MW-R10"],
+  "changed_workbook_entries": ["MW-MAC-008"],
+  "validation": {
+    "context_refresh_regressions": "passed",
+    "readonly_lock_regression": "passed",
+    "python_tests_run": 619,
+    "python_full_suite": "passed-with-3-skips",
+    "rust_tests_run": 23,
+    "targeted_release_rehearsal": "11-of-11-passed",
+    "installed_effect_verification": "passed",
+    "installed_version": "2.14.4",
+    "legacy_ack_state_sha256_before": "ea6d628788b9b3c1f3f991a8dc28e10c204f9827e887a220d74bcda242f6bdc4",
+    "legacy_ack_state_sha256_after": "ea6d628788b9b3c1f3f991a8dc28e10c204f9827e887a220d74bcda242f6bdc4",
+    "architecture_contract": "passed",
+    "documentation_contract": "passed",
+    "result": "passed"
+  },
+  "status": "passed"
+}

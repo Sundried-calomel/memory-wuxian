@@ -478,7 +478,6 @@ class MemoryStore:
         self.imports_dir = self.root / "imports"
         self.codex_import_dir = self.imports_dir / "codex"
         self.codex_token_usage_dir = self.codex_import_dir / "token-usage"
-        self.context_refresh_state_path = self.retrieval_dir / "context-refresh-state.json"
 
     @property
     def level_1_trigger(self) -> int:
@@ -3923,27 +3922,36 @@ class MemoryStore:
         drop = self.context_refresh_setting("compaction_drop_percent", 20)
         compactions = 0
         previous = None
+        latest_compaction = False
         for used, window in token_events:
             percent = used * 100.0 / window
             if previous is not None and previous >= low and previous - percent >= drop:
                 compactions += 1
+                latest_compaction = True
+            else:
+                latest_compaction = False
             previous = percent
         used_tokens, context_window = token_events[-1] if token_events else (0, 0)
         utilization = used_tokens * 100.0 / context_window if context_window else 0.0
         stage = 2 if utilization >= high else (1 if utilization >= low else 0)
+        previous_utilization = 0.0
+        if len(token_events) > 1:
+            previous_used, previous_window = token_events[-2]
+            previous_utilization = (
+                previous_used * 100.0 / previous_window if previous_window else 0.0
+            )
+        previous_stage = (
+            2 if previous_utilization >= high else (1 if previous_utilization >= low else 0)
+        )
         conversation_id = f"codex:{session_id}"
         completed = len(self.completed_rounds_by_conversation().get(conversation_id, []))
-        state = read_json(self.context_refresh_state_path) if self.context_refresh_state_path.exists() else {}
-        acknowledged = (state.get("conversations") or {}).get(conversation_id, {})
         interval = self.context_refresh_setting("round_interval", 10)
         reasons = []
-        if not acknowledged and self.summary_records():
-            reasons.append("initial")
-        if completed - int(acknowledged.get("completed_rounds", 0)) >= interval:
+        if interval > 0 and completed > 0 and completed % interval == 0:
             reasons.append("round-interval")
-        if stage > int(acknowledged.get("utilization_stage", 0)):
+        if stage > previous_stage:
             reasons.append("context-utilization")
-        if compactions > int(acknowledged.get("compaction_count", 0)):
+        if latest_compaction:
             reasons.append("context-compaction")
         fraction = self.context_refresh_setting("context_fraction_percent", 1)
         fraction_budget = context_window * fraction // 100 if context_window else 3000
@@ -3952,10 +3960,21 @@ class MemoryStore:
             self.context_refresh_setting("absolute_max_tokens", 10000),
             max(512, fraction_budget),
         )
+        refresh_id = "CR-" + canonical_sha256({
+            "conversation_id": conversation_id,
+            "reasons": reasons,
+            "completed_rounds": completed if "round-interval" in reasons else None,
+            "utilization_stage": stage if "context-utilization" in reasons else None,
+            "compaction_count": compactions if "context-compaction" in reasons else None,
+            "used_tokens": used_tokens,
+            "model_context_window": context_window,
+        })[:16]
         return {
             "enabled": self.context_refresh_enabled,
             "due": self.context_refresh_enabled and bool(reasons),
             "reasons": reasons,
+            "refresh_id": refresh_id,
+            "requires_ack": False,
             "conversation_id": conversation_id,
             "session_id": session_id,
             "session_file": str(selected),
@@ -3967,7 +3986,6 @@ class MemoryStore:
             "compaction_count": compactions,
             "capsule_token_budget": token_budget,
             "capsule_absolute_max_tokens": self.context_refresh_setting("absolute_max_tokens", 10000),
-            "acknowledged": acknowledged,
         }
 
     def context_capsule(self, session_file: Optional[Path] = None) -> Tuple[str, Dict[str, Any]]:
@@ -3995,9 +4013,10 @@ class MemoryStore:
             "# Memory无限运行时记忆胶囊",
             "",
             f"- Conversation: `{conversation_id}`",
-            f"- Generated: `{now_iso()}`",
+            f"- Refresh ID: `{telemetry['refresh_id']}`",
             f"- Verification: `summary-supported`; historical claims still require raw verification.",
             "- This is derived runtime context, not a new source message.",
+            "- Reading this capsule is read-only and requires no acknowledgement.",
             "",
         ]
         local_policy_records = [
@@ -4092,20 +4111,12 @@ class MemoryStore:
         return capsule, metadata
 
     def acknowledge_context_refresh(self, session_file: Optional[Path] = None) -> Dict[str, Any]:
-        telemetry = self.context_refresh_telemetry(session_file)
-        state = read_json(self.context_refresh_state_path) if self.context_refresh_state_path.exists() else {
-            "format_version": 1, "conversations": {}
+        return {
+            "status": "not-required",
+            "deprecated": True,
+            "wrote_state": False,
+            "message": "Context capsules are read-only and require no acknowledgement.",
         }
-        state.setdefault("conversations", {})[telemetry["conversation_id"]] = {
-            "acknowledged_at": now_iso(),
-            "completed_rounds": telemetry["completed_rounds"],
-            "utilization_stage": telemetry["utilization_stage"],
-            "compaction_count": telemetry["compaction_count"],
-            "used_tokens": telemetry["used_tokens"],
-            "model_context_window": telemetry["model_context_window"],
-        }
-        atomic_write_json(self.context_refresh_state_path, state)
-        return {"status": "acknowledged", **state["conversations"][telemetry["conversation_id"]]}
 
     def _heartbeat_unlocked(self, create_jobs: bool, repair: bool = False) -> Dict[str, Any]:
         self.init()
@@ -4300,7 +4311,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text in (
         ("context-refresh-status", "Check whether the active conversation needs a memory capsule"),
         ("context-capsule", "Render a bounded hierarchical memory capsule for the active conversation"),
-        ("ack-context-refresh", "Acknowledge that the active conversation loaded its memory capsule"),
+        ("ack-context-refresh", "Deprecated compatibility no-op; context capsules require no acknowledgement"),
     ):
         refresh_parser = subparsers.add_parser(name, help=help_text)
         refresh_parser.add_argument("--session-file")
@@ -5989,6 +6000,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "conversation-tail",
             "context-refresh-status",
             "context-capsule",
+            "ack-context-refresh",
             "inspect-bundle",
             "retrieve-global",
             "federation-status",
