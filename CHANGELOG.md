@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.14.4 - 2026-08-03
+
+- Remove acknowledgement writes from normal runtime context-capsule loading.
+- Detect refreshes from the latest deterministic round, utilization, or
+  compaction transition and expose a stable `refresh_id` for active-context
+  deduplication.
+- Keep `ack-context-refresh` as a deprecated, no-write compatibility no-op so
+  older callers neither fail nor request archive permissions.
+
 ## 2.14.3 - 2026-08-03
 
 - Reconcile recreated semantic-summary jobs by persisted job identity so an

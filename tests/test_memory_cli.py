@@ -2855,7 +2855,7 @@ summaries:
         self.assertEqual(installed.count("<!-- memory-wuxian:rules:start -->"), 1)
         self.assertIn("## Memory无限长期记忆约定", installed)
 
-    def test_context_refresh_capsule_is_bounded_and_acknowledged(self):
+    def test_context_refresh_capsule_is_bounded_idempotent_and_needs_no_ack(self):
         session_id = "019f-context-refresh"
         session = self.base / "sessions" / "rollout-context.jsonl"
         session.parent.mkdir()
@@ -2899,8 +2899,74 @@ summaries:
         self.assertEqual(unlocked_capsule.returncode, 0, unlocked_capsule.stderr)
         self.assertTrue(json.loads(unlocked_status.stdout)["due"])
         self.assertIn("# Memory无限运行时记忆胶囊", unlocked_capsule.stdout)
-        acknowledged = self.run_cli("ack-context-refresh")
-        self.assertEqual(acknowledged["status"], "acknowledged")
+        self.assertFalse(status["requires_ack"])
+        state_path = self.root / "retrieval" / "context-refresh-state.json"
+        self.assertFalse(state_path.exists())
+        repeated_capsule = self.invoke_cli("context-capsule", timeout=5)
+        self.assertEqual(repeated_capsule.returncode, 0, repeated_capsule.stderr)
+        self.assertEqual(repeated_capsule.stdout, unlocked_capsule.stdout)
+        with exclusive_lock(archive_lock):
+            legacy_ack = self.invoke_cli("ack-context-refresh", timeout=5)
+        self.assertEqual(legacy_ack.returncode, 0, legacy_ack.stderr)
+        ack_payload = json.loads(legacy_ack.stdout)
+        self.assertEqual(ack_payload["status"], "not-required")
+        self.assertFalse(ack_payload["wrote_state"])
+        self.assertFalse(state_path.exists())
+
+    def test_context_refresh_is_due_only_on_latest_threshold_transition(self):
+        session_id = "019f-context-refresh-transition"
+        session = self.base / "sessions" / "rollout-context-transition.jsonl"
+        session.parent.mkdir(exist_ok=True)
+        events = [
+            {"type": "session_meta", "payload": {"id": session_id, "source": "codex"}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {"total_tokens": 64000},
+                        "model_context_window": 100000,
+                    },
+                },
+            },
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "token_count",
+                    "info": {
+                        "last_token_usage": {"total_tokens": 70000},
+                        "model_context_window": 100000,
+                    },
+                },
+            },
+        ]
+        session.write_text(
+            "\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n",
+            encoding="utf-8",
+        )
+        self.config.write_text(
+            self.config.read_text(encoding="utf-8")
+            + f'\ncodex:\n  sessions_root: "{session.parent.as_posix()}"\n'
+            + "context_refresh:\n  enabled: true\n  round_interval: 10\n"
+            + "  utilization_low_percent: 65\n  utilization_high_percent: 80\n",
+            encoding="utf-8",
+        )
+        crossing = self.run_cli("context-refresh-status")
+        self.assertEqual(crossing["reasons"], ["context-utilization"])
+        events.append({
+            "type": "event_msg",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "last_token_usage": {"total_tokens": 71000},
+                    "model_context_window": 100000,
+                },
+            },
+        })
+        session.write_text(
+            "\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n",
+            encoding="utf-8",
+        )
         self.assertFalse(self.run_cli("context-refresh-status")["due"])
 
 

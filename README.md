@@ -1,6 +1,6 @@
 # Memory無限
 
-> **2.14.3:** Repairs L2 semantic-job replay, raises the bounded five-minute batch to eight, allows at most three concurrent model calls with serialized ingestion, keeps full recovery audit off the five-minute hot path, reports stage timing in the dashboard, and retires the obsolete macOS semantic-backfill launcher after a successful transaction. **2.14.2** verifies same-size rollout rewrites by byte hash and lets the macOS user transaction finish its full readiness window. **2.14.1** fixes macOS installation with an offline isolated PyYAML fallback. **2.14.0** adds device-local Project Evidence Owners that maintain
+> **2.14.4:** Makes runtime context-capsule loading fully read-only and acknowledgement-free, derives refreshes from the latest deterministic telemetry transition, and keeps the legacy ACK command as a no-write compatibility no-op. **2.14.3** repairs L2 semantic-job replay, raises the bounded five-minute batch to eight, allows at most three concurrent model calls with serialized ingestion, keeps full recovery audit off the five-minute hot path, reports stage timing in the dashboard, and retires the obsolete macOS semantic-backfill launcher after a successful transaction. **2.14.2** verifies same-size rollout rewrites by byte hash and lets the macOS user transaction finish its full readiness window. **2.14.1** fixes macOS installation with an offline isolated PyYAML fallback. **2.14.0** adds device-local Project Evidence Owners that maintain
 > explicit closed file selections through bounded model-free refresh. **2.13.0** adds explicit immutable Project Evidence Packages and
 > an independent encrypted `project-evidence-v1` stream. It retains the
 > **2.12.7** live-capture correction, where Python and native capture wait for the last pending
@@ -232,7 +232,7 @@ Continuous capture does not call a model. Scripts create a source-locked summary
 
 ## Runtime context refresh
 
-Memory無限 can periodically restore compressed history into a continuing Codex task without opening a replacement task. `context-refresh-status` detects configured completed-round intervals, context utilization stages, and context compaction. When refresh is due, `context-capsule` selects the highest useful semantic-summary levels, suppresses covered child summaries, adds a small recent-dialogue tail, and emits temporary derived context. `ack-context-refresh` records that the capsule was read so it is not repeatedly injected.
+Memory無限 can periodically restore compressed history into a continuing Codex task without opening a replacement task. `context-refresh-status` detects the latest completed-round milestone, context-utilization threshold crossing, or compaction event. When refresh is due, `context-capsule` selects the highest useful semantic-summary levels, suppresses covered child summaries, adds a small recent-dialogue tail, and emits temporary derived context with a stable `refresh_id`. The active reasoning context skips an ID it already contains; after compaction removes it, the same capsule may be loaded again. Reading is fully read-only and requires no acknowledgement or permission-bearing write. The deprecated `ack-context-refresh` command exists only as a no-write compatibility no-op and must not be used in normal operation.
 
 The capsule budget is derived from the model context window. The default is one percent, with a 3,000-token soft cap and an absolute 10,000-token ceiling. A capsule is navigation context rather than historical authority: claims still return to append-only raw records for verification, and the generated capsule must never be archived as a new source message. Reusable rules for workspace `AGENTS.md` files are shipped under `agents/` and `templates/`.
 
@@ -739,7 +739,6 @@ import-chatgpt
 status
 context-refresh-status
 context-capsule
-ack-context-refresh
 backup
 make-summary-job
 ingest-summary

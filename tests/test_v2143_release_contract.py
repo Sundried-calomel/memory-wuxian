@@ -15,7 +15,7 @@ class V2143ReleaseContractTest(unittest.TestCase):
         native_version = tomllib.loads(
             (ROOT / "native-collector/Cargo.toml").read_text(encoding="utf-8")
         )["package"]["version"]
-        self.assertEqual(version, "2.14.3")
+        self.assertEqual(version, "2.14.4")
         self.assertEqual(native_version, version)
         contract = json.loads(
             (ROOT / "docs/work-contracts/v2.14.3.json").read_text(encoding="utf-8")

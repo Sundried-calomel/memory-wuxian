@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.14.4",
+  "candidate_id": "v2.14.4-readonly-context-refresh",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "runtime-context-refresh",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "native-format",
+    "native-check",
+    "native-tests",
+    "bundled-native-version",
+    "candidate-native-version",
+    "macos-bundled-dashboard-signature",
+    "python-regressions",
+    "architecture-contract",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "target": "Remove context-capsule acknowledgement writes and preserve compatible, read-only runtime refresh.",
+  "primary_semantics": "Detect only the latest deterministic refresh transition, derive a stable refresh id, keep capsule rendering read-only and idempotent, and retain the legacy acknowledgement command as a no-write compatibility no-op.",
+  "invariants": [
+    "Raw conversations, summaries, indexes, cloud exchange, and backup data remain unchanged.",
+    "Historical retrieval never depends on a context-capsule acknowledgement.",
+    "Repeated reads of the same capsule produce identical output and perform no write.",
+    "Cloud exchange acknowledgements remain outside this context-refresh change."
+  ],
+  "allowed_changes": [
+    "Change runtime context-refresh trigger calculation, capsule metadata, Skill instructions, compatibility ACK behavior, tests, documentation, and release metadata."
+  ],
+  "prohibited_changes": [
+    "Change summary triggers, semantic generation, raw archive formats, device trust, cloud ACK protocols, project evidence, or dashboard behavior.",
+    "Add a new permission rule, archive lock, state file, background service, or user authorization step for capsule reads."
+  ],
+  "before_after_checks": [
+    "The same capsule can be read twice with byte-identical output while the archive lock is held.",
+    "No context-refresh state file is created by status, capsule, or legacy ACK calls.",
+    "A utilization threshold triggers only on the latest crossing and not on every later above-threshold event.",
+    "The legacy ACK command returns not-required without writing.",
+    "Skill and all three READMEs state that capsule reads require no acknowledgement."
+  ],
+  "required_evidence": [
+    "context-refresh-regressions",
+    "readonly-lock-regression",
+    "documentation-contract",
+    "targeted-release-rehearsal",
+    "installed-effect-verification"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.14.4-preflight.json",
+    "preflight_sha256": "7c87eccdbdf9d2ec926806b5e1d8e61b944846cfb1d81b648cfb5d9fa6b26daf",
+    "completion_receipt": "docs/defect-receipts/v2.14.4-completion.json",
+    "completion_sha256": "3d17b599ea64484ab9ec6a520a56ec498f93f90ecbecdf45ef674e7ab8ff0e1d",
+    "applicable_families": ["MW-R05", "MW-R07", "MW-R10"],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "A read-only capsule load was incorrectly followed by a required acknowledgement write.",
+      "A sandbox denial for that derived write was incorrectly reported as a retrieval blocker."
+    ]
+  },
+  "rollback_version": "2.14.3",
+  "lifecycle_state": "candidate-validation"
+}

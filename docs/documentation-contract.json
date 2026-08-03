@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.14.3",
+  "reviewed_version": "2.14.4",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -17,7 +17,7 @@
     },
     {
       "id": "runtime-context-refresh",
-      "required_tokens": ["context-refresh-status", "context-capsule", "ack-context-refresh"]
+      "required_tokens": ["context-refresh-status", "context-capsule", "refresh_id"]
     },
     {
       "id": "policy-lineage",
