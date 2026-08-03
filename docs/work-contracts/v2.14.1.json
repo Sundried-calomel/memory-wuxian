@@ -41,6 +41,18 @@
     "cross-platform-ci",
     "installed-effect-verification"
   ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.14.1-preflight.json",
+    "preflight_sha256": "5546b983b29271aeb77f53b3f9175e963bd077686fb2e4ed1be94334c455b494",
+    "completion_receipt": "docs/defect-receipts/v2.14.1-completion.json",
+    "completion_sha256": "18897626e39f2bae0c6e91a1cca1439785d772b2b20f611bf48e6ebcf86378de",
+    "applicable_families": ["MW-R06", "MW-R10", "MW-R12"],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "The macOS installer probed dependencies as root and attempted a forbidden global Python write.",
+      "The fallback runtime must be offline, isolated, and owned by the logged-in user."
+    ]
+  },
   "rollback_version": "2.13.0",
   "lifecycle_state": "candidate-validation"
 }

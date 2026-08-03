@@ -43,7 +43,7 @@ class FakeRunner:
                 return subprocess.CompletedProcess(command, 0, "pid = 41\n", "")
             return subprocess.CompletedProcess(command, 1, "", "not found")
         if command[:2] == ["/bin/launchctl", "bootout"]:
-            if not self.stop_sticks:
+            if command[-1].endswith(f"{transaction.COLLECTOR_LABEL}.plist") and not self.stop_sticks:
                 self.collector_running = False
             return subprocess.CompletedProcess(command, 0, "", "")
         if command[:2] == ["/bin/launchctl", "bootstrap"]:
@@ -106,6 +106,10 @@ class MacosTransactionTest(unittest.TestCase):
         )
         self.plist.parent.mkdir(parents=True)
         self.plist.write_bytes(plistlib.dumps({"Label": transaction.COLLECTOR_LABEL}))
+        self.legacy_plist = self.home / "Library" / "LaunchAgents" / (
+            "com.memorywuxian.semantic-backfill.plist"
+        )
+        self.legacy_plist.write_bytes(b"legacy")
         self.active_root_pointer = (
             self.home / ".codex" / "memory-wuxian-active-root.txt"
         )
@@ -165,6 +169,8 @@ class MacosTransactionTest(unittest.TestCase):
         self.assertFalse(
             (self.home / ".codex" / "updates" / "memory-wuxian" / "rollback-current").exists()
         )
+        self.assertFalse(self.legacy_plist.exists())
+        self.assertEqual(result["legacy_semantic_backfill"]["status"], "retired")
 
     def test_new_collector_starts_only_after_cutover_lock_is_released(self):
         def assert_archive_lock_is_free():
@@ -241,6 +247,7 @@ class MacosTransactionTest(unittest.TestCase):
             self.active_root_pointer.read_text(encoding="utf-8"),
             "/old/archive\n",
         )
+        self.assertTrue(self.legacy_plist.exists())
 
     def test_new_format_telemetry_requires_ready_phase(self):
         telemetry = self.archive / "imports" / "codex" / "collector-telemetry.json"

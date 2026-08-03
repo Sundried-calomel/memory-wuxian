@@ -601,6 +601,35 @@ def debt_status_projection(root: Path) -> dict[str, Any]:
             None,
         )
         semantic = debts["semantic_debt"]
+        throughput = supervisor.get("throughput") if isinstance(supervisor, dict) else None
+        if isinstance(throughput, dict):
+            semantic["throughput"] = {
+                "started_at": throughput.get("started_at"),
+                "finished_at": throughput.get("finished_at"),
+                "duration_seconds": max(0.0, float(throughput.get("duration_seconds") or 0)),
+                "batch_limit": _debt_count(throughput.get("batch_limit")),
+                "pending_before": _debt_count(throughput.get("pending_before")),
+                "pending_after": _debt_count(throughput.get("pending_after")),
+                "completed_jobs": _debt_count(throughput.get("completed_jobs")),
+                "scheduled_jobs": _debt_count(throughput.get("scheduled_jobs")),
+                "net_pending_change": int(throughput.get("net_pending_change") or 0),
+                "parallel_model_limit": max(
+                    1, _debt_count(throughput.get("parallel_model_limit"))
+                ),
+                "recovery_seconds": max(
+                    0.0, float(throughput.get("recovery_seconds") or 0)
+                ),
+                "semantic_dispatch_seconds": max(
+                    0.0,
+                    float(throughput.get("semantic_dispatch_seconds") or 0),
+                ),
+                "average_model_seconds": max(
+                    0.0, float(throughput.get("average_model_seconds") or 0)
+                ),
+                "maximum_model_seconds": max(
+                    0.0, float(throughput.get("maximum_model_seconds") or 0)
+                ),
+            }
         if runtime_failure and semantic["count"] > 0 and not result.get("completed_jobs"):
             semantic["state"] = "blocked"
             semantic["last_error"] = str(

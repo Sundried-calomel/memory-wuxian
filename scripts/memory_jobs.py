@@ -64,6 +64,15 @@ def _semantic_payload_equivalent(left: Dict[str, Any], right: Dict[str, Any]) ->
     )
 
 
+def semantic_idempotency_key(payload: Dict[str, Any]) -> str:
+    """Bind new semantic queue work to one persisted summary-job generation."""
+    source_signature = str(payload.get("source_signature") or "").strip()
+    summary_job_id = str(payload.get("summary_job_id") or "").strip()
+    if not source_signature or not summary_job_id:
+        raise ValueError("Semantic eligibility requires source and summary job identities")
+    return f"summary:{source_signature}:job:{summary_job_id}"
+
+
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -202,6 +211,26 @@ class MaintenanceQueue:
             self._write(job)
             return {**job, "created": True}
 
+    def enqueue_semantic(
+        self,
+        payload: Dict[str, Any],
+        *,
+        max_attempts: int = 4,
+    ) -> Dict[str, Any]:
+        """Reuse exact legacy queue work while allowing a new persisted replay."""
+        for job in self.jobs():
+            if (
+                job["kind"] == "semantic-summary-eligibility"
+                and _semantic_payload_equivalent(job["payload"], payload)
+            ):
+                return {**job, "created": False}
+        return self.enqueue(
+            "semantic-summary-eligibility",
+            semantic_idempotency_key(payload),
+            payload,
+            max_attempts=max_attempts,
+        )
+
     def jobs(self) -> list[Dict[str, Any]]:
         if not self.root.exists():
             return []
@@ -307,6 +336,30 @@ class MaintenanceQueue:
             job["attempts"] += 1
             job["updated_at"] = iso(now)
             job["lease_owner"] = owner
+            job["lease_expires_at"] = iso(now + timedelta(seconds=lease_seconds))
+            self._write(job)
+            return job
+
+    def renew_semantic(
+        self,
+        job_id: str,
+        owner: str,
+        *,
+        lease_seconds: int = 900,
+    ) -> Dict[str, Any]:
+        """Extend one active semantic lease without changing its attempt count."""
+        if not owner or not 5 <= lease_seconds <= 3600:
+            raise ValueError("Invalid semantic lease renewal")
+        with exclusive_lock(self.lock):
+            job = self._read(self._path(job_id))
+            if (
+                job["kind"] != "semantic-summary-eligibility"
+                or job["state"] != "running"
+                or job["lease_owner"] != owner
+            ):
+                raise ValueError("Maintenance job is not owned by this worker")
+            now = self.clock()
+            job["updated_at"] = iso(now)
             job["lease_expires_at"] = iso(now + timedelta(seconds=lease_seconds))
             self._write(job)
             return job
@@ -537,12 +590,7 @@ def reconcile_pending_debt(archive_root: Path, queue: Optional[MaintenanceQueue]
     for path in summary_paths:
         try:
             payload = semantic_eligibility_payload(path)
-            result = queue.enqueue(
-                "semantic-summary-eligibility",
-                f"summary:{payload['source_signature']}",
-                payload,
-                max_attempts=4,
-            )
+            result = queue.enqueue_semantic(payload, max_attempts=4)
             created += int(result["created"])
             existing += int(not result["created"])
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:

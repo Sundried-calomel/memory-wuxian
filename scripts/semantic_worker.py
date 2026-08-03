@@ -9,6 +9,7 @@ import os
 import subprocess
 import tempfile
 import hashlib
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -371,6 +372,7 @@ def execute_oversized_job(
     character_budget: int,
     utf8_budget: int,
     invoker: Callable[[list[str], int, str], dict] = invoke_codex,
+    timing_records: list[dict[str, float]] | None = None,
 ) -> tuple[dict, int]:
     embedded_source_sha = raw_source_sha256(job.get("source_records", []))
     if embedded_source_sha != job.get("source_sha256"):
@@ -395,13 +397,27 @@ def execute_oversized_job(
         result_path = plan_dir / f"{unit['unit_id']}.json"
         normalized = load_verified_result(result_path, input_sha)
         if normalized is None:
-            normalized = _validate_result_for_source(
-                store, invoker(command, timeout_seconds, prompt), unit_job
-            )
+            model_started = time.monotonic()
+            model_result = invoker(command, timeout_seconds, prompt)
+            model_seconds = time.monotonic() - model_started
+            validation_started = time.monotonic()
+            normalized = _validate_result_for_source(store, model_result, unit_job)
+            validation_seconds = time.monotonic() - validation_started
+            if timing_records is not None:
+                timing_records.append({
+                    "model_seconds": model_seconds,
+                    "validation_seconds": validation_seconds,
+                })
             persist_result(result_path, input_sha, normalized)
             calls += 1
         else:
+            validation_started = time.monotonic()
             normalized = _validate_result_for_source(store, normalized, unit_job)
+            if timing_records is not None:
+                timing_records.append({
+                    "model_seconds": 0.0,
+                    "validation_seconds": time.monotonic() - validation_started,
+                })
         results.append(normalized)
 
     reduce_level = 1
@@ -440,13 +456,27 @@ def execute_oversized_job(
             if normalized is None:
                 if logical_calls >= MAX_MODEL_CALLS:
                     raise ValueError(f"Semantic execution exceeded {MAX_MODEL_CALLS} model calls")
-                normalized = _validate_result_for_source(
-                    store, invoker(command, timeout_seconds, prompt), reduce_job
-                )
+                model_started = time.monotonic()
+                model_result = invoker(command, timeout_seconds, prompt)
+                model_seconds = time.monotonic() - model_started
+                validation_started = time.monotonic()
+                normalized = _validate_result_for_source(store, model_result, reduce_job)
+                validation_seconds = time.monotonic() - validation_started
+                if timing_records is not None:
+                    timing_records.append({
+                        "model_seconds": model_seconds,
+                        "validation_seconds": validation_seconds,
+                    })
                 persist_result(result_path, input_sha, normalized)
                 calls += 1
             else:
+                validation_started = time.monotonic()
                 normalized = _validate_result_for_source(store, normalized, reduce_job)
+                if timing_records is not None:
+                    timing_records.append({
+                        "model_seconds": 0.0,
+                        "validation_seconds": time.monotonic() - validation_started,
+                    })
             logical_calls += 1
             reduced.append(normalized)
         results = reduced
@@ -464,6 +494,7 @@ def run_job(
     create_backup: bool = True,
     invoker: Callable[[list[str], int, str], dict] = invoke_codex,
 ) -> dict:
+    total_started = time.monotonic()
     config = load_simple_yaml(config_path)
     store = MemoryStore(root, config)
     job_path = job_path.resolve()
@@ -488,15 +519,30 @@ def run_job(
         DEFAULT_PROMPT_UTF8_BUDGET,
         int(nested_get(config, ["ai_summary", "max_prompt_utf8_bytes"], DEFAULT_PROMPT_UTF8_BUDGET)),
     )
+    timing_records: list[dict[str, float]] = []
     if within_budget(prompt, character_budget, utf8_budget):
-        normalized = _validate_result_for_source(
-            store, invoker(command, timeout_seconds, prompt), job
-        )
+        model_started = time.monotonic()
+        model_result = invoker(command, timeout_seconds, prompt)
+        model_seconds = time.monotonic() - model_started
+        validation_started = time.monotonic()
+        normalized = _validate_result_for_source(store, model_result, job)
+        timing_records.append({
+            "model_seconds": model_seconds,
+            "validation_seconds": time.monotonic() - validation_started,
+        })
         ai_invocations = 1
     else:
         normalized, ai_invocations = execute_oversized_job(
-            store, job, command, timeout_seconds, character_budget, utf8_budget, invoker
+            store,
+            job,
+            command,
+            timeout_seconds,
+            character_budget,
+            utf8_budget,
+            invoker,
+            timing_records,
         )
+    ingestion_started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="memory-wuxian-summary-ingest-") as temporary:
         result_path = Path(temporary) / "summary.json"
         result_path.write_text(
@@ -511,6 +557,14 @@ def run_job(
                     "one-shot-ai-summary-ingested",
                     {"job_id": job["job_id"], "summary": str(summary_path)},
                 )
+    ingestion_seconds = time.monotonic() - ingestion_started
+    total_seconds = time.monotonic() - total_started
+    model_seconds = sum(item["model_seconds"] for item in timing_records)
+    validation_seconds = sum(item["validation_seconds"] for item in timing_records)
+    local_preparation_seconds = max(
+        0.0,
+        total_seconds - model_seconds - validation_seconds - ingestion_seconds,
+    )
     return {
         "status": "ingested",
         "job_id": job["job_id"],
@@ -518,6 +572,13 @@ def run_job(
         "backup": str(backup_path) if backup_path else None,
         "ai_invocations": ai_invocations,
         "prompt_size": prompt_size(prompt),
+        "timing": {
+            "local_preparation_seconds": round(local_preparation_seconds, 3),
+            "model_seconds": round(model_seconds, 3),
+            "validation_seconds": round(validation_seconds, 3),
+            "ingestion_seconds": round(ingestion_seconds, 3),
+            "total_seconds": round(total_seconds, 3),
+        },
     }
 
 

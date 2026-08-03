@@ -31,7 +31,11 @@
       "codex_cli_path": "/Applications/ChatGPT.app/Contents/Resources/codex",
       "codex_cli_path_windows": "~/.codex/.sandbox-bin/codex.exe",
       "timeout_seconds": 900,
-      "model": ""
+      "model": "",
+      "maximum_parallel_model_calls": 3
+    },
+    "maintenance": {
+      "full_recovery_audit_interval_seconds": 86400
     },
     "governance_ai": {
       "enabled": false,

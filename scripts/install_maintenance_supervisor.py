@@ -26,9 +26,10 @@ except ModuleNotFoundError:
 
 
 MACOS_LABEL = "com.openai.codex.memory-wuxian-maintenance"
+LEGACY_MACOS_LABEL = "com.memorywuxian.semantic-backfill"
 WINDOWS_TASK_NAME = "MemoryWuxianMaintenance"
 INTERVAL_SECONDS = 300
-DEFAULT_MAXIMUM_SEMANTIC_JOBS = 4
+DEFAULT_MAXIMUM_SEMANTIC_JOBS = 8
 SEMANTIC_JOB_TIMEOUT_SECONDS = 900
 MAINTENANCE_CLOSEOUT_MARGIN_SECONDS = 600
 WINDOWS_EXECUTION_LIMIT_SECONDS = (
@@ -36,6 +37,29 @@ WINDOWS_EXECUTION_LIMIT_SECONDS = (
     + MAINTENANCE_CLOSEOUT_MARGIN_SECONDS
 )
 Runner = Callable[..., subprocess.CompletedProcess]
+
+
+def retire_legacy_macos_semantic_backfill(
+    *,
+    runner: Runner,
+    home: Optional[Path] = None,
+) -> dict[str, object]:
+    """Retire only the obsolete launcher; historical archive bytes are untouched."""
+    home = home or Path.home()
+    plist = home / "Library" / "LaunchAgents" / f"{LEGACY_MACOS_LABEL}.plist"
+    existed = plist.is_file()
+    runner(
+        ["/bin/launchctl", "bootout", launchctl_domain(), str(plist)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    plist.unlink(missing_ok=True)
+    return {
+        "label": LEGACY_MACOS_LABEL,
+        "plist": str(plist),
+        "status": "retired" if existed else "absent",
+    }
 
 
 def iso8601_duration(seconds: int) -> str:
@@ -50,6 +74,7 @@ def maintenance_command(python: Path, skill: Path, archive: Path) -> list[str]:
         str(skill / "scripts" / "maintenance_supervisor.py"),
         "--root", str(archive),
         "--config", str(skill / "config.yaml"),
+        "--max-semantic-jobs", str(DEFAULT_MAXIMUM_SEMANTIC_JOBS),
         "--once",
     ]
 

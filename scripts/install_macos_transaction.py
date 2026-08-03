@@ -25,9 +25,11 @@ else:  # pragma: no cover - the installer is macOS-only
 import yaml
 
 try:
+    from install_maintenance_supervisor import retire_legacy_macos_semantic_backfill
     from migrate_config import migrate_config
     from platform_runtime import executable_entry_path
 except ModuleNotFoundError:
+    from scripts.install_maintenance_supervisor import retire_legacy_macos_semantic_backfill
     from scripts.migrate_config import migrate_config
     from scripts.platform_runtime import executable_entry_path
 
@@ -390,6 +392,7 @@ def install(
 
     moved_current = False
     candidate_active = False
+    legacy_semantic_backfill: dict[str, object] | None = None
     try:
         shutil.rmtree(rollback, ignore_errors=True)
         shutil.rmtree(failed, ignore_errors=True)
@@ -457,6 +460,9 @@ def install(
             capture_output=True,
             text=True,
             timeout=90,
+        )
+        legacy_semantic_backfill = retire_legacy_macos_semantic_backfill(
+            runner=runner,
         )
     except Exception as error:
         runner(
@@ -527,6 +533,7 @@ def install(
         "active_pid": int(telemetry["pid"]),
         "telemetry_updated_at": telemetry["updated_at"],
         "archive_root": str(archive_root),
+        "legacy_semantic_backfill": legacy_semantic_backfill,
     }
 
 

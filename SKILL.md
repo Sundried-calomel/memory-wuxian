@@ -80,8 +80,11 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 44. Install only a registered immutable revision through a verified binding.
 45. Keep mechanical maintenance model-free and persistent. Use stable
     idempotency keys, leases, bounded retries, and quarantine; promote semantic
-    work only after a complete dialogue boundary, then run at most one
-    explicitly leased one-shot AI worker attempt.
+    work only after a complete dialogue boundary. Each job receives one
+    explicitly leased one-shot AI worker attempt. One five-minute maintenance
+    batch may overlap at most three model calls, while source verification,
+    archive ingestion, parent-job creation, and state/index writes remain
+    serialized through their existing locks.
 46. Keep exact-byte content storage in the removable shadow path. Require
     ordered closed manifests, per-file length and SHA-256, contiguous
     per-stream checkpoints, exact reconstruction verification, and
@@ -198,7 +201,7 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 2. Run `python3 scripts/memory_cli.py init` for a new memory root. The Windows collector installer records its `--archive-root` as the active archive, so later CLI calls can omit `--root`. An explicit `--root` or `MEMORY_WUXIAN_ROOT` still overrides that pointer.
 3. Append each user and assistant message with `append`; one user message plus its assistant response forms a completed round.
 4. Let the native collector mark a summary due after 5 completed rounds or 20,000 visible characters. A character threshold reached during an answer is acted on only after that answer's `final_answer` closes the round.
-5. Let the one-shot semantic worker generate and ingest the AI summary, then exit. Use `make-summary-job` and [summary prompt](prompts/summarize.md) for manual recovery.
+5. Let the one-shot semantic worker generate and ingest the AI summary, then exit. The hidden maintenance batch may run at most three independent model calls concurrently, but each verified result is ingested under the existing archive and summary locks. Use `make-summary-job` and [summary prompt](prompts/summarize.md) for manual recovery.
 6. Use `retrieve` for earlier topics. Let it search indexes first and raw records second. Retrieval is read-only and does not require the archive write lock; query logging is skipped automatically when the caller lacks write permission.
 7. Base answers on the recovered raw segment and report the returned verification level.
 8. Run `heartbeat` for validation and recovery. Keep count-based events as primary triggers.
@@ -451,6 +454,10 @@ Use `semantic_backfill.py` for historical summary debt. It processes higher-leve
 parent jobs before Level-1 jobs, is safe to rerun, and creates one recovery snapshot
 after the batch instead of copying the complete archive after every summary. Keep
 `--max-jobs` bounded for routine maintenance; `--max-jobs 0` drains all due work.
+The configured model-call concurrency is hard-bounded to three within one batch;
+result ingestion remains serialized and a failed sibling does not cancel successful
+jobs. A clean full-recovery audit may be reused for 24 hours unless explicit
+recovery debt exists.
 
 Pass `--root <memory-directory>` before the subcommand to use a memory archive outside this skill folder.
 
@@ -480,7 +487,7 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 
 ## Client integration boundary
 
-Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or Windows scheduled task. Both keep only the Rust collector alive, use immediate native filesystem events plus an adaptive 5-second, 30-second, and 5-minute metadata fallback, and share the same archive contract. They import user messages, visible assistant commentary/final answers, lightweight task-timeline tool activity, and successful structured file-change diffs from top-level sessions; they exclude subagent sessions, system prompts, hidden reasoning, and general tool output. When a complete-round boundary makes a summary due, the collector persists a model-free eligibility record and invokes the one-shot semantic dispatcher. The dispatcher leases the explicit job, runs one ephemeral Codex CLI summary worker, and records completion, retry, or quarantine before exiting. Worker failure does not stop native capture. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.
+Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or Windows scheduled task. Both keep only the Rust collector alive, use immediate native filesystem events plus an adaptive 5-second, 30-second, and 5-minute metadata fallback, and share the same archive contract. They import user messages, visible assistant commentary/final answers, lightweight task-timeline tool activity, and successful structured file-change diffs from top-level sessions; they exclude subagent sessions, system prompts, hidden reasoning, and general tool output. When a complete-round boundary makes a summary due, the collector persists a model-free eligibility record and invokes the one-shot semantic dispatcher. The dispatcher leases the explicit job and runs one ephemeral Codex CLI summary worker. The independent five-minute maintenance owner may overlap at most three such model calls, then serializes verified ingestion through the archive locks and records completion, retry, or quarantine. Worker failure does not stop native capture or cancel successful sibling jobs. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.
 
 Federation is a separate low-frequency layer and does not change collector
 ownership of the local archive. By default, imported replicas live in the

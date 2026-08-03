@@ -46,6 +46,18 @@
     "cross-platform-ci",
     "installed-effect-verification"
   ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.14.2-preflight.json",
+    "preflight_sha256": "35afe564d3e7e64f5a87638046023c22f22c3ace8172295df98c0fd2e277776a",
+    "completion_receipt": "docs/defect-receipts/v2.14.2-completion.json",
+    "completion_sha256": "06d07340a0dbb19e39c291ed41b1fc97fff7dffa56d3ccbb7759a6e51de385d1",
+    "applicable_families": ["MW-R05", "MW-R07", "MW-R10"],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "A same-size rollout rewrite could bypass size-only source identity checks.",
+      "The outer updater timeout could expire before the inner readiness and rollback transaction completed."
+    ]
+  },
   "rollback_version": "2.14.1",
   "lifecycle_state": "candidate-validation"
 }

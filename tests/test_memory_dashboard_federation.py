@@ -77,6 +77,27 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        (root / "maintenance/supervisor-state.json").write_text(
+            json.dumps(
+                {
+                    "throughput": {
+                        "batch_limit": 8,
+                        "pending_before": 194,
+                        "pending_after": 190,
+                        "completed_jobs": 8,
+                        "scheduled_jobs": 4,
+                        "net_pending_change": -4,
+                        "duration_seconds": 42.5,
+                        "parallel_model_limit": 3,
+                        "recovery_seconds": 1.5,
+                        "semantic_dispatch_seconds": 36.0,
+                        "average_model_seconds": 11.0,
+                        "maximum_model_seconds": 15.0,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
         coverage = root / "imports/codex/coverage-status.json"
         coverage.parent.mkdir(parents=True)
         coverage.write_text(
@@ -98,6 +119,18 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         self.assertEqual(projection["debts"]["coverage_debt"]["progress"], 75.0)
         self.assertEqual(projection["debts"]["semantic_debt"]["count"], 190)
         self.assertEqual(projection["debts"]["semantic_debt"]["in_progress"], 1)
+        self.assertEqual(
+            projection["debts"]["semantic_debt"]["throughput"]["batch_limit"], 8
+        )
+        self.assertEqual(
+            projection["debts"]["semantic_debt"]["throughput"]["net_pending_change"], -4
+        )
+        self.assertEqual(
+            projection["debts"]["semantic_debt"]["throughput"]["parallel_model_limit"], 3
+        )
+        self.assertEqual(
+            projection["debts"]["semantic_debt"]["throughput"]["average_model_seconds"], 11.0
+        )
         self.assertEqual(projection["debts"]["backup_debt"]["count"], 1948)
         self.assertEqual(dashboard_health({}, {"alerts": []}, projection), "catching-up")
 
@@ -842,6 +875,12 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "semantic_debt:q.semantic",
             "backup_debt:q.backup",
             "'catching-up':q.catchingUp",
+            "throughput.completed_jobs",
+            "throughput.scheduled_jobs",
+            "throughput?.net_pending_change",
+            "throughput.batch_limit",
+            "throughput.parallel_model_limit",
+            "throughput.average_model_seconds",
         ):
             self.assertIn(debt_contract, html)
 
