@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.14.3",
+  "candidate_id": "v2.14.3-semantic-maintenance-convergence",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "semantic-maintenance-plane",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "native-format",
+    "native-check",
+    "native-tests",
+    "bundled-native-version",
+    "candidate-native-version",
+    "macos-bundled-dashboard-signature",
+    "python-regressions",
+    "architecture-contract",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "target": "Restore semantic-summary debt convergence, remove full recovery from the five-minute hot path, and expose bounded stage timing.",
+  "primary_semantics": "Reuse an exact existing semantic queue item, bind a recreated persisted summary job to its own stable idempotency identity, and process at most eight jobs per five-minute one-shot run with no more than three concurrent model calls while preserving serialized archive ingestion.",
+  "invariants": [
+    "Raw conversations and existing summaries remain immutable.",
+    "Semantic maintenance remains bounded and single-instance; only model execution may overlap, while archive and summary ingestion remain serialized.",
+    "The installer retires only the obsolete launcher and never deletes an archive.",
+    "The dashboard reads persisted bounded telemetry rather than rescanning history."
+  ],
+  "allowed_changes": [
+    "Repair semantic queue reconciliation, raise the bounded batch to eight, allow at most three concurrent model calls, move full recovery auditing out of the five-minute semantic hot path, add bounded stage timing, retire the obsolete launcher after successful installation, and update release metadata."
+  ],
+  "prohibited_changes": [
+    "Rewrite raw history, existing summaries, indexes, trigger thresholds, cloud protocols, or project evidence.",
+    "Run more than three model calls concurrently, overlap archive ingestion, delete a historical archive from the installer, change summary trigger thresholds, or weaken source and result validation."
+  ],
+  "before_after_checks": [
+    "An exact legacy semantic payload remains idempotent.",
+    "A recreated job with the same source signature receives a distinct stable queue item.",
+    "Schedulers pass an explicit batch limit of eight and retain five-minute one-shot execution.",
+    "The semantic hot path performs a lightweight recovery-debt check and does not run a full archive audit when no explicit recovery debt is present.",
+    "At most three model calls overlap; ingestion remains serialized and one failed task does not cancel successful siblings.",
+    "Persisted timing separates preparation, model execution, validation, ingestion, and total batch time without storing prompts or source text.",
+    "A failed transaction preserves the legacy launcher; a successful transaction retires it.",
+    "Dashboard debt projection includes completed, scheduled, net pending change, duration, and batch limit."
+  ],
+  "required_evidence": [
+    "semantic-idempotency-regressions",
+    "scheduler-and-installer-regressions",
+    "dashboard-throughput-regressions",
+    "bounded-concurrency-and-serialized-ingestion-regressions",
+    "stage-timing-redaction-regressions",
+    "targeted-release-rehearsal",
+    "installed-effect-verification"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.14.3-preflight.json",
+    "preflight_sha256": "ee2984b5c8792ba83a019c2fd3507e181e3cdaf4bc8605d101ba25c7dc8e02f9",
+    "completion_receipt": "docs/defect-receipts/v2.14.3-completion.json",
+    "completion_sha256": "e87b9ba343a2daff8f6881625911003072fa92b90149956551627993d87d3288",
+    "applicable_families": ["MW-R05", "MW-R07", "MW-R09", "MW-R10"],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "A recreated L2 summary job was blocked by a completed source-signature-only queue identity.",
+      "The fixed four-job batch could fall behind sustained conversation-driven semantic debt."
+    ]
+  },
+  "rollback_version": "2.14.2",
+  "lifecycle_state": "candidate-validation"
+}

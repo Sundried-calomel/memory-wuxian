@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class V212ReleaseContractTest(unittest.TestCase):
     def test_release_contract_and_capability_receipt_are_bound(self):
         version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertEqual(version, "2.14.2")
+        self.assertEqual(version, "2.14.3")
         contract = json.loads((ROOT / "docs/work-contracts/v2.12.0.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["validation_profile"], "full")
         self.assertIn("Raw messages", contract["invariants"][0])

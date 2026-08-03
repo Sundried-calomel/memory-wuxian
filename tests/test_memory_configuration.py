@@ -27,7 +27,7 @@ from migrate_config import migrate_config  # noqa: E402
 
 class MemoryConfigurationTests(unittest.TestCase):
     REPOSITORY_EFFECTIVE_SHA256 = (
-        "de45c5cb2999595c100f81ea179f7a31d4300a96c2c09c406dc19f80d5482f05"
+        "14971d80303d3ef1041deec9ff8941da9c7ac98db9a7ffbd008520461532055b"
     )
 
     def setUp(self):

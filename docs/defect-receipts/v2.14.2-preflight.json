@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "receipt_type": "defect-workbook-preflight",
+  "created_at": "2026-08-02T00:00:00+00:00",
+  "change_kind": "repair",
+  "target": "memory-wuxian-v2.14.2-source-identity-and-update-timeout",
+  "workbook": "docs/retrospectives/memory-wuxian-defect-workbook.md",
+  "selected_families": ["MW-R05", "MW-R07", "MW-R10"],
+  "result": "historical-release-gate-reconstructed"
+}

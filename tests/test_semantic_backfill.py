@@ -4,6 +4,8 @@ import json
 import os
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -33,7 +35,9 @@ class SemanticBackfillV211Tests(unittest.TestCase):
             "summaries:\n  level_1_trigger_rounds: 2\n"
             "  level_1_trigger_characters: 20000\n"
             "  higher_level_trigger_count: 2\n"
-            "  maximum_summary_depth: 4\n",
+            "  maximum_summary_depth: 4\n"
+            "ai_summary:\n  maximum_parallel_model_calls: 3\n"
+            "maintenance:\n  full_recovery_audit_interval_seconds: 86400\n",
             encoding="utf-8",
         )
         (self.root / "pending").mkdir(parents=True)
@@ -115,6 +119,128 @@ class SemanticBackfillV211Tests(unittest.TestCase):
         self.assertEqual(state["status"], "healthy")
         self.assertEqual(state["cycle"], 2)
 
+    def test_supervisor_default_batch_and_throughput_are_persisted(self):
+        self.job("job-000020.json", "conversation:test:rounds:1-2")
+        result = {
+            "completed_jobs": 3,
+            "scheduled_summary_jobs": ["job-000021.json"],
+            "remaining_pending_jobs": 2,
+            "skipped": [],
+        }
+        with (
+            patch("maintenance_supervisor.run_backfill", return_value=result) as backfill,
+            patch("maintenance_supervisor.ProjectEvidenceStore.refresh_owners", return_value={}),
+        ):
+            state = run_supervisor_tick(self.root, self.config)
+
+        self.assertEqual(backfill.call_args.kwargs["max_jobs"], 8)
+        throughput = state["throughput"]
+        self.assertEqual(throughput["batch_limit"], 8)
+        self.assertEqual(throughput["pending_before"], 1)
+        self.assertEqual(throughput["pending_after"], 2)
+        self.assertEqual(throughput["completed_jobs"], 3)
+        self.assertEqual(throughput["scheduled_jobs"], 1)
+        self.assertEqual(throughput["net_pending_change"], 1)
+
+    def test_semantic_batch_limits_model_concurrency_to_three(self):
+        for number in range(1, 9):
+            self.job(
+                f"job-{number:06d}.json",
+                f"conversation:test:rounds:{number}-{number}",
+                boundary=number,
+            )
+        active = 0
+        maximum_active = 0
+        lock = threading.Lock()
+
+        def dispatch(_root, _config, job_path, **_kwargs):
+            nonlocal active, maximum_active
+            with lock:
+                active += 1
+                maximum_active = max(maximum_active, active)
+            time.sleep(0.04)
+            with lock:
+                active -= 1
+            return {
+                "status": "ingested",
+                "job_id": job_path.stem,
+                "timing": {
+                    "local_preparation_seconds": 0.01,
+                    "model_seconds": 0.03,
+                    "validation_seconds": 0.0,
+                    "ingestion_seconds": 0.0,
+                    "total_seconds": 0.04,
+                },
+            }
+
+        recovery = {"status": "ok", "integrity_issues": [], "repairable_issues": []}
+        with (
+            patch.object(MemoryStore, "heartbeat", return_value=recovery),
+            patch("semantic_backfill.dispatch_job", side_effect=dispatch),
+        ):
+            result = run_backfill(self.root, self.config, max_jobs=8, dry_run=False)
+
+        self.assertEqual(result["completed_jobs"], 8)
+        self.assertEqual(result["parallel_model_limit"], 3)
+        self.assertEqual(maximum_active, 3)
+        self.assertEqual(result["timing"]["semantic"]["completed_jobs"], 8)
+        self.assertNotIn("prompt", json.dumps(result))
+
+    def test_parallel_failure_does_not_cancel_successful_siblings(self):
+        for number in range(1, 5):
+            self.job(
+                f"job-{number:06d}.json",
+                f"conversation:test:rounds:{number}-{number}",
+                boundary=number,
+            )
+
+        def dispatch(_root, _config, job_path, **_kwargs):
+            if job_path.stem == "job-000002":
+                raise RuntimeError("bounded failure")
+            return {"status": "ingested", "job_id": job_path.stem}
+
+        recovery = {"status": "ok", "integrity_issues": [], "repairable_issues": []}
+        with (
+            patch.object(MemoryStore, "heartbeat", return_value=recovery),
+            patch("semantic_backfill.dispatch_job", side_effect=dispatch),
+        ):
+            result = run_backfill(self.root, self.config, max_jobs=4, dry_run=False)
+
+        self.assertEqual(result["completed_jobs"], 3)
+        self.assertEqual(result["attempted_jobs"], 4)
+        self.assertEqual(
+            [item["reason"] for item in result["skipped"]].count("dispatch-failed"),
+            1,
+        )
+
+    def test_recent_clean_recovery_keeps_full_audit_off_hot_path(self):
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+        store.init()
+        state_path = self.root / "maintenance/supervisor-state.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            json.dumps({
+                "result": {
+                    "native_recovery": {
+                        "status": "ok",
+                        "timestamp": (
+                            datetime.now(timezone.utc) - timedelta(hours=2)
+                        ).isoformat(),
+                        "integrity_issues": [],
+                        "repairable_issues": [],
+                        "repairs": [],
+                    }
+                }
+            }),
+            encoding="utf-8",
+        )
+
+        with patch.object(MemoryStore, "heartbeat") as heartbeat:
+            result = run_backfill(self.root, self.config, max_jobs=0, dry_run=False)
+
+        heartbeat.assert_not_called()
+        self.assertEqual(result["native_recovery"]["mode"], "cached-recovery-audit")
+
     def test_mw211_supervisor_records_runtime_failure_detail(self):
         job = self.job("job-000006.json", "conversation:test:rounds:11-12", boundary=12)
         with patch(
@@ -160,6 +286,21 @@ class SemanticBackfillV211Tests(unittest.TestCase):
         heartbeat.assert_called_once_with(create_jobs=False, repair=True)
         self.assertFalse(marker.exists())
         self.assertEqual(second["native_recovery"]["status"], "ok")
+
+    def test_recovery_audit_does_not_delete_a_new_marker_generation(self):
+        marker = self.root / "pending/native-recovery-debt.json"
+        marker.write_text('{"generation": "old"}', encoding="utf-8")
+
+        def audited_recovery(**_kwargs):
+            marker.unlink()
+            marker.write_text('{"generation": "new"}', encoding="utf-8")
+            return {"status": "ok", "integrity_issues": [], "repairable_issues": []}
+
+        with patch.object(MemoryStore, "heartbeat", side_effect=audited_recovery):
+            result = run_backfill(self.root, self.config, max_jobs=0, dry_run=False)
+
+        self.assertEqual(result["native_recovery"]["status"], "ok")
+        self.assertEqual(marker.read_text(encoding="utf-8"), '{"generation": "new"}')
 
     def test_mw2115_parent_001_ingest_schedules_due_parent_with_store_owner(self):
         store = MemoryStore(self.root, load_simple_yaml(self.config))

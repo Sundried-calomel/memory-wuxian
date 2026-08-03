@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "receipt_type": "defect-workbook-completion",
+  "created_at": "2026-08-02T00:00:00+00:00",
+  "change_kind": "repair",
+  "target": "memory-wuxian-v2.14.2-source-identity-and-update-timeout",
+  "preflight_path": "docs/defect-receipts/v2.14.2-preflight.json",
+  "selected_families": ["MW-R05", "MW-R07", "MW-R10"],
+  "changed_workbook_entries": ["MW-MAC-007"],
+  "status": "historical-release-evidence-linked"
+}

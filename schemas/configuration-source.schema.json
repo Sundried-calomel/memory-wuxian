@@ -49,7 +49,15 @@
         "codex_cli_path": {"type": "string", "minLength": 1},
         "codex_cli_path_windows": {"type": "string", "minLength": 1},
         "timeout_seconds": {"type": "integer", "minimum": 1},
-        "model": {"type": "string"}
+        "model": {"type": "string"},
+        "maximum_parallel_model_calls": {"type": "integer", "minimum": 1, "maximum": 3}
+      }
+    },
+    "maintenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "full_recovery_audit_interval_seconds": {"type": "integer", "minimum": 3600, "maximum": 604800}
       }
     },
     "governance_ai": {

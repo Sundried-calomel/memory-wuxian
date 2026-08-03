@@ -8,14 +8,19 @@ import json
 import os
 import shutil
 import subprocess
+import threading
+import uuid
 from pathlib import Path
 from typing import Any, Dict
 
 from memory_cli import append_jsonl, load_simple_yaml, nested_get, now_iso
 from memory_jobs import MaintenanceQueue, redact_error, semantic_eligibility_payload
-from platform_lock import exclusive_lock
 from platform_process import no_window_kwargs
 from semantic_worker import run_job
+
+
+SEMANTIC_LEASE_SECONDS = 900
+SEMANTIC_LEASE_RENEW_INTERVAL_SECONDS = 60
 
 
 def eligibility_payload(job_path: Path) -> Dict[str, Any]:
@@ -64,12 +69,7 @@ def dispatch_job(
     job_path = job_path.resolve()
     payload = eligibility_payload(job_path)
     queue = MaintenanceQueue(root)
-    queued = queue.enqueue(
-        "semantic-summary-eligibility",
-        f"summary:{payload['source_signature']}",
-        payload,
-        max_attempts=4,
-    )
+    queued = queue.enqueue_semantic(payload, max_attempts=4)
     if queued["state"] in {"queued", "retry"}:
         queue.mark_semantic_ready_bulk(maximum_jobs=10000)
     current = next(job for job in queue.jobs() if job["job_id"] == queued["job_id"])
@@ -86,10 +86,38 @@ def dispatch_job(
                 "maintenance_job_id": current["job_id"],
                 "ai_invocations": 0,
             }
-    owner = f"semantic-dispatch:{os.getpid()}"
-    claimed = queue.claim_semantic(current["job_id"], owner)
+    owner = f"semantic-dispatch:{os.getpid()}:{uuid.uuid4().hex}"
+    claimed = queue.claim_semantic(
+        current["job_id"], owner, lease_seconds=SEMANTIC_LEASE_SECONDS
+    )
     if claimed is None:
         return {"status": "deferred", "maintenance_job_id": current["job_id"]}
+    renewal_stop = threading.Event()
+    renewal_errors: list[BaseException] = []
+
+    def renew_lease() -> None:
+        while not renewal_stop.wait(SEMANTIC_LEASE_RENEW_INTERVAL_SECONDS):
+            try:
+                queue.renew_semantic(
+                    current["job_id"],
+                    owner,
+                    lease_seconds=SEMANTIC_LEASE_SECONDS,
+                )
+            except BaseException as exc:
+                renewal_errors.append(exc)
+                return
+
+    renewal_thread = threading.Thread(
+        target=renew_lease,
+        name=f"memory-wuxian-lease-{current['job_id']}",
+        daemon=True,
+    )
+    renewal_thread.start()
+
+    def stop_renewal() -> None:
+        renewal_stop.set()
+        renewal_thread.join(timeout=2)
+
     try:
         config = load_simple_yaml(config_path)
         configured_worker = Path(
@@ -99,14 +127,13 @@ def dispatch_job(
             configured_worker = config_path.parent / configured_worker
         bundled_worker = Path(__file__).with_name("semantic_worker.py").resolve()
         if configured_worker.resolve() == bundled_worker:
-            with exclusive_lock(root / ".locks/semantic-worker.lock"):
-                result = run_job(
-                    root,
-                    config_path.resolve(),
-                    job_path,
-                    dry_run=dry_run,
-                    create_backup=create_backup,
-                )
+            result = run_job(
+                root,
+                config_path.resolve(),
+                job_path,
+                dry_run=dry_run,
+                create_backup=create_backup,
+            )
         else:
             command = [
                 __import__("sys").executable,
@@ -141,11 +168,16 @@ def dispatch_job(
                     ).hexdigest(),
                 }
         if dry_run:
+            stop_renewal()
             queue.fail_semantic(current["job_id"], owner, "dry run", retry_delay_seconds=0)
             return {**result, "maintenance_job_id": current["job_id"], "ai_invocations": 0}
+        stop_renewal()
+        if renewal_errors:
+            raise RuntimeError(f"semantic lease renewal failed: {renewal_errors[0]}")
         queue.complete(current["job_id"], owner, result)
         return {**result, "maintenance_job_id": current["job_id"], "ai_invocations": 1}
     except Exception as exc:
+        stop_renewal()
         if check_availability:
             available, reason = availability_probe(config_path)
             if not available:
@@ -169,6 +201,8 @@ def dispatch_job(
                 "ai_invocations": 1,
             }
         raise RuntimeError(f"semantic dispatch {failed['state']}: {exc}") from exc
+    finally:
+        stop_renewal()
 
 
 def main() -> int:

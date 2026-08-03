@@ -130,6 +130,25 @@ class MaintenanceQueueTests(unittest.TestCase):
         self.assertEqual(final["state"], "quarantined")
         self.assertIsNone(self.queue.claim_semantic(job["job_id"], "semantic-c"))
 
+    def test_semantic_lease_renewal_preserves_owner_and_attempt(self):
+        job = self.queue.enqueue(
+            "semantic-summary-eligibility",
+            "conversation:complete-round:renew",
+            {"completed_round": 4, "round_complete": True},
+            max_attempts=3,
+        )
+        self.queue.mark_semantic_ready_bulk()
+        claimed = self.queue.claim_semantic(job["job_id"], "semantic-owner", lease_seconds=10)
+        self.clock.advance(6)
+        renewed = self.queue.renew_semantic(
+            job["job_id"], "semantic-owner", lease_seconds=10
+        )
+        self.clock.advance(6)
+
+        self.assertEqual(renewed["attempts"], claimed["attempts"])
+        self.assertEqual(self.queue.recover_expired(), [])
+        self.assertEqual(self.queue.jobs()[0]["lease_owner"], "semantic-owner")
+
     def test_quarantined_job_requeue_preserves_failure_receipt(self):
         job = self.queue.enqueue(
             "semantic-summary-eligibility",
@@ -196,6 +215,70 @@ class MaintenanceQueueTests(unittest.TestCase):
         self.assertEqual(second["created"], 0)
         self.assertEqual(second["existing"], 3)
         self.assertEqual(len(self.queue.jobs()), 3)
+
+    def test_semantic_enqueue_reuses_exact_legacy_payload(self):
+        pending = self._pending_summary(
+            "job-000010.json", "conversation:a:rounds:1-2"
+        )
+        payload = {
+            "summary_job": str(pending.resolve()),
+            "summary_job_id": "job-000010",
+            "source_signature": "conversation:a:rounds:1-2",
+            "conversation_id": "codex:test",
+            "completed_round": 2,
+            "round_complete": True,
+        }
+        legacy = self.queue.enqueue(
+            "semantic-summary-eligibility",
+            "summary:conversation:a:rounds:1-2",
+            payload,
+            max_attempts=4,
+        )
+
+        reconciled = reconcile_pending_debt(self.root, self.queue)
+
+        self.assertEqual(reconciled["created"], 0)
+        self.assertEqual(reconciled["existing"], 1)
+        self.assertEqual(self.queue.jobs()[0]["job_id"], legacy["job_id"])
+
+    def test_semantic_enqueue_allows_new_persisted_replay_for_same_source(self):
+        first = self._pending_summary(
+            "job-000010.json", "conversation:a:rounds:1-2"
+        )
+        first_payload = {
+            "summary_job": str(first.resolve()),
+            "summary_job_id": "job-000010",
+            "source_signature": "conversation:a:rounds:1-2",
+            "conversation_id": "codex:test",
+            "completed_round": 2,
+            "round_complete": True,
+        }
+        legacy = self.queue.enqueue(
+            "semantic-summary-eligibility",
+            "summary:conversation:a:rounds:1-2",
+            first_payload,
+            max_attempts=4,
+        )
+        claimed = self.queue.claim( "legacy-worker")
+        self.queue.complete(claimed["job_id"], "legacy-worker", {"status": "ingested"})
+        first.unlink()
+        second = self._pending_summary(
+            "job-000011.json", "conversation:a:rounds:1-2"
+        )
+
+        reconciled = reconcile_pending_debt(self.root, self.queue)
+
+        self.assertEqual(reconciled["created"], 1)
+        self.assertEqual(reconciled["invalid"], [])
+        jobs = self.queue.jobs()
+        self.assertEqual(len(jobs), 2)
+        replay = next(item for item in jobs if item["job_id"] != legacy["job_id"])
+        self.assertEqual(replay["payload"]["summary_job_id"], "job-000011")
+        self.assertEqual(replay["payload"]["summary_job"], str(second.resolve()))
+        self.assertEqual(
+            replay["idempotency_key"],
+            "summary:conversation:a:rounds:1-2:job:job-000011",
+        )
 
     def test_mw211_queue_002_quarantined_and_deferred_work_do_not_block_ready_jobs(self):
         blocked = self.queue.enqueue("archive-health", "health:a", max_attempts=1)

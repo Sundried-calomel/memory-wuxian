@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.14.3 - 2026-08-03
+
+- Reconcile recreated semantic-summary jobs by persisted job identity so an
+  already completed source signature does not block a required L2 replay.
+- Increase the bounded five-minute semantic batch from four to eight while
+  preserving one-shot, single-instance execution and explicit per-job timeout.
+- Run at most three model calls concurrently while preserving serialized,
+  hash-verified archive ingestion and per-job failure isolation.
+- Reuse clean deep-recovery evidence for 24 hours so a full state audit does
+  not occupy the five-minute semantic hot path unless explicit recovery debt exists.
+- Persist completed, scheduled, pending-delta, duration, batch-limit, model
+  concurrency, and stage timing telemetry and surface it in the dashboard debt panel.
+- Retire the obsolete macOS semantic-backfill LaunchAgent only after a
+  successful transactional installation; historical archive bytes are not
+  deleted by the installer.
+
 ## 2.14.2 - 2026-08-02
 
 - Verify a same-size rollout metadata change against a persisted full-file SHA-256 before accepting it as unchanged.

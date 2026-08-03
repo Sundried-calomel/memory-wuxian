@@ -13,7 +13,7 @@ class V2142ReleaseContractTest(unittest.TestCase):
             for line in (ROOT / "pyproject.toml").read_text(encoding="utf-8").splitlines()
             if line.startswith("version = ")
         )
-        self.assertEqual(version, "2.14.2")
+        self.assertEqual(version, "2.14.3")
         contract = json.loads(
             (ROOT / "docs/work-contracts/v2.14.2.json").read_text(encoding="utf-8")
         )

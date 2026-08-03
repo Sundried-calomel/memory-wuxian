@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import threading
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -103,8 +106,89 @@ class SemanticPlanTests(unittest.TestCase):
                 )
             self.assertEqual(result["status"], "ingested")
             self.assertEqual(result["ai_invocations"], 1)
+            self.assertEqual(set(result["timing"]), {
+                "local_preparation_seconds",
+                "model_seconds",
+                "validation_seconds",
+                "ingestion_seconds",
+                "total_seconds",
+            })
+            self.assertTrue(all(value >= 0 for value in result["timing"].values()))
+            self.assertNotIn("prompt", result["timing"])
             self.assertEqual(calls, [build_prompt(parent)])
             self.assertFalse((store.pending_dir / "semantic-plans").exists())
+
+    def test_concurrent_model_results_enter_real_ingest_critical_section_serially(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "archive"
+            config = base / "config.yaml"
+            config.write_text(
+                "summaries:\n"
+                "  level_1_trigger_rounds: 1\n"
+                "  level_1_trigger_characters: 20000\n"
+                "  higher_level_trigger_count: 10\n"
+                "backup:\n  enabled: false\n",
+                encoding="utf-8",
+            )
+            store = MemoryStore(
+                root,
+                {
+                    "summaries": {
+                        "level_1_trigger_rounds": 1,
+                        "level_1_trigger_characters": 20000,
+                        "higher_level_trigger_count": 10,
+                    },
+                    "backup": {"enabled": False},
+                },
+            )
+            store.init()
+            for conversation in ("codex:a", "codex:b"):
+                store.append_message("user", "question", None, conversation, None, None, False)
+                store.append_message("assistant", "answer", None, conversation, None, None, False)
+            jobs = [store.make_summary_job(), store.make_summary_job()]
+            self.assertTrue(all(path is not None for path in jobs))
+
+            active = 0
+            maximum_active = 0
+            counter_lock = threading.Lock()
+            original = MemoryStore.current_job_source_sha256
+
+            def measured_source_hash(instance, assigned_job):
+                nonlocal active, maximum_active
+                with counter_lock:
+                    active += 1
+                    maximum_active = max(maximum_active, active)
+                time.sleep(0.04)
+                try:
+                    return original(instance, assigned_job)
+                finally:
+                    with counter_lock:
+                        active -= 1
+
+            with patch.object(
+                MemoryStore,
+                "current_job_source_sha256",
+                autospec=True,
+                side_effect=measured_source_hash,
+            ):
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    results = list(
+                        executor.map(
+                            lambda path: run_job(
+                                root,
+                                config,
+                                path,
+                                False,
+                                create_backup=False,
+                                invoker=lambda *_args: empty_result(),
+                            ),
+                            jobs,
+                        )
+                    )
+
+            self.assertEqual([item["status"] for item in results], ["ingested", "ingested"])
+            self.assertEqual(maximum_active, 1)
 
     def test_realistic_1_4m_shape_is_bounded_and_preserves_parent_identity(self):
         records = []

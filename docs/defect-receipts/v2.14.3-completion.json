@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "receipt_type": "defect-workbook-completion",
+  "created_at": "2026-08-03T00:00:00+00:00",
+  "change_kind": "repair",
+  "target": "memory-wuxian-v2.14.3-semantic-maintenance-convergence",
+  "preflight_path": "docs/defect-receipts/v2.14.3-preflight.json",
+  "selected_families": ["MW-R05", "MW-R07", "MW-R09", "MW-R10"],
+  "changed_workbook_entries": ["MW-MAC-005"],
+  "validation": {
+    "python_tests_run": 608,
+    "functional_regressions": "passed",
+    "metadata_corrections": "passed-after-bounded-fix",
+    "rust_tests_run": 23,
+    "architecture_contract": "passed",
+    "documentation_contract": "passed",
+    "result": "passed"
+  },
+  "status": "passed"
+}

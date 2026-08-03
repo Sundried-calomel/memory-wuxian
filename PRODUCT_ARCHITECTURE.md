@@ -146,6 +146,11 @@ hash. Summaries remain routing indexes.
 If a job exceeds the actual prompt budget, a hash-bound resumable map-reduce
 plan preserves its parent identity, validates reusable partial results, and
 caps both characters and UTF-8 bytes for every model invocation.
+The semantic maintenance owner may overlap no more than three independent model
+calls within one bounded batch. It serializes source verification, archive
+ingestion, parent-job creation, and state/index mutation through existing locks.
+Concurrency does not change trigger thresholds, prompt budgets, source identity,
+retry/quarantine semantics, or the immutable archive.
 
 ### 4. Retrieval Contract
 
@@ -190,6 +195,11 @@ Every background action is a bounded, model-free job unless a closed semantic
 summary is due. A job declares trigger, input cursor, idempotency key, lock,
 retry policy, terminal states, and diagnostic evidence. Empty checks create no
 artifact or AI request.
+The five-minute semantic maintenance run selects at most eight jobs, limits
+model-call concurrency to three, isolates sibling failures, and emits aggregate
+phase timing without prompts or source text. A clean full-recovery audit may be
+reused for 24 hours; explicit recovery debt bypasses that cache. All writes and
+parent-summary scheduling remain serialized.
 
 ### 9. Dashboard API Contract
 

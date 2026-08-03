@@ -1,6 +1,6 @@
 # Memory無限
 
-> **2.14.2:** Verifies same-size rollout rewrites by byte hash and lets the macOS user transaction finish its full readiness window. **2.14.1** fixes macOS installation with an offline isolated PyYAML fallback. **2.14.0** adds device-local Project Evidence Owners that maintain
+> **2.14.3:** Repairs L2 semantic-job replay, raises the bounded five-minute batch to eight, allows at most three concurrent model calls with serialized ingestion, keeps full recovery audit off the five-minute hot path, reports stage timing in the dashboard, and retires the obsolete macOS semantic-backfill launcher after a successful transaction. **2.14.2** verifies same-size rollout rewrites by byte hash and lets the macOS user transaction finish its full readiness window. **2.14.1** fixes macOS installation with an offline isolated PyYAML fallback. **2.14.0** adds device-local Project Evidence Owners that maintain
 > explicit closed file selections through bounded model-free refresh. **2.13.0** adds explicit immutable Project Evidence Packages and
 > an independent encrypted `project-evidence-v1` stream. It retains the
 > **2.12.7** live-capture correction, where Python and native capture wait for the last pending
@@ -21,7 +21,7 @@
 
 > **2.12.3:** Automatic semantic catch-up now continues through transient,
 > rebuildable transcript/index/state drift while Codex capture remains active.
-> Recent deep-recovery evidence is reused for up to one hour unless recovery
+> Recent deep-recovery evidence is reused for up to 24 hours unless recovery
 > debt is present, while each frozen source SHA-256 is still checked at ingest.
 > Immutable raw-history integrity failures still stop semantic execution.
 
