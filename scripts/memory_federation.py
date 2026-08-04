@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 import uuid
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -428,6 +428,13 @@ class FederationManager:
             artifact = artifacts[artifact_id]
             if artifact_id in known:
                 if known[artifact_id]["sha256"] != artifact["sha256"]:
+                    legacy = self._legacy_summary_artifact(
+                        artifact,
+                        str(known[artifact_id]["sha256"]),
+                    )
+                    if legacy is not None:
+                        artifacts[artifact_id] = legacy
+                        continue
                     raise ValueError(
                         f"Immutable local artifact changed: {artifact_id}"
                     )
@@ -457,6 +464,53 @@ class FederationManager:
         if current_state != expected_state:
             atomic_write_json(self.export_state_path, expected_state)
         return artifacts
+
+    @staticmethod
+    def _legacy_summary_artifact(
+        artifact: Dict[str, Any],
+        expected_sha256: str,
+    ) -> Optional[Dict[str, Any]]:
+        if artifact.get("artifact_type") != "summary":
+            return None
+        payload = artifact.get("payload")
+        if not isinstance(payload, dict):
+            return None
+        record = payload.get("record")
+        if not isinstance(record, dict) or record.get("policy_events") != []:
+            return None
+        legacy_record = {
+            key: value
+            for key, value in record.items()
+            if key != "policy_events"
+        }
+        candidate_records = [legacy_record]
+        created_at = legacy_record.get("created_at")
+        if isinstance(created_at, str):
+            try:
+                timestamp = datetime.fromisoformat(created_at)
+            except ValueError:
+                timestamp = None
+            if timestamp is not None:
+                for offset in (-1, 1):
+                    candidate_records.append(
+                        {
+                            **legacy_record,
+                            "created_at": (timestamp + timedelta(seconds=offset)).isoformat(),
+                        }
+                    )
+        for candidate_record in candidate_records:
+            legacy_payload = {
+                **payload,
+                "record": candidate_record,
+            }
+            digest = canonical_sha256(legacy_payload)
+            if digest == expected_sha256:
+                return {
+                    **artifact,
+                    "sha256": digest,
+                    "payload": legacy_payload,
+                }
+        return None
 
     def export_delta(
         self,

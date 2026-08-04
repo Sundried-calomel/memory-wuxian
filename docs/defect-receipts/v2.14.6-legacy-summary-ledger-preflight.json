@@ -1,0 +1,68 @@
+{
+  "artifact_profile": "skill",
+  "change_kind": "repair",
+  "created_at": "2026-08-04T17:07:09+00:00",
+  "receipt_sha256": "dd4c5403c785d7b7bc1d3dd7883bf0f5f12fc42aeb1e2a8ad6ab02169164f75e",
+  "receipt_type": "defect-workbook-preflight",
+  "registry_path": "C:\\Users\\56453\\.codex\\defect-workbooks.json",
+  "registry_sha256": "cc4f9694a90068e7788b2983a535b3a4c06d768e810c3e4740d28a7093f7c199",
+  "schema_version": 1,
+  "target": "C:\\Users\\56453\\Documents\\本地文件整理\\Memory无限更新审计\\memory-wuxian",
+  "workbooks": [
+    {
+      "files": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\general-error-families.md",
+          "sha256": "f22ee81eb4b08347356c68417cf9c1ccc144939538d955b75ff2775f9b7d1a3d"
+        },
+        {
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\windows-device-skill-defects.md",
+          "sha256": "fc4c2e532ead33584271761390e0f7259aea829f7f903777e33abe2713377fe7"
+        }
+      ],
+      "id": "windows-device-skill-lessons",
+      "known_families": [
+        "G01",
+        "G02",
+        "G03",
+        "G04",
+        "G05",
+        "G06",
+        "G07",
+        "G08",
+        "G09",
+        "G10",
+        "G11"
+      ],
+      "require_change_on_repair": false,
+      "scope": "global"
+    },
+    {
+      "files": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Memory无限更新审计\\memory-wuxian\\docs\\retrospectives\\memory-wuxian-defect-workbook.md",
+          "sha256": "e980d4f5d9ca49512eb605037ede50e1255c8d3c6b3a49a55b6b05498de41b05"
+        }
+      ],
+      "id": "memory-wuxian-project-defects",
+      "known_families": [
+        "G03",
+        "G05",
+        "MW-R01",
+        "MW-R02",
+        "MW-R03",
+        "MW-R04",
+        "MW-R05",
+        "MW-R06",
+        "MW-R07",
+        "MW-R08",
+        "MW-R09",
+        "MW-R10",
+        "MW-R11",
+        "MW-R12"
+      ],
+      "require_change_on_repair": true,
+      "scope": "subtree"
+    }
+  ]
+}
