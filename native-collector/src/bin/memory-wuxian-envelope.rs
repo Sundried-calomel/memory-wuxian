@@ -91,6 +91,12 @@ enum EnvelopeKind {
     #[value(name = "environment-v1-ack")]
     #[serde(rename = "environment-v1-ack")]
     EnvironmentV1Ack,
+    #[value(name = "project-evidence-v1-bundle")]
+    #[serde(rename = "project-evidence-v1-bundle")]
+    ProjectEvidenceV1Bundle,
+    #[value(name = "project-evidence-v1-ack")]
+    #[serde(rename = "project-evidence-v1-ack")]
+    ProjectEvidenceV1Ack,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -741,6 +747,60 @@ mod tests {
             .is_err()
         );
         assert!(!wrong_output.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn project_evidence_kind_round_trips_and_is_stream_bound() -> Result<()> {
+        let fixture = Fixture::new()?;
+        let sender = load_identity(&fixture.sender_identity)?;
+        let recipient = load_identity(&fixture.recipient_identity)?;
+        seal_file(
+            &fixture.sender_identity,
+            &[
+                sender.encryption_public_key,
+                recipient.encryption_public_key,
+            ],
+            &fixture.payload,
+            &fixture.envelope,
+            EnvelopeKind::ProjectEvidenceV1Bundle,
+            "sender",
+            "recipient",
+        )?;
+        let output = fixture
+            .directory
+            .path()
+            .join("project-evidence-opened.mwxb");
+        open_file(
+            &fixture.recipient_identity,
+            &sender.signing_public_key,
+            &fixture.envelope,
+            &output,
+            EnvelopeKind::ProjectEvidenceV1Bundle,
+            "sender",
+            "recipient",
+        )?;
+        assert_eq!(fs::read(&output)?, fs::read(&fixture.payload)?);
+
+        for (kind, name) in [
+            (EnvelopeKind::Bundle, "archive-opened.mwxb"),
+            (EnvelopeKind::EnvironmentV1Bundle, "environment-opened.mwxb"),
+        ] {
+            let wrong_output = fixture.directory.path().join(name);
+            assert!(
+                open_file(
+                    &fixture.recipient_identity,
+                    &sender.signing_public_key,
+                    &fixture.envelope,
+                    &wrong_output,
+                    kind,
+                    "sender",
+                    "recipient",
+                )
+                .is_err()
+            );
+            assert!(!wrong_output.exists());
+        }
         Ok(())
     }
 

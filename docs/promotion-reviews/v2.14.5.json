@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "version": "2.14.5",
+  "candidate": "project-evidence-encryption-compatibility",
+  "decision": "promote-after-ci-and-transactional-installer-compatibility",
+  "scope": "Project Evidence export hash and native encrypted cloud envelope contract",
+  "raw_history_changed": false,
+  "installed_effect": "Authorized real publish created one encrypted project-evidence-v1 envelope for events 1 through 8; the full transaction installer remained blocked before cutover by an exclusive_lock parameter mismatch.",
+  "rollback": "Restore the two runtime files preserved under Memory无限更新审计/runtime-backups/project-evidence-encryption-20260804; project evidence packages and archive history remain unchanged."
+}

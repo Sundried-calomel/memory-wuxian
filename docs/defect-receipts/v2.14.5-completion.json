@@ -1,0 +1,20 @@
+{
+  "change_kind": "repair",
+  "changed_workbook_entries": [
+    "memory-wuxian-project-defects"
+  ],
+  "created_at": "2026-08-03T20:45:56+00:00",
+  "no_applicable_family_reason": null,
+  "preflight_path": "C:\\Users\\56453\\Documents\\本地文件整理\\Memory无限更新审计\\memory-wuxian\\docs\\defect-receipts\\project-evidence-encryption-20260804-preflight.json",
+  "preflight_sha256": "d8a7524484a0f7951fe1315a0162cd6c08d727db95ac8fad6c9ddd1fcb4f505d",
+  "receipt_sha256": "8aa4a73d60acba699120d3ca1869b8aaf7e386c564312075b406342203b7ed35",
+  "receipt_type": "defect-workbook-completion",
+  "schema_version": 1,
+  "selected_families": [
+    "G03",
+    "MW-R06",
+    "MW-R09"
+  ],
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\本地文件整理\\Memory无限更新审计\\memory-wuxian"
+}

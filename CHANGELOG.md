@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.14.5 - 2026-08-04
+
+- Add explicit signed-envelope kinds for `project-evidence-v1` bundles and
+  acknowledgements while preserving archive and Environment stream binding.
+- Return the standard transport `sha256` field from project-evidence exports
+  while retaining `bundle_sha256` as a backward-compatible alias.
+- Add cross-stream rejection and exact bundle-hash regressions so a newly
+  declared independent stream cannot ship without end-to-end encryption proof.
+
 ## 2.14.4 - 2026-08-03
 
 - Remove acknowledgement writes from normal runtime context-capsule loading.

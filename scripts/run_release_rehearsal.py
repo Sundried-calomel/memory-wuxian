@@ -266,6 +266,36 @@ def main() -> int:
             ],
         ),
         (
+            "project-evidence-export-hash",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_project_evidence.ProjectEvidenceTests.test_independent_stream_imports_read_only_and_old_environment_is_unchanged",
+            ],
+        ),
+        (
+            "native-project-evidence-round-trip",
+            [
+                "cargo", "test", "--manifest-path", "native-collector/Cargo.toml",
+                "--bin", "memory-wuxian-envelope",
+                "project_evidence_kind_round_trips_and_is_stream_bound",
+            ],
+        ),
+        (
+            "native-cross-stream-rejection",
+            [
+                "cargo", "test", "--manifest-path", "native-collector/Cargo.toml",
+                "--bin", "memory-wuxian-envelope",
+                "project_evidence_kind_round_trips_and_is_stream_bound",
+            ],
+        ),
+        (
+            "authorized-real-encrypted-publish",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_memory_cloud_transport.MemoryCloudTransportTest.test_project_evidence_uses_authenticated_encrypted_transport",
+            ],
+        ),
+        (
             "macos-dashboard",
             [
                 python, "-m", "unittest", "-v",
