@@ -8,6 +8,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -59,6 +60,11 @@ DEFAULT_MAXIMUM_PENDING_SECONDS = 3600
 DEFAULT_CLEANUP_GRACE_SECONDS = 24 * 60 * 60
 MAX_CLOUD_QUEUE_ENTRIES = 4096
 MAX_CLOUD_SCAN_SECONDS = 3.0
+ONEDRIVE_MACOS_EXECUTABLE = Path(
+    "/Applications/OneDrive.app/Contents/MacOS/OneDrive"
+)
+ONEDRIVE_MATERIALIZATION_TIMEOUT_SECONDS = 120.0
+ONEDRIVE_MATERIALIZATION_POLL_SECONDS = 0.5
 ENVELOPE_PATTERN = re.compile(
     r"^(?P<from_sequence>[0-9]{20})-"
     r"(?P<to_sequence>[0-9]{20})-"
@@ -130,6 +136,35 @@ class CryptoAdapter(Protocol):
 
 class TransientCloudArtifactError(RuntimeError):
     """A synchronized artifact is visible but not locally readable yet."""
+
+
+def _is_macos_onedrive_path(path: Path) -> bool:
+    if sys.platform != "darwin" or not ONEDRIVE_MACOS_EXECUTABLE.is_file():
+        return False
+    resolved = path.resolve(strict=False)
+    parts = resolved.parts
+    try:
+        cloud_storage = parts.index("CloudStorage")
+    except ValueError:
+        return False
+    return any(part.startswith("OneDrive-") for part in parts[cloud_storage + 1 :])
+
+
+def _set_macos_onedrive_pin(path: Path, action: str) -> None:
+    if action not in {"/pin", "/clearpin"}:
+        raise ValueError(f"Unsupported OneDrive pin action: {action}")
+    completed = subprocess.run(
+        [str(ONEDRIVE_MACOS_EXECUTABLE), action, str(path)],
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+        timeout=30,
+        **no_window_kwargs(),
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise OSError(detail or f"OneDrive {action} failed")
 
 
 class CommandCrypto:
@@ -919,15 +954,45 @@ class CloudFolderTransport:
 
     @staticmethod
     def _materialize_candidate(path: Path) -> None:
-        """Trigger cloud-provider hydration without reading the whole envelope."""
+        """Materialize a cloud placeholder before decrypting the envelope."""
         try:
             with path.open("rb") as handle:
                 if not handle.read(1):
                     raise OSError("Cloud artifact is empty")
         except OSError as exc:
+            if not _is_macos_onedrive_path(path):
+                raise TransientCloudArtifactError(
+                    f"Cloud artifact is not locally readable yet: {exc}"
+                ) from exc
+
+            try:
+                _set_macos_onedrive_pin(path, "/pin")
+            except (OSError, subprocess.SubprocessError) as pin_error:
+                raise TransientCloudArtifactError(
+                    "Cloud artifact is not locally readable and OneDrive could "
+                    f"not request materialization: {pin_error}"
+                ) from pin_error
+
+            deadline = time.monotonic() + ONEDRIVE_MATERIALIZATION_TIMEOUT_SECONDS
+            last_error: OSError = exc
+            while time.monotonic() < deadline:
+                try:
+                    with path.open("rb") as handle:
+                        if not handle.read(1):
+                            raise OSError("Cloud artifact is empty")
+                    try:
+                        _set_macos_onedrive_pin(path, "/clearpin")
+                    except (OSError, subprocess.SubprocessError):
+                        pass
+                    return
+                except OSError as retry_error:
+                    last_error = retry_error
+                    time.sleep(ONEDRIVE_MATERIALIZATION_POLL_SECONDS)
+
             raise TransientCloudArtifactError(
-                f"Cloud artifact is not locally readable yet: {exc}"
-            ) from exc
+                "Cloud artifact materialization did not finish within "
+                f"{ONEDRIVE_MATERIALIZATION_TIMEOUT_SECONDS:g} seconds: {last_error}"
+            ) from last_error
 
     def _read_ack(
         self,
@@ -971,6 +1036,10 @@ class CloudFolderTransport:
     ) -> None:
         for peer_id, peer in peers.items():
             incoming = self._incoming_acks(peer_id)
+            state = self._peer_state(peer_id)
+            acknowledged_sequence = int(
+                state["acknowledged"]["last_event_sequence"]
+            )
             try:
                 paths = self._bounded_queue_entries(incoming, "cloud ack queue")
             except (OSError, ValueError) as exc:
@@ -987,16 +1056,18 @@ class CloudFolderTransport:
                     continue
                 if path.suffix != ".mwxa":
                     continue
-                if not ACK_PATTERN.fullmatch(path.name) or not self._stable_candidate(path):
+                match = ACK_PATTERN.fullmatch(path.name)
+                if not match or not self._stable_candidate(path):
                     result["transient"].append(
                         {"peer": peer_id, "type": "ack", "path": display_path(path)}
                     )
+                    continue
+                if int(match.group("sequence")) < acknowledged_sequence:
                     continue
                 try:
                     ack = self._read_ack(
                         path, peer_id, peer["cloud_identity"]
                     )
-                    state = self._peer_state(peer_id)
                     current = state["acknowledged"]
                     sequence = int(ack["last_event_sequence"])
                     if sequence < int(current["last_event_sequence"]):
@@ -1190,6 +1261,26 @@ class CloudFolderTransport:
                             "type": "bundle-gap",
                             "path": display_path(path),
                             "expected_sequence": expected_sequence,
+                        }
+                    )
+                    continue
+                if is_current_replay and expected_sequence == current_sequence + 1:
+                    ack_path = self._write_ack(
+                        peer_id,
+                        peer["cloud_identity"],
+                        local_identity,
+                        {
+                            "to_event_sequence": current_sequence,
+                            "bundle_id": replica_state["last_bundle_id"],
+                        },
+                        replica_state["last_bundle_sha256"],
+                    )
+                    result["imports"].append(
+                        {
+                            "peer": peer_id,
+                            "status": "no-change",
+                            "bundle_id": replica_state["last_bundle_id"],
+                            "ack": str(ack_path),
                         }
                     )
                     continue
