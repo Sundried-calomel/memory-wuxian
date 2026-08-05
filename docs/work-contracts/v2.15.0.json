@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.15.0",
+  "candidate_id": "v2.15.0-project-attachment-candidate",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "project-evidence-plane-exchange-plane",
+  "target": "A project-attachment-v1 exact-byte large-file channel with 4 MiB authenticated chunks, resumable encrypted cloud delivery, atomic verified reconstruction, and project/conversation association metadata.",
+  "primary_semantics": "Large project deliverables remain ordinary readable source files while Memory Wuxian records immutable manifests and transfers deduplicated exact-byte chunks independently from project-evidence-v1.",
+  "invariants": [
+    "archive-v1, environment-v1, and project-evidence-v1 formats, ledgers, cursors, acknowledgements, and failure behavior remain unchanged.",
+    "Source files are never rewritten, moved, renamed, deleted, normalized, or replaced by attachment objects.",
+    "Every chunk and complete logical file is identified by SHA-256 over exact bytes; a receiver materializes nothing until all chunks and the whole-file hash pass.",
+    "A missing, duplicate, reordered, corrupt, wrong-origin, wrong-target, or cross-stream chunk fails closed without a partial destination file.",
+    "Old peers may ignore project-attachment-v1 without blocking any older stream.",
+    "The dashboard distinguishes local manifest creation, encrypted publication, peer acknowledgement, and verified reconstruction."
+  ],
+  "allowed_changes": [
+    "Add an independent project-attachment-v1 store, manifest, owner, exchange manager, schema, CLI adapters, cloud transport binding, status projection, and explicit native envelope kinds.",
+    "Support closed selections of PDF, PPTX, DOCX, XLS, XLSX, TIF, TIFF, PNG, JPEG, and WebP project deliverables.",
+    "Use 4 MiB chunks, a 256 MiB logical-file limit, a 1 GiB generation limit, bounded bundles, deduplication, retries, acknowledgements, and atomic reconstruction.",
+    "Add fixed candidate, negative, interruption, replay, corruption, old-peer, Windows Unicode path, real PPTX/PDF, and rollback cases."
+  ],
+  "prohibited_changes": [
+    "Raise project-evidence-v1 limits or place large base64 payloads in its existing package format.",
+    "Transfer executables, scripts, archives, credentials, private keys, tokens, unknown formats, whole workspaces, caches, or automatically discovered files.",
+    "Treat local indexing, cloud-file visibility, encryption, or upload as peer acknowledgement or verified reconstruction.",
+    "Garbage-collect a chunk referenced by any local or peer manifest, or infer semantic duplicates from filenames."
+  ],
+  "before_after_checks": [
+    "Hash every source fixture before build, interrupted export, import failure, reconstruction, retry, and rollback.",
+    "Reconstruct exact PPTX and PDF bytes from shuffled delivery attempts and compare complete SHA-256.",
+    "Inject missing, corrupt, duplicate, reordered, oversized, disallowed, symlink, wrong-target, wrong-origin, and wrong-stream cases.",
+    "Run project-evidence-v1 and all older cloud-stream regressions unchanged beside the new stream.",
+    "Verify dashboard and CLI report each lifecycle stage without overstating remote completion."
+  ],
+  "required_evidence": [
+    "source-audit",
+    "targeted-tests",
+    "architecture-contract",
+    "exact-byte-reconstruction",
+    "interruption-recovery",
+    "authenticated-cloud-roundtrip",
+    "cross-stream-rejection",
+    "old-peer-isolation",
+    "real-pptx-pdf-rehearsal",
+    "windows-unicode-path",
+    "macos-candidate",
+    "rollback-proof",
+    "rehearsal-matrix",
+    "documentation-contract",
+    "promotion-review"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/work-contracts/v2.15.0-project-attachment-preflight.json",
+    "preflight_sha256": "7a73def1fdd76f7edca46e7591a6aec2289e1300f4e4bec4314054e3dfd083ba",
+    "completion_receipt": "docs/work-contracts/v2.15.0-project-attachment-completion.json",
+    "completion_sha256": "2f68423fdc71ce7e97e08effc1be30a293a52032401d0bd6b468cd0983959227",
+    "applicable_families": ["G02", "G03", "G05", "G06", "G09", "MW-R05", "MW-R06", "MW-R09", "MW-R10", "MW-R11"],
+    "project_workbook_updated": true,
+    "original_triggers": ["MW-WIN-014", "MW-REL-015", "project-evidence 4 MiB per-file boundary", "cloud transport stage overstatement"]
+  },
+  "lifecycle_state": "verified"
+}

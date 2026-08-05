@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.14.5",
+  "reviewed_version": "2.15.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
@@ -118,6 +118,10 @@
     {
       "id": "project-evidence-packages",
       "required_tokens": ["project-evidence-build", "project-evidence-list", "project-evidence-query", "project-evidence-reconstruct", "project-evidence-status", "project-evidence-owner-register", "project-evidence-owner-refresh", "project-evidence-owner-status", "project-evidence-v1"]
+    },
+    {
+      "id": "project-attachments",
+      "required_tokens": ["project-attachment-build", "project-attachment-owner-register", "project-attachment-owner-refresh", "project-attachment-owner-status", "project-attachment-status", "project-attachment-sync", "project-attachment-reconstruct", "project-attachment-v1", "4 MiB", "256 MiB", "1 GiB", "SHA-256"]
     },
     {
       "id": "environment-installation",

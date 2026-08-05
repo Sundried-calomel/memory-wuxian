@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "capability_id": "project-attachment-exchange",
+  "revision": "2.15.0",
+  "owner_id": "project-evidence-plane-exchange-plane",
+  "producer_identity": "memory-wuxian-maintainers",
+  "artifact_sha256": "d37bb6c29b6d792a243827fc9165ed81557c5ca98db1908911fc4f3e753852ec",
+  "triggers": [
+    {"trigger_id": "record-large-deliverable", "phrase": "Record an explicit large project attachment"},
+    {"trigger_id": "sync-large-deliverable", "phrase": "Synchronize explicit project attachments"},
+    {"trigger_id": "reconstruct-large-deliverable", "phrase": "Reconstruct a verified project attachment generation"}
+  ],
+  "calls": [],
+  "resources": [
+    {"resource_id": "attachment-source-files", "access": "read", "coordination_owner": "project-evidence-plane-exchange-plane"},
+    {"resource_id": "attachment-object-store", "access": "write", "coordination_owner": "project-evidence-plane-exchange-plane"},
+    {"resource_id": "attachment-cloud-exchange", "access": "write", "coordination_owner": "project-evidence-plane-exchange-plane"},
+    {"resource_id": "attachment-reconstruction-target", "access": "write", "coordination_owner": "project-evidence-plane-exchange-plane"},
+    {"resource_id": "attachment-dashboard-status", "access": "write", "coordination_owner": "product-shell"}
+  ],
+  "permissions": ["file-read", "file-write", "encrypted-cloud-write"],
+  "actions": [
+    {"action_id": "record-closed-generation", "risk": "ordinary", "permissions": ["file-read", "file-write"], "resources": ["attachment-source-files", "attachment-object-store"], "authorization_gate": null},
+    {"action_id": "refresh-explicit-owner", "risk": "ordinary", "permissions": ["file-read", "file-write"], "resources": ["attachment-source-files", "attachment-object-store"], "authorization_gate": null},
+    {"action_id": "publish-encrypted-attachments", "risk": "authorization-gated", "permissions": ["file-read", "file-write", "encrypted-cloud-write"], "resources": ["attachment-object-store", "attachment-cloud-exchange"], "authorization_gate": "explicit-user-cloud-write"},
+    {"action_id": "preview-reconstruction", "risk": "ordinary", "permissions": ["file-read"], "resources": ["attachment-object-store", "attachment-reconstruction-target"], "authorization_gate": null},
+    {"action_id": "apply-reconstruction", "risk": "authorization-gated", "permissions": ["file-read", "file-write"], "resources": ["attachment-object-store", "attachment-reconstruction-target"], "authorization_gate": "explicit-user-destination-write"},
+    {"action_id": "render-attachment-status", "risk": "ordinary", "permissions": ["file-read", "file-write"], "resources": ["attachment-dashboard-status"], "authorization_gate": null}
+  ]
+}

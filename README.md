@@ -1,5 +1,10 @@
 # Memory無限
 
+> **2.15.0:** Adds the independent encrypted `project-attachment-v1` stream for
+> explicit large project deliverables. Exact 4 MiB chunks, SHA-256 manifests,
+> resumable delivery, and verified atomic reconstruction keep ordinary source
+> files readable while leaving every older stream unchanged.
+
 > **2.14.5:** Completes the Project Evidence cloud contract with stream-bound native encryption kinds and a transport-compatible bundle hash. Cross-stream rejection remains mandatory.
 
 > **2.14.4:** Makes runtime context-capsule loading fully read-only and acknowledgement-free, derives refreshes from the latest deterministic telemetry transition, and keeps the legacy ACK command as a no-write compatibility no-op. **2.14.3** repairs L2 semantic-job replay, raises the bounded five-minute batch to eight, allows at most three concurrent model calls with serialized ingestion, keeps full recovery audit off the five-minute hot path, reports stage timing in the dashboard, and retires the obsolete macOS semantic-backfill launcher after a successful transaction. **2.14.2** verifies same-size rollout rewrites by byte hash and lets the macOS user transaction finish its full readiness window. **2.14.1** fixes macOS installation with an offline isolated PyYAML fallback. **2.14.0** adds device-local Project Evidence Owners that maintain
@@ -574,6 +579,32 @@ selection. The five-minute model-free supervisor refreshes at most 20 owners
 per pass. Unchanged content creates no record; changed stable content creates a
 predecessor-linked immutable generation. Source paths remain local, failures
 are isolated, and imported packages never create owners.
+
+## Project attachments
+
+Large final deliverables belong to the independent `project-attachment-v1`
+stream instead of raising the bounded Project Evidence limit. A closed JSON
+specification may select PDF, PPTX, DOCX, XLS/XLSX, TIF/TIFF, PNG, JPEG, or
+WebP files. Memory Wuxian preserves the original files untouched and records
+exact SHA-256 manifests over deduplicated 4 MiB chunks. One logical file is
+limited to 256 MiB and one generation to 1 GiB.
+
+Encrypted delivery is resumable and stream-bound. A receiver materializes no
+file until every chunk and the complete-file hash pass. Successful application
+writes a reconstruction receipt; missing, corrupt, reordered, wrong-target, or
+cross-stream data fails closed. Use the dedicated sync command when only these
+attachments are authorized for transfer. See
+[the project attachment contract](references/project-attachments.md).
+
+```text
+project-attachment-build
+project-attachment-owner-register
+project-attachment-owner-refresh
+project-attachment-owner-status
+project-attachment-status
+project-attachment-sync
+project-attachment-reconstruct
+```
 
 ## Memory無限 2.0 environment convergence
 

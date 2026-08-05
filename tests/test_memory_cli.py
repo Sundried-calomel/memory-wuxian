@@ -2807,6 +2807,8 @@ summaries:
 
     @unittest.skipUnless(sys.platform == "win32", "Windows bootstrap test")
     def test_windows_bootstrap_reports_runtime_versions(self):
+        if sys.version_info[:2] != (3, 14):
+            self.skipTest("Windows bootstrap runtime contract requires Python 3.14")
         sessions = self.base / "sessions"
         sessions.mkdir()
         collector = self.base / "memory-wuxian-collector.exe"

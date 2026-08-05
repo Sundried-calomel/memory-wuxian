@@ -13,6 +13,7 @@ from typing import Callable
 
 from memory_jobs import write_maintenance_projection
 from memory_project_evidence import ProjectEvidenceStore
+from memory_project_attachments import ProjectAttachmentStore
 from platform_lock import exclusive_lock
 from platform_transaction import atomic_write_canonical_json
 from semantic_backfill import run_backfill
@@ -70,6 +71,10 @@ def _run_supervisor_tick_unlocked(
         maximum_owners=20,
         apply=True,
     )
+    project_attachments = ProjectAttachmentStore(root).refresh_owners(
+        maximum_owners=20,
+        apply=True,
+    )
     return {
         "format": "memory-wuxian-maintenance-supervisor-state-v1",
         "status": _supervisor_status(result),
@@ -98,6 +103,7 @@ def _run_supervisor_tick_unlocked(
             ),
         },
         "project_evidence_owners": project_evidence,
+        "project_attachment_owners": project_attachments,
     }
 
 

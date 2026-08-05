@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "binding_id": "memory-wuxian-v2-15-binding",
+  "project_id": "memory-wuxian",
+  "registry_sha256": "890c093963b6a3d7251f250955bdde351dc0c92a9946d6ac9a1a9f4da07addd5",
+  "capabilities": [
+    {
+      "capability_id": "project-attachment-exchange",
+      "revision": "2.15.0",
+      "manifest_sha256": "ad25d2ca1590e513d7aee3177d49a892e442bfdaf1c56816046d74a5f53181e4",
+      "allowed_actions": [
+        "record-closed-generation",
+        "refresh-explicit-owner",
+        "publish-encrypted-attachments",
+        "preview-reconstruction",
+        "apply-reconstruction",
+        "render-attachment-status"
+      ],
+      "allowed_permissions": ["file-read", "file-write", "encrypted-cloud-write"],
+      "allowed_resources": [
+        "attachment-source-files",
+        "attachment-object-store",
+        "attachment-cloud-exchange",
+        "attachment-reconstruction-target",
+        "attachment-dashboard-status"
+      ]
+    }
+  ]
+}

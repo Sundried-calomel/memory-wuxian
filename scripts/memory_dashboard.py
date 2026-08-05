@@ -33,6 +33,7 @@ from memory_cli import (
     MemoryStore,
     atomic_write_json,
     environment_cloud_transport,
+    project_attachment_cloud_transport,
     project_evidence_cloud_transport,
     load_simple_yaml,
     local_platform_name,
@@ -51,6 +52,7 @@ from memory_environment_profiles import EnvironmentProfileManager
 from memory_federation import FederationManager
 from memory_governance_ai import GovernanceAIQueue
 from memory_project_evidence import ProjectEvidenceExchangeManager, ProjectEvidenceStore
+from memory_project_attachments import ProjectAttachmentExchangeManager
 from memory_readonly_service import ReadOnlyMemoryService
 from platform_lock import exclusive_lock
 from platform_process import no_window_kwargs
@@ -64,6 +66,71 @@ CLOUD_SCHEDULER_LABEL = "com.openai.codex.memory-wuxian-cloud-sync"
 CLOUD_SCHEDULER_TASK = "MemoryWuxianCloudSync"
 GOVERNANCE_AI_SCHEDULER_LABEL = "com.openai.codex.memory-wuxian-governance-ai"
 GOVERNANCE_AI_SCHEDULER_TASK = "MemoryWuxianGovernanceAI"
+
+
+def project_attachment_lifecycle(
+    transport_status: dict[str, Any], inventory: dict[str, Any]
+) -> dict[str, Any]:
+    """Project exact-byte state without inferring one lifecycle stage from another."""
+    local_sequence = int(inventory.get("local_event_sequence") or 0)
+    published_sequence = 0
+    acknowledged_sequence = 0
+    published_peers = 0
+    acknowledged_peers = 0
+    peers = [
+        item
+        for item in transport_status.get("peers", [])
+        if isinstance(item, dict)
+        and item.get("trusted", True)
+        and item.get("cloud_ready", True)
+    ]
+    for peer in peers:
+        acknowledged = peer.get("acknowledged") or {}
+        outstanding = peer.get("outstanding") or {}
+        peer_acknowledged = int(acknowledged.get("last_event_sequence") or 0)
+        peer_published = max(
+            peer_acknowledged,
+            int(outstanding.get("to_event_sequence") or 0),
+        )
+        if peer_published:
+            published_peers += 1
+        if local_sequence and peer_acknowledged >= local_sequence:
+            acknowledged_peers += 1
+        published_sequence = max(published_sequence, peer_published)
+        acknowledged_sequence = max(acknowledged_sequence, peer_acknowledged)
+    encrypted = bool(transport_status.get("encrypted"))
+    return {
+        "local_manifest_creation": {
+            "state": "recorded" if int(inventory.get("local_manifests") or 0) else "none",
+            "manifests": int(inventory.get("local_manifests") or 0),
+            "files": int(inventory.get("local_files") or 0),
+            "bytes": int(inventory.get("local_bytes") or 0),
+            "event_sequence": local_sequence,
+        },
+        "encrypted_publication": {
+            "state": "published" if published_sequence else "ready" if encrypted else "unconfigured",
+            "event_sequence": published_sequence,
+            "peers": published_peers,
+        },
+        "peer_acknowledgement": {
+            "state": (
+                "acknowledged"
+                if local_sequence and peers and acknowledged_peers == len(peers)
+                else "partial"
+                if acknowledged_sequence
+                else "pending"
+                if local_sequence
+                else "none"
+            ),
+            "event_sequence": acknowledged_sequence,
+            "peers": acknowledged_peers,
+            "expected_peers": len(peers),
+        },
+        "verified_reconstruction": {
+            "state": "verified" if int(inventory.get("verified_reconstructions") or 0) else "none",
+            "receipts": int(inventory.get("verified_reconstructions") or 0),
+        },
+    }
 
 
 def background_subprocess_kwargs() -> dict[str, Any]:
@@ -1720,11 +1787,24 @@ def make_handler(
                 store
             ).status()
             project_evidence_status["owners"] = ProjectEvidenceStore(store).owner_status()
+            project_attachment_transport = project_attachment_cloud_transport(
+                store, archive_transport, bootstrap=False
+            )
+            project_attachment_status = project_attachment_transport.status()
+            project_attachment_status["inventory"] = ProjectAttachmentExchangeManager(
+                store
+            ).status()
+            project_attachment_status["lifecycle"] = project_attachment_lifecycle(
+                project_attachment_status,
+                project_attachment_status["inventory"],
+            )
             cloud["streams"] = {
                 "archive-v1": archive_stream,
                 "environment-v1": environment_transport.status(),
                 "project-evidence-v1": project_evidence_status,
             }
+            if project_attachment_status.get("configured") or project_attachment_status["inventory"].get("local_manifests"):
+                cloud["streams"]["project-attachment-v1"] = project_attachment_status
             cloud["scheduler"] = cloud_scheduler_status()
             devices["cloud"] = cloud
             return devices
@@ -1970,6 +2050,9 @@ def make_handler(
                 project_evidence_transport = project_evidence_cloud_transport(
                     store, transport, bootstrap=True
                 )
+                project_attachment_transport = project_attachment_cloud_transport(
+                    store, transport, bootstrap=True
+                )
                 if action == "enable":
                     if not transport.status().get("configured"):
                         raise ValueError("cloud transport is not configured")
@@ -1984,18 +2067,24 @@ def make_handler(
                     transport.set_enabled(True)
                     environment_transport.set_enabled(True)
                     project_evidence_transport.set_enabled(True)
+                    if project_attachment_transport.status().get("configured"):
+                        project_attachment_transport.set_enabled(True)
                     try:
                         scheduler = set_cloud_scheduler(store, True)
                     except Exception:
                         transport.set_enabled(False)
                         environment_transport.set_enabled(False)
                         project_evidence_transport.set_enabled(False)
+                        if project_attachment_transport.status().get("configured"):
+                            project_attachment_transport.set_enabled(False)
                         raise
                     result = {"status": "enabled", "scheduler": scheduler}
                 elif action == "disable":
                     transport.set_enabled(False)
                     environment_transport.set_enabled(False)
                     project_evidence_transport.set_enabled(False)
+                    if project_attachment_transport.status().get("configured"):
+                        project_attachment_transport.set_enabled(False)
                     result = {
                         "status": "disabled",
                         "scheduler": set_cloud_scheduler(store, False),
@@ -2015,11 +2104,14 @@ def make_handler(
                     with exclusive_lock(
                         store.root / ".locks" / "federation.lock"
                     ):
-                        for name, stream_transport in (
+                        stream_transports = [
                             ("archive", transport),
                             ("environment", environment_transport),
                             ("project_evidence", project_evidence_transport),
-                        ):
+                        ]
+                        if project_attachment_transport.status().get("enabled"):
+                            stream_transports.append(("project_attachments", project_attachment_transport))
+                        for name, stream_transport in stream_transports:
                             try:
                                 stream_result = stream_transport.sync(force=True)
                                 streams[name] = {
@@ -2196,6 +2288,7 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--window", action="store_true", help="Open a native WebView2 application window")
+    parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args()
     store = MemoryStore(Path(args.root).expanduser().resolve(), load_simple_yaml(Path(args.config).expanduser().resolve()))
     server = ThreadingHTTPServer(
@@ -2203,6 +2296,14 @@ def main() -> int:
         make_handler(store, Path(args.config).expanduser().resolve()),
     )
     url = f"http://{args.host}:{server.server_port}/"
+    if args.self_check:
+        try:
+            if args.window:
+                import webview  # noqa: F401
+            print(json.dumps({"status": "ready", "url": url}, ensure_ascii=False), flush=True)
+            return 0
+        finally:
+            server.server_close()
     if args.window:
         print(json.dumps({"status": "opening-window", "url": url}, ensure_ascii=False), flush=True)
         run_window(server, url)

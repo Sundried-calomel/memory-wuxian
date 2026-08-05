@@ -257,6 +257,14 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
     never exports its source path. A five-minute model-free pass may refresh at
     most 20 owners; unchanged content creates no record, changed stable content
     creates one predecessor-linked generation, and failures remain isolated.
+    Put explicitly selected large final deliverables in the independent
+    `project-attachment-v1` stream. Use 4 MiB exact chunks, keep each logical
+    file at or below 256 MiB and each generation at or below 1 GiB, and never
+    rewrite or replace the ordinary source file. Use `project-attachment-sync`
+    when only attachment transfer is authorized. Treat upload, acknowledgement,
+    and verified reconstruction as separate states; only a complete SHA-256
+    reconstruction may write a receipt. Follow
+    `references/project-attachments.md`.
 33. Use `environment-conflicts` and `environment-promotions` for current
     governance state. Resolve a conflict or advance a promotion only with
     explicit reviewer and evidence fields; never infer approval from recency or

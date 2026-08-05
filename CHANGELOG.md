@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.15.0 - 2026-08-04
+
+- Add the independent encrypted `project-attachment-v1` stream for explicit
+  large project deliverables without changing `project-evidence-v1` limits.
+- Preserve exact readable source bytes through 4 MiB SHA-256 chunks, bounded
+  manifests, deduplication, resumable delivery, and verified atomic rebuilds.
+- Add device-local attachment owners, a scoped attachment-only sync command,
+  reconstruction receipts, lifecycle status, native envelope kinds, and
+  corruption/interruption/Unicode-path regression coverage.
+- Preserve pre-policy-event summary hashes during later federation exports by
+  reproducing only an exact legacy payload match; all real content changes
+  remain fail-closed.
+- Require the Windows dashboard launcher to perform a real no-window dependency
+  self-check and propagate early child failures during transactional upgrades.
+
 ## 2.14.5 - 2026-08-04
 
 - Add explicit signed-envelope kinds for `project-evidence-v1` bundles and

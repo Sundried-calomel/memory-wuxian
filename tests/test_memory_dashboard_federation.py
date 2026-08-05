@@ -24,6 +24,7 @@ from memory_dashboard import (
     dashboard_health,
     debt_status_projection,
     make_handler,
+    project_attachment_lifecycle,
 )
 
 
@@ -34,6 +35,39 @@ class MemoryDashboardFederationTest(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def test_project_attachment_lifecycle_keeps_all_four_stages_distinct(self):
+        lifecycle = project_attachment_lifecycle(
+            {
+                "encrypted": True,
+                "peers": [
+                    {
+                        "trusted": True,
+                        "cloud_ready": True,
+                        "acknowledged": {"last_event_sequence": 7},
+                        "outstanding": {"to_event_sequence": 9},
+                    },
+                    {
+                        "trusted": True,
+                        "cloud_ready": True,
+                        "acknowledged": {"last_event_sequence": 9},
+                        "outstanding": None,
+                    },
+                ],
+            },
+            {
+                "local_manifests": 2,
+                "local_files": 13,
+                "local_bytes": 44848196,
+                "local_event_sequence": 9,
+                "verified_reconstructions": 1,
+            },
+        )
+        self.assertEqual(lifecycle["local_manifest_creation"]["state"], "recorded")
+        self.assertEqual(lifecycle["encrypted_publication"]["state"], "published")
+        self.assertEqual(lifecycle["peer_acknowledgement"]["state"], "partial")
+        self.assertEqual(lifecycle["peer_acknowledgement"]["peers"], 1)
+        self.assertEqual(lifecycle["verified_reconstruction"]["state"], "verified")
 
     def test_dashboard_health_ignores_normal_concurrent_round_order(self):
         self.assertEqual(

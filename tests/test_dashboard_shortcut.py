@@ -26,6 +26,16 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn('.arg("--port")', source)
         self.assertIn('.arg("0")', source)
         self.assertNotIn('.arg("8765")', source)
+        self.assertIn('argument == "--self-check"', source)
+        self.assertIn("status.success()", source)
+        self.assertIn("try_wait()", source)
+
+    def test_dashboard_self_check_validates_window_dependency_without_opening(self):
+        source = (SKILL_ROOT / "scripts/memory_dashboard.py").read_text(encoding="utf-8")
+        self.assertIn('parser.add_argument("--self-check"', source)
+        self.assertIn("if args.self_check:", source)
+        self.assertIn("import webview", source)
+        self.assertIn("server.server_close()", source)
 
     def test_shortcut_installer_is_atomic_and_uses_current_paths(self):
         script = (SKILL_ROOT / "scripts/install_dashboard_shortcut_windows.ps1").read_text(
