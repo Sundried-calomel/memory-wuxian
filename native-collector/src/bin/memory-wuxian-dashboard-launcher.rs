@@ -85,14 +85,18 @@ fn launch() -> Result<()> {
             .arg("--self-check")
             .status()
             .context("self-check Memory Wuxian dashboard")?;
-        ensure!(status.success(), "dashboard self-check failed with {status}");
+        ensure!(
+            status.success(),
+            "dashboard self-check failed with {status}"
+        );
     } else {
-        let mut child = command
-            .spawn()
-            .context("start Memory Wuxian dashboard")?;
+        let mut child = command.spawn().context("start Memory Wuxian dashboard")?;
         std::thread::sleep(std::time::Duration::from_millis(1200));
         if let Some(status) = child.try_wait().context("inspect dashboard startup")? {
-            ensure!(status.success(), "dashboard exited during startup with {status}");
+            ensure!(
+                status.success(),
+                "dashboard exited during startup with {status}"
+            );
         }
     }
     Ok(())

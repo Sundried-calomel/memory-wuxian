@@ -296,6 +296,19 @@
   导出成功和真实内容变化仍被拒绝。
 - Families: `MW-R05`, `MW-R06`, `MW-R09`, `G03`.
 
+### MW-REL-024：Rust 功能验证通过但格式门未在提交前执行
+
+- 证据：`仓库已核验`。v2.15.0 PR #68 的三平台候选均在
+  `cargo fmt --check --manifest-path native-collector/Cargo.toml` 失败；功能测试和原生
+  流绑定测试此前均通过，失败集中于状态台启动器的纯格式差异。
+- 根因：增量验证覆盖了行为和合同，却没有执行 CI 中独立的 Rust 格式门。
+- 逃逸边界：本地“相关测试通过”被误当作候选完整；同一处未格式化源码因此在 macOS、
+  Ubuntu 和 Windows 重复失败。
+- 永久门槛：任何 `native-collector/**/*.rs` 变更在提交前必须执行与 CI 完全一致的
+  `cargo fmt --check --manifest-path native-collector/Cargo.toml`；若失败，先运行 `cargo fmt`
+  并重新执行受影响测试，不能依赖编译或单元测试间接覆盖格式。
+- Families: `MW-R06`, `G09`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。
