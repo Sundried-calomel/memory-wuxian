@@ -25,6 +25,7 @@ fn main() {
     if let Err(error) = launch() {
         let log = std::env::temp_dir().join("memory-wuxian-dashboard-launcher.log");
         let _ = fs::write(log, format!("{error:#}\n"));
+        std::process::exit(1);
     }
 }
 
@@ -68,7 +69,9 @@ fn launch() -> Result<()> {
     );
     ensure!(config.archive_root.is_dir(), "archive root does not exist");
 
-    Command::new(python)
+    let self_check = std::env::args_os().any(|argument| argument == "--self-check");
+    let mut command = Command::new(python);
+    command
         .arg(dashboard)
         .arg("--root")
         .arg(config.archive_root)
@@ -76,9 +79,22 @@ fn launch() -> Result<()> {
         .arg(skill_config)
         .arg("--port")
         .arg("0")
-        .arg("--window")
-        .spawn()
-        .context("start Memory Wuxian dashboard")?;
+        .arg("--window");
+    if self_check {
+        let status = command
+            .arg("--self-check")
+            .status()
+            .context("self-check Memory Wuxian dashboard")?;
+        ensure!(status.success(), "dashboard self-check failed with {status}");
+    } else {
+        let mut child = command
+            .spawn()
+            .context("start Memory Wuxian dashboard")?;
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        if let Some(status) = child.try_wait().context("inspect dashboard startup")? {
+            ensure!(status.success(), "dashboard exited during startup with {status}");
+        }
+    }
     Ok(())
 }
 

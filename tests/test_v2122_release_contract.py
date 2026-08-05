@@ -12,7 +12,7 @@ class V2122ReleaseContractTest(unittest.TestCase):
         version = tomllib.loads(
             (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         )["project"]["version"]
-        self.assertEqual(version, "2.14.4")
+        self.assertGreaterEqual(tuple(map(int, version.split("."))), (2, 14, 4))
         contract = json.loads(
             (ROOT / "docs/work-contracts/v2.12.2.json").read_text(encoding="utf-8")
         )

@@ -76,7 +76,8 @@
       "id": "project-evidence-plane",
       "architecture_owner": "Project Evidence Plane",
       "patterns": [
-        "scripts/memory_project_evidence.py"
+        "scripts/memory_project_evidence.py",
+        "scripts/memory_project_attachments.py"
       ]
     },
     {

@@ -43,6 +43,7 @@ from memory_content_store import ContentStore
 from memory_diagnostics import create_diagnostic_bundle
 from memory_jobs import KINDS as MAINTENANCE_JOB_KINDS, MaintenanceQueue, run_model_free_tick
 from memory_project_evidence import ProjectEvidenceExchangeManager, ProjectEvidenceStore
+from memory_project_attachments import ProjectAttachmentExchangeManager, ProjectAttachmentStore
 from memory_resumable_sync import ResumableTransfer
 from memory_readonly_http import create_server as create_readonly_server
 from memory_readonly_mcp import serve_lines as serve_readonly_mcp
@@ -190,6 +191,33 @@ def project_evidence_cloud_transport(
             early_flush_bytes=int(archive_config.get("early_flush_bytes", 1024 * 1024)),
             maximum_pending_seconds=int(archive_config.get("maximum_pending_seconds", 3600)),
             cleanup_grace_seconds=int(archive_config.get("cleanup_grace_seconds", 24 * 60 * 60)),
+        )
+    return transport
+
+
+def project_attachment_cloud_transport(
+    store: "MemoryStore",
+    archive_transport: CloudFolderTransport,
+    *,
+    bootstrap: bool,
+) -> CloudFolderTransport:
+    manager = ProjectAttachmentExchangeManager(store)
+    transport = CloudFolderTransport(
+        manager,
+        config_path=manager.metadata_root / "cloud.json",
+        stream_id="project-attachment-v1",
+    )
+    config = archive_transport.config
+    if bootstrap and not transport.config_path.exists() and isinstance(config, dict) and str(config.get("exchange_root", "")).strip():
+        transport.configure(
+            Path(str(config["exchange_root"])),
+            Path(str(config["identity_private_path"])),
+            Path(str(config["envelope_binary"])) if config.get("envelope_binary") else None,
+            enabled=bool(config.get("enabled")),
+            merge_window_seconds=int(config.get("merge_window_seconds", 900)),
+            early_flush_bytes=int(config.get("early_flush_bytes", 1024 * 1024)),
+            maximum_pending_seconds=int(config.get("maximum_pending_seconds", 3600)),
+            cleanup_grace_seconds=int(config.get("cleanup_grace_seconds", 24 * 60 * 60)),
         )
     return transport
 
@@ -4576,6 +4604,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Bypass the merge window for local exports",
     )
+    project_attachment_sync_parser = subparsers.add_parser(
+        "project-attachment-sync",
+        help="Run one encrypted synchronization pass for project attachments only",
+    )
+    project_attachment_sync_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Bypass the merge window for attachment exports",
+    )
     subparsers.add_parser(
         "cloud-status",
         help="Show encrypted cloud-folder configuration and peer delivery state",
@@ -4632,6 +4669,39 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "project-evidence-owner-status",
         help="Show device-local project evidence owners and their current generation",
+    )
+    project_attachment_build = subparsers.add_parser(
+        "project-attachment-build",
+        help="Preview or record one exact-byte project attachment generation",
+    )
+    project_attachment_build.add_argument("--spec", required=True)
+    project_attachment_build.add_argument("--apply", action="store_true")
+    project_attachment_reconstruct = subparsers.add_parser(
+        "project-attachment-reconstruct",
+        help="Preview or reconstruct a complete verified project attachment generation",
+    )
+    project_attachment_reconstruct.add_argument("--generation-id", required=True)
+    project_attachment_reconstruct.add_argument("--destination", required=True)
+    project_attachment_reconstruct.add_argument("--apply", action="store_true")
+    project_attachment_owner_register = subparsers.add_parser(
+        "project-attachment-owner-register",
+        help="Preview or register one explicit device-local attachment selection",
+    )
+    project_attachment_owner_register.add_argument("--spec", required=True)
+    project_attachment_owner_register.add_argument("--apply", action="store_true")
+    project_attachment_owner_refresh = subparsers.add_parser(
+        "project-attachment-owner-refresh",
+        help="Preview or refresh one registered attachment selection",
+    )
+    project_attachment_owner_refresh.add_argument("--project-id", required=True)
+    project_attachment_owner_refresh.add_argument("--apply", action="store_true")
+    subparsers.add_parser(
+        "project-attachment-status",
+        help="Show local attachment manifests and exchange cursors",
+    )
+    subparsers.add_parser(
+        "project-attachment-owner-status",
+        help="Show device-local project attachment owners",
     )
     migration_preview = subparsers.add_parser(
         "migration-preview", help="Preview a verified copy-only archive migration"
@@ -5484,6 +5554,9 @@ def dispatch_command(
         result["project_evidence"] = project_evidence_cloud_transport(
             store, transport, bootstrap=True
         ).status()
+        result["project_attachments"] = project_attachment_cloud_transport(
+            store, transport, bootstrap=True
+        ).status()
         result["scheduler_install_command"] = [
             sys.executable,
             str(SKILL_ROOT / "scripts" / "install_cloud_sync.py"),
@@ -5558,6 +5631,9 @@ def dispatch_command(
         result["project_evidence"] = project_evidence_cloud_transport(
             store, archive_transport, bootstrap=True
         ).sync(force=args.force)
+        result["project_attachments"] = project_attachment_cloud_transport(
+            store, archive_transport, bootstrap=True
+        ).sync(force=args.force)
     elif args.command == "cloud-status":
         archive_transport = CloudFolderTransport(FederationManager(store))
         result = archive_transport.status()
@@ -5572,6 +5648,14 @@ def dispatch_command(
         result["project_evidence"] = project_evidence_cloud_transport(
             store, archive_transport, bootstrap=False
         ).status()
+        result["project_attachments"] = project_attachment_cloud_transport(
+            store, archive_transport, bootstrap=False
+        ).status()
+    elif args.command == "project-attachment-sync":
+        archive_transport = CloudFolderTransport(FederationManager(store))
+        result = project_attachment_cloud_transport(
+            store, archive_transport, bootstrap=True
+        ).sync(force=args.force)
     elif args.command == "cloud-enable":
         archive_transport = CloudFolderTransport(FederationManager(store))
         result = archive_transport.set_enabled(True)
@@ -5581,6 +5665,9 @@ def dispatch_command(
         result["project_evidence"] = project_evidence_cloud_transport(
             store, archive_transport, bootstrap=True
         ).set_enabled(True)
+        result["project_attachments"] = project_attachment_cloud_transport(
+            store, archive_transport, bootstrap=True
+        ).set_enabled(True)
     elif args.command == "cloud-disable":
         archive_transport = CloudFolderTransport(FederationManager(store))
         result = archive_transport.set_enabled(False)
@@ -5588,6 +5675,9 @@ def dispatch_command(
             store, archive_transport, bootstrap=True
         ).set_enabled(False)
         result["project_evidence"] = project_evidence_cloud_transport(
+            store, archive_transport, bootstrap=True
+        ).set_enabled(False)
+        result["project_attachments"] = project_attachment_cloud_transport(
             store, archive_transport, bootstrap=True
         ).set_enabled(False)
     elif args.command == "project-evidence-build":
@@ -5629,6 +5719,26 @@ def dispatch_command(
         )
     elif args.command == "project-evidence-owner-status":
         result = ProjectEvidenceStore(store).owner_status()
+    elif args.command == "project-attachment-build":
+        result = ProjectAttachmentStore(store).build(
+            read_json(Path(args.spec).expanduser().resolve()), apply=args.apply
+        )
+    elif args.command == "project-attachment-reconstruct":
+        result = ProjectAttachmentStore(store).reconstruct(
+            args.generation_id, Path(args.destination), apply=args.apply
+        )
+    elif args.command == "project-attachment-owner-register":
+        result = ProjectAttachmentStore(store).register_owner(
+            read_json(Path(args.spec).expanduser().resolve()), apply=args.apply
+        )
+    elif args.command == "project-attachment-owner-refresh":
+        result = ProjectAttachmentStore(store).refresh_owner(
+            args.project_id, apply=args.apply
+        )
+    elif args.command == "project-attachment-status":
+        result = {"status": "ok", "exchange": ProjectAttachmentExchangeManager(store).status(), "owners": ProjectAttachmentStore(store).owner_status()}
+    elif args.command == "project-attachment-owner-status":
+        result = ProjectAttachmentStore(store).owner_status()
     elif args.command == "migration-preview":
         result = GuardedFeatures(store).migration_preview(Path(args.destination))
     elif args.command == "migration-apply":
@@ -6010,6 +6120,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "project-evidence-query",
             "project-evidence-status",
             "project-evidence-owner-status",
+            "project-attachment-status",
+            "project-attachment-owner-status",
             "migration-preview",
             "as-of",
             "decision-graph",
@@ -6038,6 +6150,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return dispatch_command(args, parser, store)
         if args.command.startswith("project-evidence-"):
             with exclusive_lock(store.root / ".locks" / "project-evidence-command.lock"):
+                return dispatch_command(args, parser, store)
+        if args.command in {"project-attachment-build", "project-attachment-owner-register", "project-attachment-owner-refresh", "project-attachment-reconstruct"} and not args.apply:
+            return dispatch_command(args, parser, store)
+        if args.command.startswith("project-attachment-") and args.command != "project-attachment-sync":
+            with exclusive_lock(store.root / ".locks" / "project-attachment-command.lock"):
                 return dispatch_command(args, parser, store)
         if args.command in {"environment-init", "environment-register"}:
             return dispatch_command(args, parser, store)
@@ -6077,6 +6194,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "cloud-configure",
             "cloud-pair-import",
             "cloud-sync",
+            "project-attachment-sync",
             "cloud-enable",
             "cloud-disable",
         }:

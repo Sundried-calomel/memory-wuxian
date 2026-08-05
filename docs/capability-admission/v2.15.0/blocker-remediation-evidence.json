@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "candidate_id": "project-attachment-exchange",
+  "candidate_revision": "2.15.0",
+  "artifact_sha256": "d37bb6c29b6d792a243827fc9165ed81557c5ca98db1908911fc4f3e753852ec",
+  "artifact_hash_contract": "SHA-256 of UTF-8 records sorted by repository-relative path; each record is path, NUL, lowercase file SHA-256, LF",
+  "checks": [
+    {
+      "id": "focused-project-attachment-dashboard-contract",
+      "status": "pass",
+      "result": "32 passed in 7.31s",
+      "scope": [
+        "tests/test_memory_project_attachments.py",
+        "tests/test_v215_release_contract.py",
+        "tests/test_memory_dashboard_federation.py"
+      ]
+    },
+    {
+      "id": "cloud-transport-regression",
+      "status": "pass",
+      "result": "23 passed in 35.45s",
+      "scope": ["tests/test_memory_cloud_transport.py"]
+    },
+    {
+      "id": "native-envelope-stream-binding",
+      "status": "pass",
+      "result": "1 passed; 11 filtered out",
+      "scope": ["native-collector/src/bin/memory-wuxian-envelope.rs"]
+    },
+    {
+      "id": "python-module-compile",
+      "status": "pass",
+      "result": "exit code 0",
+      "scope": [
+        "scripts/memory_project_attachments.py",
+        "scripts/memory_cli.py",
+        "scripts/memory_dashboard.py"
+      ]
+    },
+    {
+      "id": "combined-cloud-and-historical-cli-suite",
+      "status": "not_run",
+      "result": "terminated by the 180 second command timeout after 69 progress dots; no complete verdict recorded",
+      "scope": ["tests/test_memory_cloud_transport.py", "tests/test_memory_cli.py"]
+    }
+  ]
+}

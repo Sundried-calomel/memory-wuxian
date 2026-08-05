@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class V214ReleaseContractTest(unittest.TestCase):
     def test_version_owner_contract_and_surfaces(self):
         version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertEqual(version, "2.14.4")
+        self.assertGreaterEqual(tuple(map(int, version.split("."))), (2, 14, 4))
         contract = json.loads((ROOT / "docs/work-contracts/v2.14.0.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["owner_id"], "project-evidence-plane")
         self.assertEqual(contract["rollback_version"], "2.13.0")

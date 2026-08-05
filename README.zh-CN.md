@@ -1,5 +1,9 @@
 # Memory無限
 
+> **2.15.0：**新增独立加密的 `project-attachment-v1` 大型项目附件流。它使用
+> 4 MiB 精确分块、SHA-256 清单、可续传交付和原子验证重建；原始文件继续保持
+> 普通可读，既有归档、环境和项目证据流均不改变。
+
 > **2.14.5：**补齐项目证据云同步合同：新增绑定独立流的原生加密类型和传输兼容的 bundle 哈希，并强制验证跨流解封失败。
 
 > **2.14.4：**运行时上下文胶囊改为完全只读且不需要已读确认，刷新直接依据最新的确定性遥测转变触发，旧 ACK 命令仅保留为不写入的兼容空操作。**2.14.3** 修复 L2 语义任务重放，将每五分钟的有界批量提高到 8，模型调用最多 3 路并发而归档写入保持串行，将完整恢复审计移出五分钟热路径，在操作台展示分阶段耗时，并仅在事务安装成功后退役旧 macOS 语义回填启动项。**2.14.2** 对同尺寸 rollout 改写执行字节哈希校验，并让 macOS 用户级更新事务完整覆盖采集器就绪窗口。**2.14.1** 修复 macOS 安装，并提供离线、隔离的 PyYAML 后备运行时。**2.14.0** 新增本机 Project Evidence Owner，通过有界、无需模型的刷新维护显式封闭文件清单。**2.13.0** 新增显式、不可变的项目证据包及独立加密的
@@ -450,6 +454,29 @@ project-evidence-owner-status
 每轮最多刷新 20 个 owner；内容不变时零写入，稳定变化时生成一个带前代链接的
 不可变代次。源路径始终只留在本机，失败按 owner 隔离，对端证据不会创建本机
 owner。
+
+## 项目大型附件
+
+大型最终成果使用独立的 `project-attachment-v1`，不会抬高既有项目证据包的
+有界限制。显式封闭的 JSON 清单可以选择 PDF、PPTX、DOCX、XLS/XLSX、
+TIF/TIFF、PNG、JPEG 或 WebP。Memory 無限不改动原始文件，只记录按 4 MiB
+分块的精确 SHA-256 清单并对相同分块去重。单个逻辑文件上限为 256 MiB，单代
+上限为 1 GiB。
+
+加密传输支持断点续传并绑定独立流。接收端只有在全部分块和完整文件哈希均通过
+后才会原子重建，并写入验证回执；缺块、损坏、乱序、错误目标或跨流数据均关闭
+失败。只授权附件上传时应使用专用同步命令。详见
+[项目大型附件合同](references/project-attachments.md)。
+
+```text
+project-attachment-build
+project-attachment-owner-register
+project-attachment-owner-refresh
+project-attachment-owner-status
+project-attachment-status
+project-attachment-sync
+project-attachment-reconstruct
+```
 
 ## Memory無限 2.0 环境趋同
 

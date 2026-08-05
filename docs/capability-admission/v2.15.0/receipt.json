@@ -1,0 +1,26 @@
+{
+  "allowed_actions": [
+    "apply-reconstruction",
+    "preview-reconstruction",
+    "publish-encrypted-attachments",
+    "record-closed-generation",
+    "refresh-explicit-owner",
+    "render-attachment-status"
+  ],
+  "authorization_gated_actions": [
+    "apply-reconstruction",
+    "publish-encrypted-attachments"
+  ],
+  "binding_sha256": "4c3325d7d633a4c28d0c2712168b7f66ab093716b86691b1c6c052321301d856",
+  "candidate_id": "project-attachment-exchange",
+  "candidate_revision": "2.15.0",
+  "deterministic_check_version": 1,
+  "manifest_sha256": "ad25d2ca1590e513d7aee3177d49a892e442bfdaf1c56816046d74a5f53181e4",
+  "owner_id": "project-evidence-plane-exchange-plane",
+  "project_id": "memory-wuxian",
+  "receipt_id": "car:5d475f191a32b12183b7754ee72d664cbd93d1b0d7533caf4fed824017b659f0",
+  "registry_sha256": "890c093963b6a3d7251f250955bdde351dc0c92a9946d6ac9a1a9f4da07addd5",
+  "schema_version": 1,
+  "semantic_review_sha256": "01e1f3bb1fdd911f9f81052238629689be6877d59b7ce541caaae3daea3ef9bf",
+  "status": "allowed"
+}

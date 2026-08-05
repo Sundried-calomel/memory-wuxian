@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -418,6 +419,88 @@ safety:
             self.base / "node-b-federation-cache/peers/node-alpha/summaries"
         )
         self.assertEqual(len(list(replica_summaries.glob("*.json"))), 1)
+
+    def test_legacy_summary_ledger_ignores_only_empty_policy_default(self):
+        self.append_round(self.node_a, "LEGACY")
+        job = self.run_cli(self.node_a, "make-summary-job")
+        summary_result = self.base / "legacy-summary.json"
+        summary_result.write_text(
+            json.dumps(
+                {
+                    "topics": ["legacy summary"],
+                    "established_conclusions": ["old payload remains reproducible"],
+                    "open_questions": [],
+                    "concepts": ["federation"],
+                    "policy_events": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.run_cli(
+            self.node_a,
+            "ingest-summary",
+            "--job",
+            job["job"],
+            "--summary-json",
+            str(summary_result),
+        )
+        manager = FederationManager(
+            MemoryStore(self.node_a, load_simple_yaml(self.config))
+        )
+        artifacts = manager.local_artifacts()
+        summary_id = next(
+            artifact_id
+            for artifact_id in artifacts
+            if artifact_id.startswith("summary:")
+        )
+        current = artifacts[summary_id]
+        legacy_record = {
+            key: value
+            for key, value in current["payload"]["record"].items()
+            if key != "policy_events"
+        }
+        legacy_created_at = datetime.fromisoformat(legacy_record["created_at"])
+        legacy_record["created_at"] = (
+            legacy_created_at + timedelta(seconds=1)
+        ).isoformat()
+        legacy_payload = {**current["payload"], "record": legacy_record}
+        legacy_sha256 = canonical_sha256(legacy_payload)
+        legacy = manager._legacy_summary_artifact(current, legacy_sha256)
+        self.assertIsNotNone(legacy)
+
+        manager.refresh_export_ledger()
+        ledger = memory_federation.read_jsonl(manager.export_ledger_path)
+        summary_event = next(
+            event for event in ledger if event["artifact_id"] == summary_id
+        )
+        summary_event["sha256"] = legacy_sha256
+        memory_federation.atomic_write_jsonl(manager.export_ledger_path, ledger)
+
+        refreshed = manager.refresh_export_ledger()
+        self.assertEqual(refreshed[summary_id], legacy)
+        bundle = self.base / "legacy-summary.mwxb"
+        exported = manager.export_delta(bundle)
+        self.assertEqual(exported["status"], "created")
+        with zipfile.ZipFile(bundle) as archive:
+            payloads = [
+                json.loads(line)
+                for line in archive.read("payload/artifacts.jsonl")
+                .decode("utf-8")
+                .splitlines()
+            ]
+        exported_summary = next(
+            item for item in payloads if item["artifact_id"] == summary_id
+        )
+        self.assertNotIn("policy_events", exported_summary["payload"]["record"])
+
+        changed = artifacts[summary_id]
+        changed["payload"]["record"]["policy_events"] = [
+            {"policy_event_id": "policy:changed"}
+        ]
+        changed["sha256"] = canonical_sha256(changed["payload"])
+        with patch.object(manager, "local_artifacts", return_value=artifacts):
+            with self.assertRaisesRegex(ValueError, "Immutable local artifact changed"):
+                manager.refresh_export_ledger()
 
     def test_export_recovers_state_and_pages_large_deltas(self):
         self.append_round(self.node_a, "PAGED")

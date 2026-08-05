@@ -214,11 +214,15 @@ class ProjectEvidenceTests(unittest.TestCase):
             store.register_owner(missing)
 
         linked = self.source / "linked.txt"
-        linked.symlink_to(self.source / "status.txt")
-        linked_spec = self.spec()
-        linked_spec["files"].append({"path": "linked.txt", "role": "status"})
-        with self.assertRaisesRegex(ValueError, "unsafe"):
-            store.register_owner(linked_spec)
+        try:
+            linked.symlink_to(self.source / "status.txt")
+        except OSError:
+            linked = None
+        if linked is not None:
+            linked_spec = self.spec()
+            linked_spec["files"].append({"path": "linked.txt", "role": "status"})
+            with self.assertRaisesRegex(ValueError, "unsafe"):
+                store.register_owner(linked_spec)
 
         oversized = self.source / "oversized.txt"
         with oversized.open("wb") as handle:
