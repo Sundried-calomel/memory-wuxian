@@ -2,6 +2,9 @@
 
 ## 2.15.0 - 2026-08-04
 
+- Fix macOS OneDrive Files On-Demand imports by explicitly pinning unreadable
+  encrypted placeholders, waiting for bounded materialization, and clearing the
+  pin after bytes become readable.
 - Add the independent encrypted `project-attachment-v1` stream for explicit
   large project deliverables without changing `project-evidence-v1` limits.
 - Preserve exact readable source bytes through 4 MiB SHA-256 chunks, bounded

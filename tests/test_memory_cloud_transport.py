@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -9,7 +10,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -80,6 +81,60 @@ class CommandCryptoArgumentTest(unittest.TestCase):
                     "node-alpha",
                     "node-beta",
                 )
+
+
+class CloudPlaceholderMaterializationTest(unittest.TestCase):
+    def test_macos_onedrive_placeholder_is_pinned_then_cleared(self):
+        placeholder = Path("/tmp/placeholder.mwxe")
+        reads = [OSError(11, "Resource deadlock avoided"), io.BytesIO(b"x")]
+
+        with (
+            patch.object(Path, "open", side_effect=reads),
+            patch("memory_cloud_transport._is_macos_onedrive_path", return_value=True),
+            patch("memory_cloud_transport._set_macos_onedrive_pin") as pin,
+            patch("memory_cloud_transport.time.sleep"),
+        ):
+            CloudFolderTransport._materialize_candidate(placeholder)
+
+        self.assertEqual(
+            pin.call_args_list,
+            [call(placeholder, "/pin"), call(placeholder, "/clearpin")],
+        )
+
+    def test_non_onedrive_placeholder_remains_transient(self):
+        placeholder = Path("/tmp/placeholder.mwxe")
+
+        with (
+            patch.object(
+                Path,
+                "open",
+                side_effect=OSError(11, "Resource deadlock avoided"),
+            ),
+            patch("memory_cloud_transport._is_macos_onedrive_path", return_value=False),
+        ):
+            with self.assertRaises(TransientCloudArtifactError):
+                CloudFolderTransport._materialize_candidate(placeholder)
+
+    def test_onedrive_pin_failure_remains_transient(self):
+        placeholder = Path("/tmp/placeholder.mwxe")
+
+        with (
+            patch.object(
+                Path,
+                "open",
+                side_effect=OSError(11, "Resource deadlock avoided"),
+            ),
+            patch("memory_cloud_transport._is_macos_onedrive_path", return_value=True),
+            patch(
+                "memory_cloud_transport._set_macos_onedrive_pin",
+                side_effect=OSError("pin failed"),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                TransientCloudArtifactError,
+                "could not request materialization",
+            ):
+                CloudFolderTransport._materialize_candidate(placeholder)
 
 
 class FakeCrypto:
@@ -535,6 +590,31 @@ safety:
         self.assertEqual(peer_after, peer_before)
         self.assertEqual(peer_after["transport"]["type"], "ssh")
         self.assertEqual(peer_after["transport"]["host"], "beta.example")
+
+    def test_ack_older_than_acknowledged_cursor_is_ignored_before_decryption(self):
+        state = self.transport_a._peer_state("node-beta")
+        state["acknowledged"] = {
+            "last_event_sequence": 100,
+            "last_bundle_id": f"mwb-{'a' * 32}",
+            "last_bundle_sha256": "b" * 64,
+            "acknowledged_at": "2026-08-05T00:00:00+00:00",
+        }
+        self.transport_a.save_config()
+        stale = self.transport_a._incoming_acks("node-beta") / (
+            f"ack-{50:020d}-mwb-{'c' * 32}.mwxa"
+        )
+        stale.parent.mkdir(parents=True, exist_ok=True)
+        stale.write_bytes(b"unsupported legacy acknowledgement")
+
+        with patch.object(
+            self.transport_a,
+            "_read_ack",
+            side_effect=AssertionError("stale acknowledgement was decrypted"),
+        ):
+            result = self.transport_a.sync(force=False, now=1045)
+
+        self.assertEqual(result["quarantined"], [])
+        self.assertEqual(result["transient"], [])
 
     def test_project_evidence_uses_authenticated_encrypted_transport(self):
         config = load_simple_yaml(self.config_path)
