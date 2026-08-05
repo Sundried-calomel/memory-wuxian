@@ -26,6 +26,7 @@ from memory_cloud_transport import (
     filesystem_native_path,
 )
 from memory_federation import FederationManager, read_json
+from memory_project_evidence import ProjectEvidenceExchangeManager, ProjectEvidenceStore
 
 
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
@@ -534,6 +535,52 @@ safety:
         self.assertEqual(peer_after, peer_before)
         self.assertEqual(peer_after["transport"]["type"], "ssh")
         self.assertEqual(peer_after["transport"]["host"], "beta.example")
+
+    def test_project_evidence_uses_authenticated_encrypted_transport(self):
+        config = load_simple_yaml(self.config_path)
+        store_a = MemoryStore(self.node_a, config)
+        store_b = MemoryStore(self.node_b, config)
+        source = self.base / "project-evidence-source"
+        source.mkdir()
+        (source / "PROJECT_AGENTS.md").write_text("# Project rules\n", encoding="utf-8")
+        spec = {
+            "schema_version": 1,
+            "project_id": "project-cloud-test",
+            "title": "Project cloud test",
+            "source_root": str(source),
+            "files": [{"path": "PROJECT_AGENTS.md", "role": "project-rule"}],
+        }
+        ProjectEvidenceStore(store_a).build(spec, apply=True)
+        manager_a = ProjectEvidenceExchangeManager(store_a)
+        manager_b = ProjectEvidenceExchangeManager(store_b)
+        transport_a = CloudFolderTransport(
+            manager_a,
+            config_path=manager_a.metadata_root / "cloud.json",
+            stream_id="project-evidence-v1",
+            crypto=self.crypto,
+        )
+        transport_b = CloudFolderTransport(
+            manager_b,
+            config_path=manager_b.metadata_root / "cloud.json",
+            stream_id="project-evidence-v1",
+            crypto=self.crypto,
+        )
+        for transport, key in ((transport_a, self.key_a), (transport_b, self.key_b)):
+            transport.configure(self.exchange, key, enabled=True)
+
+        published = transport_a.sync(force=True, now=1000)
+        self.assertEqual(len(published["published"]), 1)
+        envelope_path = Path(published["published"][0]["path"])
+        envelope = json.loads(envelope_path.read_text(encoding="utf-8"))
+        self.assertEqual(envelope["kind"], "project-evidence-v1-bundle")
+        self.assertEqual(envelope["origin_node_id"], "node-alpha")
+        self.assertEqual(envelope["target_node_id"], "node-beta")
+        self.assertNotIn("Project rules", envelope_path.read_text(encoding="utf-8"))
+
+        imported = transport_b.sync(force=True, now=1010)
+        self.assertEqual(imported["imports"][0]["status"], "imported")
+        remote = ProjectEvidenceStore(store_b).list("project-cloud-test")["remote"]
+        self.assertEqual(len(remote), 1)
 
     def test_cli_pairing_and_real_envelope_round_trip(self):
         helper_name = (
