@@ -1,0 +1,14 @@
+{
+  "blocking_rule_ids": [],
+  "covered_rule_ids": [],
+  "errors": [],
+  "packet_id": "packet:3c67d72e90392818137ce636",
+  "packet_sha256": "3998b6290128d856c0c1ca559ecca628b93230c7fed3cf81df57b95ed44f02e4",
+  "plan_sha256": "acffeed95ed6ff7b159c7928d0292c5eeab8b4707f7a40ab813cceff837d5dcf",
+  "receipt_sha256": "a27422a18ab56e1254c536ec23544d0f4c18b26dd208f795102601fead765470",
+  "receipt_type": "defect-plan-coverage",
+  "schema_version": 1,
+  "status": "passed",
+  "task_id": "memory-atoms-v1-sidecar-20260810",
+  "task_sha256": "e0fae7a6598611861727fa2df6c5e161183062ab0f980ed7775a8134bea392eb"
+}

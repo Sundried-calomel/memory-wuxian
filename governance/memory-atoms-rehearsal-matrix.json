@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "rehearsal_id": "memory-atoms-v1-l3-20260810",
+  "work_item_id": "memory-atoms-v1-sidecar-20260810",
+  "candidate_id": "sha256:c696f24a6c056943766b49ed176d1595acc3a9a0d0a6dbab6c88ce91cac88d22",
+  "owner_id": "memory-plane",
+  "artifact_profile": "software-feature",
+  "validation_level": "L3",
+  "production_entrypoints": [
+    "scripts/memory_atoms.py"
+  ],
+  "required_case_ids": [
+    "MWX-POS-001",
+    "MWX-NEG-001",
+    "MWX-ID-001",
+    "MWX-BND-001"
+  ],
+  "cases": [
+    {
+      "case_id": "MWX-POS-001",
+      "title": "Real CLI validates and creates a multilingual sidecar",
+      "category": "positive",
+      "stage": "candidate",
+      "requirement": "The explicit CLI handles Chinese, Japanese, currency symbols, emoji, spaces, and canonical UTF-8 output.",
+      "runner": "tests.test_memory_atoms.MemoryAtomsTest.test_real_cli_validate_and_project",
+      "production_entrypoint": "scripts/memory_atoms.py",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "validate succeeds and project creates one external sidecar",
+      "status": "pass",
+      "evidence": {
+        "reference": "tests/test_memory_atoms.py",
+        "sha256": null,
+        "accepted_by": null,
+        "acceptance_evidence": null
+      }
+    },
+    {
+      "case_id": "MWX-NEG-001",
+      "title": "Source and structure violations fail closed",
+      "category": "negative",
+      "stage": "candidate",
+      "requirement": "Unknown IDs, source drift, malformed UTF-8, incompatible status, and recomputed-hash tampering are rejected.",
+      "runner": "tests.test_memory_atoms.MemoryAtomsTest",
+      "production_entrypoint": "scripts/memory_atoms.py",
+      "uses_production_path": true,
+      "side_effects": "none",
+      "expected": "all invalid inputs are rejected without a sidecar write",
+      "status": "pass",
+      "evidence": {
+        "reference": "tests/test_memory_atoms.py",
+        "sha256": null,
+        "accepted_by": null,
+        "acceptance_evidence": null
+      }
+    },
+    {
+      "case_id": "MWX-ID-001",
+      "title": "Candidate identity binds the complete implementation file set",
+      "category": "candidate-identity",
+      "stage": "candidate",
+      "requirement": "The declared candidate SHA-256 is computed from the ordered path and SHA-256 list of every implementation file.",
+      "runner": "PowerShell Get-FileHash SHA256 over the six declared implementation files",
+      "production_entrypoint": "scripts/memory_atoms.py",
+      "uses_production_path": true,
+      "side_effects": "none",
+      "expected": "sha256:c696f24a6c056943766b49ed176d1595acc3a9a0d0a6dbab6c88ce91cac88d22",
+      "status": "pass",
+      "evidence": {
+        "reference": "governance/memory-atoms-implementation-contract.json",
+        "sha256": null,
+        "accepted_by": null,
+        "acceptance_evidence": null
+      }
+    },
+    {
+      "case_id": "MWX-BND-001",
+      "title": "Append-only sidecar boundary preserves summary-v1",
+      "category": "boundary",
+      "stage": "candidate",
+      "requirement": "Identical reruns are idempotent, different bytes cannot replace an existing sidecar, and archive-root output is rejected.",
+      "runner": "tests.test_memory_atoms.MemoryAtomsTest.test_sidecar_write_is_external_idempotent_and_append_only",
+      "production_entrypoint": "scripts/memory_atoms.py",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "summary-v1 hash is unchanged and all overwrite or archive-root attempts fail closed",
+      "status": "pass",
+      "evidence": {
+        "reference": "tests/test_memory_atoms.py",
+        "sha256": null,
+        "accepted_by": null,
+        "acceptance_evidence": null
+      }
+    }
+  ],
+  "historical_failures": [
+    {
+      "failure_id": "memory-wuxian-windows-encoding",
+      "description": "Redirected Windows CLI output previously inherited a legacy console encoding and broke Japanese currency and multilingual paths.",
+      "case_ids": [
+        "MWX-POS-001"
+      ]
+    },
+    {
+      "failure_id": "memory-wuxian-summary-hash-drift",
+      "description": "Adding fields to old summary records previously changed federation identities, so the new representation must remain a separate sidecar.",
+      "case_ids": [
+        "MWX-BND-001"
+      ]
+    }
+  ],
+  "stage_claims": [
+    "candidate"
+  ],
+  "completed_at": "2026-08-09T22:02:43Z"
+}

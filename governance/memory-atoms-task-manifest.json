@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-atoms-v1-sidecar-20260810",
+  "objective": "Add a non-destructive memory-atoms-v1 sidecar contract, deterministic validator/projector, and bounded A/B evidence path without changing summary-v1 or the live archive pipeline.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main",
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian",
+  "owner_id": "memory-plane",
+  "platforms": [
+    "windows",
+    "macos",
+    "linux"
+  ],
+  "languages": [
+    "python",
+    "json",
+    "markdown"
+  ],
+  "path_globs": [
+    "scripts/memory_atoms.py",
+    "schemas/memory-atoms-result.schema.json",
+    "prompts/extract-memory-atoms.md",
+    "references/memory-atoms-v1.md",
+    "tests/test_memory_atoms.py",
+    "tests/fixtures/memory-atoms/**",
+    "docs/module-architecture.json"
+  ],
+  "entrypoints": [
+    "python-library",
+    "explicit-preview-cli",
+    "test-harness"
+  ],
+  "resources": [
+    "closed-summary-job",
+    "raw-evidence",
+    "derived-sidecar",
+    "architecture-registry"
+  ],
+  "operations": [
+    "validate",
+    "project",
+    "compare",
+    "write-derived"
+  ],
+  "data_formats": [
+    "utf-8-json",
+    "utf-8-jsonl",
+    "markdown"
+  ],
+  "authorization_boundaries": [
+    "Do not modify, reinterpret, or backfill existing summary-v1 records.",
+    "Do not write to a live archive, summary queue, semantic queue, or cloud exchange path.",
+    "Do not invoke a model, network service, package installer, or unreviewed third-party runtime.",
+    "Only validate explicit candidate JSON and write a new sidecar file beneath an explicit output directory.",
+    "Reject unknown source IDs, source hash mismatches, malformed UTF-8, and unsupported schema versions.",
+    "Keep all historical evidence append-only; corrections are represented by relations, never replacement."
+  ],
+  "implementation_units": [
+    {
+      "id": "atom-engine",
+      "owner_id": "memory-plane",
+      "paths": [
+        "scripts/memory_atoms.py"
+      ],
+      "entrypoints": [
+        "python-library",
+        "explicit-preview-cli"
+      ],
+      "resources": [
+        "closed-summary-job",
+        "raw-evidence",
+        "derived-sidecar"
+      ],
+      "operations": [
+        "validate",
+        "project",
+        "compare",
+        "write-derived"
+      ],
+      "planned_check_ids": [
+        "source-id-whitelist",
+        "source-hash-binding",
+        "immutable-summary-v1",
+        "append-only-sidecar",
+        "bounded-input",
+        "deterministic-projection",
+        "no-live-archive-effect"
+      ]
+    },
+    {
+      "id": "atom-contract",
+      "owner_id": "memory-plane",
+      "paths": [
+        "prompts/extract-memory-atoms.md",
+        "references/memory-atoms-v1.md"
+      ],
+      "entrypoints": [
+        "python-library"
+      ],
+      "resources": [
+        "closed-summary-job",
+        "raw-evidence",
+        "derived-sidecar"
+      ],
+      "operations": [
+        "project",
+        "compare"
+      ],
+      "planned_check_ids": [
+        "contract-source-grounding",
+        "contract-no-priority-inference",
+        "contract-no-live-activation"
+      ]
+    },
+    {
+      "id": "atom-schema",
+      "owner_id": "platform-foundation",
+      "paths": [
+        "schemas/memory-atoms-result.schema.json"
+      ],
+      "entrypoints": [
+        "python-library"
+      ],
+      "resources": [
+        "derived-sidecar"
+      ],
+      "operations": [
+        "validate"
+      ],
+      "planned_check_ids": [
+        "schema-strictness",
+        "schema-version-lock",
+        "schema-json-validation"
+      ]
+    },
+    {
+      "id": "atom-evidence",
+      "owner_id": "product-quality",
+      "paths": [
+        "tests/test_memory_atoms.py",
+        "tests/fixtures/memory-atoms/**"
+      ],
+      "entrypoints": [
+        "test-harness"
+      ],
+      "resources": [
+        "closed-summary-job",
+        "raw-evidence",
+        "derived-sidecar"
+      ],
+      "operations": [
+        "validate",
+        "project",
+        "compare",
+        "write-derived"
+      ],
+      "planned_check_ids": [
+        "focused-unittest",
+        "utf8-fixtures",
+        "negative-fixtures",
+        "ab-comparison",
+        "production-path-unchanged"
+      ]
+    },
+    {
+      "id": "architecture-registration",
+      "owner_id": "product-architecture",
+      "paths": [
+        "docs/module-architecture.json"
+      ],
+      "entrypoints": [
+        "architecture-checker"
+      ],
+      "resources": [
+        "architecture-registry"
+      ],
+      "operations": [
+        "validate"
+      ],
+      "planned_check_ids": [
+        "architecture-contract"
+      ]
+    }
+  ],
+  "rule_exclusions": []
+}

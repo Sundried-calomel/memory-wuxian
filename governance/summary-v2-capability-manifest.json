@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "capability_id": "memory-wuxian-summary-v2",
+  "revision": "experimental-20260813",
+  "owner_id": "memory-plane",
+  "producer_identity": "memory-plane-implementation",
+  "artifact_sha256": "be9d180e67b4b0a9a7c572b1dafc331c0742ed3cc9c1604aa4cd0dad98116bf5",
+  "triggers": [
+    {
+      "trigger_id": "explicit-summary-v2",
+      "phrase": "Generate or backfill traceable summary-v2"
+    }
+  ],
+  "calls": [],
+  "resources": [
+    {
+      "resource_id": "validated-memory-source",
+      "access": "read",
+      "coordination_owner": "memory-plane"
+    },
+    {
+      "resource_id": "external-summary-v2-sidecars",
+      "access": "write",
+      "coordination_owner": "memory-plane"
+    },
+    {
+      "resource_id": "codex-one-shot-summary-model",
+      "access": "write",
+      "coordination_owner": "control-plane"
+    }
+  ],
+  "permissions": [
+    "file-read",
+    "file-write-derived",
+    "model-call"
+  ],
+  "actions": [
+    {
+      "action_id": "validate-project",
+      "risk": "ordinary",
+      "permissions": ["file-read"],
+      "resources": ["validated-memory-source"],
+      "authorization_gate": null
+    },
+    {
+      "action_id": "persist-derived-sidecar",
+      "risk": "ordinary",
+      "permissions": ["file-read", "file-write-derived"],
+      "resources": ["validated-memory-source", "external-summary-v2-sidecars"],
+      "authorization_gate": null
+    },
+    {
+      "action_id": "generate-semantic-summary",
+      "risk": "authorization-gated",
+      "permissions": ["file-read", "file-write-derived", "model-call"],
+      "resources": ["validated-memory-source", "external-summary-v2-sidecars", "codex-one-shot-summary-model"],
+      "authorization_gate": "explicit-user-model-send-authorization"
+    }
+  ]
+}

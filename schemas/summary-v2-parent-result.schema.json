@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://memory-wuxian.local/schemas/summary-v2-parent-result.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format_version", "job_id", "summary_level", "source_sha256", "overview", "scenes", "atoms", "relations", "retrieval_anchors", "omissions"],
+  "properties": {
+    "format_version": { "type": "integer", "const": 2 },
+    "job_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "summary_level": { "type": "integer", "minimum": 2, "maximum": 16 },
+    "source_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "overview": { "type": "array", "minItems": 1, "maxItems": 24, "items": { "$ref": "#/$defs/overview" } },
+    "scenes": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "$ref": "#/$defs/scene" } },
+    "atoms": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/atom" } },
+    "relations": { "type": "array", "maxItems": 1024, "items": { "$ref": "#/$defs/relation" } },
+    "retrieval_anchors": { "type": "array", "maxItems": 0 },
+    "omissions": { "type": "array", "maxItems": 0 }
+  },
+  "$defs": {
+    "local_id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
+    "source_refs": { "type": "array", "minItems": 1, "maxItems": 128, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "overview": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "text", "source_refs"],
+      "properties": {
+        "local_id": { "$ref": "#/$defs/local_id" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "source_refs": { "$ref": "#/$defs/source_refs" }
+      }
+    },
+    "scene": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "title", "summary", "source_refs"],
+      "properties": {
+        "local_id": { "$ref": "#/$defs/local_id" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "source_refs": { "$ref": "#/$defs/source_refs" }
+      }
+    },
+    "atom": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_id", "atom_type", "statement", "epistemic_status", "scope", "source_refs"],
+      "properties": {
+        "local_id": { "$ref": "#/$defs/local_id" },
+        "atom_type": { "type": "string", "enum": ["work_fact", "work_task", "work_method", "work_artifact"] },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "epistemic_status": { "type": "string", "enum": ["explicit_fact", "accepted_decision", "proposal", "open_question", "uncertain", "withdrawn"] },
+        "scope": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "source_refs": { "$ref": "#/$defs/source_refs" }
+      }
+    },
+    "relation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["from_local_id", "to_local_id", "relation_type", "source_refs"],
+      "properties": {
+        "from_local_id": { "$ref": "#/$defs/local_id" },
+        "to_local_id": { "$ref": "#/$defs/local_id" },
+        "relation_type": { "type": "string", "enum": ["supports", "duplicates", "revises", "contradicts", "supersedes"] },
+        "source_refs": { "$ref": "#/$defs/source_refs" }
+      }
+    }
+  }
+}

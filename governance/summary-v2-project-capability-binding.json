@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "binding_id": "memory-wuxian-summary-v2-experimental-binding",
+  "project_id": "memory-wuxian",
+  "registry_sha256": "0513cb7bdc56992ee908a271c834788fd386969a93822a89319b6e181dd27ef2",
+  "capabilities": [
+    {
+      "capability_id": "memory-wuxian-summary-v2",
+      "revision": "experimental-20260813",
+      "manifest_sha256": "6b2336e37ffff7009c30244191494e62bff4e2f9ef9c21dcade2337a819e0d2d",
+      "allowed_actions": [
+        "validate-project",
+        "persist-derived-sidecar",
+        "generate-semantic-summary"
+      ],
+      "allowed_permissions": [
+        "file-read",
+        "file-write-derived",
+        "model-call"
+      ],
+      "allowed_resources": [
+        "validated-memory-source",
+        "external-summary-v2-sidecars",
+        "codex-one-shot-summary-model"
+      ]
+    }
+  ]
+}

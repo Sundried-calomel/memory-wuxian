@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-traceable-sidecar-20260810",
+  "packet_id": "packet:52405f017b4f98c078956872",
+  "units": [
+    {
+      "unit_id": "summary-v2-core",
+      "owner_id": "memory-plane",
+      "paths": ["scripts/memory_summary_v2.py"],
+      "rule_coverage": []
+    },
+    {
+      "unit_id": "summary-v2-worker",
+      "owner_id": "control-plane",
+      "paths": ["scripts/summary_v2_worker.py"],
+      "rule_coverage": []
+    },
+    {
+      "unit_id": "summary-v2-contract",
+      "owner_id": "memory-plane",
+      "paths": ["prompts/summarize-v2.md", "references/summary-v2.md"],
+      "rule_coverage": [
+        {
+          "rule_id": "G08",
+          "prevention": "Require complete source-reference accounting and deterministic raw-message backreferences for every projected item while leaving raw evidence and summary-v1 byte unchanged.",
+          "check_ids": ["evidence-roundtrip"],
+          "evidence_refs": [
+            "tests/test_memory_summary_v2.py",
+            "references/summary-v2.md"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_id": "summary-v2-schema",
+      "owner_id": "platform-foundation",
+      "paths": ["schemas/summary-v2-result.schema.json"],
+      "rule_coverage": []
+    },
+    {
+      "unit_id": "summary-v2-evidence",
+      "owner_id": "product-quality",
+      "paths": ["tests/test_memory_summary_v2.py"],
+      "rule_coverage": []
+    },
+    {
+      "unit_id": "summary-v2-architecture",
+      "owner_id": "product-architecture",
+      "paths": ["docs/module-architecture.json"],
+      "rule_coverage": []
+    }
+  ]
+}

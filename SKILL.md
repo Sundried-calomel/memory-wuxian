@@ -14,7 +14,13 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 3. Use summaries only as routing indexes; verify historical claims against raw text.
 4. Build deterministic Level-1 indexes after the configured completed-round or visible-character threshold, whichever occurs first.
 5. Generate each higher level after a configured number of ungrouped child summaries.
-6. Persist every summary level and every parent-child relationship.
+6. Persist every summary level and every parent-child relationship. Keep
+   summary format version separate from hierarchy level. For traceable
+   summary-v2, make L1 high recall; make L2 and higher progressively shorter
+   navigation layers that route every direct child and deterministically carry
+   active decisions, tasks, open questions, uncertainty, withdrawals, key
+   artifact routes, and explicit corrections without copying ordinary child
+   detail upward.
 7. Record only explicit source information. Do not infer hidden preferences, motives, or importance.
 8. Keep runtime compression separate from permanent memory.
 9. Verify SHA-256 source integrity before summary ingestion.

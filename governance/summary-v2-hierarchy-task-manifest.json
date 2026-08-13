@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-progressive-hierarchy-20260813",
+  "objective": "Correct summary-v2 so L1 preserves durable source detail while L2 and higher provide progressively shorter, lossless navigation and carry only mandatory durable state.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main",
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian",
+  "owner_id": "memory-plane",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "json", "markdown"],
+  "path_globs": [
+    "scripts/memory_summary_v2.py",
+    "scripts/summary_v2_worker.py",
+    "schemas/summary-v2-*-result.schema.json",
+    "prompts/summarize-v2-*.md",
+    "references/summary-v2.md",
+    "tests/test_memory_summary_v2.py",
+    "docs/module-architecture.json",
+    "governance/summary-v2-hierarchy-*.json"
+  ],
+  "entrypoints": ["python-library", "explicit-opt-in-cli", "one-shot-model-worker", "test-harness"],
+  "resources": ["closed-level-1-job", "summary-v2-child-sidecars", "raw-evidence", "external-derived-sidecar", "architecture-registry"],
+  "operations": ["validate", "summarize", "project", "compose", "compare", "write-derived"],
+  "data_formats": ["utf-8-json", "utf-8-markdown"],
+  "authorization_boundaries": [
+    "Do not modify raw history or any existing summary-v1 byte, prompt, schema, index, job, state, or hash.",
+    "Keep summary-v2 opt-in and outside live archive, retrieval, capsule, federation, cloud, dashboard, and maintenance paths.",
+    "L1 must retain source-grounded durable facts, decisions, corrections, constraints, uncertainty, open questions, artifacts, and exact locators.",
+    "L2 and higher must cover every direct child through navigation but must not restate every ordinary child detail.",
+    "Every active decision, rule, unresolved question, unresolved conflict, correction, commitment, current task, and required artifact route in the deterministic promotion manifest must be carried or explicitly resolved.",
+    "Every high-level route and carried item must deterministically reach child items and retained raw message IDs.",
+    "Model output remains untrusted and cannot choose final IDs, paths, source identity, mandatory promotion items, or storage actions."
+  ],
+  "implementation_units": [
+    {
+      "id": "summary-v2-hierarchy-core",
+      "owner_id": "memory-plane",
+      "paths": ["scripts/memory_summary_v2.py"],
+      "entrypoints": ["python-library", "explicit-opt-in-cli"],
+      "resources": ["closed-level-1-job", "summary-v2-child-sidecars", "raw-evidence", "external-derived-sidecar"],
+      "operations": ["validate", "project", "compose", "compare", "write-derived"],
+      "planned_check_ids": ["l1-durable-detail", "parent-child-navigation", "mandatory-promotion", "ordinary-detail-delegation", "hierarchical-backreferences", "append-only-external-write", "no-summary-v1-effect"]
+    },
+    {
+      "id": "summary-v2-hierarchy-worker",
+      "owner_id": "control-plane",
+      "paths": ["scripts/summary_v2_worker.py"],
+      "entrypoints": ["one-shot-model-worker", "explicit-opt-in-cli"],
+      "resources": ["closed-level-1-job", "summary-v2-child-sidecars", "external-derived-sidecar"],
+      "operations": ["summarize", "validate", "project", "compose", "write-derived"],
+      "planned_check_ids": ["level-specific-prompt", "level-specific-schema", "read-only-model-sandbox", "bounded-prompt", "utf8-stdio", "no-background-activation"]
+    },
+    {
+      "id": "summary-v2-hierarchy-contract",
+      "owner_id": "memory-plane",
+      "paths": ["prompts/summarize-v2.md", "prompts/summarize-v2-parent.md", "references/summary-v2.md"],
+      "entrypoints": ["one-shot-model-worker"],
+      "resources": ["raw-evidence", "summary-v2-child-sidecars"],
+      "operations": ["summarize", "validate", "compose"],
+      "planned_check_ids": ["l1-fact-recall-contract", "parent-progressive-compression-contract", "source-only", "state-preservation", "activation-boundary"]
+    },
+    {
+      "id": "summary-v2-hierarchy-schema",
+      "owner_id": "platform-foundation",
+      "paths": ["schemas/summary-v2-result.schema.json", "schemas/summary-v2-parent-result.schema.json"],
+      "entrypoints": ["one-shot-model-worker"],
+      "resources": ["external-derived-sidecar"],
+      "operations": ["validate"],
+      "planned_check_ids": ["strict-level-schema", "api-schema-subset", "version-lock"]
+    },
+    {
+      "id": "summary-v2-hierarchy-evidence",
+      "owner_id": "product-quality",
+      "paths": ["tests/test_memory_summary_v2.py"],
+      "entrypoints": ["test-harness", "explicit-opt-in-cli", "one-shot-model-worker"],
+      "resources": ["closed-level-1-job", "summary-v2-child-sidecars", "external-derived-sidecar"],
+      "operations": ["validate", "summarize", "project", "compose", "compare", "write-derived"],
+      "planned_check_ids": ["l1-positive-negative", "l2-mandatory-carry", "l2-ordinary-detail-not-required", "l2-child-coverage", "l3-no-growth", "multilingual-special-characters", "real-cli", "tamper-injection"]
+    },
+    {
+      "id": "summary-v2-hierarchy-architecture",
+      "owner_id": "product-architecture",
+      "paths": ["docs/module-architecture.json"],
+      "entrypoints": ["architecture-checker"],
+      "resources": ["architecture-registry"],
+      "operations": ["validate"],
+      "planned_check_ids": ["architecture-contract"]
+    }
+  ],
+  "rule_exclusions": []
+}

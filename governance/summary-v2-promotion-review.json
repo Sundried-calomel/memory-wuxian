@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "review_id": "summary-v2-promotion-20260810",
+  "work_item_id": "summary-v2-sidecar-20260810",
+  "candidate_id": "sha256:d48923a92d0e49ef324d1d17d8a8b0aed506ba1a5f9a3ba91bfc0e199a4077d5",
+  "owner_id": "memory-plane",
+  "source_revision": "main@6deff46ee591b1b7c6ad460aeafd99512ff4792c+staged-candidate",
+  "product_evolution_record_id": "not-created-experimental-summary-v2",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The authorized job-000493 A/B validated the external sidecar, source-language output, exact raw-message routes, and recovery of substantially more durable detail after prompt refinement. Human comparison still found one summary-v1 open question absent from summary-v2, proving that message-level coverage is not fact-level semantic completeness. The candidate remains unactivated until a source-derived fact and open-question ledger is enforced.",
+  "evidence_refs": [
+    "governance/summary-v2-rehearsal-matrix.json",
+    "governance/summary-v2-plan-receipt.json",
+    "references/summary-v2.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-09T22:35:13Z"
+}

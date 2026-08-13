@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "rehearsal_id": "summary-v2-progressive-hierarchy-l3-20260813",
+  "work_item_id": "summary-v2-progressive-hierarchy-20260813",
+  "candidate_id": "sha256:be9d180e67b4b0a9a7c572b1dafc331c0742ed3cc9c1604aa4cd0dad98116bf5",
+  "owner_id": "memory-plane",
+  "artifact_profile": "software-feature",
+  "validation_level": "L3",
+  "production_entrypoints": [
+    "scripts/memory_summary_v2.py",
+    "scripts/summary_v2_worker.py"
+  ],
+  "required_case_ids": [
+    "MWXSV2-POS-001",
+    "MWXSV2-NEG-001",
+    "MWXSV2-BND-001",
+    "MWXSV2-ID-001"
+  ],
+  "cases": [
+    {
+      "case_id": "MWXSV2-POS-001",
+      "title": "L1, L2, and L3 preserve routes while compacting parent evidence units",
+      "category": "positive",
+      "stage": "candidate",
+      "requirement": "L1 keeps message evidence; each higher level uses direct child IDs, routes every child, and carries the deterministic promotion manifest.",
+      "runner": "tests.test_memory_summary_v2.SummaryV2Test.test_higher_parent_promotes_state_and_keeps_direct_child_routes",
+      "production_entrypoint": "scripts/memory_summary_v2.py",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "L3 validates with two direct child routes and no promoted-state growth beyond its children",
+      "status": "pass",
+      "evidence": {"reference": "tests/test_memory_summary_v2.py", "sha256": null, "accepted_by": null, "acceptance_evidence": null}
+    },
+    {
+      "case_id": "MWXSV2-NEG-001",
+      "title": "Missing promoted durable state fails closed",
+      "category": "negative",
+      "stage": "candidate",
+      "requirement": "A parent cannot pass after removing an accepted decision, task, open question, uncertainty, withdrawal, or correction selected by the deterministic manifest.",
+      "runner": "tests.test_memory_summary_v2.SummaryV2Test.test_parent_rejects_missing_promoted_state_but_not_ordinary_detail",
+      "production_entrypoint": "scripts/memory_summary_v2.py",
+      "uses_production_path": true,
+      "side_effects": "none",
+      "expected": "validator rejects the candidate before persistence",
+      "status": "pass",
+      "evidence": {"reference": "tests/test_memory_summary_v2.py", "sha256": null, "accepted_by": null, "acceptance_evidence": null}
+    },
+    {
+      "case_id": "MWXSV2-BND-001",
+      "title": "Parent delegates ordinary detail and exact locators without losing navigation",
+      "category": "boundary",
+      "stage": "candidate",
+      "requirement": "Ordinary explicit facts and exact anchors stay in L1, while L2 routes to their child and cannot omit that child.",
+      "runner": "tests.test_memory_summary_v2.SummaryV2Test.test_parent_rejects_missing_promoted_state_but_not_ordinary_detail",
+      "production_entrypoint": "scripts/memory_summary_v2.py",
+      "uses_production_path": true,
+      "side_effects": "none",
+      "expected": "ordinary fact is absent from promotion manifest, child remains represented, and parent anchors stay empty",
+      "status": "pass",
+      "evidence": {"reference": "tests/test_memory_summary_v2.py", "sha256": null, "accepted_by": null, "acceptance_evidence": null}
+    },
+    {
+      "case_id": "MWXSV2-ID-001",
+      "title": "Candidate identity binds the hierarchy implementation set",
+      "category": "candidate-identity",
+      "stage": "candidate",
+      "requirement": "The candidate SHA-256 is computed from the ordered path and SHA-256 list for the ten declared implementation and evidence files.",
+      "runner": "SHA-256 over canonical ordered path and file-hash manifest",
+      "production_entrypoint": "scripts/memory_summary_v2.py",
+      "uses_production_path": true,
+      "side_effects": "none",
+      "expected": "sha256:be9d180e67b4b0a9a7c572b1dafc331c0742ed3cc9c1604aa4cd0dad98116bf5",
+      "status": "pass",
+      "evidence": {"reference": "governance/summary-v2-hierarchy-implementation-contract.json", "sha256": null, "accepted_by": null, "acceptance_evidence": null}
+    }
+  ],
+  "historical_failures": [
+    {
+      "failure_id": "summary-v2-parent-prose-expansion",
+      "description": "The prior parent source treated every child item as a required evidence unit and forced ordinary child detail to be repeated upward.",
+      "case_ids": ["MWXSV2-POS-001", "MWXSV2-BND-001"]
+    },
+    {
+      "failure_id": "summary-v2-durable-state-loss",
+      "description": "Message-level source coverage alone did not prove that an open question or other durable state survived semantic compression.",
+      "case_ids": ["MWXSV2-NEG-001"]
+    }
+  ],
+  "stage_claims": ["candidate"],
+  "completed_at": "2026-08-13T01:30:00Z"
+}

@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-traceable-sidecar-20260810",
+  "objective": "Add an opt-in hierarchical summary-v2 path whose L1 and higher-level summaries preserve source coverage, typed atoms, scenes, retrieval anchors, omissions, and raw-message backreferences without modifying summary-v1 or live archive behavior.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main",
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian",
+  "owner_id": "memory-plane",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "json", "markdown"],
+  "path_globs": [
+    "scripts/memory_summary_v2.py",
+    "scripts/summary_v2_worker.py",
+    "schemas/summary-v2-result.schema.json",
+    "prompts/summarize-v2.md",
+    "references/summary-v2.md",
+    "tests/test_memory_summary_v2.py",
+    "docs/module-architecture.json"
+  ],
+  "entrypoints": [
+    "python-library",
+    "explicit-opt-in-cli",
+    "one-shot-model-worker",
+    "test-harness"
+  ],
+  "resources": [
+    "closed-level-1-job",
+    "summary-v2-child-sidecars",
+    "raw-evidence",
+    "external-derived-sidecar",
+    "architecture-registry"
+  ],
+  "operations": [
+    "validate",
+    "summarize",
+    "project",
+    "compose",
+    "compare",
+    "write-derived"
+  ],
+  "data_formats": [
+    "utf-8-json",
+    "utf-8-markdown"
+  ],
+  "authorization_boundaries": [
+    "Do not modify summary-v1 prompts, schemas, files, indexes, jobs, state, or hashes.",
+    "Do not write into the live archive, summary queue, maintenance queue, retrieval indexes, federation, cloud exchange, or dashboard.",
+    "Model output is an untrusted candidate and cannot choose final IDs, paths, timestamps, importance, priority, or storage actions.",
+    "Every source reference must be represented in a scene and an atom or retrieval anchor, or explicitly omitted with a reason; silent loss is forbidden.",
+    "Every projected item must retain deterministic backreferences to raw message IDs.",
+    "Higher-level summaries consume only validated summary-v2 sidecars and must preserve child evidence references.",
+    "Sidecars are append-only and may be created only outside the declared archive root.",
+    "The feature remains opt-in and is not eligible for retrieval or context-capsule activation without a separate human-reviewed promotion change."
+  ],
+  "implementation_units": [
+    {
+      "id": "summary-v2-core",
+      "owner_id": "memory-plane",
+      "paths": ["scripts/memory_summary_v2.py"],
+      "entrypoints": ["python-library", "explicit-opt-in-cli"],
+      "resources": [
+        "closed-level-1-job",
+        "summary-v2-child-sidecars",
+        "raw-evidence",
+        "external-derived-sidecar"
+      ],
+      "operations": ["validate", "project", "compose", "compare", "write-derived"],
+      "planned_check_ids": [
+        "source-hash-binding",
+        "complete-source-accounting",
+        "hierarchical-backreferences",
+        "required-tool-locators",
+        "deterministic-identities",
+        "append-only-external-write",
+        "human-readable-markdown",
+        "no-summary-v1-effect"
+      ]
+    },
+    {
+      "id": "summary-v2-worker",
+      "owner_id": "control-plane",
+      "paths": ["scripts/summary_v2_worker.py"],
+      "entrypoints": ["one-shot-model-worker", "explicit-opt-in-cli"],
+      "resources": [
+        "closed-level-1-job",
+        "summary-v2-child-sidecars",
+        "external-derived-sidecar"
+      ],
+      "operations": ["summarize", "validate", "project", "compose", "write-derived"],
+      "planned_check_ids": [
+        "read-only-model-sandbox",
+        "strict-output-schema",
+        "candidate-before-write",
+        "bounded-prompt",
+        "utf8-stdio",
+        "no-background-activation"
+      ]
+    },
+    {
+      "id": "summary-v2-contract",
+      "owner_id": "memory-plane",
+      "paths": ["prompts/summarize-v2.md", "references/summary-v2.md"],
+      "entrypoints": ["one-shot-model-worker"],
+      "resources": ["raw-evidence", "summary-v2-child-sidecars"],
+      "operations": ["summarize", "validate", "compose"],
+      "planned_check_ids": [
+        "prompt-source-only",
+        "prompt-state-preservation",
+        "prompt-locator-preservation",
+        "activation-boundary-documented"
+      ]
+    },
+    {
+      "id": "summary-v2-schema",
+      "owner_id": "platform-foundation",
+      "paths": ["schemas/summary-v2-result.schema.json"],
+      "entrypoints": ["one-shot-model-worker"],
+      "resources": ["external-derived-sidecar"],
+      "operations": ["validate"],
+      "planned_check_ids": [
+        "strict-schema",
+        "bounded-arrays",
+        "version-lock"
+      ]
+    },
+    {
+      "id": "summary-v2-evidence",
+      "owner_id": "product-quality",
+      "paths": ["tests/test_memory_summary_v2.py"],
+      "entrypoints": ["test-harness", "explicit-opt-in-cli", "one-shot-model-worker"],
+      "resources": [
+        "closed-level-1-job",
+        "summary-v2-child-sidecars",
+        "external-derived-sidecar"
+      ],
+      "operations": ["validate", "summarize", "project", "compose", "compare", "write-derived"],
+      "planned_check_ids": [
+        "l1-positive",
+        "l1-negative",
+        "l2-backreference",
+        "tool-locator-regression",
+        "multilingual-special-characters",
+        "real-cli-candidate-path",
+        "stubbed-model-worker",
+        "tamper-injection",
+        "production-path-unchanged"
+      ]
+    },
+    {
+      "id": "summary-v2-architecture",
+      "owner_id": "product-architecture",
+      "paths": ["docs/module-architecture.json"],
+      "entrypoints": ["architecture-checker"],
+      "resources": ["architecture-registry"],
+      "operations": ["validate"],
+      "planned_check_ids": ["architecture-contract"]
+    }
+  ],
+  "rule_exclusions": []
+}

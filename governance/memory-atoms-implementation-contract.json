@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-atoms-v1-sidecar-20260810",
+  "candidate_id": "sha256:c696f24a6c056943766b49ed176d1595acc3a9a0d0a6dbab6c88ce91cac88d22",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane",
+  "target": "Experimental memory-atoms-v1 sidecar contract and explicit preview CLI",
+  "primary_semantics": "Add source-bound typed memory projections without modifying summary-v1, raw history, or any live runtime path.",
+  "invariants": [
+    "Raw records and summary-v1 remain byte unchanged.",
+    "Every atom and relation cites only source IDs from one validated closed Level-1 job.",
+    "Source, atom, relation, scene, and projection identities are deterministically recomputable.",
+    "Sidecar persistence is append-only, idempotent for identical bytes, and outside the archive root.",
+    "No model, network, scheduler, retrieval, federation, cloud, or dashboard path is activated."
+  ],
+  "allowed_changes": [
+    "Add a strict candidate schema and extraction prompt.",
+    "Add a deterministic validator, projector, external sidecar writer, and A/B count report.",
+    "Register the new production script to the existing Memory Plane owner.",
+    "Add focused tests and an experimental contract document."
+  ],
+  "prohibited_changes": [
+    "Do not modify existing raw or summary formats.",
+    "Do not add a maintenance worker, automatic model call, retrieval route, or cloud exchange route.",
+    "Do not infer priority, importance, persona, motivation, or implicit supersession.",
+    "Do not update, delete, or overwrite a prior sidecar."
+  ],
+  "before_after_checks": [
+    "Hash a summary-v1 file before and after sidecar creation.",
+    "Run the real CLI with multilingual and special-character paths.",
+    "Reject source drift, unknown IDs, malformed UTF-8, invalid status/type pairs, and internal tampering.",
+    "Run the module architecture and documentation contracts."
+  ],
+  "required_evidence": [
+    "source-audit",
+    "targeted-tests",
+    "integration-rehearsal",
+    "invariant-check",
+    "rehearsal-matrix",
+    "promotion-review"
+  ],
+  "lifecycle_state": "validated-staged"
+}

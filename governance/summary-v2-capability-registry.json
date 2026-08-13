@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "registry_id": "memory-wuxian-summary-v2-experimental",
+  "capabilities": [
+    "summary-v2-capability-manifest.json"
+  ]
+}

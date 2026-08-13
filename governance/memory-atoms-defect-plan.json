@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-atoms-v1-sidecar-20260810",
+  "packet_id": "packet:3c67d72e90392818137ce636",
+  "units": [
+    {
+      "unit_id": "atom-engine",
+      "owner_id": "memory-plane",
+      "paths": [
+        "scripts/memory_atoms.py"
+      ],
+      "rule_coverage": []
+    },
+    {
+      "unit_id": "atom-contract",
+      "owner_id": "memory-plane",
+      "paths": [
+        "prompts/extract-memory-atoms.md",
+        "references/memory-atoms-v1.md"
+      ],
+      "rule_coverage": []
+    },
+    {
+      "unit_id": "atom-schema",
+      "owner_id": "platform-foundation",
+      "paths": [
+        "schemas/memory-atoms-result.schema.json"
+      ],
+      "rule_coverage": []
+    },
+    {
+      "unit_id": "atom-evidence",
+      "owner_id": "product-quality",
+      "paths": [
+        "tests/test_memory_atoms.py",
+        "tests/fixtures/memory-atoms/**"
+      ],
+      "rule_coverage": []
+    },
+    {
+      "unit_id": "architecture-registration",
+      "owner_id": "product-architecture",
+      "paths": [
+        "docs/module-architecture.json"
+      ],
+      "rule_coverage": []
+    }
+  ]
+}

@@ -46,6 +46,7 @@
         "scripts/semantic_dispatch.py",
         "scripts/semantic_e5_worker.py",
         "scripts/semantic_plan.py",
+        "scripts/summary_v2_worker.py",
         "scripts/semantic_worker.py"
       ]
     },
@@ -57,6 +58,8 @@
         "scripts/daily_metrics.py",
         "scripts/memory_indexing.py",
         "scripts/memory_content_store.py",
+        "scripts/memory_atoms.py",
+        "scripts/memory_summary_v2.py",
         "scripts/memory_guarded_features.py",
         "scripts/token_usage.py",
         "native-collector/src/main.rs"

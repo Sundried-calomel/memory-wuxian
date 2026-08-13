@@ -1,0 +1,18 @@
+{
+  "blocking_rule_ids": [
+    "G08"
+  ],
+  "covered_rule_ids": [
+    "G08"
+  ],
+  "errors": [],
+  "packet_id": "packet:52405f017b4f98c078956872",
+  "packet_sha256": "8cba36eb9ee72d4224dc699d2d8641681b5ce2788f1dcaeaa128696f77f0040e",
+  "plan_sha256": "7baac80c833081e311c060c1ec83339403913ec48f96fb9c8142a9aa28623681",
+  "receipt_sha256": "a1865ddebf7b6fd9e3699f212611ebd65c751e0f634e08a8273da70c301a9c6a",
+  "receipt_type": "defect-plan-coverage",
+  "schema_version": 1,
+  "status": "passed",
+  "task_id": "summary-v2-traceable-sidecar-20260810",
+  "task_sha256": "6518ba4d7b469b055bc6936354d19d244e713894499d176ab4d048dd86f822ec"
+}

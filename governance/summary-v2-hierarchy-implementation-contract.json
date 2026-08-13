@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "work_item_id": "summary-v2-progressive-hierarchy-20260813",
+  "candidate_id": "sha256:be9d180e67b4b0a9a7c572b1dafc331c0742ed3cc9c1604aa4cd0dad98116bf5",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane",
+  "target": "Experimental summary-v2 L1 and L2-plus hierarchy contracts and projectors",
+  "primary_semantics": "Keep V2 L1 as the high-recall source layer while making V2 L2 and higher compact, direct-child navigation layers with deterministic durable-state promotion.",
+  "invariants": [
+    "Raw records, summary-v1, and existing L1 sidecars remain byte unchanged.",
+    "V2 format version is independent from L1, L2, and higher hierarchy levels.",
+    "Every parent routes every direct child summary and every route reaches retained raw message IDs.",
+    "Every deterministic promotion-manifest entry survives in parent durable state.",
+    "Ordinary child detail remains navigable in the child and is not required to be copied upward.",
+    "The feature remains opt-in, external-sidecar only, and disconnected from production maintenance and retrieval."
+  ],
+  "allowed_changes": [
+    "Split L1 and parent prompts and response schemas.",
+    "Change only the experimental parent source, validation, projection, and Markdown contracts.",
+    "Add deterministic promotion selection and semantic deduplication.",
+    "Add focused hierarchy tests and contract documentation."
+  ],
+  "prohibited_changes": [
+    "Do not rewrite raw history, summary-v1, or prior sidecars.",
+    "Do not activate a scheduler, maintenance route, dashboard route, retrieval route, federation route, or cloud route.",
+    "Do not treat ordinary child prose repetition as parent completeness.",
+    "Do not let model output choose source identity, promotion eligibility, final IDs, or storage paths."
+  ],
+  "before_after_checks": [
+    "Run L1, L2, and L3 positive and negative hierarchy tests.",
+    "Verify direct-child navigation and raw-message reachability.",
+    "Verify missing promoted state fails and ordinary detail need not be promoted.",
+    "Verify existing summary-v1 bytes remain unchanged during sidecar persistence.",
+    "Run Python compile, architecture contract, documentation contract, and diff check."
+  ],
+  "required_evidence": [
+    "defect-preflight",
+    "defect-plan-receipt",
+    "source-audit",
+    "targeted-tests",
+    "integration-rehearsal",
+    "invariant-check",
+    "candidate-identity",
+    "rehearsal-matrix",
+    "architecture-contract",
+    "documentation-contract",
+    "promotion-review"
+  ],
+  "lifecycle_state": "validated"
+}

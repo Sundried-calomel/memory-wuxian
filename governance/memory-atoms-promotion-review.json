@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "review_id": "memory-atoms-v1-promotion-20260810",
+  "work_item_id": "memory-atoms-v1-sidecar-20260810",
+  "candidate_id": "sha256:c696f24a6c056943766b49ed176d1595acc3a9a0d0a6dbab6c88ce91cac88d22",
+  "owner_id": "memory-plane",
+  "source_revision": "main@6deff46ee591b1b7c6ad460aeafd99512ff4792c+staged-candidate",
+  "product_evolution_record_id": "not-created-experimental-sidecar",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The reusable mechanisms already belong to existing Memory Wuxian and global defect families: immutable raw evidence, source-bound projections, explicit UTF-8, deterministic IDs, and fail-closed append-only writes. This staged feature adds no new global rule, and it is not approved for activation or release.",
+  "evidence_refs": [
+    "governance/memory-atoms-rehearsal-matrix.json",
+    "governance/memory-atoms-plan-receipt.json",
+    "references/memory-atoms-v1.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-09T22:02:43Z"
+}

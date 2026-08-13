@@ -1,0 +1,22 @@
+{
+  "allowed_actions": [
+    "generate-semantic-summary",
+    "persist-derived-sidecar",
+    "validate-project"
+  ],
+  "authorization_gated_actions": [
+    "generate-semantic-summary"
+  ],
+  "binding_sha256": "00ca488a54d5d8ddb179eb83153e93b8e7f81624f4d5385aba572892f67c4047",
+  "candidate_id": "memory-wuxian-summary-v2",
+  "candidate_revision": "experimental-20260813",
+  "deterministic_check_version": 1,
+  "manifest_sha256": "6b2336e37ffff7009c30244191494e62bff4e2f9ef9c21dcade2337a819e0d2d",
+  "owner_id": "memory-plane",
+  "project_id": "memory-wuxian",
+  "receipt_id": "car:5dc2171c7070cd884281e373bf36a827f0957d984975d660342ab5c87de0bddd",
+  "registry_sha256": "0513cb7bdc56992ee908a271c834788fd386969a93822a89319b6e181dd27ef2",
+  "schema_version": 1,
+  "semantic_review_sha256": "c8349c778a45bbb7396e2d68d19f55d63d4416675154ae41b9d6099dd6eb2d8d",
+  "status": "allowed"
+}

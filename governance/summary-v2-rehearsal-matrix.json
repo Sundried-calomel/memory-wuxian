@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "rehearsal_id": "summary-v2-l3-20260810",
+  "work_item_id": "summary-v2-sidecar-20260810",
+  "candidate_id": "sha256:d48923a92d0e49ef324d1d17d8a8b0aed506ba1a5f9a3ba91bfc0e199a4077d5",
+  "owner_id": "memory-plane",
+  "artifact_profile": "software-feature",
+  "validation_level": "L3",
+  "production_entrypoints": [
+    "scripts/memory_summary_v2.py",
+    "scripts/summary_v2_worker.py"
+  ],
+  "required_case_ids": [
+    "SV2-POS-001",
+    "SV2-NEG-001",
+    "SV2-ID-001",
+    "SV2-BND-001",
+    "SV2-WRK-001",
+    "SV2-REAL-001"
+  ],
+  "cases": [
+    {
+      "case_id": "SV2-POS-001",
+      "title": "Real CLI validates and projects a multilingual L1 candidate",
+      "category": "positive",
+      "stage": "candidate",
+      "requirement": "The explicit CLI handles Chinese, Japanese, currency symbols, emoji, spaces, canonical UTF-8, and human-readable projection.",
+      "runner": "tests.test_memory_summary_v2.MemorySummaryV2Test.test_real_cli_candidate_path_with_multilingual_content",
+      "production_entrypoint": "scripts/memory_summary_v2.py",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "validate and project succeed and create one immutable external sidecar bundle",
+      "status": "pass",
+      "evidence": {
+        "reference": "tests/test_memory_summary_v2.py",
+        "sha256": null,
+        "accepted_by": null,
+        "acceptance_evidence": null
+      }
+    },
+    {
+      "case_id": "SV2-NEG-001",
+      "title": "Traceability and integrity violations fail closed",
+      "category": "negative",
+      "stage": "candidate",
+      "requirement": "Silent loss, missing dual coverage, unknown references, locator drift, omissions overlapping represented content, source tampering, and result tampering are rejected.",
+      "runner": "tests.test_memory_summary_v2.MemorySummaryV2Test",
+      "production_entrypoint": "scripts/memory_summary_v2.py",
+      "uses_production_path": true,
+      "side_effects": "none",
+      "expected": "all invalid candidates fail before sidecar persistence",
+      "status": "pass",
+      "evidence": {
+        "reference": "tests/test_memory_summary_v2.py",
+        "sha256": null,
+        "accepted_by": null,
+        "acceptance_evidence": null
+      }
+    },
+    {
+      "case_id": "SV2-ID-001",
+      "title": "Candidate identity binds the implementation file set",
+      "category": "candidate-identity",
+      "stage": "candidate",
+      "requirement": "The candidate SHA-256 is computed from the ordered path and SHA-256 list of all seven declared implementation files.",
+      "runner": "PowerShell Get-FileHash SHA256 over the seven declared implementation files",
+      "production_entrypoint": "scripts/memory_summary_v2.py",
+      "uses_production_path": true,
+      "side_effects": "none",
+      "expected": "sha256:d48923a92d0e49ef324d1d17d8a8b0aed506ba1a5f9a3ba91bfc0e199a4077d5",
+      "status": "pass",
+      "evidence": {
+        "reference": "governance/summary-v2-implementation-contract.json",
+        "sha256": null,
+        "accepted_by": null,
+        "acceptance_evidence": null
+      }
+    },
+    {
+      "case_id": "SV2-BND-001",
+      "title": "Append-only sidecar boundary preserves summary-v1",
+      "category": "boundary",
+      "stage": "candidate",
+      "requirement": "Identical reruns are idempotent, conflicting bytes cannot replace a sidecar, archive-root output is rejected, and summary-v1 remains unchanged.",
+      "runner": "tests.test_memory_summary_v2.MemorySummaryV2Test.test_sidecar_write_is_external_append_only_and_preserves_summary_v1",
+      "production_entrypoint": "scripts/memory_summary_v2.py",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "summary-v1 hash is unchanged and overwrite or archive-root attempts fail closed",
+      "status": "pass",
+      "evidence": {
+        "reference": "tests/test_memory_summary_v2.py",
+        "sha256": null,
+        "accepted_by": null,
+        "acceptance_evidence": null
+      }
+    },
+    {
+      "case_id": "SV2-WRK-001",
+      "title": "One-shot worker uses bounded prompt, schema, and offline candidate route",
+      "category": "positive",
+      "stage": "candidate",
+      "requirement": "The worker invokes one read-only schema-constrained model call when authorized and accepts an offline candidate without a model call.",
+      "runner": "tests.test_memory_summary_v2.MemorySummaryV2Test.test_worker_with_stubbed_model_and_offline_candidate plus real archive dry-run",
+      "production_entrypoint": "scripts/summary_v2_worker.py",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "stubbed worker and dry-run pass; real archive content is not sent without explicit authorization",
+      "status": "pass",
+      "evidence": {
+        "reference": "tests/test_memory_summary_v2.py",
+        "sha256": null,
+        "accepted_by": null,
+        "acceptance_evidence": null
+      }
+    },
+    {
+      "case_id": "SV2-REAL-001",
+      "title": "Authorized real archive generation and human A/B review",
+      "category": "historical-regression",
+      "stage": "authorized-real",
+      "requirement": "Generate summary-v2 from the explicitly authorized job-000493, validate the immutable sidecar, preserve summary-v1, and perform semantic comparison rather than relying on structural counts.",
+      "runner": "scripts/summary_v2_worker.py l1 plus scripts/memory_summary_v2.py validate-sidecar and compare",
+      "production_entrypoint": "scripts/summary_v2_worker.py",
+      "uses_production_path": true,
+      "side_effects": "authorized-real",
+      "expected": "A valid external sidecar is created; human review records both recovered detail and any remaining semantic omission before activation.",
+      "status": "pass",
+      "evidence": {
+        "reference": "C:/Users/56453/Documents/ChatGPT/memory无限/summary-v2-ab/job-000493/memory-wuxian-summary-v2/level-1/summary-v2-57bef6c7da327cdb000236f55c72f33c/summary.json",
+        "sha256": "b07e11e983092bbb01bbd24a88d0794115acc5814d91ba98001506c90ee4c6b7",
+        "accepted_by": null,
+        "acceptance_evidence": null
+      }
+    }
+  ],
+  "historical_failures": [
+    {
+      "failure_id": "memory-wuxian-summary-hash-drift",
+      "description": "Changing established summary records can alter immutable federation identities, so summary-v2 remains a separate sidecar.",
+      "case_ids": [
+        "SV2-BND-001"
+      ]
+    },
+    {
+      "failure_id": "memory-wuxian-summary-information-loss",
+      "description": "Broad prose summaries can become too vague to explain decisions or locate exact source evidence.",
+      "case_ids": [
+        "SV2-POS-001",
+        "SV2-NEG-001"
+      ]
+    },
+    {
+      "failure_id": "memory-wuxian-windows-encoding",
+      "description": "Windows command paths and multilingual records require explicit UTF-8 handling.",
+      "case_ids": [
+        "SV2-POS-001"
+      ]
+    },
+    {
+      "failure_id": "memory-wuxian-fact-level-semantic-loss",
+      "description": "Representing every source message does not prove that every durable fact, threshold, limitation, or open question survived compression.",
+      "case_ids": [
+        "SV2-REAL-001"
+      ]
+    }
+  ],
+  "stage_claims": [
+    "candidate",
+    "authorized-real"
+  ],
+  "completed_at": "2026-08-09T22:35:13Z"
+}

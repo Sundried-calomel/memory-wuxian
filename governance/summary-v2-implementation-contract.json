@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "work_item_id": "summary-v2-sidecar-20260810",
+  "candidate_id": "sha256:d48923a92d0e49ef324d1d17d8a8b0aed506ba1a5f9a3ba91bfc0e199a4077d5",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "memory-plane",
+  "target": "Experimental traceable summary-v2 sidecar and explicit one-shot worker",
+  "primary_semantics": "Produce useful hierarchical summaries whose claims, scenes, typed atoms, omissions, and retrieval anchors remain traceable to immutable source records without changing summary-v1 or any live runtime path.",
+  "invariants": [
+    "Raw records and summary-v1 remain byte unchanged.",
+    "Every source item is represented in both scene context and an atom or anchor, or is named in an explicit omission with a reason.",
+    "Every L1 detail traces to a raw message ID and every L2+ detail traces through validated child summary item IDs to raw message IDs.",
+    "Required tool, command, and file locators remain exact retrieval anchors.",
+    "Source and result identities are deterministically recomputable and sidecar persistence is append-only outside the archive root.",
+    "No scheduler, summary-v1 worker, retrieval, capsule, federation, cloud, dashboard, or automatic model path is activated."
+  ],
+  "allowed_changes": [
+    "Add a strict summary-v2 result schema and bounded prompt.",
+    "Add deterministic source preparation, candidate validation, projection, and external sidecar persistence.",
+    "Add an explicit one-shot model worker and an offline candidate path.",
+    "Register the scripts with existing architecture owners and add focused tests and documentation."
+  ],
+  "prohibited_changes": [
+    "Do not modify existing raw, index, or summary-v1 records.",
+    "Do not activate summary-v2 in production maintenance, retrieval, capsule, federation, cloud, or dashboard paths.",
+    "Do not silently drop source material or replace exact locators with paraphrases.",
+    "Do not overwrite or mutate a previously written sidecar.",
+    "Do not send a real archive to a model without explicit authorization for that archive."
+  ],
+  "before_after_checks": [
+    "Hash summary-v1 before and after sidecar creation.",
+    "Exercise the real CLI candidate path with Chinese, Japanese, currency symbols, emoji, and spaces.",
+    "Reject silent source loss, unknown references, locator drift, source tampering, result tampering, and conflicting writes.",
+    "Run focused, related, full CLI, architecture, documentation, compilation, and diff checks."
+  ],
+  "required_evidence": [
+    "source-audit",
+    "targeted-tests",
+    "integration-rehearsal",
+    "invariant-check",
+    "rehearsal-matrix",
+    "promotion-review"
+  ],
+  "lifecycle_state": "validated"
+}

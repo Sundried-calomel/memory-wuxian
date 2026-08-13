@@ -1,0 +1,31 @@
+{
+  "change_kind": "modify",
+  "changed_catalog_entries": [],
+  "changed_workbook_entries": [],
+  "created_at": "2026-08-09T22:54:28+00:00",
+  "no_applicable_family_reason": null,
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\governance\\summary-v2-preflight.json",
+  "preflight_sha256": "821a8c3f99ee94991b22e3a21e8ac77040565c090b193d0931e083a8a9102ec9",
+  "receipt_sha256": "099918b8d75369d4e54101aa198bc3300f747e7ba669066eb43c0f579ab31386",
+  "receipt_type": "defect-workbook-completion",
+  "schema_version": 1,
+  "selected_families": [
+    "G01",
+    "G02",
+    "G03",
+    "G04",
+    "G05",
+    "G07",
+    "G08",
+    "G11",
+    "MW-R02",
+    "MW-R05",
+    "MW-R07",
+    "MW-R08",
+    "MW-R10",
+    "MW-R11",
+    "MW-R12"
+  ],
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main"
+}

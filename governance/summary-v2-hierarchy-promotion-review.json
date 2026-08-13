@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "review_id": "summary-v2-progressive-hierarchy-promotion-20260813",
+  "work_item_id": "summary-v2-progressive-hierarchy-20260813",
+  "candidate_id": "sha256:be9d180e67b4b0a9a7c572b1dafc331c0742ed3cc9c1604aa4cd0dad98116bf5",
+  "owner_id": "memory-plane",
+  "source_revision": "staged-candidate-not-committed",
+  "product_evolution_record_id": "references/summary-v2.md",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The durable-state promotion and direct-child routing rules are specific to the experimental Memory Wuxian summary-v2 hierarchy. Existing global G08 already owns source round-trip and immutable evidence requirements, so no new global governance rule is proposed.",
+  "evidence_refs": [
+    "governance/summary-v2-hierarchy-rehearsal-matrix.json",
+    "governance/summary-v2-hierarchy-plan-receipt.json",
+    "references/summary-v2.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-13T01:30:00Z"
+}

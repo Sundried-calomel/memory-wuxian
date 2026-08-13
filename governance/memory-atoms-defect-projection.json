@@ -1,0 +1,24 @@
+# Defect Prevention Packet
+
+- Task: `memory-atoms-v1-sidecar-20260810`
+- Packet: `packet:3c67d72e90392818137ce636`
+- Status: `ready`
+- Blocking limit: 12
+- Projection limit: 2500 estimated tokens
+
+## Authorization Boundaries
+
+- Do not modify, reinterpret, or backfill existing summary-v1 records.
+- Do not write to a live archive, summary queue, semantic queue, or cloud exchange path.
+- Do not invoke a model, network service, package installer, or unreviewed third-party runtime.
+- Only validate explicit candidate JSON and write a new sidecar file beneath an explicit output directory.
+- Reject unknown source IDs, source hash mismatches, malformed UTF-8, and unsupported schema versions.
+- Keep all historical evidence append-only; corrections are represented by relations, never replacement.
+
+## Invalidation
+
+- The task manifest bytes or declared scope change.
+- A catalog, source workbook binding, rule status, or threshold changes.
+- The implementation plan adds an undeclared unit, owner, path, entrypoint, resource, or operation.
+
+Packet SHA-256: `3c4a137304aa1aea0e27fde74a4928cc127e59951fbff81e75af1c2d1d06548f`
