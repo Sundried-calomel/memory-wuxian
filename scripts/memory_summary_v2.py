@@ -447,6 +447,112 @@ def _validate_local_id(value: Any, location: str, used: set[str]) -> str:
     return local_id
 
 
+def normalize_model_candidate(candidate: Any, source: dict[str, Any]) -> Any:
+    """Canonicalize harmless model formatting while preserving strict validation."""
+    if not isinstance(candidate, dict):
+        return candidate
+    normalized = json.loads(json.dumps(candidate, ensure_ascii=False))
+    source_order = {
+        source_ref: index for index, source_ref in enumerate(source["source_refs"])
+    }
+
+    def refs(value: Any) -> Any:
+        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+            return value
+        repaired: list[str] = []
+        for item in value:
+            if item in source_order:
+                repaired.append(item)
+                continue
+            prefix_matches = [
+                source_ref
+                for source_ref in source["source_refs"]
+                if item.startswith(source_ref)
+                and len(item) > len(source_ref)
+            ]
+            repaired.append(prefix_matches[0] if len(prefix_matches) == 1 else item)
+        unique: list[Any] = []
+        for item in repaired:
+            if item not in unique:
+                unique.append(item)
+        return sorted(
+            unique,
+            key=lambda item: source_order.get(item, len(source_order) + unique.index(item)),
+        )
+
+    text_fields = {
+        "overview": ("text",),
+        "scenes": ("title", "summary"),
+        "atoms": ("statement", "scope"),
+        "omissions": ("reason",),
+    }
+    for group, fields in text_fields.items():
+        for item in normalized.get(group, []):
+            if not isinstance(item, dict):
+                continue
+            if "source_refs" in item:
+                item["source_refs"] = refs(item["source_refs"])
+            for field in fields:
+                if isinstance(item.get(field), str):
+                    item[field] = item[field].strip()
+
+    used_ids = {
+        item.get("local_id")
+        for group in ("overview", "scenes", "atoms")
+        for item in normalized.get(group, [])
+        if isinstance(item, dict) and isinstance(item.get("local_id"), str)
+    }
+    anchors: list[dict[str, Any]] = []
+    for index, locator in enumerate(source["required_locators"], 1):
+        local_id = f"required_locator_{index}"
+        while local_id in used_ids:
+            local_id = "mw_" + local_id
+        used_ids.add(local_id)
+        anchors.append(
+            {
+                "local_id": local_id,
+                "text": locator["text"],
+                "kind": locator["kind"],
+                "source_refs": [locator["source_ref"]],
+            }
+        )
+    normalized["retrieval_anchors"] = anchors
+
+    atom_by_id = {
+        item.get("local_id"): item
+        for item in normalized.get("atoms", [])
+        if isinstance(item, dict) and isinstance(item.get("local_id"), str)
+    }
+    relations: list[Any] = []
+    for item in normalized.get("relations", []):
+        if not isinstance(item, dict):
+            relations.append(item)
+            continue
+        left = atom_by_id.get(item.get("from_local_id"))
+        right = atom_by_id.get(item.get("to_local_id"))
+        if left is None or right is None:
+            relations.append(item)
+            continue
+        allowed = set(left.get("source_refs", [])) | set(right.get("source_refs", []))
+        canonical_refs = refs(item.get("source_refs"))
+        if not isinstance(canonical_refs, list):
+            relations.append(item)
+            continue
+        relation_refs = [value for value in canonical_refs if value in allowed]
+        if not relation_refs:
+            continue
+        item["source_refs"] = relation_refs
+        relations.append(item)
+    normalized["relations"] = relations
+    omissions = normalized.get("omissions")
+    if isinstance(omissions, list) and all(isinstance(item, dict) for item in omissions):
+        normalized["omissions"] = sorted(
+            omissions,
+            key=lambda item: source_order.get(item.get("source_ref"), len(source_order)),
+        )
+    return normalized
+
+
 def validate_candidate(candidate: Any, source: dict[str, Any]) -> dict[str, Any]:
     is_parent = source["source_kind"] == SOURCE_CHILDREN
     candidate = _exact(

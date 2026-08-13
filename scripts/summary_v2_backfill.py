@@ -28,6 +28,12 @@ PLAN_FORMAT = "memory-wuxian-summary-v2-backfill-plan-v1"
 MAX_BATCH = 20
 MAX_PARALLEL = 3
 FAILURE_LIMIT = 3
+RUNNER_REVISION = "summary-v2-backfill-normalizer-v3"
+NON_RETRYABLE_ERRORS = (
+    "prompt exceeds the",
+    "backfill job drifted",
+    "source-validation:",
+)
 
 
 def _relative_to(path: Path, parent: Path) -> bool:
@@ -307,7 +313,10 @@ def _refresh_plan(
         failure_path = _failure_path(output_root, summary_id)
         if failure_path.exists():
             failure = json.loads(failure_path.read_text(encoding="utf-8"))
-            if int(failure.get("attempts", 0)) >= FAILURE_LIMIT:
+            if (
+                failure.get("runner_revision") == RUNNER_REVISION
+                and int(failure.get("attempts", 0)) >= FAILURE_LIMIT
+            ):
                 task["status"] = "quarantined"
                 quarantine.append(
                     {
@@ -408,15 +417,22 @@ def run_batch(
                 except Exception as exc:
                     error = str(exc).replace("\r", " ").replace("\n", " ")[:500]
                     failure_path = _failure_path(output_root, task["summary_id"])
-                    attempts = 1
+                    attempts = FAILURE_LIMIT if any(
+                        marker in error for marker in NON_RETRYABLE_ERRORS
+                    ) else 1
                     if failure_path.exists():
                         previous = json.loads(failure_path.read_text(encoding="utf-8"))
-                        attempts = int(previous.get("attempts", 0)) + 1
+                        if (
+                            attempts != FAILURE_LIMIT
+                            and previous.get("runner_revision") == RUNNER_REVISION
+                        ):
+                            attempts = int(previous.get("attempts", 0)) + 1
                     failure_path.parent.mkdir(parents=True, exist_ok=True)
                     atomic_write_canonical_json(
                         failure_path,
                         {
                             "summary_id": task["summary_id"],
+                            "runner_revision": RUNNER_REVISION,
                             "attempts": attempts,
                             "last_error": error,
                         },

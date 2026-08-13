@@ -16,6 +16,7 @@ from memory_summary_v2 import (  # noqa: E402
     build_level_1_source,
     build_parent_source,
     comparison_report,
+    normalize_model_candidate,
     persist_sidecar,
     project,
     render_markdown,
@@ -181,6 +182,40 @@ class SummaryV2Test(unittest.TestCase):
             sidecar["retrieval_anchors"][0]["text"],
         )
         self.assertEqual(sidecar, validate_sidecar(sidecar, source))
+
+    def test_model_candidate_normalization_is_conservative_and_deterministic(self):
+        source = build_level_1_source(self.job())
+        candidate = self.candidate(source)
+        candidate["scenes"][0]["title"] = "  可追溯摘要设计与核验  "
+        candidate["scenes"][0]["source_refs"] = list(reversed(source["source_refs"]))
+        candidate["atoms"][0]["source_refs"] = list(reversed(source["source_refs"]))
+        candidate["atoms"][0]["source_refs"][0] += "a3327706528e4bb45ed549d441ded0f"
+        candidate["relations"] = [
+            {
+                "from_local_id": "atom1",
+                "to_local_id": "atom1",
+                "relation_type": "supports",
+                "source_refs": ["outside-source"],
+            }
+        ]
+        candidate["retrieval_anchors"] = [
+            {
+                "local_id": "badAnchor",
+                "text": "  changed locator  ",
+                "kind": "other",
+                "source_refs": [source["source_refs"][0]],
+            }
+        ]
+        normalized = normalize_model_candidate(candidate, source)
+        self.assertEqual("可追溯摘要设计与核验", normalized["scenes"][0]["title"])
+        self.assertEqual(source["source_refs"], normalized["scenes"][0]["source_refs"])
+        self.assertEqual(source["source_refs"], normalized["atoms"][0]["source_refs"])
+        self.assertFalse(normalized["relations"])
+        self.assertEqual(
+            [item["text"] for item in source["required_locators"]],
+            [item["text"] for item in normalized["retrieval_anchors"]],
+        )
+        project(source, normalized)
 
     def test_silent_source_loss_is_rejected(self):
         source = build_level_1_source(self.job())

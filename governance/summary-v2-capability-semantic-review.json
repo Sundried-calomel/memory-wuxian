@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "candidate_id": "memory-wuxian-summary-v2",
-  "candidate_revision": "experimental-backfill-20260813",
-  "candidate_manifest_sha256": "1d7687510b43e1df0a1d4f37f0ba7860cfcf1632e3cc3a302d7d2b29b943336f",
+  "candidate_revision": "experimental-backfill-ref-prefix-20260813",
+  "candidate_manifest_sha256": "4e24ff583d1fac61bea34da18bfbc8cca2ccff15c3852e8bca70ba87a9f10521",
   "registry_sha256": "0513cb7bdc56992ee908a271c834788fd386969a93822a89319b6e181dd27ef2",
   "reviewer_identity": "governance-contract-reviewer",
   "classification": "extension",
@@ -13,6 +13,8 @@
     "Direct-child routing and deterministic promotion preserve evidence reachability without forcing ordinary detail upward.",
     "The one-shot model action remains authorization-gated and installation alone does not schedule or invoke it.",
     "Historical backfill is explicit, bounded to three concurrent calls and twenty nodes per run, retries at most three times, and quarantines source drift or candidate conflicts without blocking unrelated nodes.",
+    "Model formatting normalization is deterministic and conservative: strict semantic coverage validation remains unchanged, declared locators replace model anchors, reference order is canonicalized, and unsupported optional relations are discarded.",
+    "A source reference polluted by trailing model text is repaired only when it begins with exactly one complete declared source ID; unknown and ambiguous references still fail strict validation. Failure budgets are revision-bound so a governed normalizer repair can be retried without erasing prior receipts.",
     "No trigger, call-cycle, or resource conflict was found in the project-bound registry."
   ],
   "trigger_resolutions": []

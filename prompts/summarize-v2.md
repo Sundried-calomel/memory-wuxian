@@ -16,6 +16,9 @@ Use no information outside that payload.
   their original bytes and are never translated.
 - Every represented source ref must appear in at least one scene and in at
   least one atom or retrieval anchor.
+- Within every `source_refs` array, cite only declared refs, remove duplicates,
+  and preserve the exact order in which those refs appear in the supplied
+  `source_refs` list.
 - A source ref that carries no durable meaning may appear in `omissions`, but
   the reason must say what was omitted. Never silently drop a source ref.
 - Preserve exact names, identifiers, file paths, commands, tool names, artifact
@@ -33,6 +36,9 @@ Use no information outside that payload.
   supersession.
 - Create `revises`, `contradicts`, or `supersedes` only when the source states
   that relationship explicitly.
+- Relations are optional. A relation's `source_refs` must be a non-empty subset
+  of the union of the two referenced atoms' `source_refs`; otherwise omit the
+  relation. Do not use a relation to provide message coverage.
 - L1 source refs are raw message IDs. Preserve their evidence routes so the
   final summary can navigate back to the exact source messages.
 - Overview text should explain what happened and why it matters within the

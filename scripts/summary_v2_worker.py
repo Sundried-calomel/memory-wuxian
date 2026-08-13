@@ -22,6 +22,7 @@ from memory_summary_v2 import (
     SOURCE_CHILDREN,
     build_level_1_source,
     build_parent_source,
+    normalize_model_candidate,
     persist_sidecar,
     project,
     public_source,
@@ -176,6 +177,7 @@ def run_source(
     model_called = candidate is None
     if candidate is None:
         candidate = invoker(command, timeout, prompt)
+    candidate = normalize_model_candidate(candidate, source)
     sidecar = project(source, candidate)
     bundle, status = persist_sidecar(sidecar, output_directory, archive_root)
     return {

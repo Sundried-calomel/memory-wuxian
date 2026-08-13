@@ -1,0 +1,17 @@
+{
+  "change_kind": "repair",
+  "changed_catalog_entries": [],
+  "changed_workbook_entries": [],
+  "created_at": "2026-08-13T04:14:36+00:00",
+  "no_applicable_family_reason": null,
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\governance\\summary-v2-backfill-ref-repair-preflight.json",
+  "preflight_sha256": "5b00afb282fdba59906b03206f80937a48c0079268f469d730722d3fe0dc770d",
+  "receipt_sha256": "e341f0683bf2092e4383ce0c390be684a160e7ca8223d464f97a26ea04874476",
+  "receipt_type": "defect-workbook-completion",
+  "schema_version": 1,
+  "selected_families": [
+    "G08"
+  ],
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main"
+}
