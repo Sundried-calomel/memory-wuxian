@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "candidate_id": "memory-wuxian-summary-v2",
-  "candidate_revision": "experimental-20260813",
-  "candidate_manifest_sha256": "6b2336e37ffff7009c30244191494e62bff4e2f9ef9c21dcade2337a819e0d2d",
+  "candidate_revision": "experimental-backfill-20260813",
+  "candidate_manifest_sha256": "1d7687510b43e1df0a1d4f37f0ba7860cfcf1632e3cc3a302d7d2b29b943336f",
   "registry_sha256": "0513cb7bdc56992ee908a271c834788fd386969a93822a89319b6e181dd27ef2",
   "reviewer_identity": "governance-contract-reviewer",
   "classification": "extension",
@@ -12,6 +12,7 @@
     "The capability writes only derived sidecars outside the authoritative archive and cannot rewrite raw history or summary-v1.",
     "Direct-child routing and deterministic promotion preserve evidence reachability without forcing ordinary detail upward.",
     "The one-shot model action remains authorization-gated and installation alone does not schedule or invoke it.",
+    "Historical backfill is explicit, bounded to three concurrent calls and twenty nodes per run, retries at most three times, and quarantines source drift or candidate conflicts without blocking unrelated nodes.",
     "No trigger, call-cycle, or resource conflict was found in the project-bound registry."
   ],
   "trigger_resolutions": []

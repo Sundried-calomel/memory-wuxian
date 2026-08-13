@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-historical-backfill-20260813",
+  "objective": "Build a resumable, bounded, source-verified historical summary-v2 backfill planner and runner that never modifies raw history or summary-v1.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main",
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian",
+  "owner_id": "control-plane",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "json", "markdown"],
+  "path_globs": ["scripts/summary_v2_backfill.py", "tests/test_summary_v2_backfill.py", "references/summary-v2.md", "docs/module-architecture.json", "governance/summary-v2-backfill-*.json"],
+  "entrypoints": ["explicit-opt-in-cli", "test-harness"],
+  "resources": ["authoritative-raw-read", "summary-v1-read", "external-summary-v2-sidecars", "one-shot-model-worker"],
+  "operations": ["inventory", "validate", "plan", "summarize", "write-derived"],
+  "data_formats": ["utf-8-json", "utf-8-markdown"],
+  "authorization_boundaries": [
+    "Never write, replace, rename, or delete raw history, summary-v1, archive indexes, or peer replicas.",
+    "Plan only from source-message lists whose reconstructed source SHA-256 exactly matches summary-v1 metadata.",
+    "Write jobs, state, receipts, and summary-v2 sidecars only under an explicit external output root.",
+    "Invoke at most three one-shot model calls concurrently, cap each explicit run at twenty summaries, and resume idempotently from persisted sidecars.",
+    "Generate parents only after every declared direct child sidecar validates.",
+    "Quarantine invalid or drifted inputs without blocking unrelated work.",
+    "Do not register a background task or production queue integration."
+  ],
+  "implementation_units": [
+    {
+      "id": "summary-v2-backfill-runner",
+      "owner_id": "control-plane",
+      "paths": ["scripts/summary_v2_backfill.py"],
+      "entrypoints": ["explicit-opt-in-cli"],
+      "resources": ["authoritative-raw-read", "summary-v1-read", "external-summary-v2-sidecars", "one-shot-model-worker"],
+      "operations": ["inventory", "validate", "plan", "summarize", "write-derived"],
+      "planned_check_ids": ["source-hash-gate", "existing-sidecar-detection", "conflict-quarantine", "bounded-batch", "bounded-retry", "resume", "parent-readiness", "external-only-write", "quarantine"]
+    },
+    {
+      "id": "summary-v2-backfill-evidence",
+      "owner_id": "product-quality",
+      "paths": ["tests/test_summary_v2_backfill.py", "references/summary-v2.md"],
+      "entrypoints": ["test-harness"],
+      "resources": ["authoritative-raw-read", "summary-v1-read", "external-summary-v2-sidecars"],
+      "operations": ["inventory", "validate", "plan"],
+      "planned_check_ids": ["positive-plan", "hash-drift-negative", "resume-idempotency", "parent-order", "archive-immutability"]
+    },
+    {
+      "id": "summary-v2-backfill-architecture",
+      "owner_id": "product-architecture",
+      "paths": ["docs/module-architecture.json"],
+      "entrypoints": ["architecture-checker"],
+      "resources": ["architecture-registry"],
+      "operations": ["validate"],
+      "planned_check_ids": ["architecture-contract"]
+    }
+  ],
+  "rule_exclusions": []
+}

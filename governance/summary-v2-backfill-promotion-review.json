@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "review_id": "summary-v2-historical-backfill-promotion-20260813",
+  "task_id": "summary-v2-historical-backfill-20260813",
+  "disposition": "no-new-global-rule",
+  "rationale": "Existing G08 and the summary-v2 capability authorization gate already own evidence round-trip, immutable-source, and model-send boundaries. Backfill-specific limits remain in the capability manifest, task contract, reference, and rehearsal matrix.",
+  "evidence_refs": [
+    "governance/summary-v2-backfill-plan-receipt.json",
+    "governance/summary-v2-backfill-completion.json",
+    "governance/summary-v2-backfill-rehearsal-matrix.json",
+    "references/summary-v2.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-13T03:00:00Z"
+}

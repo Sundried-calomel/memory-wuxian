@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "capability_id": "memory-wuxian-summary-v2",
-  "revision": "experimental-20260813",
+  "revision": "experimental-backfill-20260813",
   "owner_id": "memory-plane",
   "producer_identity": "memory-plane-implementation",
-  "artifact_sha256": "be9d180e67b4b0a9a7c572b1dafc331c0742ed3cc9c1604aa4cd0dad98116bf5",
+  "artifact_sha256": "a76c376f6743a271b2de7e991c0af587b4f152a4f5c3bff97aec3cc9f2ea9ef9",
   "triggers": [
     {
       "trigger_id": "explicit-summary-v2",

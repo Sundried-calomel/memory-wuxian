@@ -74,6 +74,27 @@ review demonstrates that the summaries are understandable, source-locatable,
 state-faithful, and materially more useful than summary-v1. Passing structural
 coverage alone is not semantic approval.
 
+## Historical Backfill
+
+`scripts/summary_v2_backfill.py` builds an explicit external plan from existing
+summary-v1 metadata and authoritative raw records. It reconstructs each L1 job
+only when every declared message exists and the complete source SHA-256 matches.
+Invalid inputs are quarantined in the plan; source files are never repaired or
+rewritten. Existing validated summary-v2 sidecars are reused by their parallel
+summary ID.
+
+The `run` command processes at most twenty ready nodes per explicit invocation
+with no more than three one-shot model calls concurrently. A node is
+quarantined after three failed attempts. L1 nodes are completed before their
+matching V1 parent grouping becomes ready; each parent is generated only after
+all direct child sidecars validate. Conflicting valid V2 candidates for one V1
+node are preserved and quarantined for explicit arbitration while unrelated
+nodes continue. Jobs, plans, run receipts, and sidecars stay under an explicit
+output root outside the archive. The authoritative raw history is scanned once
+when the plan is built; later batches refresh from sidecars and failure receipts
+without rescanning the full archive. The runner registers no scheduler or
+production queue and can be safely invoked again after interruption.
+
 ## First Authorized Real A/B
 
 The first authorized real run used `job-000493`, the 22-message source of

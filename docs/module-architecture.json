@@ -46,6 +46,7 @@
         "scripts/semantic_dispatch.py",
         "scripts/semantic_e5_worker.py",
         "scripts/semantic_plan.py",
+        "scripts/summary_v2_backfill.py",
         "scripts/summary_v2_worker.py",
         "scripts/semantic_worker.py"
       ]

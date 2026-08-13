@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "rehearsal_id": "summary-v2-historical-backfill-20260813",
+  "task_id": "summary-v2-historical-backfill-20260813",
+  "candidate_artifact_sha256": "a76c376f6743a271b2de7e991c0af587b4f152a4f5c3bff97aec3cc9f2ea9ef9",
+  "stage": "candidate",
+  "cases": [
+    {
+      "case_id": "MWXBF-POS-001",
+      "title": "Verified L1 reconstruction and parent ordering",
+      "status": "pass",
+      "evidence": "35 focused summary-v2 and memory-atom tests passed, including UTF-8 and special-character fixtures."
+    },
+    {
+      "case_id": "MWXBF-PERF-001",
+      "title": "Single authoritative scan and incremental refresh",
+      "status": "pass",
+      "evidence": "The planner test observes exactly one read_all_raw call; later runs load the persisted plan and refresh only sidecars and failure receipts."
+    },
+    {
+      "case_id": "MWXBF-NEG-001",
+      "title": "Conflicting valid candidates do not halt unrelated work",
+      "status": "pass",
+      "evidence": "The real plan quarantined only L1-000450 and left 457 L1 nodes ready. Both candidate paths and projection hashes were retained."
+    },
+    {
+      "case_id": "MWXBF-NEG-002",
+      "title": "Source drift and unsafe output roots fail closed",
+      "status": "pass",
+      "evidence": "Focused tests quarantine source-hash drift and reject output inside the authoritative archive."
+    },
+    {
+      "case_id": "MWXBF-BND-001",
+      "title": "Bounded execution and retry",
+      "status": "pass",
+      "evidence": "Each explicit run is capped at 20 nodes, concurrency at 3 model calls, and failures at 3 attempts before quarantine."
+    },
+    {
+      "case_id": "MWXBF-IMM-001",
+      "title": "Authoritative archive remains immutable",
+      "status": "pass",
+      "evidence": "A real baseline and post-plan comparison checked 526 raw and summary-v1 files with zero byte changes."
+    },
+    {
+      "case_id": "MWXBF-AUTH-001",
+      "title": "Unscoped historical model send is blocked",
+      "status": "pass",
+      "evidence": "The first three-node semantic run was rejected because prior authorization covered only job-000493, proving that installation and planning do not imply broader data-exfiltration authorization."
+    },
+    {
+      "case_id": "MWXBF-LIVE-001",
+      "title": "Authorized historical semantic canary",
+      "status": "pending-authorization",
+      "evidence": "No new historical source was sent and no new V2 sidecar was generated. Explicit user approval for broader Codex model processing is still required."
+    }
+  ],
+  "stage_claims": ["implementation-validated", "real-plan-validated"],
+  "excluded_claims": ["historical-semantic-backfill-completed", "production-activation"],
+  "completed_at": "2026-08-13T03:00:00Z"
+}

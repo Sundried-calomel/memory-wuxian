@@ -6,8 +6,8 @@
   "capabilities": [
     {
       "capability_id": "memory-wuxian-summary-v2",
-      "revision": "experimental-20260813",
-      "manifest_sha256": "6b2336e37ffff7009c30244191494e62bff4e2f9ef9c21dcade2337a819e0d2d",
+      "revision": "experimental-backfill-20260813",
+      "manifest_sha256": "1d7687510b43e1df0a1d4f37f0ba7860cfcf1632e3cc3a302d7d2b29b943336f",
       "allowed_actions": [
         "validate-project",
         "persist-derived-sidecar",

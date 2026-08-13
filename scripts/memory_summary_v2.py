@@ -309,7 +309,11 @@ def _promotion_manifest(sidecar: dict[str, Any]) -> list[dict[str, Any]]:
     return list(promoted_by_state.values())
 
 
-def build_parent_source(children: Iterable[dict[str, Any]]) -> dict[str, Any]:
+def build_parent_source(
+    children: Iterable[dict[str, Any]],
+    *,
+    parallel_summary_id: str | None = None,
+) -> dict[str, Any]:
     validated_children = [validate_sidecar(child) for child in children]
     if len(validated_children) < 2:
         raise SummaryV2Error("a parent summary-v2 requires at least two child sidecars")
@@ -376,7 +380,11 @@ def build_parent_source(children: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "source_kind": SOURCE_CHILDREN,
         "summary_level": child_level + 1,
         "job_id": f"summary-v2-parent-{source_sha[:24]}",
-        "parallel_summary_id": f"L{child_level + 1}-v2-{source_sha[:16]}",
+        "parallel_summary_id": (
+            parallel_summary_id
+            if parallel_summary_id
+            else f"L{child_level + 1}-v2-{source_sha[:16]}"
+        ),
         "conversation_id": conversation_id,
         "source_sha256": source_sha,
         "source_refs": source_refs,

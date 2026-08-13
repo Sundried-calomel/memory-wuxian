@@ -1,0 +1,18 @@
+{
+  "blocking_rule_ids": [
+    "G08"
+  ],
+  "covered_rule_ids": [
+    "G08"
+  ],
+  "errors": [],
+  "packet_id": "packet:7faa1f2e8c427d3070a1bff3",
+  "packet_sha256": "9579f0e921825911d84ff5a82751707da27f69cea4054aa21466fe708206856c",
+  "plan_sha256": "e636c0ce26f79c343fc52f1bb408d80546fe57412c5ecee3af3c145c65d2c1db",
+  "receipt_sha256": "f659dc1108c72f33682a963b8ecff1db021aab04a3c9683d560bf6b229ccf4c9",
+  "receipt_type": "defect-plan-coverage",
+  "schema_version": 1,
+  "status": "passed",
+  "task_id": "summary-v2-historical-backfill-20260813",
+  "task_sha256": "a03bbbf6894df66ffd7f9fa391ee7dce82bc31dafe1ccf52a98e6c22bc5529bc"
+}
