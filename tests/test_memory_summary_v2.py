@@ -15,6 +15,8 @@ from memory_summary_v2 import (  # noqa: E402
     SummaryV2Error,
     build_level_1_source,
     build_parent_source,
+    build_parent_rescue_reduce_source,
+    build_rescue_reduce_source,
     comparison_report,
     normalize_model_candidate,
     persist_sidecar,
@@ -182,6 +184,130 @@ class SummaryV2Test(unittest.TestCase):
             sidecar["retrieval_anchors"][0]["text"],
         )
         self.assertEqual(sidecar, validate_sidecar(sidecar, source))
+
+    def test_derived_file_locator_has_no_surrounding_whitespace(self):
+        job = self.job()
+        job["source_records"][1]["text"] = "File: C:\\tmp\\报告.txt    [edited]"
+        job["source_sha256"] = _source_sha256(job["source_records"])
+        source = build_level_1_source(job)
+        self.assertEqual("C:\\tmp\\报告.txt", source["required_locators"][1]["text"])
+        sidecar = project(source, self.candidate(source))
+        self.assertEqual("C:\\tmp\\报告.txt", sidecar["retrieval_anchors"][1]["text"])
+
+    def test_deterministic_locators_can_exceed_the_model_anchor_limit(self):
+        job = self.job()
+        locator_texts = [f"command-{index:04d}" for index in range(513)]
+        job["source_records"][0]["text"] = " ".join(locator_texts)
+        job["source_sha256"] = _source_sha256(job["source_records"])
+        source = build_level_1_source(job)
+        source["required_locators"] = [
+            {
+                "source_ref": source["source_refs"][0],
+                "text": text,
+                "kind": "command",
+            }
+            for text in locator_texts
+        ]
+        candidate = normalize_model_candidate(
+            self.candidate(source, include_locator=False),
+            source,
+        )
+        sidecar = project(source, candidate)
+        self.assertEqual(513, len(sidecar["retrieval_anchors"]))
+        self.assertEqual(sidecar, validate_sidecar(sidecar, source))
+
+    def test_rescue_maps_reduce_to_the_unchanged_formal_l1_identity(self):
+        left_job = self.job()
+        right_job = self.job(offset=3)
+        formal_records = [*left_job["source_records"], *right_job["source_records"]]
+        formal_job = {
+            **left_job,
+            "job_id": "formal-rescue-job",
+            "target_summary_id": "L1-000777",
+            "source_sha256": _source_sha256(formal_records),
+            "source_message_ids": [item["message_id"] for item in formal_records],
+            "source_records": formal_records,
+        }
+        formal_source = build_level_1_source(formal_job)
+        maps = []
+        for job in (left_job, right_job):
+            source = build_level_1_source(job)
+            maps.append(project(source, self.candidate(source)))
+        rescue_source = build_rescue_reduce_source(formal_source, maps)
+        self.assertEqual(formal_source["parallel_summary_id"], rescue_source["parallel_summary_id"])
+        self.assertEqual(formal_source["source_sha256"], rescue_source["source_sha256"])
+        self.assertEqual(formal_source["source_refs"], rescue_source["source_refs"])
+        rescue_prompt = build_prompt(rescue_source)
+        self.assertIn('"deterministic_locator_count":2', rescue_prompt)
+        self.assertNotIn(
+            'Ran rg -n "summary-v1|summary-v2" scripts tests',
+            rescue_prompt,
+        )
+        self.assertIn("deterministic projector injects every", rescue_prompt)
+        reduced = project(rescue_source, self.candidate(rescue_source))
+        self.assertEqual("L1-000777", reduced["parallel_summary_id"])
+        self.assertEqual(formal_source["source_refs"], reduced["coverage"]["raw_message_ids"])
+
+    def test_parent_rescue_maps_keep_original_direct_child_routes(self):
+        children = []
+        for offset in (0, 3, 6, 9):
+            source = build_level_1_source(self.job(offset=offset))
+            children.append(project(source, self.candidate(source)))
+        formal = build_parent_source(children, parallel_summary_id="L2-000777")
+        maps = []
+        for index in (0, 2):
+            source = build_parent_source(
+                children[index : index + 2],
+                parallel_summary_id=f"L2-000777-map-{index // 2 + 1}",
+            )
+            maps.append(project(source, self.parent_candidate(source)))
+        rescue = build_parent_rescue_reduce_source(formal, maps)
+        self.assertEqual(formal["source_refs"], rescue["source_refs"])
+        self.assertEqual(formal["source_sha256"], rescue["source_sha256"])
+        reduced = project(rescue, self.parent_candidate(rescue))
+        self.assertEqual("L2-000777", reduced["parallel_summary_id"])
+        self.assertEqual(formal["source_refs"], reduced["coverage"]["represented_source_refs"])
+
+    def test_rescue_normalizer_restores_scene_routes_from_maps(self):
+        left_job = self.job()
+        right_job = self.job(offset=3)
+        records = [*left_job["source_records"], *right_job["source_records"]]
+        formal_job = {
+            **left_job,
+            "job_id": "formal-route-repair",
+            "target_summary_id": "L1-000778",
+            "source_sha256": _source_sha256(records),
+            "source_message_ids": [item["message_id"] for item in records],
+            "source_records": records,
+        }
+        formal = build_level_1_source(formal_job)
+        maps = []
+        for job in (left_job, right_job):
+            source = build_level_1_source(job)
+            maps.append(project(source, self.candidate(source)))
+        rescue = build_rescue_reduce_source(formal, maps)
+        candidate = self.candidate(rescue)
+        lost = rescue["source_refs"][-1]
+        candidate["scenes"][0]["source_refs"].remove(lost)
+        normalized = normalize_model_candidate(candidate, rescue)
+        self.assertTrue(
+            any(lost in scene["source_refs"] for scene in normalized["scenes"])
+        )
+        project(rescue, normalized)
+
+    def test_normalizer_adds_navigation_atom_for_scene_only_refs(self):
+        source = build_level_1_source(self.job())
+        candidate = self.candidate(source)
+        missing = source["source_refs"][-1]
+        candidate["atoms"][0]["source_refs"].remove(missing)
+        normalized = normalize_model_candidate(candidate, source)
+        routes = [
+            atom
+            for atom in normalized["atoms"]
+            if atom["local_id"].startswith("detail_route_")
+        ]
+        self.assertTrue(any(missing in atom["source_refs"] for atom in routes))
+        project(source, normalized)
 
     def test_model_candidate_normalization_is_conservative_and_deterministic(self):
         source = build_level_1_source(self.job())

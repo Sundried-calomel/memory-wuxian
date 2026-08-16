@@ -20,6 +20,8 @@ from memory_summary_v2 import (
     MAX_SIDECAR_BYTES,
     SummaryV2Error,
     SOURCE_CHILDREN,
+    SOURCE_RESCUE_MAPS,
+    SOURCE_PARENT_RESCUE_MAPS,
     build_level_1_source,
     build_parent_source,
     normalize_model_candidate,
@@ -29,6 +31,7 @@ from memory_summary_v2 import (
     validate_sidecar,
 )
 from platform_process import no_window_kwargs
+from platform_transaction import atomic_write_canonical_json
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -57,24 +60,69 @@ def build_prompt(source: dict[str, Any]) -> str:
     prompt_name = (
         "summarize-v2-parent.md"
         if source["source_kind"] == SOURCE_CHILDREN
-        else "summarize-v2.md"
+        else (
+            "summarize-v2-parent-rescue-reduce.md"
+            if source["source_kind"] == SOURCE_PARENT_RESCUE_MAPS
+            else
+            "summarize-v2-rescue-reduce.md"
+            if source["source_kind"] == SOURCE_RESCUE_MAPS
+            else "summarize-v2.md"
+        )
     )
     instructions = (ROOT / "prompts" / prompt_name).read_text(encoding="utf-8")
     public = public_source(source)
+    rescue_source = source["source_kind"] in {
+        SOURCE_RESCUE_MAPS,
+        SOURCE_PARENT_RESCUE_MAPS,
+    }
+    source_payload = source["prompt_payload"]
+    if rescue_source:
+        source_payload = {
+            "map_sidecars": [
+                {
+                    "summary_level": sidecar["summary_level"],
+                    "source": {
+                        "source_kind": sidecar["source"]["source_kind"],
+                        "raw_message_ids": sidecar["source"]["raw_message_ids"],
+                    },
+                    "overview": sidecar["overview"],
+                    "scenes": sidecar["scenes"],
+                    "atoms": sidecar["atoms"],
+                    "relations": sidecar["relations"],
+                    "omissions": sidecar["omissions"],
+                }
+                for sidecar in source_payload.get("map_sidecars", [])
+            ]
+        }
+    required_locator_refs = list(
+        dict.fromkeys(locator["source_ref"] for locator in source["required_locators"])
+    )
+    task = {
+        "format_version": 2,
+        "job_id": source["job_id"],
+        "summary_level": source["summary_level"],
+        "conversation_id": source["conversation_id"],
+        "source_kind": source["source_kind"],
+        "source_sha256": source["source_sha256"],
+        "source_refs": source["source_refs"],
+        "source_ref_catalog": source["ref_catalog"],
+        "required_locators": source["required_locators"],
+    }
+    if rescue_source:
+        task["required_locators"] = []
+        task["deterministic_locator_count"] = len(source["required_locators"])
+        task["deterministic_locator_source_refs"] = required_locator_refs
     payload = {
-        "task": {
-            "format_version": 2,
-            "job_id": source["job_id"],
-            "summary_level": source["summary_level"],
-            "conversation_id": source["conversation_id"],
-            "source_kind": source["source_kind"],
-            "source_sha256": source["source_sha256"],
-            "source_refs": source["source_refs"],
-            "source_ref_catalog": source["ref_catalog"],
-            "required_locators": source["required_locators"],
-        },
-        "source_manifest": public["source_manifest"],
-        "source_payload": source["prompt_payload"],
+        "task": task,
+        "source_manifest": (
+            {
+                "kind": public["source_manifest"]["kind"],
+                "validated_record_count": len(public["raw_message_manifest"]),
+            }
+            if rescue_source
+            else public["source_manifest"]
+        ),
+        "source_payload": source_payload,
     }
     return instructions + "\n\n" + json.dumps(
         payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -99,7 +147,7 @@ def codex_command(
     model = str(nested_get(config, ["ai_summary", "model"], "")).strip()
     schema_name = (
         "summary-v2-parent-result.schema.json"
-        if source["source_kind"] == SOURCE_CHILDREN
+        if source["source_kind"] in {SOURCE_CHILDREN, SOURCE_PARENT_RESCUE_MAPS}
         else "summary-v2-result.schema.json"
     )
     command = [
@@ -149,6 +197,7 @@ def run_source(
     candidate: dict[str, Any] | None = None,
     dry_run: bool = False,
     invoker: Callable[[list[str], int, str], dict[str, Any]] = invoke_codex,
+    rejected_candidate_path: Path | None = None,
 ) -> dict[str, Any]:
     prompt = build_prompt(source)
     prompt_bytes = len(prompt.encode("utf-8"))
@@ -178,7 +227,14 @@ def run_source(
     if candidate is None:
         candidate = invoker(command, timeout, prompt)
     candidate = normalize_model_candidate(candidate, source)
-    sidecar = project(source, candidate)
+    try:
+        sidecar = project(source, candidate)
+    except Exception:
+        if rejected_candidate_path is not None:
+            rejected_candidate_path = Path(rejected_candidate_path)
+            rejected_candidate_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_canonical_json(rejected_candidate_path, candidate)
+        raise
     bundle, status = persist_sidecar(sidecar, output_directory, archive_root)
     return {
         "status": status,

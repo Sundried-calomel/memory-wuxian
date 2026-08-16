@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-rescue-single-attempt",
+  "packet_sha256": "fe70cc07885cc6b19376b52e2cbd7ab3878a520181055c1464190c6842fc242c",
+  "checks": [
+    {
+      "check_id": "real-entrypoint-effect",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-retry-gate-tests.log",
+          "sha256": "48ffd0da6eea252d8374b011a5e89e686bd7403e1d87a40f626943d996d2e1f4"
+        }
+      ],
+      "note": "Production Rescue candidate selection was exercised twice; a terminal current-revision attempt produced no second model call while in-progress state remained resumable."
+    },
+    {
+      "check_id": "evidence-roundtrip",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-retry-gate-tests.log",
+          "sha256": "48ffd0da6eea252d8374b011a5e89e686bd7403e1d87a40f626943d996d2e1f4"
+        }
+      ],
+      "note": "Regression tests prove ordered source partitioning, partial-map identity recovery, and unchanged authoritative archive hashes."
+    },
+    {
+      "check_id": "registered-preflight",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-retry-gate-preflight.json",
+          "sha256": "ec380d157cea2ad0149ddd112c2fe14912bd3e7af2a9d1f269ecf892c125890d"
+        }
+      ],
+      "note": "The target was resolved through the registered workbook gate and the task, catalogs, and workbook hashes were frozen before implementation."
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-retry-gate-governor-tests.log",
+          "sha256": "88bd11be31fca7f02c5b13e0b23863988d16d13c9bcf9adc93d8c8c5588fa0cc"
+        }
+      ],
+      "note": "The governance regression suite rejects missing receipts, unknown families, hash drift, and a required but unchanged project workbook."
+    }
+  ]
+}

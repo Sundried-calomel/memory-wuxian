@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-rescue-single-attempt",
+  "objective": "Prevent a failed Summary V2 Rescue node from being selected again under the same runner revision while preserving immutable source and successful summary artifacts.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian",
+  "owner_id": "memory-plane.summary-engine",
+  "platforms": [
+    "windows",
+    "macos",
+    "linux"
+  ],
+  "languages": [
+    "python"
+  ],
+  "path_globs": [
+    "scripts/summary_v2_backfill.py",
+    "tests/test_summary_v2_backfill.py",
+    "docs/retrospectives/memory-wuxian-defect-workbook.md"
+  ],
+  "entrypoints": [
+    "background-worker",
+    "summarizer",
+    "governance",
+    "preflight",
+    "completion"
+  ],
+  "resources": [
+    "task",
+    "process",
+    "background-state",
+    "conversation-history",
+    "raw-evidence",
+    "workbook",
+    "receipt",
+    "hash"
+  ],
+  "operations": [
+    "start",
+    "report",
+    "summarize",
+    "filter",
+    "validate",
+    "complete"
+  ],
+  "data_formats": [
+    "json",
+    "jsonl",
+    "text",
+    "markdown"
+  ],
+  "authorization_boundaries": [
+    "Raw archive and Summary V1 remain read-only.",
+    "Existing successful Summary V2 artifacts remain read-only.",
+    "A failed node may be retried only after an explicit runner revision change or a separately approved recovery action.",
+    "The currently running Rescue process must finish before runner code changes are applied."
+  ],
+  "implementation_units": [
+    {
+      "id": "retry-selection",
+      "owner_id": "memory-plane.summary-engine",
+      "paths": [
+        "scripts/summary_v2_backfill.py"
+      ],
+      "entrypoints": [
+        "background-worker",
+        "summarizer"
+      ],
+      "resources": [
+        "task",
+        "background-state",
+        "conversation-history"
+      ],
+      "operations": [
+        "start",
+        "filter",
+        "summarize"
+      ],
+      "planned_check_ids": [
+        "real-entrypoint-effect",
+        "evidence-roundtrip"
+      ]
+    },
+    {
+      "id": "retry-regression",
+      "owner_id": "memory-plane.summary-engine",
+      "paths": [
+        "tests/test_summary_v2_backfill.py"
+      ],
+      "entrypoints": [
+        "summarizer"
+      ],
+      "resources": [
+        "task",
+        "background-state"
+      ],
+      "operations": [
+        "validate"
+      ],
+      "planned_check_ids": [
+        "real-entrypoint-effect",
+        "evidence-roundtrip"
+      ]
+    },
+    {
+      "id": "defect-learning",
+      "owner_id": "memory-wuxian-governance",
+      "paths": [
+        "docs/retrospectives/memory-wuxian-defect-workbook.md"
+      ],
+      "entrypoints": [
+        "governance",
+        "completion"
+      ],
+      "resources": [
+        "workbook",
+        "receipt",
+        "hash"
+      ],
+      "operations": [
+        "validate",
+        "complete"
+      ],
+      "planned_check_ids": [
+        "registered-preflight",
+        "fail-closed-completion"
+      ]
+    }
+  ],
+  "rule_exclusions": []
+}

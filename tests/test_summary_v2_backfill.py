@@ -14,7 +14,23 @@ from memory_atoms import _source_sha256  # noqa: E402
 from memory_cli import MemoryStore  # noqa: E402
 from memory_summary_v2 import build_level_1_source, project  # noqa: E402
 from platform_transaction import atomic_write_canonical_json  # noqa: E402
-from summary_v2_backfill import SummaryV2Error, build_plan  # noqa: E402
+from summary_v2_backfill import (  # noqa: E402
+    EXECUTION_CONTRACT_FORMAT,
+    MAP_RESCUE_REVISION,
+    PARENT_RESCUE_REVISION,
+    SummaryV2Error,
+    _begin_rescue_attempt,
+    _exclusive_runner_lock,
+    _execution_fingerprint,
+    _chunk_job,
+    _load_rescue_attempt_state,
+    _refresh_plan,
+    _rescue_state_path,
+    _select_single_attempt_candidates,
+    _write_rescue_state,
+    build_plan,
+    run_batch,
+)
 
 
 def summary_markdown(summary_id, level, conversation_id, source_sha, message_ids, children=()):
@@ -182,6 +198,12 @@ class SummaryV2BackfillTest(unittest.TestCase):
         self.assertEqual("ready", by_id["L1-000002"]["status"])
         reasons = {item["summary_id"]: item["reason"] for item in conflicted["quarantine"]}
         self.assertEqual("conflicting-existing-sidecars", reasons["L1-000001"])
+        refreshed_without_external_roots = _refresh_plan(conflicted, [])
+        reasons = {
+            item["summary_id"]: item["reason"]
+            for item in refreshed_without_external_roots["quarantine"]
+        }
+        self.assertEqual("conflicting-existing-sidecars", reasons["L1-000001"])
 
     def test_source_hash_drift_is_quarantined(self):
         path = self.archive / "summaries" / "level-1" / "L1-000001.md"
@@ -197,6 +219,182 @@ class SummaryV2BackfillTest(unittest.TestCase):
     def test_output_inside_archive_is_rejected(self):
         with self.assertRaisesRegex(SummaryV2Error, "outside the archive"):
             build_plan(self.archive, self.archive / "derived")
+
+    def test_unreadable_sidecar_fails_closed_without_writing_plan(self):
+        sidecar = self.output / "existing" / "summary.json"
+        sidecar.parent.mkdir(parents=True)
+        sidecar.write_text("{}", encoding="utf-8")
+        with patch(
+            "summary_v2_backfill.load_sidecar",
+            side_effect=PermissionError("denied"),
+        ):
+            with self.assertRaisesRegex(SummaryV2Error, "cannot read or validate"):
+                build_plan(self.archive, self.output)
+        self.assertFalse((self.output / "backfill" / "plan.json").exists())
+
+    def test_execution_identity_drift_stops_before_plan_mutation(self):
+        contract = _execution_fingerprint()
+        contract["format"] = EXECUTION_CONTRACT_FORMAT
+        contract["windows_user"] = contract["windows_user"] + "-different"
+        path = self.output / "backfill" / "execution-contract.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(contract), encoding="utf-8")
+        config = self.base / "config.yaml"
+        config.write_text("ai_summary: {}\n", encoding="utf-8")
+        with self.assertRaisesRegex(SummaryV2Error, "refusing runner fallback"):
+            run_batch(self.archive, self.output, config, maximum_jobs=1)
+        self.assertFalse((self.output / "backfill" / "plan.json").exists())
+
+    def test_rescue_chunks_are_an_exact_ordered_partition(self):
+        build_plan(self.archive, self.output)
+        task = next(item for item in json.loads(
+            (self.output / "backfill" / "plan.json").read_text(encoding="utf-8")
+        )["tasks"] if item.get("job"))
+        job = json.loads(Path(task["job"]).read_text(encoding="utf-8"))
+        chunks = _chunk_job(job, target_bytes=1)
+        recovered = [
+            message_id
+            for chunk in chunks
+            for message_id in chunk["source_message_ids"]
+        ]
+        self.assertEqual(job["source_message_ids"], recovered)
+        self.assertEqual(len(recovered), len(set(recovered)))
+
+    def test_runner_lock_rejects_a_second_writer_and_cleans_up(self):
+        lock_path = self.output / "backfill" / ".runner-lock"
+        with _exclusive_runner_lock(self.output, "first"):
+            self.assertTrue(lock_path.is_dir())
+            with self.assertRaisesRegex(SummaryV2Error, "another summary-v2 runner"):
+                with _exclusive_runner_lock(self.output, "second"):
+                    self.fail("second runner unexpectedly acquired the lock")
+        self.assertFalse(lock_path.exists())
+
+    def test_rescue_state_merge_preserves_maps_from_disk(self):
+        path = self.output / "backfill" / "rescue" / "state.json"
+        base = {
+            "revision": "fixture-v1",
+            "summary_id": "L1-fixture",
+            "maps": {"map-001": {"source_sha256": "one"}},
+        }
+        _write_rescue_state(path, base)
+        stale = {
+            "revision": "fixture-v1",
+            "summary_id": "L1-fixture",
+            "maps": {"map-002": {"source_sha256": "two"}},
+        }
+        _write_rescue_state(path, stale)
+        self.assertEqual({"map-001", "map-002"}, set(stale["maps"]))
+
+    def test_failed_rescue_revision_schedules_zero_followup_work(self):
+        before = {
+            path.relative_to(self.archive): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in self.archive.rglob("*")
+            if path.is_file()
+        }
+        task = {"summary_id": "L1-fixture"}
+        for family, revision in (
+            ("map", MAP_RESCUE_REVISION),
+            ("parent", PARENT_RESCUE_REVISION),
+        ):
+            path = _rescue_state_path(
+                self.output,
+                family,
+                revision,
+                task["summary_id"],
+            )
+            state = _load_rescue_attempt_state(path, revision, task["summary_id"])
+            _begin_rescue_attempt(path, state)
+            state["attempt_status"] = "failed"
+            state["last_error"] = "fixture validation failure"
+            _write_rescue_state(path, state)
+            with patch("summary_v2_backfill.run_source") as model_call:
+                selected, deferred = _select_single_attempt_candidates(
+                    [task],
+                    self.output,
+                    family,
+                    revision,
+                    1,
+                )
+            self.assertEqual([], selected)
+            self.assertEqual([task["summary_id"]], deferred)
+            model_call.assert_not_called()
+        after = {
+            path.relative_to(self.archive): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in self.archive.rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(before, after)
+
+    def test_in_progress_rescue_can_resume_but_new_revision_is_independent(self):
+        task = {"summary_id": "L1-resume"}
+        path = _rescue_state_path(
+            self.output,
+            "map",
+            MAP_RESCUE_REVISION,
+            task["summary_id"],
+        )
+        state = _load_rescue_attempt_state(
+            path,
+            MAP_RESCUE_REVISION,
+            task["summary_id"],
+        )
+        _begin_rescue_attempt(path, state)
+        state["maps"]["map-001"] = {"source_sha256": "partial"}
+        _write_rescue_state(path, state)
+        selected, deferred = _select_single_attempt_candidates(
+            [task],
+            self.output,
+            "map",
+            MAP_RESCUE_REVISION,
+            1,
+        )
+        self.assertEqual([task], selected)
+        self.assertEqual([], deferred)
+
+        next_revision = MAP_RESCUE_REVISION + ".next"
+        selected, deferred = _select_single_attempt_candidates(
+            [task],
+            self.output,
+            "map",
+            next_revision,
+            1,
+        )
+        self.assertEqual([task], selected)
+        self.assertEqual([], deferred)
+        self.assertFalse(
+            _rescue_state_path(
+                self.output,
+                "map",
+                next_revision,
+                task["summary_id"],
+            ).exists()
+        )
+
+    def test_rescue_selection_reports_terminal_nodes_beyond_batch_limit(self):
+        tasks = [
+            {"summary_id": "L1-ready"},
+            {"summary_id": "L1-terminal"},
+        ]
+        path = _rescue_state_path(
+            self.output,
+            "map",
+            MAP_RESCUE_REVISION,
+            "L1-terminal",
+        )
+        state = _load_rescue_attempt_state(path, MAP_RESCUE_REVISION, "L1-terminal")
+        _begin_rescue_attempt(path, state)
+        state["attempt_status"] = "failed"
+        _write_rescue_state(path, state)
+
+        selected, deferred = _select_single_attempt_candidates(
+            tasks,
+            self.output,
+            "map",
+            MAP_RESCUE_REVISION,
+            1,
+        )
+        self.assertEqual([tasks[0]], selected)
+        self.assertEqual(["L1-terminal"], deferred)
 
 
 if __name__ == "__main__":

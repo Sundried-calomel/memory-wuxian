@@ -309,6 +309,23 @@
   并重新执行受影响测试，不能依赖编译或单元测试间接覆盖格式。
 - Families: `MW-R06`, `G09`.
 
+### MW-SUM-025：Rescue 批次在同一 revision 反复选择失败节点
+
+- 证据：`本机已核验`。Summary V2 历史回填的 `rescue-map` 与 `rescue-parent`
+  在连续 heartbeat 批次中反复选择已经失败的同一节点；部分节点的 reduce 尝试次数
+  因而增长到 5，而批准的收敛合同要求同一 runner revision 只正式尝试一次。
+- 根因：候选选择器只读取主计划中的 quarantine 原因，没有读取当前 Rescue revision 的
+  终态；`rescue-direct` 已有一次性语义，但 map 与 parent 两条入口没有共享该约束。
+- 逃逸边界：既有测试验证了单个 Rescue 调用与分段产物，却没有连续调用同一 revision，
+  也没有验证失败节点第二次运行产生零模型调用。heartbeat 只能编排批次，无法弥补 runner
+  自身缺少幂等重试门。
+- 永久门槛：map 与 parent Rescue 必须使用 revision 隔离的尝试状态；`failed` 或
+  `completed` 在当前 revision 均为终态，后续批次不得再次选择；`in-progress` 可从精确
+  partial map 续传；只有显式提升 revision 才重新准入。每次正式失败必须先持久化错误。
+- 回归：覆盖同 revision 第二次选择为零、批次上限之后的终态仍被完整计数、异常中断
+  可续传、新 revision 可重新准入，以及 raw、Summary V1、既有成功 Summary V2 哈希不变。
+- Families: `MW-R08`, `MW-R11`, `G02`, `G08`, `G11`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。

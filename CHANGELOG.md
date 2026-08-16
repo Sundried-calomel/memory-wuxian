@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Make Summary V2 map and parent Rescue attempts terminal after one formal
+  attempt per runner revision, while preserving exact partial-map recovery
+  after an interrupted in-progress attempt.
+- Store Rescue attempt state by revision so an explicit revision bump can
+  re-admit old failures without rewriting raw archives, Summary V1, or existing
+  successful Summary V2 artifacts.
+- Report all terminal nodes skipped by the current revision, including nodes
+  beyond the active batch limit, and add repeat-run and revision-isolation
+  regressions.
+
 ## 2.15.0 - 2026-08-04
 
 - Add the independent encrypted `project-attachment-v1` stream for explicit

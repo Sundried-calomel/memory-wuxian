@@ -37,6 +37,8 @@ PROJECTOR = "memory_summary_v2.py:traceable-projector-v1"
 PARENT_PROJECTOR = "memory_summary_v2.py:hierarchical-parent-projector-v2"
 SOURCE_LEVEL_1 = "closed-level-1-job"
 SOURCE_CHILDREN = "summary-v2-children"
+SOURCE_RESCUE_MAPS = "summary-v2-rescue-maps"
+SOURCE_PARENT_RESCUE_MAPS = "summary-v2-parent-rescue-maps"
 MAX_SOURCE_REFS = 4096
 MAX_REFS_PER_ITEM = 128
 MAX_OVERVIEW_ITEMS = 24
@@ -44,6 +46,7 @@ MAX_SCENES = 128
 MAX_ATOMS = 512
 MAX_RELATIONS = 1024
 MAX_ANCHORS = 512
+MAX_DETERMINISTIC_ANCHORS = 4096
 MAX_OMISSIONS = 4096
 MAX_TEXT_CHARACTERS = 4000
 MAX_ANCHOR_CHARACTERS = 1000
@@ -165,10 +168,18 @@ def _tool_locators(record: dict[str, Any]) -> list[dict[str, str]]:
     for line in lines:
         match = re.match(r"^File:\s+(.+?)\s+\[[^]]+\]", line.strip())
         if match:
-            locators.append({"text": match.group(1), "kind": "path"})
+            locators.append(
+                {
+                    "text": match.group(1).strip()[:MAX_ANCHOR_CHARACTERS],
+                    "kind": "path",
+                }
+            )
     unique: dict[tuple[str, str], dict[str, str]] = {}
     for locator in locators:
-        unique[(locator["text"], locator["kind"])] = locator
+        text = locator["text"].strip()[:MAX_ANCHOR_CHARACTERS]
+        if text:
+            normalized = {**locator, "text": text}
+            unique[(text, locator["kind"])] = normalized
     return list(unique.values())
 
 
@@ -397,6 +408,80 @@ def build_parent_source(
     }
 
 
+def build_rescue_reduce_source(
+    formal_source: dict[str, Any],
+    map_sidecars: Iterable[dict[str, Any]],
+) -> dict[str, Any]:
+    if formal_source.get("source_kind") != SOURCE_LEVEL_1:
+        raise SummaryV2Error("rescue reduce requires one formal Level-1 source")
+    maps = [validate_sidecar(sidecar) for sidecar in map_sidecars]
+    if len(maps) < 2:
+        raise SummaryV2Error("rescue reduce requires at least two map sidecars")
+    if any(
+        sidecar["summary_level"] != 1
+        or sidecar["conversation_id"] != formal_source["conversation_id"]
+        or sidecar["source"]["source_kind"] not in {SOURCE_LEVEL_1, SOURCE_RESCUE_MAPS}
+        for sidecar in maps
+    ):
+        raise SummaryV2Error("rescue maps must be Level-1 summaries from one conversation")
+    sequence = {
+        record["message_id"]: int(record["sequence"])
+        for record in formal_source["source_manifest"]["records"]
+    }
+    ordered = sorted(
+        maps,
+        key=lambda sidecar: min(sequence[item] for item in sidecar["source"]["raw_message_ids"]),
+    )
+    covered = [
+        message_id
+        for sidecar in ordered
+        for message_id in sidecar["source"]["raw_message_ids"]
+    ]
+    if covered != formal_source["source_refs"] or len(covered) != len(set(covered)):
+        raise SummaryV2Error("rescue maps must form one exact ordered partition")
+    return {
+        **formal_source,
+        "source_kind": SOURCE_RESCUE_MAPS,
+        "prompt_payload": {"map_sidecars": ordered},
+    }
+
+
+def build_parent_rescue_reduce_source(
+    formal_source: dict[str, Any],
+    map_sidecars: Iterable[dict[str, Any]],
+) -> dict[str, Any]:
+    if formal_source.get("source_kind") != SOURCE_CHILDREN:
+        raise SummaryV2Error("parent rescue requires one formal parent source")
+    maps = [validate_sidecar(sidecar) for sidecar in map_sidecars]
+    if len(maps) < 2:
+        raise SummaryV2Error("parent rescue requires at least two map sidecars")
+    if any(
+        sidecar["summary_level"] != formal_source["summary_level"]
+        or sidecar["conversation_id"] != formal_source["conversation_id"]
+        for sidecar in maps
+    ):
+        raise SummaryV2Error("parent rescue maps must share the formal parent identity scope")
+    formal_order = {value: index for index, value in enumerate(formal_source["source_refs"])}
+    ordered = sorted(
+        maps,
+        key=lambda sidecar: min(
+            formal_order[value] for value in sidecar["source"]["source_refs"]
+        ),
+    )
+    covered = [
+        source_ref
+        for sidecar in ordered
+        for source_ref in sidecar["source"]["source_refs"]
+    ]
+    if covered != formal_source["source_refs"] or len(covered) != len(set(covered)):
+        raise SummaryV2Error("parent rescue maps must partition the direct child summaries")
+    return {
+        **formal_source,
+        "source_kind": SOURCE_PARENT_RESCUE_MAPS,
+        "prompt_payload": {"map_sidecars": ordered},
+    }
+
+
 def public_source(source: dict[str, Any]) -> dict[str, Any]:
     catalog = {entry["source_ref"]: entry["source_message_ids"] for entry in source["ref_catalog"]}
     raw_ids: list[str] = []
@@ -405,11 +490,16 @@ def public_source(source: dict[str, Any]) -> dict[str, Any]:
             if message_id not in raw_ids:
                 raw_ids.append(message_id)
     raw_sequence: dict[str, int] = {}
-    if source["source_kind"] == SOURCE_LEVEL_1:
+    if source["source_kind"] in {SOURCE_LEVEL_1, SOURCE_RESCUE_MAPS}:
         raw_manifest = list(source["source_manifest"]["records"])
     else:
         raw_manifest_by_id: dict[str, dict[str, Any]] = {}
-        for child in source["prompt_payload"]["child_sidecars"]:
+        payload_key = (
+            "map_sidecars"
+            if source["source_kind"] == SOURCE_PARENT_RESCUE_MAPS
+            else "child_sidecars"
+        )
+        for child in source["prompt_payload"][payload_key]:
             for record in child["source"]["raw_message_manifest"]:
                 previous = raw_manifest_by_id.get(record["message_id"])
                 if previous is not None and previous != record:
@@ -550,11 +640,120 @@ def normalize_model_candidate(candidate: Any, source: dict[str, Any]) -> Any:
             omissions,
             key=lambda item: source_order.get(item.get("source_ref"), len(source_order)),
         )
+    if source["source_kind"] in {SOURCE_RESCUE_MAPS, SOURCE_PARENT_RESCUE_MAPS}:
+        content_refs = {
+            source_ref
+            for group in ("overview", "scenes", "atoms", "retrieval_anchors")
+            for item in normalized.get(group, [])
+            if isinstance(item, dict)
+            for source_ref in item.get("source_refs", [])
+        }
+        for relation in normalized.get("relations", []):
+            if isinstance(relation, dict):
+                content_refs.update(relation.get("source_refs", []))
+        normalized["omissions"] = [
+            item
+            for item in normalized.get("omissions", [])
+            if item.get("source_ref") not in content_refs
+        ]
+        scene_refs = {
+            source_ref
+            for scene in normalized.get("scenes", [])
+            if isinstance(scene, dict)
+            for source_ref in scene.get("source_refs", [])
+        }
+        missing_scene_refs = content_refs - scene_refs
+        maps = source["prompt_payload"]["map_sidecars"]
+        for map_index, sidecar in enumerate(maps, 1):
+            missing = [
+                source_ref
+                for source_ref in sidecar["source"]["source_refs"]
+                if source_ref in missing_scene_refs
+            ]
+            if not missing:
+                continue
+            title = sidecar["scenes"][0]["title"]
+            summary = " ".join(item["text"] for item in sidecar["overview"])
+            summary = summary[:MAX_TEXT_CHARACTERS].strip()
+            for batch_index in range(0, len(missing), MAX_REFS_PER_ITEM):
+                local_id = f"rescue_route_{map_index}_{batch_index // MAX_REFS_PER_ITEM + 1}"
+                while local_id in used_ids:
+                    local_id = "mw_" + local_id
+                used_ids.add(local_id)
+                batch = missing[batch_index : batch_index + MAX_REFS_PER_ITEM]
+                normalized.setdefault("scenes", []).append(
+                    {
+                        "local_id": local_id,
+                        "title": title,
+                        "summary": summary,
+                        "source_refs": batch,
+                    }
+                )
+                missing_scene_refs.difference_update(batch)
+    if source["source_kind"] not in {SOURCE_CHILDREN, SOURCE_PARENT_RESCUE_MAPS}:
+        detail_refs = {
+            source_ref
+            for group in ("atoms", "retrieval_anchors")
+            for item in normalized.get(group, [])
+            if isinstance(item, dict)
+            for source_ref in item.get("source_refs", [])
+        }
+        represented_refs = {
+            source_ref
+            for group in ("overview", "scenes", "atoms", "retrieval_anchors")
+            for item in normalized.get(group, [])
+            if isinstance(item, dict)
+            for source_ref in item.get("source_refs", [])
+        }
+        for relation in normalized.get("relations", []):
+            if isinstance(relation, dict):
+                represented_refs.update(relation.get("source_refs", []))
+        missing_detail_refs = represented_refs - detail_refs
+        for scene_index, scene in enumerate(normalized.get("scenes", []), 1):
+            if not isinstance(scene, dict):
+                continue
+            missing = [
+                source_ref
+                for source_ref in scene.get("source_refs", [])
+                if source_ref in missing_detail_refs
+            ]
+            if not missing:
+                continue
+            title = str(scene.get("title", "")).strip()
+            if re.search(r"[\u3040-\u30ff\u3400-\u9fff]", title):
+                statement = f"相关细节由场景“{title}”建立导航，需按引用回查原始消息。"
+                scope = "Summary V2 原文导航"
+            else:
+                statement = (
+                    f"Source details are routed through the scene '{title}' and "
+                    "must be verified against the cited raw messages."
+                )
+                scope = "Summary V2 source navigation"
+            for batch_index in range(0, len(missing), MAX_REFS_PER_ITEM):
+                local_id = (
+                    f"detail_route_{scene_index}_"
+                    f"{batch_index // MAX_REFS_PER_ITEM + 1}"
+                )
+                while local_id in used_ids:
+                    local_id = "mw_" + local_id
+                used_ids.add(local_id)
+                batch = missing[batch_index : batch_index + MAX_REFS_PER_ITEM]
+                normalized.setdefault("atoms", []).append(
+                    {
+                        "local_id": local_id,
+                        "atom_type": "work_fact",
+                        "statement": statement,
+                        "epistemic_status": "explicit_fact",
+                        "scope": scope,
+                        "source_refs": batch,
+                    }
+                )
+                missing_detail_refs.difference_update(batch)
     return normalized
 
 
 def validate_candidate(candidate: Any, source: dict[str, Any]) -> dict[str, Any]:
-    is_parent = source["source_kind"] == SOURCE_CHILDREN
+    is_parent = source["source_kind"] in {SOURCE_CHILDREN, SOURCE_PARENT_RESCUE_MAPS}
     candidate = _exact(
         candidate,
         {
@@ -653,7 +852,10 @@ def validate_candidate(candidate: Any, source: dict[str, Any]) -> dict[str, Any]
         atom_by_local[local_id] = normalized
 
     anchors: list[dict[str, Any]] = []
-    for index, raw in enumerate(array("retrieval_anchors", MAX_ANCHORS)):
+    anchor_limit = max(MAX_ANCHORS, len(source["required_locators"]))
+    if anchor_limit > MAX_DETERMINISTIC_ANCHORS:
+        raise SummaryV2Error("deterministic retrieval anchors exceed the staged limit")
+    for index, raw in enumerate(array("retrieval_anchors", anchor_limit)):
         location = f"candidate.retrieval_anchors[{index}]"
         item = _exact(raw, {"local_id", "text", "kind", "source_refs"}, location)
         kind = item["kind"]
@@ -956,7 +1158,11 @@ def project(source: dict[str, Any], candidate: Any) -> dict[str, Any]:
     result = {
         "format": FORMAT,
         "format_version": FORMAT_VERSION,
-        "projector": PARENT_PROJECTOR if source["source_kind"] == SOURCE_CHILDREN else PROJECTOR,
+        "projector": (
+            PARENT_PROJECTOR
+            if source["source_kind"] in {SOURCE_CHILDREN, SOURCE_PARENT_RESCUE_MAPS}
+            else PROJECTOR
+        ),
         "summary_v2_id": summary_v2_id,
         "summary_level": source["summary_level"],
         "parallel_summary_id": source["parallel_summary_id"],
@@ -1051,11 +1257,16 @@ def validate_sidecar(
     )
     if expected_source is not None and source != public_source(expected_source):
         raise SummaryV2Error("sidecar source does not match the validated source bundle")
-    if source["source_kind"] not in {SOURCE_LEVEL_1, SOURCE_CHILDREN}:
+    if source["source_kind"] not in {
+        SOURCE_LEVEL_1,
+        SOURCE_CHILDREN,
+        SOURCE_RESCUE_MAPS,
+        SOURCE_PARENT_RESCUE_MAPS,
+    }:
         raise SummaryV2Error("sidecar.source.source_kind is unsupported")
     expected_projector = (
         PARENT_PROJECTOR
-        if source["source_kind"] == SOURCE_CHILDREN
+        if source["source_kind"] in {SOURCE_CHILDREN, SOURCE_PARENT_RESCUE_MAPS}
         else PROJECTOR
     )
     if sidecar["projector"] != expected_projector:
@@ -1138,7 +1349,7 @@ def validate_sidecar(
             message_ids, key=lambda message_id: int(raw_by_id[message_id]["sequence"])
         ):
             raise SummaryV2Error(f"source ref {source_ref} raw messages are not ordered")
-    if source["source_kind"] == SOURCE_LEVEL_1:
+    if source["source_kind"] in {SOURCE_LEVEL_1, SOURCE_RESCUE_MAPS}:
         manifest = _exact(
             source["source_manifest"], {"kind", "records"}, "sidecar.source.source_manifest"
         )
@@ -1231,7 +1442,10 @@ def validate_sidecar(
         if source["source_sha256"] != canonical_sha256(manifest):
             raise SummaryV2Error("parent source SHA-256 disagrees with child manifest")
     required_locators = source["required_locators"]
-    if not isinstance(required_locators, list) or len(required_locators) > MAX_ANCHORS:
+    if (
+        not isinstance(required_locators, list)
+        or len(required_locators) > MAX_DETERMINISTIC_ANCHORS
+    ):
         raise SummaryV2Error("sidecar.source.required_locators is malformed")
     locator_keys: set[tuple[str, str, str]] = set()
     for index, raw in enumerate(required_locators):
@@ -1253,11 +1467,12 @@ def validate_sidecar(
     all_item_ids: set[str] = set()
     content_refs: set[str] = set()
     atom_ids: set[str] = set()
+    deterministic_anchor_limit = max(MAX_ANCHORS, len(required_locators))
     for group_name, fields, maximum, minimum in (
         ("overview", {"item_id", "text", "source_refs", "source_message_ids"}, MAX_OVERVIEW_ITEMS, 1),
         ("scenes", {"item_id", "title", "summary", "source_refs", "source_message_ids"}, MAX_SCENES, 1),
         ("atoms", {"item_id", "atom_type", "statement", "epistemic_status", "scope", "source_refs", "source_message_ids"}, MAX_ATOMS, 1),
-        ("retrieval_anchors", {"item_id", "text", "kind", "source_refs", "source_message_ids"}, MAX_ANCHORS, 0),
+        ("retrieval_anchors", {"item_id", "text", "kind", "source_refs", "source_message_ids"}, deterministic_anchor_limit, 0),
     ):
         group = sidecar[group_name]
         if not isinstance(group, list) or not minimum <= len(group) <= maximum:
@@ -1374,7 +1589,7 @@ def validate_sidecar(
         raise SummaryV2Error("sidecar both represents and omits a source ref")
     if content_refs | set(omitted_refs) != set(source_refs):
         raise SummaryV2Error("sidecar source accounting is incomplete")
-    if source["source_kind"] == SOURCE_CHILDREN:
+    if source["source_kind"] in {SOURCE_CHILDREN, SOURCE_PARENT_RESCUE_MAPS}:
         scene_refs = {
             source_ref
             for scene in sidecar["scenes"]
@@ -1524,7 +1739,10 @@ def validate_sidecar(
 
 def render_markdown(sidecar: dict[str, Any]) -> str:
     sidecar = validate_sidecar(sidecar)
-    is_parent = sidecar["source"]["source_kind"] == SOURCE_CHILDREN
+    is_parent = sidecar["source"]["source_kind"] in {
+        SOURCE_CHILDREN,
+        SOURCE_PARENT_RESCUE_MAPS,
+    }
 
     def refs(item: dict[str, Any]) -> str:
         source_refs = ", ".join(f"`{value}`" for value in item.get("source_refs", []))
