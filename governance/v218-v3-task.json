@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-capture-structure-v3",
+  "objective": "Replace ad hoc JSON aggregation with typed batch results and consolidate cross-platform event-loop state transitions while preserving observable output, capture ordering, and platform-specific watcher behavior.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian",
+  "owner_id": "capture-core",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["rust", "python", "json", "markdown"],
+  "path_globs": [
+    "native-collector/src/lib.rs",
+    "native-collector/src/**/*.rs",
+    "tests/test_v218_v3_contract.py",
+    "tests/test_product_architecture.py",
+    "docs/work-contracts/v2.18-v3.json",
+    "docs/refactoring/v2.18-module-remediation-ledger.md",
+    "docs/rehearsals/v2.18-v3*.json",
+    "governance/v218-v3-*"
+  ],
+  "entrypoints": [
+    "Store::sync_batch",
+    "Store::sync_startup_batch",
+    "run_event_loop"
+  ],
+  "resources": [
+    "capture-batch-result",
+    "codex-rollout-source",
+    "capture-cursor",
+    "capture-wal",
+    "collector-telemetry",
+    "coverage-status"
+  ],
+  "operations": [
+    "parse",
+    "aggregate",
+    "serialize",
+    "watch",
+    "sync",
+    "write-telemetry",
+    "validate",
+    "document"
+  ],
+  "data_formats": ["json", "jsonl", "rust", "markdown"],
+  "authorization_boundaries": [
+    "Preserve the exact public batch JSON fields, nullability, counters, partial-error shape, and error propagation behavior.",
+    "Preserve WAL, archive-lock, cursor, backup-debt, coverage, summary-job, deterministic-index, and telemetry operation ordering.",
+    "Keep watcher acquisition, event draining, debounce, and watcher refresh platform-specific while sharing only the common rollout-cycle state transition.",
+    "Do not modify live archives, installed components, running processes, summary rules, deterministic-index semantics, cloud or federation protocols, packaging, version numbers, or release state.",
+    "Do not claim macOS runtime execution from Windows; use compile/source-contract evidence and require a later native macOS run before release."
+  ],
+  "implementation_units": [
+    {
+      "id": "typed-batch-result",
+      "owner_id": "capture-core",
+      "paths": ["native-collector/src/lib.rs", "tests/test_v218_v3_contract.py"],
+      "entrypoints": ["Store::sync_batch", "Store::sync_startup_batch"],
+      "resources": ["capture-batch-result", "capture-cursor", "capture-wal"],
+      "operations": ["parse", "aggregate", "serialize", "sync", "validate"],
+      "planned_check_ids": ["batch-json-byte-parity", "partial-source-error-parity", "batch-counter-and-session-merge-parity"]
+    },
+    {
+      "id": "shared-event-cycle",
+      "owner_id": "capture-core",
+      "paths": ["native-collector/src/lib.rs", "tests/test_v218_v3_contract.py"],
+      "entrypoints": ["run_event_loop"],
+      "resources": ["codex-rollout-source", "collector-telemetry", "coverage-status"],
+      "operations": ["watch", "sync", "write-telemetry", "validate"],
+      "planned_check_ids": ["event-cycle-positive", "event-cycle-sync-failure", "cross-platform-watcher-contract"]
+    },
+    {
+      "id": "v3-evidence-and-ledger",
+      "owner_id": "product-quality",
+      "paths": ["docs/work-contracts/v2.18-v3.json", "docs/refactoring/v2.18-module-remediation-ledger.md", "docs/rehearsals/v2.18-v3*.json", "governance/v218-v3-*"],
+      "entrypoints": ["v218-v3-candidate-evaluation"],
+      "resources": ["v3-contract", "v3-rehearsal", "v3-independent-evaluation"],
+      "operations": ["validate", "document"],
+      "planned_check_ids": ["candidate-identity", "architecture-contract", "independent-evaluation"]
+    }
+  ],
+  "rule_exclusions": []
+}

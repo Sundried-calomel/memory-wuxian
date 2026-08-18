@@ -1,0 +1,31 @@
+{
+  "evidence": [
+    {
+      "check_id": "unicode-path-fixtures",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-v3-validation.json",
+      "sha256": "26e4bedcea113586c4b409e1b588de4442eba68c00a32053feb0c287c7907255"
+    }
+  ],
+  "load_receipt_internal_sha256": "4061014fdd21499d6562cd970e00a5a27bbb643573c9f6359027b76d90647f62",
+  "load_receipt_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-v3-load.json",
+  "load_receipt_sha256": "6fffc18fd980b518728fbb6334bf5f86051bc462bde5798dbccf8a946de3ccf8",
+  "packet_file_sha256": "dcb1bd5986f57ad7e3e9bdca348f344e873783464aac80b543c386b4f6b4a897",
+  "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-v3-packet.json",
+  "packet_sha256": "e085d129f28291f1ecb10a8c47d33d37c89271d92eebc1ba7663ce26b692dd64",
+  "passed_check_ids": [
+    "unicode-path-fixtures"
+  ],
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-v3-preflight.json",
+  "preflight_sha256": "1c6669f7a40c4f31169f65f28d327fa599172c0efef7c161e793e727f8fdd19b",
+  "receipt_sha256": "94faa0ebc330606fd20551f2da827fcfd1b18c5b27dcec468c9019ddd37678e0",
+  "receipt_type": "defect-prevention-verification",
+  "required_check_ids": [
+    "unicode-path-fixtures"
+  ],
+  "results_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-v3-results.json",
+  "results_sha256": "0faf263c2e58569fdc74d15759fb48f4c766d916d1720aeb5f2748e3bce449f5",
+  "schema_version": 1,
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "verified_at": "2026-08-18T15:09:53.470482+00:00"
+}

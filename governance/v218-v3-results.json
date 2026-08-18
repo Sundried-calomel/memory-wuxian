@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-capture-structure-v3",
+  "packet_sha256": "e085d129f28291f1ecb10a8c47d33d37c89271d92eebc1ba7663ce26b692dd64",
+  "checks": [
+    {
+      "check_id": "unicode-path-fixtures",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-v3-validation.json",
+          "sha256": "26e4bedcea113586c4b409e1b588de4442eba68c00a32053feb0c287c7907255"
+        }
+      ],
+      "note": "Golden and black-box parity fixtures preserved Chinese, yen symbols, emoji, spaces, and structured path fields across single-batch and multi-batch capture."
+    }
+  ]
+}

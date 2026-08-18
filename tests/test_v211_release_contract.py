@@ -31,11 +31,15 @@ class V211ReleaseContractTest(unittest.TestCase):
 
     def test_mw211_02_incremental_sync_cannot_overwrite_global_coverage(self):
         source = (ROOT / "native-collector/src/lib.rs").read_text(encoding="utf-8")
+        production = source.split("#[cfg(test)]", 1)[0]
         batch = source.split("fn sync_batch(&self", 1)[1].split(
             "fn sync_batch_unlocked", 1
         )[0]
         self.assertNotIn("write_coverage_status", batch)
-        self.assertEqual(source.count("store.write_coverage_status(&current_paths)?;"), 2)
+        self.assertEqual(
+            production.count("store.write_coverage_status(&current_paths)?;"), 1
+        )
+        self.assertEqual(production.count("process_rollout_cycle("), 3)
         self.assertEqual(source.count("store.write_coverage_status(&scoped_paths)?;"), 2)
         cursor = (ROOT / "native-collector/src/store/cursor.rs").read_text(encoding="utf-8")
         self.assertIn("fn requires_sync", cursor)

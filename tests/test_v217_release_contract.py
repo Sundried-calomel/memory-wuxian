@@ -30,6 +30,7 @@ class V217ReleaseContractTests(unittest.TestCase):
         launcher = (ROOT / "native-collector/src/main.rs").read_text(encoding="utf-8")
         core_launcher = (ROOT / "native-collector/src/bin/memory-wuxian-core-launcher.rs").read_text(encoding="utf-8")
         implementation = (ROOT / "native-collector/src/lib.rs").read_text(encoding="utf-8")
+        production = implementation.split("#[cfg(test)]", 1)[0]
         self.assertLess(len(launcher.splitlines()), 10)
         self.assertIn("run_in_thread", launcher)
         self.assertIn("run_in_thread", core_launcher)
@@ -38,8 +39,10 @@ class V217ReleaseContractTests(unittest.TestCase):
         self.assertLess(run_block.index("mark_watcher_ready"), run_block.index("sync_startup_batch"))
         self.assertEqual(
             implementation.count("rollouts_requiring_sync(store, &current_paths)?"),
-            2,
+            1,
         )
+        self.assertEqual(production.count("fn process_rollout_cycle("), 1)
+        self.assertEqual(production.count("process_rollout_cycle("), 3)
         self.assertIn("refreshed_watcher_baseline_cannot_hide_cursor_debt", implementation)
 
 
