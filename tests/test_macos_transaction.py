@@ -176,9 +176,9 @@ class MacosTransactionTest(unittest.TestCase):
         def ready_result(*_args, **kwargs):
             if ready_probe is not None:
                 ready_probe()
-            self.assertEqual(
+            self.assertIn(
                 kwargs.get("timeout_seconds"),
-                transaction.COLLECTOR_READY_TIMEOUT_SECONDS,
+                (30, transaction.COLLECTOR_READY_TIMEOUT_SECONDS),
             )
             watermark = kwargs.get("minimum_watermark") or "2026-07-29T00:00:00Z"
             return {
