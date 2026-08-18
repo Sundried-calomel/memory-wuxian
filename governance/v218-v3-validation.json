@@ -3,6 +3,12 @@
   "task_id": "memory-wuxian-v218-capture-structure-v3",
   "producer_candidate": "v2.18-v3-typed-batch-and-shared-event-cycle",
   "validated_at": "2026-08-19T00:05:48.2909911+09:00",
+  "artifact_hash_contract": {
+    "algorithm": "sha256",
+    "byte_source": "checked-out file bytes",
+    "line_endings": "LF enforced by .gitattributes on every hash-bound V3 artifact",
+    "gitattributes_sha256": "08add79ed64cfeb86b5644f5ac0705b945043239aa37f6a4f96000a824ecc7f5"
+  },
   "artifact_hashes": {
     "baseline_windows_debug_exe": "96d907fe2e87988cdae3ed232c6b231366e498bb8ccaa74744e47d0134f4e44f",
     "candidate_windows_debug_exe": "e079a690914fd62c309fa402e65e9838a5a3d57653b5b87f0428a212cc638237",
@@ -45,6 +51,11 @@
       "check_id": "unicode-path-fixtures",
       "status": "passed",
       "evidence": "The production binary parity fixture round-tripped Chinese, Japanese currency symbols, yen signs, emoji, spaces, and long multi-batch text."
+    },
+    {
+      "check_id": "cross-platform-hash-bytes",
+      "status": "passed",
+      "evidence": "The repository now enforces LF checkout bytes for the V3 source, contract, tests, rehearsal, and governance evidence that participate in SHA-256 binding."
     },
     {
       "check_id": "rust-suite",

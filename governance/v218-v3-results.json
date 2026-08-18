@@ -9,7 +9,7 @@
       "evidence": [
         {
           "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-v3-validation.json",
-          "sha256": "26e4bedcea113586c4b409e1b588de4442eba68c00a32053feb0c287c7907255"
+          "sha256": "4b14c10ab1a05232106464a4d65a480f1a093a3716136d71d6c47550ee0648e1"
         }
       ],
       "note": "Golden and black-box parity fixtures preserved Chinese, yen symbols, emoji, spaces, and structured path fields across single-batch and multi-batch capture."

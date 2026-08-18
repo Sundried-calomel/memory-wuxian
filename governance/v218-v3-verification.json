@@ -3,7 +3,7 @@
     {
       "check_id": "unicode-path-fixtures",
       "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-v3-validation.json",
-      "sha256": "26e4bedcea113586c4b409e1b588de4442eba68c00a32053feb0c287c7907255"
+      "sha256": "4b14c10ab1a05232106464a4d65a480f1a093a3716136d71d6c47550ee0648e1"
     }
   ],
   "load_receipt_internal_sha256": "4061014fdd21499d6562cd970e00a5a27bbb643573c9f6359027b76d90647f62",
@@ -17,15 +17,15 @@
   ],
   "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-v3-preflight.json",
   "preflight_sha256": "1c6669f7a40c4f31169f65f28d327fa599172c0efef7c161e793e727f8fdd19b",
-  "receipt_sha256": "94faa0ebc330606fd20551f2da827fcfd1b18c5b27dcec468c9019ddd37678e0",
+  "receipt_sha256": "2d8d8691ad66f98acebc016b4513a552399d65c8754836e9718e7c1a0dc7b7b7",
   "receipt_type": "defect-prevention-verification",
   "required_check_ids": [
     "unicode-path-fixtures"
   ],
   "results_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-v3-results.json",
-  "results_sha256": "0faf263c2e58569fdc74d15759fb48f4c766d916d1720aeb5f2748e3bce449f5",
+  "results_sha256": "2f3dda7e4845fcf2321aabf4e80889dec2907aa98dadb09963bebef2cea6d932",
   "schema_version": 1,
   "status": "passed",
   "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
-  "verified_at": "2026-08-18T15:09:53.470482+00:00"
+  "verified_at": "2026-08-18T15:32:18.756405+00:00"
 }
