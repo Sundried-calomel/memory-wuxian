@@ -36,6 +36,11 @@ class V217ReleaseContractTests(unittest.TestCase):
         run_block = implementation[implementation.index("fn run() -> Result<()>"):]
         self.assertLess(run_block.index("prepare_watcher"), run_block.index("recent_rollouts"))
         self.assertLess(run_block.index("mark_watcher_ready"), run_block.index("sync_startup_batch"))
+        self.assertEqual(
+            implementation.count("rollouts_requiring_sync(store, &current_paths)?"),
+            2,
+        )
+        self.assertIn("refreshed_watcher_baseline_cannot_hide_cursor_debt", implementation)
 
 
 if __name__ == "__main__":

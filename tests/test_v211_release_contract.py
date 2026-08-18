@@ -42,11 +42,24 @@ class V211ReleaseContractTest(unittest.TestCase):
         self.assertNotIn('if cursor.get("excluded_reason").is_some()', source)
 
     def test_mw2115_legacy_ai_path_is_absent_from_collector_production(self):
-        source = (ROOT / "native-collector/src/lib.rs").read_text(encoding="utf-8")
-        production = source.split("#[cfg(test)]", 1)[0]
-        self.assertNotIn("run_one_shot_summary", production)
-        self.assertNotIn("semantic_dispatch.py", production)
-        self.assertNotIn("command.output()", production)
+        paths = (
+            "native-collector/src/lib.rs",
+            "native-collector/src/locking.rs",
+            "native-collector/src/runtime.rs",
+            "native-collector/src/source/mod.rs",
+            "native-collector/src/store/mod.rs",
+            "native-collector/src/store/cursor.rs",
+            "native-collector/src/store/transaction.rs",
+            "native-collector/src/telemetry.rs",
+            "native-collector/src/main.rs",
+            "native-collector/src/bin/memory-wuxian-core-launcher.rs",
+        )
+        production = "\n".join(
+            (ROOT / path).read_text(encoding="utf-8").split("#[cfg(test)]", 1)[0]
+            for path in paths
+        )
+        for forbidden in ("run_one_shot_summary", "semantic_dispatch.py", "command.output()"):
+            self.assertNotIn(forbidden, production)
         self.assertIn("self.maybe_create_level_one_job()?", production)
 
     def test_mw211_03_background_effect_gate_is_explicit(self):
