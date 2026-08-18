@@ -14,10 +14,16 @@ archive_root="$user_home/Documents/MemoryWuxianArchive"
 sessions_root="$user_home/.codex/sessions"
 active_root_pointer="$user_home/.codex/memory-wuxian-active-root.txt"
 if [[ -f "$active_root_pointer" ]]; then
-  preserved_archive_root="$(/usr/bin/head -n 1 "$active_root_pointer")"
-  if [[ -n "$preserved_archive_root" && "$preserved_archive_root" = /* ]]; then
-    archive_root="$preserved_archive_root"
+  preserved_archive_root="$(/bin/cat "$active_root_pointer")"
+  if [[ "$preserved_archive_root" == *$'\n'* ]]; then
+    echo "MemoryWuxian active archive pointer must contain exactly one path." >&2
+    exit 1
   fi
+  if [[ -z "$preserved_archive_root" || "$preserved_archive_root" != /* || ! -d "$preserved_archive_root" ]]; then
+    echo "MemoryWuxian active archive pointer is invalid: $active_root_pointer" >&2
+    exit 1
+  fi
+  archive_root="$preserved_archive_root"
 fi
 
 find_python() {
@@ -77,12 +83,32 @@ if ! /usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
   fi
 fi
 
-/bin/mkdir -p "$archive_root" "$sessions_root" "$user_home/.codex"
-/usr/sbin/chown -R "$console_user":staff "$archive_root" "$sessions_root"
+/usr/bin/install -d -o "$console_user" -g staff "$user_home/.codex"
+if [[ ! -e "$archive_root" ]]; then
+  /usr/bin/install -d -o "$console_user" -g staff "$archive_root"
+fi
+if [[ ! -d "$archive_root" ]]; then
+  echo "MemoryWuxian archive root is not a directory: $archive_root" >&2
+  exit 1
+fi
+archive_root="$(cd "$archive_root" && /bin/pwd -P)"
+if [[ ! -e "$sessions_root" ]]; then
+  /usr/bin/install -d -o "$console_user" -g staff "$sessions_root"
+fi
+if [[ ! -d "$sessions_root" ]]; then
+  echo "MemoryWuxian sessions root is not a directory: $sessions_root" >&2
+  exit 1
+fi
 
-/usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
-  "$python_executable" "$source_root/scripts/memory_cli.py" \
-  --root "$archive_root" --config "$source_root/config.yaml" init >/dev/null
+if [[ ! -f "$archive_root/state.json" ]]; then
+  if [[ -n "$(/bin/ls -A "$archive_root")" ]]; then
+    echo "MemoryWuxian refuses to initialize a non-empty unknown archive: $archive_root" >&2
+    exit 1
+  fi
+  /usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
+    "$python_executable" "$source_root/scripts/memory_cli.py" \
+    --root "$archive_root" --config "$source_root/config.yaml" init >/dev/null
+fi
 
 /usr/bin/sudo -u "$console_user" /usr/bin/env HOME="$user_home" \
   "$python_executable" "$source_root/scripts/install_macos_transaction.py" \
@@ -104,7 +130,10 @@ node_display_name="$(/usr/sbin/scutil --get ComputerName 2>/dev/null || /bin/hos
   --skill-root "$skill_root" \
   --python-executable "$python_executable" >/dev/null
 
-printf '%s\n' "$archive_root" > "$active_root_pointer"
-/usr/sbin/chown "$console_user":staff "$active_root_pointer"
+committed_archive_root="$(/bin/cat "$active_root_pointer")"
+if [[ "$committed_archive_root" == *$'\n'* || "$committed_archive_root" != "$archive_root" ]]; then
+  echo "MemoryWuxian transaction did not commit the requested archive root." >&2
+  exit 1
+fi
 
 exit 0

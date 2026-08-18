@@ -20,7 +20,7 @@ from memory_project_attachments import (
 class V215ReleaseContractTests(unittest.TestCase):
     def test_version_and_public_contract_are_synchronized(self):
         version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertEqual(version, "2.15.0")
+        self.assertGreaterEqual(tuple(map(int, version.split("."))), (2, 15, 0))
         self.assertEqual(
             json.loads((ROOT / "docs" / "documentation-contract.json").read_text(encoding="utf-8"))["reviewed_version"],
             version,

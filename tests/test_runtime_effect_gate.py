@@ -1,192 +1,164 @@
+from __future__ import annotations
+
 import json
-import os
 import sys
-import tempfile
-import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from tempfile import TemporaryDirectory
+from unittest import mock
+
+SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+from runtime_effect_gate import check_runtime_effects
 
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
+class RuntimeEffectGateTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = TemporaryDirectory()
+        self.root = Path(self.temporary.name) / "归档 root"
+        self.lifecycle = self.root / "imports" / "codex" / "collector-lifecycle.json"
+        self.telemetry = self.root / "imports" / "codex" / "collector-telemetry.json"
+        self.lifecycle.parent.mkdir(parents=True, exist_ok=True)
+        self.telemetry.parent.mkdir(parents=True, exist_ok=True)
+        self.command = [
+            str(Path(self.temporary.name) / "collector.exe"),
+            "--archive-root",
+            str(self.root),
+        ]
+        self.manifest = {
+            "format": "memory-wuxian-collector-lifecycle-v1",
+            "generation": "generation-2.16",
+            "archive_root": str(self.root),
+            "expected_command": self.command,
+            "startup_owners": [
+                {
+                    "owner_id": "task:MemoryWuxianCollector",
+                    "kind": "windows-task",
+                    "generation": "generation-2.16",
+                    "archive_root": str(self.root),
+                    "command": self.command,
+                    "pid_identity": "required",
+                }
+            ],
+        }
+        self.status = {
+            "format_version": 2,
+            "pid": 731,
+            "phase": "ready",
+            "ready": True,
+            "source_watermark": "event-41",
+            "archive_watermark": "event-41",
+            "updated_at": "2026-08-18T00:00:00+00:00",
+        }
+        self.now = datetime(2026, 8, 18, tzinfo=timezone.utc)
+        self._write_state()
 
-from memory_cli import MemoryStore, load_simple_yaml  # noqa: E402
-from runtime_effect_gate import check_runtime_effects  # noqa: E402
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
 
-
-class RuntimeEffectGateTest(unittest.TestCase):
-    def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.base = Path(self.temporary.name)
-        self.archive = self.base / "archive"
-        self.config = self.base / "config.yaml"
-        self.config.write_text(
-            "summaries:\n  higher_level_trigger_count: 2\n  maximum_summary_depth: 4\n"
-            "backup:\n  enabled: false\n",
-            encoding="utf-8",
+    def _write_state(self) -> None:
+        self.lifecycle.write_text(
+            json.dumps(self.manifest, ensure_ascii=False), encoding="utf-8"
         )
-        self.store = MemoryStore(self.archive, load_simple_yaml(self.config))
-        self.store.init()
-        supervisor = self.archive / "maintenance/supervisor-state.json"
-        supervisor.parent.mkdir(parents=True, exist_ok=True)
-        supervisor.write_text(
-            json.dumps({"status": "healthy"}),
-            encoding="utf-8",
-        )
-
-    def test_clean_runtime_passes(self):
-        result = check_runtime_effects(self.archive, self.config)
-        self.assertEqual(result["status"], "pass")
-
-    def test_hidden_effect_failures_are_independently_reported(self):
-        index = self.archive / "indexes/conversations.jsonl"
-        index.write_text('{"message_id":"missing"}\n', encoding="utf-8")
-        backup = self.base / "backups"
-        backup.mkdir()
-        orphan = backup / ".2026-08-01_120000_000001.tmp-1234"
-        orphan.mkdir()
-        self.config.write_text(
-            self.config.read_text(encoding="utf-8").replace(
-                "backup:\n  enabled: false\n",
-                f'backup:\n  enabled: true\n  directory: "{backup}"\n',
-            ),
-            encoding="utf-8",
-        )
-        job = self.archive / "maintenance/jobs/quarantined/job.json"
-        job.parent.mkdir(parents=True)
-        job.write_text(
-            json.dumps({"job_id": "job-1", "state": "quarantined"}),
-            encoding="utf-8",
-        )
-        supervisor = self.archive / "maintenance/supervisor-state.json"
-        os.utime(supervisor, (time.time() - 3600, time.time() - 3600))
-
-        result = check_runtime_effects(self.archive, self.config)
-        codes = {item["code"] for item in result["failures"]}
-        self.assertEqual(result["status"], "fail")
-        self.assertIn("conversation-index-not-converged", codes)
-        self.assertIn("incomplete-backup-residue", codes)
-        self.assertIn("permanent-maintenance-debt", codes)
-        self.assertIn("maintenance-supervisor-not-healthy", codes)
-
-    def test_parent_backlog_is_catching_up_when_one_parent_job_is_pending(self):
-        pending = self.archive / "pending/job-000001.json"
-        pending.parent.mkdir(parents=True, exist_ok=True)
-        pending.write_text(
-            json.dumps({
-                "job_id": "job-000001",
-                "summary_level": 2,
-                "source_signature": "conversation:codex:test:children:L1-1,L1-2",
-            }),
-            encoding="utf-8",
-        )
-        with patch(
-            "runtime_effect_gate.semantic_parent_debt",
-            return_value=[{"conversation_id": "codex:other", "source_level": 1}],
-        ):
-            result = check_runtime_effects(self.archive, self.config)
-
-        self.assertEqual(result["status"], "pass")
-        self.assertEqual(len(result["observations"]["pending_parent_jobs"]), 1)
-
-    def test_parent_backlog_fails_when_no_parent_job_is_pending(self):
-        with patch(
-            "runtime_effect_gate.semantic_parent_debt",
-            return_value=[{"conversation_id": "codex:test", "source_level": 1}],
-        ):
-            result = check_runtime_effects(self.archive, self.config)
-
-        self.assertIn(
-            "semantic-parent-job-missing",
-            {item["code"] for item in result["failures"]},
+        self.telemetry.write_text(
+            json.dumps(self.status, ensure_ascii=False), encoding="utf-8"
         )
 
-    def test_windows_activation_fails_on_sandbox_profile_shortcut(self):
-        skill = self.base / ".codex" / "skills" / "memory-wuxian"
-        launcher = skill / "bin" / "memory-wuxian-dashboard-launcher.exe"
-        icon = skill / "assets" / "memory-wuxian.ico"
-        inspector = skill / "scripts" / "inspect_dashboard_shortcut_windows.ps1"
-        for path in (launcher, icon, inspector):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"test")
-        python = self.base / "python.exe"
-        python.write_bytes(b"test")
-        launcher_config = self.base / "launcher.json"
-        launcher_config.write_text(
-            json.dumps({
-                "python_executable": str(python),
-                "archive_root": str(self.archive),
-            }),
-            encoding="utf-8",
+    def _inspect(self, _pid: int) -> dict[str, object]:
+        return {"running": True, "command": self.command}
+
+    def test_default_paths_prove_configured_and_live_effect(self) -> None:
+        result = check_runtime_effects(
+            self.root, now=self.now, process_inspector=self._inspect
         )
-        shortcut_path = self.base / "Memory.lnk"
-        shortcut_path.write_bytes(b"test")
-        with patch(
-            "runtime_effect_gate.inspect_windows_shortcut",
-            return_value={
-                "exists": True,
-                "target_exists": True,
-                "target": r"C:\Users\CodexSandboxOffline\.codex\skills\memory-wuxian\bin\memory-wuxian-dashboard-launcher.exe",
-                "working_directory": r"C:\Users\CodexSandboxOffline\.codex\skills\memory-wuxian",
-                "icon": r"C:\Users\CodexSandboxOffline\.codex\skills\memory-wuxian\assets\memory-wuxian.ico,0",
-                "arguments": "",
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["format"], "memory-wuxian-runtime-effect-v2")
+        self.assertEqual(result["reason_codes"], [])
+
+    def test_missing_manifest_fails_closed_with_structured_code(self) -> None:
+        self.lifecycle.unlink()
+        result = check_runtime_effects(
+            self.root, now=self.now, process_inspector=self._inspect
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual(
+            result["reason_codes"], [{"code": "collector-lifecycle-manifest-missing"}]
+        )
+
+    def test_duplicate_startup_owner_fails_closed(self) -> None:
+        self.manifest["startup_owners"].append(
+            dict(self.manifest["startup_owners"][0], owner_id="duplicate")
+        )
+        self._write_state()
+        result = check_runtime_effects(
+            self.root, now=self.now, process_inspector=self._inspect
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual(
+            result["reason_codes"][0]["code"],
+            "collector-startup-owner-count-invalid",
+        )
+        self.assertEqual(result["reason_codes"][0]["observed"], 2)
+
+    def test_command_archive_generation_and_pid_identity_are_checked(self) -> None:
+        owner = self.manifest["startup_owners"][0]
+        owner["generation"] = "old"
+        owner["archive_root"] = str(self.root / "wrong")
+        owner["command"] = [self.command[0], "--archive-root", str(self.root / "wrong")]
+        self._write_state()
+        result = check_runtime_effects(
+            self.root, now=self.now, process_inspector=self._inspect
+        )
+        codes = {item["code"] for item in result["reason_codes"]}
+        self.assertIn("collector-owner-generation-mismatch", codes)
+        self.assertIn("collector-owner-archive-root-mismatch", codes)
+        self.assertIn("collector-owner-command-mismatch", codes)
+
+        owner.update(
+            {
+                "generation": self.manifest["generation"],
+                "archive_root": str(self.root),
+                "command": self.command,
+            }
+        )
+        self._write_state()
+        result = check_runtime_effects(
+            self.root,
+            now=self.now,
+            process_inspector=lambda _pid: {
+                "running": True,
+                "command": ["wrong.exe"],
             },
-        ):
-            result = check_runtime_effects(
-                self.archive,
-                self.config,
-                skill_root=skill,
-                launcher_config=launcher_config,
-                windows_shortcut=shortcut_path,
-            )
-
-        self.assertIn(
-            "windows-shortcut-activation-invalid",
-            {item["code"] for item in result["failures"]},
+        )
+        self.assertEqual(
+            result["reason_codes"], [{"code": "collector-live-command-mismatch"}]
         )
 
-    def test_windows_activation_passes_only_for_exact_live_paths(self):
-        skill = self.base / ".codex" / "skills" / "memory-wuxian"
-        launcher = skill / "bin" / "memory-wuxian-dashboard-launcher.exe"
-        icon = skill / "assets" / "memory-wuxian.ico"
-        inspector = skill / "scripts" / "inspect_dashboard_shortcut_windows.ps1"
-        for path in (launcher, icon, inspector):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"test")
-        python = self.base / "python.exe"
-        python.write_bytes(b"test")
-        launcher_config = self.base / "launcher.json"
-        launcher_config.write_text(
-            json.dumps({
-                "python_executable": str(python),
-                "archive_root": str(self.archive.resolve()),
-            }),
-            encoding="utf-8",
-        )
-        shortcut_path = self.base / "Memory.lnk"
-        shortcut_path.write_bytes(b"test")
-        with patch(
-            "runtime_effect_gate.inspect_windows_shortcut",
-            return_value={
-                "exists": True,
-                "target_exists": True,
-                "target": str(launcher.resolve()),
-                "working_directory": str(skill.resolve()),
-                "icon": f"{icon.resolve()},0",
-                "arguments": "",
-            },
-        ):
+    def test_gate_never_recursively_scans_archive(self) -> None:
+        raw = self.root / "raw" / "deep"
+        raw.mkdir(parents=True)
+        (raw / "event.jsonl").write_text('{"sequence": 999}\n', encoding="utf-8")
+        with mock.patch.object(Path, "rglob", side_effect=AssertionError("archive scan")):
             result = check_runtime_effects(
-                self.archive,
-                self.config,
-                skill_root=skill,
-                launcher_config=launcher_config,
-                windows_shortcut=shortcut_path,
+                self.root, now=self.now, process_inspector=self._inspect
             )
+        self.assertTrue(result["ok"])
 
-        self.assertEqual(result["status"], "pass")
+    def test_optional_shortcut_remains_bounded_and_fail_closed(self) -> None:
+        shortcut = Path(self.temporary.name) / "Memory Wuxian.lnk"
+        result = check_runtime_effects(
+            self.root,
+            now=self.now,
+            process_inspector=self._inspect,
+            windows_shortcut=shortcut,
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual(
+            result["reason_codes"], [{"code": "collector-windows-shortcut-missing"}]
+        )
 
 
 if __name__ == "__main__":

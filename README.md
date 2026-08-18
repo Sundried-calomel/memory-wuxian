@@ -1,5 +1,11 @@
 # Memory無限
 
+> **2.16.0:** Makes collector installation and activation transactional on
+> Windows and macOS. A candidate must prove its exact startup owner, command,
+> archive root, live identity, and bounded watermark progress before commit;
+> failures restore the previous runnable generation and preserve evidence in
+> `collector-lifecycle.json`.
+
 > **2.15.0:** Adds the independent encrypted `project-attachment-v1` stream for
 > explicit large project deliverables. Exact 4 MiB chunks, SHA-256 manifests,
 > resumable delivery, and verified atomic reconstruction keep ordinary source

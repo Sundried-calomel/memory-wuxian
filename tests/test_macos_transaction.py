@@ -34,13 +34,16 @@ class FakeRunner:
         self.autosync_probe = autosync_probe
         self.maintenance_probe = maintenance_probe
         self.collector_running = True
+        self.current_pid = 41
 
     def __call__(self, arguments, **kwargs):
         command = [str(item) for item in arguments]
         self.calls.append(command)
         if command[:2] == ["/bin/launchctl", "print"]:
             if self.collector_running:
-                return subprocess.CompletedProcess(command, 0, "pid = 41\n", "")
+                return subprocess.CompletedProcess(
+                    command, 0, f"pid = {self.current_pid}\n", ""
+                )
             return subprocess.CompletedProcess(command, 1, "", "not found")
         if command[:2] == ["/bin/launchctl", "bootout"]:
             if command[-1].endswith(f"{transaction.COLLECTOR_LABEL}.plist") and not self.stop_sticks:
@@ -60,6 +63,56 @@ class FakeRunner:
         if command and len(command) > 1 and command[1].endswith(
             "install_codex_autosync.py"
         ):
+            values = {
+                command[index]: command[index + 1]
+                for index in range(2, len(command) - 1)
+                if command[index].startswith("--")
+            }
+            archive = Path(values["--archive-root"])
+            skill = Path(values["--skill-root"])
+            sessions = Path(values["--sessions-root"])
+            since = "2026-01-01T00:00:00Z"
+            activation = archive / "imports" / "codex" / "collector-activation.json"
+            activation.parent.mkdir(parents=True, exist_ok=True)
+            activation.write_text(json.dumps({"since": since}), encoding="utf-8")
+            plist = Path.home() / "Library" / "LaunchAgents" / (
+                f"{transaction.COLLECTOR_LABEL}.plist"
+            )
+            plist.write_bytes(
+                plistlib.dumps(
+                    {
+                        "Label": transaction.COLLECTOR_LABEL,
+                        "ProgramArguments": [
+                            str(skill / "bin" / "memory-wuxian-collector"),
+                            "--archive-root",
+                            str(archive),
+                            "--config",
+                            str(skill / "config.yaml"),
+                            "--sessions-root",
+                            str(sessions),
+                            "--since",
+                            since,
+                            "--debounce-ms",
+                            "400",
+                        ],
+                        "StandardOutPath": str(
+                            archive / "imports/codex/launch-agent.stdout.log"
+                        ),
+                        "StandardErrorPath": str(
+                            archive / "imports/codex/launch-agent.stderr.log"
+                        ),
+                        "EnvironmentVariables": {
+                            "RUST_BACKTRACE": "1",
+                            "MEMORY_WUXIAN_PYTHON": values["--python-executable"],
+                            "MEMORY_WUXIAN_CODEX": values["--codex-cli"],
+                        },
+                    }
+                )
+            )
+            pointer = skill.parent.parent / "memory-wuxian-active-root.txt"
+            pointer.write_text(f"{archive}\n", encoding="utf-8")
+            self.current_pid = 42
+            self.collector_running = True
             if self.autosync_probe is not None:
                 self.autosync_probe()
         if command and len(command) > 1 and command[1].endswith(
@@ -89,6 +142,7 @@ class MacosTransactionTest(unittest.TestCase):
             (root / "bin").mkdir(parents=True)
             (root / "scripts").mkdir()
             (root / "marker").write_text(marker, encoding="utf-8")
+            (root / "SKILL.md").write_text("---\nname: memory-wuxian\n---\n")
             (root / "config.yaml").write_text("backup:\n  enabled: false\n")
             for name in ("memory-wuxian-collector", "memory-wuxian-envelope"):
                 path = root / "bin" / name
@@ -126,7 +180,14 @@ class MacosTransactionTest(unittest.TestCase):
                 kwargs.get("timeout_seconds"),
                 transaction.COLLECTOR_READY_TIMEOUT_SECONDS,
             )
-            return {"pid": 42, "updated_at": "2026-07-30T00:00:00Z"}
+            return {
+                "pid": 42,
+                "ready": True,
+                "updated_at": "2026-07-30T00:00:00Z",
+                "last_archive_update": "2026-07-30T00:00:00Z",
+                "source_watermark": "2026-07-29T00:00:00Z",
+                "archive_watermark": "2026-07-29T00:00:00Z",
+            }
 
         with (
             patch("pathlib.Path.home", return_value=self.home),
@@ -166,11 +227,55 @@ class MacosTransactionTest(unittest.TestCase):
         self.assertEqual((self.skill / "marker").read_text(), "new")
         for excluded in (".git", "target", "outputs", "dist", "memory", "__pycache__"):
             self.assertFalse((self.skill / excluded).exists())
-        self.assertFalse(
-            (self.home / ".codex" / "updates" / "memory-wuxian" / "rollback-current").exists()
-        )
+        update_root = self.home / ".codex" / "updates" / "memory-wuxian"
+        self.assertEqual(list((update_root / "generations").iterdir()), [])
+        self.assertTrue(Path(result["commit_receipt"]).is_file())
+        journal = transaction.read_json(Path(result["commit_receipt"]).parent / "journal.json")
+        self.assertEqual([item["stage"] for item in journal["events"]], [
+            "prepare", "prepare", "prepare", "verify", "commit"
+        ])
         self.assertFalse(self.legacy_plist.exists())
         self.assertEqual(result["legacy_semantic_backfill"]["status"], "retired")
+
+    def test_second_run_is_idempotent_and_preserves_archive_bytes(self):
+        sentinel = self.archive / "raw" / "多语言" / "exact.bin"
+        sentinel.parent.mkdir(parents=True)
+        sentinel.write_bytes(bytes(range(256)) * 8)
+        before = sentinel.read_bytes()
+        runner = FakeRunner()
+
+        first = self.invoke(runner)
+        calls_after_first = len(runner.calls)
+        second = self.invoke(runner)
+
+        self.assertEqual(first["status"], "installed")
+        self.assertEqual(second["status"], "installed")
+        self.assertTrue(second["idempotent"])
+        self.assertEqual(sentinel.read_bytes(), before)
+        later = runner.calls[calls_after_first:]
+        self.assertFalse(
+            any(command[:2] == ["/bin/launchctl", "bootout"] for command in later)
+        )
+
+    def test_commit_receipt_failure_rolls_back_before_pruning_evidence(self):
+        original_atomic_json = transaction.atomic_json
+
+        def fail_commit_receipt(path, payload):
+            if Path(path).name == "commit-receipt.json":
+                raise OSError("synthetic commit receipt failure")
+            return original_atomic_json(path, payload)
+
+        with patch.object(transaction, "atomic_json", side_effect=fail_commit_receipt):
+            with self.assertRaisesRegex(OSError, "synthetic commit receipt failure"):
+                self.invoke(FakeRunner())
+
+        self.assertEqual((self.skill / "marker").read_text(encoding="utf-8"), "old")
+        transaction_roots = list(
+            (self.home / ".codex/updates/memory-wuxian/transactions").iterdir()
+        )
+        self.assertEqual(len(transaction_roots), 1)
+        self.assertFalse((transaction_roots[0] / "commit-receipt.json").exists())
+        self.assertTrue((transaction_roots[0] / "rollback-receipt.json").is_file())
 
     def test_new_collector_starts_only_after_cutover_lock_is_released(self):
         def assert_archive_lock_is_free():
@@ -348,6 +453,122 @@ class MacosTransactionTest(unittest.TestCase):
                 self.invoke(runner)
         self.assertTrue(runner.collector_running)
         self.assertEqual((self.skill / "marker").read_text(), "old")
+
+
+class MacosTransactionPortableContractTest(unittest.TestCase):
+    def test_journal_retains_prepare_verify_commit_history(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            journal_path = Path(temporary) / "事务 かな € 😀" / "journal.json"
+            journal = {
+                "state": "prepare",
+                "events": [],
+                "transaction_id": "mwt-test",
+            }
+            transaction.transition(journal_path, journal, "prepare", phase="staged")
+            transaction.transition(journal_path, journal, "verify", effect={"status": "passed"})
+            receipt = journal_path.parent / "commit-receipt.json"
+            transaction.atomic_json(receipt, {"status": "committed"})
+            transaction.transition(journal_path, journal, "commit", commit_receipt=str(receipt))
+
+            persisted = transaction.read_json(journal_path)
+            self.assertEqual(
+                [event["stage"] for event in persisted["events"]],
+                ["prepare", "verify", "commit"],
+            )
+            self.assertTrue(receipt.is_file())
+
+    def test_multilingual_long_candidate_preserves_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / ("来源 かな € 😀 " + "a" * 80)
+            candidate = root / ("候选 " + "b" * 80)
+            current = root / "current"
+            (source / "bin").mkdir(parents=True)
+            (source / "scripts").mkdir()
+            (source / "config.yaml").write_bytes(b"backup:\n  enabled: false\n")
+            payload = bytes(range(256)) * 4
+            (source / "精确字节.bin").write_bytes(payload)
+            for name in ("memory-wuxian-collector", "memory-wuxian-envelope"):
+                executable = source / "bin" / name
+                executable.write_bytes(b"binary\x00payload")
+                executable.chmod(0o755)
+
+            transaction.prepare_candidate(source, candidate, current)
+
+            self.assertEqual((candidate / "精确字节.bin").read_bytes(), payload)
+            self.assertEqual(
+                transaction.tree_generation(source)[0],
+                transaction.tree_generation(candidate)[0],
+            )
+
+    def test_exact_launch_contract_rejects_archive_root_substitution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            skill = root / "技能 空间"
+            archive = root / "归档 かな"
+            sessions = root / "sessions"
+            for path in (skill / "bin", archive / "imports/codex", sessions):
+                path.mkdir(parents=True)
+            pointer = root / "active-root.txt"
+            pointer.write_text(f"{archive}\n", encoding="utf-8")
+            activation = archive / "imports/codex/collector-activation.json"
+            activation.write_text(
+                json.dumps({"since": "2026-01-01T00:00:00Z"}), encoding="utf-8"
+            )
+            plist = root / "collector.plist"
+            plist.write_bytes(
+                plistlib.dumps(
+                    {
+                        "Label": transaction.COLLECTOR_LABEL,
+                        "ProgramArguments": [
+                            str(skill / "bin/memory-wuxian-collector"),
+                            "--archive-root",
+                            str(root / "wrong archive"),
+                            "--config",
+                            str(skill / "config.yaml"),
+                            "--sessions-root",
+                            str(sessions),
+                            "--since",
+                            "2026-01-01T00:00:00Z",
+                            "--debounce-ms",
+                            "400",
+                        ],
+                        "StandardOutPath": str(archive / "imports/codex/launch-agent.stdout.log"),
+                        "StandardErrorPath": str(archive / "imports/codex/launch-agent.stderr.log"),
+                        "EnvironmentVariables": {
+                            "RUST_BACKTRACE": "1",
+                            "MEMORY_WUXIAN_PYTHON": str(root / "python"),
+                            "MEMORY_WUXIAN_CODEX": str(root / "codex"),
+                        },
+                    }
+                )
+            )
+            telemetry = {
+                "pid": 42,
+                "last_archive_update": "2026-01-01T00:00:01Z",
+                "source_watermark": "2026-01-01T00:00:00Z",
+                "archive_watermark": "2026-01-01T00:00:00Z",
+            }
+            runner = lambda command, **kwargs: subprocess.CompletedProcess(
+                command, 0, "pid = 42\n", ""
+            )
+            with self.assertRaisesRegex(RuntimeError, "does not exactly match"):
+                transaction.validate_installed_launch_contract(
+                    skill_root=skill,
+                    archive_root=archive,
+                    sessions_root=sessions,
+                    python_executable=root / "python",
+                    codex_cli=root / "codex",
+                    plist=plist,
+                    active_root_pointer=pointer,
+                    telemetry=telemetry,
+                    previous_archive_watermark=None,
+                    runner=runner,
+                )
+
+    def test_relative_archive_argument_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, "absolute path"):
+            transaction.exact_macos_root("relative/归档", "archive root")
 
 
 @unittest.skipUnless(sys.platform == "darwin", "native macOS candidate probe")

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.16.0",
+  "candidate_id": "v2.16.0-transactional-collector-lifecycle",
+  "artifact_profile": "software-feature",
+  "classification": "repair",
+  "owner_id": "capture-core-platform-foundation-product-quality",
+  "validation_profile": "full",
+  "target": "Transactional cross-platform collector activation with bounded installed-effect proof and exact rollback.",
+  "invariants": [
+    "The previous verified generation remains runnable until the candidate passes readiness and watermark proof.",
+    "Exactly one startup owner is authoritative and its argument vector and archive root are exact.",
+    "Raw archives, summary semantics, historical backfill, and cloud protocols remain unchanged."
+  ],
+  "allowed_changes": [
+    "Add durable lifecycle journals, receipts, generation staging, restart policy, rollback, and bounded effect verification.",
+    "Remove the Windows Run-key fallback as a competing startup authority."
+  ],
+  "prohibited_changes": [
+    "Rewrite or migrate any archive, summary, index, cloud, peer, or historical catch-up data.",
+    "Treat process existence or command exit zero as installed-effect proof."
+  ],
+  "before_after_checks": [
+    "Inject failure before and after every lifecycle transition and compare the exact pre-state after rollback.",
+    "Verify multilingual and long-path argument vectors without shell reconstruction.",
+    "Prove bounded source and archive watermark convergence through the installed entrypoint."
+  ],
+  "required_evidence": [
+    "architecture-contract",
+    "targeted-lifecycle-tests",
+    "windows-transaction-rehearsal",
+    "macos-transaction-rehearsal",
+    "bounded-runtime-effect",
+    "rollback-proof",
+    "full-release-rehearsal",
+    "documentation-contract",
+    "independent-review"
+  ],
+  "lifecycle_state": "candidate"
+}

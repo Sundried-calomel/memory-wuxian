@@ -30,6 +30,7 @@ if ($python) {
 } else {
   schtasks.exe /End /TN MemoryWuxianCodexSync 2>$null
   schtasks.exe /Delete /TN MemoryWuxianCodexSync /F 2>$null
+  # Cleanup only: current installers never create this legacy startup owner.
   reg.exe DELETE "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /V MemoryWuxianCodexSync /F 2>$null
 }
 

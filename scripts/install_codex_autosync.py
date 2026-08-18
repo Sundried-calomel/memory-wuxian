@@ -22,6 +22,16 @@ except ModuleNotFoundError:
 LABEL = "com.memorywuxian.codex-sync"
 
 
+def exact_root_argument(value: str, label: str) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        raise SystemExit(f"{label} must be an absolute path: {path}")
+    try:
+        return path.resolve(strict=True)
+    except OSError as error:
+        raise SystemExit(f"{label} does not exist: {path}") from error
+
+
 def atomic_write_plist(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
@@ -109,9 +119,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     if args.debounce_ms < 100:
         raise SystemExit("--debounce-ms must be at least 100")
-    skill_root = Path(args.skill_root).expanduser().resolve()
-    archive_root = Path(args.archive_root).expanduser().resolve()
-    sessions_root = Path(args.sessions_root).expanduser().resolve()
+    skill_root = exact_root_argument(args.skill_root, "Skill root")
+    archive_root = exact_root_argument(args.archive_root, "archive root")
+    sessions_root = exact_root_argument(args.sessions_root, "sessions root")
+    if archive_root in (skill_root, sessions_root) or archive_root.is_relative_to(skill_root):
+        raise SystemExit("archive root must be distinct from Skill and sessions roots")
     collector = Path(
         args.collector_executable or skill_root / "bin" / "memory-wuxian-collector"
     ).expanduser().absolute()
