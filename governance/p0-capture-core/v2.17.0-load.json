@@ -1,0 +1,16 @@
+{
+  "blocking_rule_ids": [
+    "G04"
+  ],
+  "brief_sha256": "b68b7c74d98bd73958f66d02cf8f1cd4186d2e85e353e54da69ad47e7ff6c68f",
+  "loaded_at": "2026-08-18T04:07:04.447020+00:00",
+  "packet_file_sha256": "8afd3bb2bef074767b64ff0c869198d689c983333cbae15008bbffbe8cbe53b9",
+  "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-core-refactor\\governance\\p0-capture-core\\v2.17.0-packet.json",
+  "packet_sha256": "0b48521ae0bc8bb8cec51e53ae36510af415c534fd974b3db40a0f4de761af62",
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-core-refactor\\governance\\p0-capture-core\\v2.17.0-preflight.json",
+  "preflight_sha256": "c853e20f458269915dc046b1fc42892261a2db39f02011b454316ed68e7454a7",
+  "receipt_sha256": "478f134021887aebd23e7d438e94baed43180cf6b0872fa7f59fddb3c304f8d0",
+  "receipt_type": "defect-prevention-load",
+  "schema_version": 1,
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-core-refactor"
+}

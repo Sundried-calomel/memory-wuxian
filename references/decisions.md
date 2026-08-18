@@ -487,3 +487,27 @@ resumable map-reduce plan whose actual prompts satisfy both character and UTF-8
 byte budgets and whose completed pieces are reused only after hash validation.
 The dashboard reports recoverable backlog as catching-up and reserves attention
 or error for quarantine, permanent failure, corruption, or integrity drift.
+
+## D-051: P0 capture is an isolated mechanical failure domain
+
+Status: Accepted for v2.16-v2.18.
+
+Extract native collection into one `capture-core` module whose only allowed
+module dependency is Platform Foundation. Capture Core owns source watching,
+visible-event normalization, append-only raw transactions, durable cursor and
+write-ahead transaction evidence, single-writer locking, runtime readiness,
+mechanical telemetry, and atomic backup-debt handoff. Control, Memory, Exchange,
+Environment, Project Evidence, Product Shell/UI, product-quality helpers, and
+AI/model runtimes must remain outside its dependency and failure domains.
+
+Complete the boundary in three ordered compatible releases: v2.16 makes
+collector lifecycle activation and rollback transactional; v2.17 extracts the
+native library, watcher-first runtime, sources, store, locking, telemetry, and
+dedicated launcher with byte-parity evidence; v2.18 adds durable transaction
+recovery, fault isolation, bounded diagnostics, and release evidence. D-009 is
+clarified accordingly: Capture Core commits only backup-debt state atomically;
+external snapshot execution remains independent low-frequency maintenance.
+
+This decision does not authorize Summary V1 or V2 changes, atomic or parent
+summary work, historical semantic or mechanical backfill, or any cloud,
+federation, acknowledgement, peer-state, envelope, or stream-protocol change.

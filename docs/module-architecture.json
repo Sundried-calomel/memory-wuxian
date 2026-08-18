@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "source_roots": [
     {"path": "scripts", "extensions": [".py", ".ps1", ".sh"]},
     {"path": "native-collector/src", "extensions": [".rs"]},
@@ -9,8 +9,50 @@
   ],
   "modules": [
     {
+      "id": "capture-core",
+      "architecture_owner": "Capture Core",
+      "criticality": "P0",
+      "failure_domain": "capture-core",
+      "allowed_dependencies": ["platform-foundation"],
+      "forbidden_dependencies": [
+        "product-shell",
+        "control-plane",
+        "memory-plane",
+        "environment-plane",
+        "project-evidence-plane",
+        "exchange-plane",
+        "product-quality"
+      ],
+      "forbidden_capabilities": ["control", "memory", "exchange", "environment", "project", "ui", "ai"],
+      "patterns": [
+        "scripts/collector_lifecycle.py",
+        "native-collector/src/main.rs",
+        "native-collector/src/lib.rs",
+        "native-collector/src/runtime.rs",
+        "native-collector/src/locking.rs",
+        "native-collector/src/telemetry.rs",
+        "native-collector/src/source/**",
+        "native-collector/src/store/**",
+        "native-collector/src/bin/memory-wuxian-core-launcher.rs"
+      ],
+      "expected_patterns": [
+        "scripts/collector_lifecycle.py",
+        "native-collector/src/lib.rs",
+        "native-collector/src/runtime.rs",
+        "native-collector/src/locking.rs",
+        "native-collector/src/telemetry.rs",
+        "native-collector/src/source/**",
+        "native-collector/src/store/**",
+        "native-collector/src/bin/memory-wuxian-core-launcher.rs"
+      ]
+    },
+    {
       "id": "product-shell",
       "architecture_owner": "Product Shell",
+      "criticality": "P2",
+      "failure_domain": "product-shell",
+      "allowed_dependencies": ["capture-core", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "platform-foundation"],
+      "forbidden_dependencies": [],
       "patterns": [
         "dashboard/**",
         "scripts/auto_update.py",
@@ -31,6 +73,10 @@
     {
       "id": "control-plane",
       "architecture_owner": "Control Plane",
+      "criticality": "P1",
+      "failure_domain": "control-plane",
+      "allowed_dependencies": ["capture-core", "product-shell", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "platform-foundation"],
+      "forbidden_dependencies": [],
       "patterns": [
         "scripts/archive_waterline.py",
         "scripts/governance_ai_worker.py",
@@ -52,19 +98,26 @@
     {
       "id": "memory-plane",
       "architecture_owner": "Memory Plane",
+      "criticality": "P1",
+      "failure_domain": "memory-plane",
+      "allowed_dependencies": ["capture-core", "control-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "platform-foundation"],
+      "forbidden_dependencies": ["product-shell"],
       "patterns": [
         "scripts/conversation_titles.py",
         "scripts/daily_metrics.py",
         "scripts/memory_indexing.py",
         "scripts/memory_content_store.py",
         "scripts/memory_guarded_features.py",
-        "scripts/token_usage.py",
-        "native-collector/src/main.rs"
+        "scripts/token_usage.py"
       ]
     },
     {
       "id": "environment-plane",
       "architecture_owner": "Environment Plane",
+      "criticality": "P1",
+      "failure_domain": "environment-plane",
+      "allowed_dependencies": ["control-plane", "memory-plane", "project-evidence-plane", "exchange-plane", "platform-foundation"],
+      "forbidden_dependencies": ["capture-core", "product-shell"],
       "patterns": [
         "scripts/memory_environment*.py",
         "scripts/memory_governance_ai.py",
@@ -75,6 +128,10 @@
     {
       "id": "project-evidence-plane",
       "architecture_owner": "Project Evidence Plane",
+      "criticality": "P1",
+      "failure_domain": "project-evidence-plane",
+      "allowed_dependencies": ["control-plane", "memory-plane", "environment-plane", "exchange-plane", "platform-foundation"],
+      "forbidden_dependencies": ["capture-core", "product-shell"],
       "patterns": [
         "scripts/memory_project_evidence.py",
         "scripts/memory_project_attachments.py"
@@ -83,6 +140,10 @@
     {
       "id": "exchange-plane",
       "architecture_owner": "Exchange Plane",
+      "criticality": "P1",
+      "failure_domain": "exchange-plane",
+      "allowed_dependencies": ["control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "platform-foundation"],
+      "forbidden_dependencies": ["capture-core", "product-shell"],
       "patterns": [
         "scripts/memory_cloud_transport.py",
         "scripts/memory_federation.py",
@@ -93,6 +154,10 @@
     {
       "id": "platform-foundation",
       "architecture_owner": "Platform Foundation",
+      "criticality": "P0",
+      "failure_domain": "platform-foundation",
+      "allowed_dependencies": [],
+      "forbidden_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane"],
       "patterns": [
         "scripts/console_encoding.py",
         "scripts/collector_activation.py",
@@ -104,6 +169,10 @@
     {
       "id": "product-quality",
       "architecture_owner": "Release Evidence Contract",
+      "criticality": "P2",
+      "failure_domain": "product-quality",
+      "allowed_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "platform-foundation"],
+      "forbidden_dependencies": [],
       "patterns": [
         "scripts/build_native_collector.ps1",
         "scripts/build_native_collector.sh",
@@ -116,7 +185,22 @@
     }
   ],
   "python_dependency_rules": {
+    "enforce_module_allowlist": true,
     "forbidden_imports": {
+      "capture-core": [
+        "anthropic",
+        "memory_cli",
+        "memory_cloud_transport",
+        "memory_dashboard",
+        "memory_environment",
+        "memory_federation",
+        "memory_governance_ai",
+        "memory_project_attachments",
+        "memory_project_evidence",
+        "openai",
+        "semantic_dispatch",
+        "semantic_worker"
+      ],
       "control-plane": ["memory_dashboard"],
       "memory-plane": ["memory_cli", "memory_dashboard"],
       "environment-plane": ["memory_cli", "memory_dashboard"],

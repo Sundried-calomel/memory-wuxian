@@ -222,6 +222,14 @@ Use Memory無限 to preserve conversation history outside the active context win
     selection must include the original trigger, an adjacent-entry regression
     case, and a real installed or production-sized effect check appropriate to
     the affected platform.
+78. Treat `capture-core` as the P0 mechanical capture owner and an independent
+    failure domain. Its only allowed module dependency is
+    `platform-foundation`; it must not import or embed Control, Memory,
+    Exchange, Environment, Project Evidence, Product Shell/UI, product-quality,
+    or AI behavior. Register its production paths and dependency fields in
+    schema-v2 `docs/module-architecture.json` and keep the architecture checker
+    passing. For v2.16-v2.18, Summary V1/V2, atomic summaries, historical
+    backfill, and all cloud protocols remain explicit non-goals.
 
 ## Authority order
 

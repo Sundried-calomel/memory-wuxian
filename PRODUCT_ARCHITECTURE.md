@@ -39,9 +39,13 @@ Memory無限
 │   ├── Job Queue
 │   ├── Health / Diagnostics
 │   └── Configuration
+├── Capture Core
+│   ├── Source Discovery / Watchers
+│   ├── Visible-Event Normalization
+│   ├── Archive Append / Durable Cursor
+│   ├── Locking / Runtime Readiness
+│   └── Mechanical Telemetry / Backup-Debt Handoff
 ├── Memory Plane
-│   ├── Source Adapters
-│   ├── Archive Store
 │   ├── Summary Engine
 │   ├── Index Engine
 │   ├── Retrieval Engine
@@ -75,8 +79,18 @@ Memory無限
 
 ## Authority Domains
 
-The Memory Plane owns source events, raw history, transcripts, summary jobs,
-summaries, indexes, retrieval, context capsules, and token telemetry.
+The Capture Core is the P0 mechanical capture failure domain. It owns source
+watching and bounded catch-up, visible-event normalization, the append-only raw
+archive transaction, durable cursor and write-ahead transaction evidence,
+single-writer locking, runtime readiness, mechanical telemetry, and an atomic
+backup-debt handoff. It consumes only stable source and storage contracts and
+Platform Foundation primitives.
+
+The Memory Plane owns the meaning and schema of source events and raw history,
+transcripts, summary jobs, summaries, indexes, retrieval, context capsules, and
+token telemetry. It may consume Capture Core outputs but cannot inject summary,
+retrieval, exchange, environment, project, UI, or AI behavior into the capture
+transaction.
 
 The Environment Plane owns registered Rules and Skills, immutable revisions,
 local bindings, installation transactions, conflicts, promotion review,
@@ -108,7 +122,15 @@ advance or block another.
 Product Shell -> Application Services -> Domain Modules -> Platform Foundation
 Control Plane -> Application Services
 Exchange Adapters -> Exchange Contracts -> Domain Importers
+Product Shell / Control Plane / Memory Plane -> Capture Core -> Platform Foundation
 ```
+
+`capture-core` has a one-way dependency allowlist: it may depend only on
+`platform-foundation`. It must not depend on Product Shell or UI, Control Plane,
+Memory Plane, Exchange Plane, Environment Plane, Project Evidence Plane,
+product-quality helpers, or any AI/model runtime. Those modules may observe or
+invoke its stable lifecycle contract without becoming part of its failure
+domain.
 
 Prohibited dependencies:
 
@@ -117,9 +139,38 @@ Prohibited dependencies:
 - installers implementing archive, conflict, or retrieval policy;
 - transports directly mutating local authoritative domain files;
 - source adapters bypassing the archive transaction contract;
+- Capture Core importing control, memory, exchange, environment, project, UI,
+  AI, semantic-worker, or cloud-protocol behavior;
 - tests treating a UI response as proof of domain persistence.
 
+The machine-readable owner and dependency contract is
+`docs/module-architecture.json` schema v2. The Capture Core production surface
+is reserved under `native-collector/src/lib.rs`, `runtime.rs`, `locking.rs`,
+`telemetry.rs`, `source/**`, `store/**`,
+`bin/memory-wuxian-core-launcher.rs`, and
+`scripts/collector_lifecycle.py`. Every production path must have exactly one
+owner, and `scripts/check_architecture_contract.py` rejects dependencies outside
+the declared allowlist.
+
 ## Versioned Application Contracts
+
+### 0. P0 Capture Core Contract
+
+Capture continues whenever optional control, summary, indexing, retrieval,
+exchange, environment, project, dashboard, or AI work fails. Lifecycle changes
+are one bounded transaction with explicit pre-state, activation, readiness,
+commit, and rollback evidence. Watcher readiness is established before catch-up
+so events arriving during startup cannot fall between enumeration and live
+observation. Raw append and cursor advancement remain ordered and durable;
+restart recovery replays transaction evidence idempotently without rewriting
+accepted raw history.
+
+The v2.16-v2.18 Capture Core refactor is behavior-preserving isolation work.
+Summary V1, Summary V2, atomic or parent summaries, historical semantic or
+mechanical backfill, and every cloud/federation protocol are explicit non-goals.
+No summary eligibility rule, historical catch-up policy, `archive-v1`,
+`environment-v1`, `project-evidence-v1`, acknowledgement, peer-state, envelope,
+or live-archive payload contract may change in this work.
 
 ### 1. Source Adapter Contract
 
