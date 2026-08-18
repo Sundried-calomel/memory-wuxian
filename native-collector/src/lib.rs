@@ -3284,6 +3284,10 @@ fn newest_source_watermark(stamps: &HashMap<PathBuf, (u64, SystemTime)>) -> Opti
         .map(|modified| DateTime::<Utc>::from(modified).to_rfc3339_opts(SecondsFormat::Secs, true))
 }
 
+fn rollouts_requiring_sync(store: &Store, current_paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
+    store.changed_rollouts(current_paths.to_vec())
+}
+
 #[cfg(target_os = "macos")]
 fn run_event_loop(
     store: &Store,
@@ -3319,17 +3323,14 @@ fn run_event_loop(
         let current_stamps = rollout_stamps(&current_paths)?;
         let source_watermark = newest_source_watermark(&current_stamps);
         telemetry.record_source_watermark(source_watermark.clone());
-        let changed_paths: Vec<PathBuf> = current_paths
-            .iter()
-            .filter(|path| known_stamps.get(*path) != current_stamps.get(*path))
-            .cloned()
-            .collect();
+        let changed_paths = rollouts_requiring_sync(store, &current_paths)?;
+        let had_pending_rollouts = !changed_paths.is_empty();
         let sync_succeeded = changed_paths.is_empty() || sync_and_emit(store, changed_paths);
         store.write_coverage_status(&current_paths)?;
-        if sync_succeeded && known_stamps != current_stamps {
+        if sync_succeeded && (had_pending_rollouts || known_stamps != current_stamps) {
             telemetry.record_archive(source_watermark);
         }
-        if received_event || known_stamps != current_stamps {
+        if received_event || had_pending_rollouts || known_stamps != current_stamps {
             last_activity = std::time::Instant::now();
             write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK)?;
         }
@@ -3409,13 +3410,15 @@ fn run_event_loop(
                 .filter(|path| known_stamps.get(*path) != current_stamps.get(*path))
                 .cloned(),
         );
+        candidates.extend(rollouts_requiring_sync(store, &current_paths)?);
+        let had_pending_rollouts = !candidates.is_empty();
         let sync_succeeded =
             candidates.is_empty() || sync_and_emit(store, candidates.into_iter().collect());
         store.write_coverage_status(&current_paths)?;
-        if sync_succeeded && known_stamps != current_stamps {
+        if sync_succeeded && (had_pending_rollouts || known_stamps != current_stamps) {
             telemetry.record_archive(source_watermark);
         }
-        if received_event || known_stamps != current_stamps {
+        if received_event || had_pending_rollouts || known_stamps != current_stamps {
             last_activity = std::time::Instant::now();
             write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK)?;
         }
@@ -3430,19 +3433,33 @@ fn run_event_loop(
 mod adaptive_fallback_tests {
     use super::*;
     use crate::runtime::{DEEP_IDLE_AFTER, DEEP_IDLE_FALLBACK, IDLE_AFTER, IDLE_FALLBACK};
+    use std::io::Write;
 
     #[test]
     fn collector_has_no_semantic_ai_execution_path() {
-        let source = include_str!("lib.rs");
-        let production = source
-            .split("#[cfg(test)]")
-            .next()
-            .expect("collector source has a production section");
+        let sources = [
+            include_str!("lib.rs"),
+            include_str!("locking.rs"),
+            include_str!("runtime.rs"),
+            include_str!("source/mod.rs"),
+            include_str!("store/mod.rs"),
+            include_str!("store/cursor.rs"),
+            include_str!("store/transaction.rs"),
+            include_str!("telemetry.rs"),
+            include_str!("main.rs"),
+            include_str!("bin/memory-wuxian-core-launcher.rs"),
+        ];
+        let production = sources
+            .iter()
+            .map(|source| source.split("#[cfg(test)]").next().unwrap_or(source))
+            .collect::<Vec<_>>()
+            .join("\n");
         for forbidden in [
             "semantic_dispatch.py",
             "run_one_shot_summary",
             "sync_batch_with_semantic_worker",
             "result[\"semantic_worker\"]",
+            "command.output()",
         ] {
             assert!(
                 !production.contains(forbidden),
@@ -3451,6 +3468,70 @@ mod adaptive_fallback_tests {
         }
         assert!(production.contains("self.maybe_create_level_one_job()?"));
         assert!(production.contains("\"created_summary_job\": created_job.map"));
+    }
+
+    #[test]
+    fn refreshed_watcher_baseline_cannot_hide_cursor_debt() -> Result<()> {
+        const TEST_SESSION_ID: &str = "019fb8f2-9a67-7b03-9474-6f92cd6b21a7";
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let config = archive.path().join("config.yaml");
+        fs::write(&config, "{}\n")?;
+        let store = Store::new(archive.path().to_path_buf(), &config, None, None)?;
+        let path = sessions.path().join(format!(
+            "rollout-2026-08-18T00-00-00-{TEST_SESSION_ID}.jsonl"
+        ));
+        let session = json!({
+            "timestamp": "2026-08-18T00:00:00Z",
+            "type": "session_meta",
+            "payload": {"id": TEST_SESSION_ID, "source": "user"}
+        });
+        let first = json!({
+            "timestamp": "2026-08-18T00:00:01Z",
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": "first"}
+        });
+        fs::write(
+            &path,
+            format!(
+                "{}\n{}\n",
+                serde_json::to_string(&session)?,
+                serde_json::to_string(&first)?
+            ),
+        )?;
+        let canonical = path.canonicalize()?;
+        let metadata = fs::metadata(&canonical)?;
+        let cursor_dir = archive.path().join("imports/codex");
+        atomic_write_json(
+            &cursor_dir.join(format!("{TEST_SESSION_ID}.json")),
+            &json!({
+                "format_version": 1,
+                "session_id": TEST_SESSION_ID,
+                "source_path": portable_path(&canonical),
+                "source_size": metadata.len(),
+                "committed_byte_offset": metadata.len(),
+                "observed_source_size": metadata.len(),
+                "complete": true,
+                "source_mtime": DateTime::<Utc>::from(metadata.modified()?).to_rfc3339(),
+            }),
+        )?;
+        let appended = json!({
+            "timestamp": "2026-08-18T00:00:02Z",
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": "appended-during-startup"}
+        });
+        let mut file = fs::OpenOptions::new().append(true).open(&canonical)?;
+        writeln!(file, "{}", serde_json::to_string(&appended)?)?;
+
+        let current_paths = vec![canonical.clone()];
+        let refreshed_baseline = rollout_stamps(&current_paths)?;
+        let current_stamps = rollout_stamps(&current_paths)?;
+        assert_eq!(refreshed_baseline, current_stamps);
+        assert_eq!(
+            rollouts_requiring_sync(&store, &current_paths)?,
+            vec![canonical]
+        );
+        Ok(())
     }
 
     #[test]

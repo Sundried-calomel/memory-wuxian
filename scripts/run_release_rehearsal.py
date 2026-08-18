@@ -435,8 +435,10 @@ def main() -> int:
                 python, "-c",
                 (
                     "from pathlib import Path;"
-                    "s=Path('native-collector/src/lib.rs').read_text('utf-8');"
-                    "p=s.split('#[cfg(test)]',1)[0];"
+                    "paths=('lib.rs','locking.rs','runtime.rs','source/mod.rs','store/mod.rs','store/cursor.rs','store/transaction.rs','telemetry.rs','main.rs','bin/memory-wuxian-core-launcher.rs');"
+                    "root=Path('native-collector/src');"
+                    "s=(root/'lib.rs').read_text('utf-8');"
+                    "p='\\n'.join((root/path).read_text('utf-8').split('#[cfg(test)]',1)[0] for path in paths);"
                     "assert 'fn sync_startup_batch' in s;"
                     "assert 'self.sync_batch(paths)' in p;"
                     "assert 'store.sync_startup_batch(initial_paths)?' in s;"
