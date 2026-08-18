@@ -371,6 +371,28 @@
   Summary V1、既有成功 Summary V2 不变核验。
 - Families: `MW-R08`, `MW-R11`, `G08`, `G11`.
 
+### MW-SUM-028：parent Rescue 候选筛选引用未初始化的隔离原因
+
+- 证据：`本机已核验`。`summary-v2-parent-map-reduce-v4` 在正式单轮进入
+  `run_parent_rescue` 后、创建任何 parent state 或调用模型前，以
+  `NameError: name 'reasons' is not defined` 崩溃；批次没有消耗节点尝试，正式计划保持
+  `completed=452`、`quarantined=43`、`remaining_ready=0`、`remaining_waiting=5`。
+- 根因：map Rescue 在候选筛选前调用 `_quarantine_reason_by_id(plan)`，parent 入口在
+  复制同类筛选条件时引用了 `reasons`，却没有执行同一初始化；既有测试只验证共享的一次
+  尝试选择器，没有执行 parent 入口自身的候选池构造。
+- 逃逸边界：单次尝试、schema canary 和 parent map/reduce 内容测试均在候选池之后；因此
+  它们不能证明 CLI 从刷新计划到候选选择的完整路径可运行。进程成功启动也不能代替入口
+  状态转换证据。
+- 永久门槛：map 与 parent 必须在同一入口阶段从刷新后的计划派生 quarantine reasons，
+  并通过共享 eligibility helper 接受 `model-failure-limit` 及新 revision 可重新准入的
+  `infra-blocked`，拒绝来源冲突。候选筛选异常必须发生在 `_begin_rescue_attempt` 前并保持
+  零模型调用、零节点状态写入。
+- 回归：直接执行真实 `run_parent_rescue`，同时放入内容失败、基础设施失败、来源冲突和
+  L1 隔离项；断言仅两个符合条件的 L2 节点进入单次尝试选择器、使用新 parent revision、
+  模型调用为零。正式恢复时还要验证 parent-state 与计划计数发生预期变化，raw、Summary
+  V1 和既有成功 Summary V2 哈希不变。
+- Families: `MW-R08`, `MW-R11`, `G02`, `G08`, `G11`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。

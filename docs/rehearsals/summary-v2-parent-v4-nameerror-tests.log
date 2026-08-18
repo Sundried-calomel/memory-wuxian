@@ -1,0 +1,22 @@
+test_conflicting_existing_sidecars_quarantine_only_their_summary (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_conflicting_existing_sidecars_quarantine_only_their_summary) ... ok
+test_execution_identity_drift_stops_before_plan_mutation (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_execution_identity_drift_stops_before_plan_mutation) ... ok
+test_failed_rescue_revision_schedules_zero_followup_work (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_failed_rescue_revision_schedules_zero_followup_work) ... ok
+test_in_progress_rescue_can_resume_but_new_revision_is_independent (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_in_progress_rescue_can_resume_but_new_revision_is_independent) ... ok
+test_infra_blocked_state_is_terminal_without_consuming_content_retry (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_infra_blocked_state_is_terminal_without_consuming_content_retry) ... ok
+test_new_revision_candidate_pool_reincludes_infrastructure_failures (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_new_revision_candidate_pool_reincludes_infrastructure_failures) ... ok
+test_old_normal_failure_routes_to_new_rescue_campaign_once (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_old_normal_failure_routes_to_new_rescue_campaign_once) ... ok
+test_output_inside_archive_is_rejected (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_output_inside_archive_is_rejected) ... ok
+test_parent_rescue_derives_reasons_before_candidate_selection (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_parent_rescue_derives_reasons_before_candidate_selection) ... ok
+test_plan_reconstructs_verified_l1_and_waits_for_parent (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_plan_reconstructs_verified_l1_and_waits_for_parent) ... ok
+test_rejected_candidate_is_evidence_only_and_artifacts_are_revision_scoped (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_rejected_candidate_is_evidence_only_and_artifacts_are_revision_scoped) ... ok
+test_rescue_chunks_are_an_exact_ordered_partition (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_rescue_chunks_are_an_exact_ordered_partition) ... ok
+test_rescue_selection_reports_terminal_nodes_beyond_batch_limit (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_rescue_selection_reports_terminal_nodes_beyond_batch_limit) ... ok
+test_rescue_state_merge_preserves_maps_from_disk (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_rescue_state_merge_preserves_maps_from_disk) ... ok
+test_runner_lock_rejects_a_second_writer_and_cleans_up (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_runner_lock_rejects_a_second_writer_and_cleans_up) ... ok
+test_source_hash_drift_is_quarantined (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_source_hash_drift_is_quarantined) ... ok
+test_unreadable_sidecar_fails_closed_without_writing_plan (tests.test_summary_v2_backfill.SummaryV2BackfillTest.test_unreadable_sidecar_fails_closed_without_writing_plan) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 1.346s
+
+OK

@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-parent-candidate-reasons-scope",
+  "packet_sha256": "55a41eee71651b925f0df43855d32c586632cc09a6a2db6793765499c946b240",
+  "checks": [
+    {
+      "check_id": "real-entrypoint-effect",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v4-nameerror-tests.log",
+          "sha256": "e232e36c16ed9f3d059e668f25cca2bd76b3e120f1d862f19a4b761c65e44a80"
+        }
+      ],
+      "note": "The production run_parent_rescue entrypoint constructs the candidate pool without NameError and selects only eligible L2 content and infrastructure failures under the new revision."
+    },
+    {
+      "check_id": "evidence-roundtrip",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v4-nameerror-tests.log",
+          "sha256": "e232e36c16ed9f3d059e668f25cca2bd76b3e120f1d862f19a4b761c65e44a80"
+        }
+      ],
+      "note": "The complete backfill regression file preserves ordered source partitioning, revision-scoped state, exact partial-map recovery, and authoritative archive bytes."
+    },
+    {
+      "check_id": "registered-preflight",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v4-nameerror-preflight.json",
+          "sha256": "11d91366f0f436d9eda0e4d55d0898992d10d6ed5415cc6086ebb3275d22cfa1"
+        }
+      ],
+      "note": "The registered target-based workbook gate froze the catalog and workbook hashes before implementation."
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-retry-gate-governor-tests.log",
+          "sha256": "88bd11be31fca7f02c5b13e0b23863988d16d13c9bcf9adc93d8c8c5588fa0cc"
+        }
+      ],
+      "note": "The governance regression evidence rejects missing receipts, unknown families, hash drift, and unchanged required project workbooks."
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "change_kind": "repair",
+  "changed_catalog_entries": [],
+  "changed_workbook_entries": [],
+  "created_at": "2026-08-18T21:25:55+00:00",
+  "no_applicable_family_reason": null,
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v4-nameerror-preflight.json",
+  "preflight_sha256": "11d91366f0f436d9eda0e4d55d0898992d10d6ed5415cc6086ebb3275d22cfa1",
+  "receipt_sha256": "b1a09722883d5f44601b30a5fbca177d5bbf002115e1430fc9ca9591ccdb34df",
+  "receipt_type": "defect-workbook-completion",
+  "schema_version": 1,
+  "selected_families": [
+    "G02",
+    "G08",
+    "G11"
+  ],
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main"
+}

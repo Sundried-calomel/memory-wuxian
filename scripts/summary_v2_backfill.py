@@ -43,7 +43,7 @@ FAILURE_LIMIT = 1
 RUNNER_REVISION = "summary-v2-backfill-normalizer-v5"
 DIRECT_RESCUE_REVISION = "summary-v2-direct-rescue-v1"
 MAP_RESCUE_REVISION = "summary-v2-map-reduce-v5"
-PARENT_RESCUE_REVISION = "summary-v2-parent-map-reduce-v4"
+PARENT_RESCUE_REVISION = "summary-v2-parent-map-reduce-v5"
 MAP_PROMPT_TARGET = 240_000
 REDUCE_PROMPT_LIMIT = 900_000
 EXECUTION_CONTRACT_FORMAT = "memory-wuxian-summary-v2-execution-contract-v1"
@@ -1421,13 +1421,14 @@ def run_parent_rescue(
     _validate_execution_contract(output_root)
     plan_path = output_root / "backfill" / "plan.json"
     plan = _refresh_plan(json.loads(plan_path.read_text(encoding="utf-8")), existing_roots)
+    reasons = _quarantine_reason_by_id(plan)
     candidate_pool = sorted(
         (
             task
             for task in plan["tasks"]
             if task["status"] == "quarantined"
             and int(task["level"]) > 1
-            and reasons.get(task["summary_id"]) == "model-failure-limit"
+            and _rescue_quarantine_is_eligible(reasons.get(task["summary_id"]))
         ),
         key=lambda item: (int(item["level"]), item["summary_id"]),
     )

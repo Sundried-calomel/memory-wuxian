@@ -33,6 +33,7 @@ from summary_v2_backfill import (  # noqa: E402
     _write_rescue_state,
     build_plan,
     run_batch,
+    run_parent_rescue,
 )
 
 
@@ -477,6 +478,43 @@ class SummaryV2BackfillTest(unittest.TestCase):
         self.assertTrue(_rescue_quarantine_is_eligible("model-failure-limit"))
         self.assertFalse(_rescue_quarantine_is_eligible("conflicting-existing-sidecars"))
         self.assertFalse(_rescue_quarantine_is_eligible(None))
+
+    def test_parent_rescue_derives_reasons_before_candidate_selection(self):
+        plan = build_plan(self.archive, self.output)
+        plan["tasks"] = [
+            {"summary_id": "L2-content", "status": "quarantined", "level": 2},
+            {"summary_id": "L2-infra", "status": "quarantined", "level": 2},
+            {"summary_id": "L2-conflict", "status": "quarantined", "level": 2},
+            {"summary_id": "L1-content", "status": "quarantined", "level": 1},
+        ]
+        plan["quarantine"] = [
+            {"summary_id": "L2-content", "reason": "model-failure-limit"},
+            {"summary_id": "L2-infra", "reason": "infra-blocked"},
+            {"summary_id": "L2-conflict", "reason": "conflicting-existing-sidecars"},
+            {"summary_id": "L1-content", "reason": "model-failure-limit"},
+        ]
+        config = self.base / "config.yaml"
+        config.write_text("ai_summary: {}\n", encoding="utf-8")
+        with (
+            patch("summary_v2_backfill._refresh_plan", return_value=plan),
+            patch(
+                "summary_v2_backfill._select_single_attempt_candidates",
+                return_value=([], []),
+            ) as select,
+        ):
+            receipt = run_parent_rescue(
+                self.archive,
+                self.output,
+                config,
+                maximum_jobs=3,
+            )
+        selected_pool = select.call_args.args[0]
+        self.assertEqual(
+            ["L2-content", "L2-infra"],
+            [task["summary_id"] for task in selected_pool],
+        )
+        self.assertEqual(PARENT_RESCUE_REVISION, select.call_args.args[3])
+        self.assertEqual(0, receipt["attempted"])
 
 
 if __name__ == "__main__":
