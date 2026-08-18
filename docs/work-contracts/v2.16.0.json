@@ -36,5 +36,14 @@
     "documentation-contract",
     "independent-review"
   ],
+  "defect_workbook": {
+    "preflight_receipt": "governance/p0-capture-core/v2.16.0-preflight.json",
+    "preflight_sha256": "a55857b2197fabef5ca0e50a1f78b657d4e5d3b2587c907ea1c3d1f8c0abbaa3",
+    "completion_receipt": "governance/p0-capture-core/v2.16.0-completion.json",
+    "completion_sha256": "39f8ac15f2a9bd3dd009fddd883458e5e338e8bf9de6572334d5bdfbb96a054e",
+    "applicable_families": ["G01", "G02", "G04", "G05", "G06", "G07", "G09", "MW-R03", "MW-R05", "MW-R06", "MW-R10"],
+    "project_workbook_updated": true,
+    "original_triggers": ["MW-REL-025", "MW-WIN-017", "MW-REL-024"]
+  },
   "lifecycle_state": "candidate"
 }

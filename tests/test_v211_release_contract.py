@@ -55,14 +55,13 @@ class V211ReleaseContractTest(unittest.TestCase):
         dispatch = (ROOT / "scripts/semantic_dispatch.py").read_text(encoding="utf-8")
         self.assertIn("str(expanded) if expanded.is_file()", dispatch)
         self.assertTrue((ROOT / "scripts/runtime_effect_gate.py").is_file())
-        for token in (
-            "semantic-parent-job-missing",
-            "semantic-index-stale",
-            "incomplete-backup-residue",
-            "permanent-maintenance-debt",
-            "maintenance-supervisor-not-healthy",
-        ):
-            self.assertIn(token, (ROOT / "scripts/runtime_effect_gate.py").read_text(encoding="utf-8"))
+        gate = (ROOT / "scripts/runtime_effect_gate.py").read_text(encoding="utf-8")
+        lifecycle = (ROOT / "scripts/collector_lifecycle.py").read_text(encoding="utf-8")
+        maintenance = (ROOT / "scripts/memory_service_state.py").read_text(encoding="utf-8")
+        self.assertIn("verify_collector_lifecycle", gate)
+        self.assertIn("collector-watermark-not-converged", lifecycle)
+        self.assertIn("maintenance supervisor state is stale", maintenance)
+        self.assertNotIn("semantic-parent-job-missing", gate)
 
     def test_mw2116_patch_rehearsal_is_explicitly_bounded(self):
         contract = json.loads(
