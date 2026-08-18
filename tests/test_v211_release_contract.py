@@ -50,10 +50,20 @@ class V211ReleaseContractTest(unittest.TestCase):
             "native-collector/src/store/mod.rs",
             "native-collector/src/store/cursor.rs",
             "native-collector/src/store/transaction.rs",
+            "native-collector/src/store/wal.rs",
             "native-collector/src/telemetry.rs",
             "native-collector/src/main.rs",
             "native-collector/src/bin/memory-wuxian-core-launcher.rs",
         )
+        excluded = {
+            "native-collector/src/bin/memory-wuxian-dashboard-launcher.rs",
+            "native-collector/src/bin/memory-wuxian-envelope.rs",
+        }
+        discovered = {
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "native-collector/src").rglob("*.rs")
+        } - excluded
+        self.assertEqual(set(paths), discovered)
         production = "\n".join(
             (ROOT / path).read_text(encoding="utf-8").split("#[cfg(test)]", 1)[0]
             for path in paths

@@ -754,6 +754,7 @@ impl Store {
                 wal.recover(&transaction_id)?;
             }
         }
+        wal.compact_if_needed()?;
         Ok(())
     }
 
@@ -1314,16 +1315,30 @@ impl Store {
     fn write_coverage_status(&self, paths: &[PathBuf]) -> Result<()> {
         let mut missing_cursor_rollouts = 0u64;
         let mut incomplete_rollouts = 0u64;
+        let mut source_error_rollouts = 0u64;
         let mut pending_bytes = 0u64;
         let mut observed_bytes = 0u64;
         for path in paths {
-            let metadata = fs::metadata(path)?;
+            let metadata = match fs::metadata(path) {
+                Ok(value) => value,
+                Err(error) => {
+                    source_error_rollouts += 1;
+                    eprintln!("coverage source error ({}): {error}", path.display());
+                    continue;
+                }
+            };
             observed_bytes = observed_bytes.saturating_add(metadata.len());
-            let cursor = rollout_session_id(path)
+            let cursor_path = rollout_session_id(path)
                 .map(|session_id| self.cursor_path(&session_id))
-                .filter(|cursor_path| cursor_path.exists())
-                .map(|cursor_path| read_json(&cursor_path))
-                .transpose()?;
+                .filter(|cursor_path| cursor_path.exists());
+            let cursor = match cursor_path.map(|path| read_json(&path)).transpose() {
+                Ok(value) => value,
+                Err(error) => {
+                    source_error_rollouts += 1;
+                    eprintln!("coverage cursor error ({}): {error:#}", path.display());
+                    None
+                }
+            };
             let Some(cursor) = cursor else {
                 missing_cursor_rollouts += 1;
                 pending_bytes = pending_bytes.saturating_add(metadata.len());
@@ -1344,7 +1359,7 @@ impl Store {
             &self.root.join("imports/codex/coverage-status.json"),
             &json!({
                 "format_version": 1,
-                "status": if missing_cursor_rollouts == 0 && incomplete_rollouts == 0 {
+                "status": if missing_cursor_rollouts == 0 && incomplete_rollouts == 0 && source_error_rollouts == 0 {
                     "covered"
                 } else {
                     "catching-up"
@@ -1352,6 +1367,7 @@ impl Store {
                 "scoped_rollouts": paths.len(),
                 "missing_cursor_rollouts": missing_cursor_rollouts,
                 "incomplete_rollouts": incomplete_rollouts,
+                "source_error_rollouts": source_error_rollouts,
                 "pending_bytes": pending_bytes,
                 "observed_bytes": observed_bytes,
                 "updated_at": now_iso(),
@@ -1574,24 +1590,27 @@ impl Store {
                     .and_then(|captures| captures.get(1))
                     .map(|value| value.as_str());
                 let Some(session_id) = session_id else {
-                    return Some(Ok(path));
+                    return Some(path);
                 };
                 let cursor_path = self.cursor_path(session_id);
                 let cursor = match read_json(&cursor_path) {
                     Ok(value) => value,
-                    Err(_) => return Some(Ok(path)),
+                    Err(_) => return Some(path),
                 };
                 let metadata = match fs::metadata(&path) {
                     Ok(value) => value,
-                    Err(error) => return Some(Err(error.into())),
+                    Err(error) => {
+                        eprintln!("source metadata error ({}): {error}", path.display());
+                        return Some(path);
+                    }
                 };
                 if cursor_requires_sync(&cursor, &path, &metadata) {
-                    Some(Ok(path))
+                    Some(path)
                 } else {
                     None
                 }
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Vec<_>>();
         eprintln!("memory-wuxian-collector startup: cursor comparison completed");
         Ok(changed)
     }
@@ -2587,6 +2606,10 @@ impl Store {
     }
 
     fn sync_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
+        self.sync_batch_mode(paths, false)
+    }
+
+    fn sync_batch_mode(&self, paths: Vec<PathBuf>, isolate_source_errors: bool) -> Result<Value> {
         self.repair_native_recovery_debt()?;
         let path_count = paths.len();
         let completed_before = self.lock("archive.lock", || {
@@ -2605,88 +2628,112 @@ impl Store {
             "backup": null,
             "backup_debt": null,
         });
+        let mut source_errors = Vec::new();
         for path in paths {
-            let mut accumulated_session: Option<Value> = None;
-            loop {
-                let prepared = self.prepare_sync_file(&path)?;
-                let chunk =
-                    self.lock("archive.lock", || self.sync_batch_unlocked(vec![prepared]))?;
-                for field in [
-                    "imported_messages",
-                    "duplicate_messages",
-                    "repaired_transcripts",
-                    "token_usage_changed_events",
-                ] {
-                    result[field] = json!(
-                        result.get(field).and_then(Value::as_u64).unwrap_or(0)
-                            + chunk.get(field).and_then(Value::as_u64).unwrap_or(0)
-                    );
-                }
-                if let Some(session) = chunk
-                    .get("sessions")
-                    .and_then(Value::as_array)
-                    .and_then(|sessions| sessions.first())
-                {
-                    if let Some(accumulated) = accumulated_session.as_mut() {
-                        for field in [
-                            "visible_events",
-                            "imported_messages",
-                            "duplicate_messages",
-                            "repaired_transcripts",
-                            "token_usage_changed_events",
-                        ] {
-                            accumulated[field] = json!(
-                                accumulated.get(field).and_then(Value::as_u64).unwrap_or(0)
-                                    + session.get(field).and_then(Value::as_u64).unwrap_or(0)
-                            );
-                        }
-                        for field in [
-                            "last_line",
-                            "reported_total_tokens",
-                            "token_usage_ledger",
-                            "excluded_reason",
-                            "committed_byte_offset",
-                            "observed_source_size",
-                            "complete",
-                            "caught_up",
-                        ] {
-                            accumulated[field] = session[field].clone();
-                        }
-                    } else {
-                        accumulated_session = Some(session.clone());
+            let synced = (|| -> Result<Option<Value>> {
+                let mut accumulated_session: Option<Value> = None;
+                loop {
+                    let prepared = self.prepare_sync_file(&path)?;
+                    let chunk =
+                        self.lock("archive.lock", || self.sync_batch_unlocked(vec![prepared]))?;
+                    for field in [
+                        "imported_messages",
+                        "duplicate_messages",
+                        "repaired_transcripts",
+                        "token_usage_changed_events",
+                    ] {
+                        result[field] = json!(
+                            result.get(field).and_then(Value::as_u64).unwrap_or(0)
+                                + chunk.get(field).and_then(Value::as_u64).unwrap_or(0)
+                        );
                     }
-                }
-                for field in [
-                    "created_summary_job",
-                    "deterministic_indexes",
-                    "backup_debt",
-                ] {
-                    if chunk.get(field).is_some_and(|value| !value.is_null()) {
-                        result[field] = chunk[field].clone();
+                    if let Some(session) = chunk
+                        .get("sessions")
+                        .and_then(Value::as_array)
+                        .and_then(|sessions| sessions.first())
+                    {
+                        if let Some(accumulated) = accumulated_session.as_mut() {
+                            for field in [
+                                "visible_events",
+                                "imported_messages",
+                                "duplicate_messages",
+                                "repaired_transcripts",
+                                "token_usage_changed_events",
+                            ] {
+                                accumulated[field] = json!(
+                                    accumulated.get(field).and_then(Value::as_u64).unwrap_or(0)
+                                        + session.get(field).and_then(Value::as_u64).unwrap_or(0)
+                                );
+                            }
+                            for field in [
+                                "last_line",
+                                "reported_total_tokens",
+                                "token_usage_ledger",
+                                "excluded_reason",
+                                "committed_byte_offset",
+                                "observed_source_size",
+                                "complete",
+                                "caught_up",
+                            ] {
+                                accumulated[field] = session[field].clone();
+                            }
+                        } else {
+                            accumulated_session = Some(session.clone());
+                        }
                     }
+                    for field in [
+                        "created_summary_job",
+                        "deterministic_indexes",
+                        "backup_debt",
+                    ] {
+                        if chunk.get(field).is_some_and(|value| !value.is_null()) {
+                            result[field] = chunk[field].clone();
+                        }
+                    }
+                    let caught_up = chunk
+                        .get("sessions")
+                        .and_then(Value::as_array)
+                        .and_then(|sessions| sessions.first())
+                        .and_then(|session| session.get("caught_up"))
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true);
+                    if caught_up {
+                        break;
+                    }
+                    // Give maintenance and backup workers a fair chance to acquire
+                    // the shared archive lock during sustained history catch-up.
+                    std::thread::sleep(RECOVERY_LOCK_YIELD);
                 }
-                let caught_up = chunk
-                    .get("sessions")
-                    .and_then(Value::as_array)
-                    .and_then(|sessions| sessions.first())
-                    .and_then(|session| session.get("caught_up"))
-                    .and_then(Value::as_bool)
-                    .unwrap_or(true);
-                if caught_up {
-                    break;
-                }
-                // Give maintenance and backup workers a fair chance to acquire
-                // the shared archive lock during sustained history catch-up.
-                std::thread::sleep(RECOVERY_LOCK_YIELD);
-            }
-            if let Some(session) = accumulated_session {
-                result["sessions"]
+                Ok(accumulated_session)
+            })();
+            match synced {
+                Ok(Some(session)) => result["sessions"]
                     .as_array_mut()
                     .expect("sessions is an array")
-                    .push(session);
+                    .push(session),
+                Ok(None) => {}
+                Err(error) if isolate_source_errors => {
+                    eprintln!("source sync error ({}): {error:#}", path.display());
+                    source_errors.push(json!({
+                        "source_path": portable_path(&path),
+                        "error": error.to_string(),
+                    }));
+                    if self.root.join("pending/native-recovery-debt.json").exists() {
+                        self.repair_native_recovery_debt().context(
+                            "repair partial source mutation before continuing startup capture",
+                        )?;
+                        self.recover_capture_wal()?;
+                    }
+                }
+                Err(error) => return Err(error),
             }
         }
         result["session_count"] = json!(path_count);
+        if !source_errors.is_empty() {
+            result["status"] = json!("partial");
+            result["source_error_count"] = json!(source_errors.len());
+            result["source_errors"] = Value::Array(source_errors);
+        }
         let imported = result
             .get("imported_messages")
             .and_then(Value::as_u64)
@@ -2732,7 +2779,7 @@ impl Store {
     }
 
     fn sync_startup_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        self.sync_batch(paths)
+        self.sync_batch_mode(paths, true)
     }
 
     fn repair_native_recovery_debt(&self) -> Result<()> {
@@ -3518,6 +3565,7 @@ mod adaptive_fallback_tests {
             include_str!("store/mod.rs"),
             include_str!("store/cursor.rs"),
             include_str!("store/transaction.rs"),
+            include_str!("store/wal.rs"),
             include_str!("telemetry.rs"),
             include_str!("main.rs"),
             include_str!("bin/memory-wuxian-core-launcher.rs"),
@@ -3655,6 +3703,55 @@ ai_summary:
         Ok(())
     }
 
+    #[test]
+    fn store_restart_recovers_a_durable_transaction_exactly_once() -> Result<()> {
+        const SESSION_ID: &str = "019fb8f2-9a67-7b03-9474-6f92cd6b21a7";
+        let archive = tempfile::tempdir()?;
+        let config = archive.path().join("config.yaml");
+        fs::write(&config, "{}\n")?;
+        let source_path = "C:/sessions/durable-rollout.jsonl";
+        let intent = WalIntent {
+            transaction_id: "durable-tx".to_owned(),
+            session_id: SESSION_ID.to_owned(),
+            source_path: source_path.to_owned(),
+            cursor_before_line: 2,
+            cursor_after_line: 3,
+            committed_byte_offset: 512,
+        };
+        let store = Store::new(archive.path().to_path_buf(), &config, None, None)?;
+        store.capture_wal().begin(&intent)?;
+        atomic_write_json(
+            &store.cursor_path(SESSION_ID),
+            &json!({
+                "format_version": 1,
+                "session_id": SESSION_ID,
+                "source_path": source_path,
+                "last_line": 3,
+                "committed_byte_offset": 512,
+            }),
+        )?;
+        let raw_path = archive.path().join("raw/2026/08/18.md");
+        fs::create_dir_all(raw_path.parent().expect("raw path has a parent"))?;
+        fs::write(&raw_path, b"durable archive bytes\n")?;
+        drop(store);
+
+        let recovered = Store::new(archive.path().to_path_buf(), &config, None, None)?;
+        let state = recovered.capture_wal_state()?;
+        assert!(state.pending.is_empty());
+        assert_eq!(
+            state.last_durable_transaction.as_deref(),
+            Some("durable-tx")
+        );
+        let wal_path = archive.path().join("imports/codex/capture-wal.jsonl");
+        let recovered_wal_size = fs::metadata(&wal_path)?.len();
+        drop(recovered);
+
+        let _replayed = Store::new(archive.path().to_path_buf(), &config, None, None)?;
+        assert_eq!(fs::metadata(&wal_path)?.len(), recovered_wal_size);
+        assert_eq!(fs::read(&raw_path)?, b"durable archive bytes\n");
+        Ok(())
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn kqueue_rollout_watch_count_is_bounded() -> Result<()> {
@@ -3749,6 +3846,53 @@ mod rollout_stream_tests {
             }),
         )?;
         assert!(recent_rollouts(sessions.path(), Some(since), archive.path())?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn startup_source_failure_does_not_block_other_rollouts() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let config = archive.path().join("config.yaml");
+        fs::write(&config, "{}\n")?;
+        let store = Store::new(archive.path().to_path_buf(), &config, None, None)?;
+        let mut state = json!({
+            "format_version": 1,
+            "total_messages": 0,
+            "completed_rounds": 0,
+            "last_summarized_round": 0,
+            "last_summarized_rounds": {},
+            "last_raw_message_id": null,
+            "pending_round": null,
+            "pending_rounds": {},
+            "next_round_number": 1,
+            "completed_rounds_out_of_order": [],
+            "next_job_id": 1,
+            "next_summary_ids": {"1": 1, "2": 1, "3": 1, "4": 1},
+            "last_successful_memory_update": null,
+        });
+        store.save_state(&mut state)?;
+        let valid = rollout_path(sessions.path());
+        fs::write(
+            &valid,
+            format!(
+                "{}\n{}\n",
+                session_meta(json!("user")),
+                user_event("captured despite adjacent source failure")
+            ),
+        )?;
+        let missing = sessions.path().join("missing-rollout.jsonl");
+
+        let canonical = valid.canonicalize()?;
+        store.write_coverage_status(&[missing.clone(), canonical.clone()])?;
+        let coverage = read_json(&archive.path().join("imports/codex/coverage-status.json"))?;
+        assert_eq!(coverage["source_error_rollouts"], 1);
+        let result = store.sync_startup_batch(vec![missing, canonical])?;
+
+        assert_eq!(result["status"], "partial");
+        assert_eq!(result["source_error_count"], 1);
+        assert_eq!(result["imported_messages"], 1);
+        assert_eq!(result["sessions"].as_array().map(Vec::len), Some(1));
         Ok(())
     }
 

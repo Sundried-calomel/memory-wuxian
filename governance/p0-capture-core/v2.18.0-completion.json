@@ -4,17 +4,20 @@
   "changed_workbook_entries": [
     "memory-wuxian-project-defects"
   ],
-  "created_at": "2026-08-18T06:58:51+00:00",
+  "created_at": "2026-08-18T07:47:39+00:00",
   "no_applicable_family_reason": null,
   "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\p0-capture-core\\v2.18.0-preflight.json",
   "preflight_sha256": "a23e02d48455914c3bb924ebc5d49231feeaa129194c73de44b9cdd125b67888",
-  "receipt_sha256": "dd7bbcc1cfb92f76619d5caca3b2c303a2f498e354aebb577aeb1194d17e5497",
+  "receipt_sha256": "cc939cdb6f86bb737a3e9450f1c0c22efb76912569e592e4f59a1fbec1503c24",
   "receipt_type": "defect-workbook-completion",
   "schema_version": 1,
   "selected_families": [
     "G02",
+    "G03",
+    "G05",
     "G06",
     "G09",
+    "MW-R03",
     "MW-R05",
     "MW-R06",
     "MW-R09",

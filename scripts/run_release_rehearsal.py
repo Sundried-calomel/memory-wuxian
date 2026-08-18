@@ -444,12 +444,16 @@ def main() -> int:
                 python, "-c",
                 (
                     "from pathlib import Path;"
-                    "paths=('lib.rs','locking.rs','runtime.rs','source/mod.rs','store/mod.rs','store/cursor.rs','store/transaction.rs','telemetry.rs','main.rs','bin/memory-wuxian-core-launcher.rs');"
+                    "paths=('lib.rs','locking.rs','runtime.rs','source/mod.rs','store/mod.rs','store/cursor.rs','store/transaction.rs','store/wal.rs','telemetry.rs','main.rs','bin/memory-wuxian-core-launcher.rs');"
                     "root=Path('native-collector/src');"
+                    "excluded={'bin/memory-wuxian-dashboard-launcher.rs','bin/memory-wuxian-envelope.rs'};"
+                    "assert set(paths)=={path.relative_to(root).as_posix() for path in root.rglob('*.rs')}-excluded;"
                     "s=(root/'lib.rs').read_text('utf-8');"
                     "p='\\n'.join((root/path).read_text('utf-8').split('#[cfg(test)]',1)[0] for path in paths);"
                     "assert 'fn sync_startup_batch' in s;"
-                    "assert 'self.sync_batch(paths)' in p;"
+                    "assert 'self.sync_batch_mode(paths, false)' in p;"
+                    "assert 'self.sync_batch_mode(paths, true)' in p;"
+                    "assert 'repair partial source mutation before continuing startup capture' in p;"
                     "assert 'store.sync_startup_batch(initial_paths)?' in s;"
                     "assert 'self.maybe_create_level_one_job()?' in p;"
                     "assert 'semantic_dispatch.py' not in p;"
