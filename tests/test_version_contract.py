@@ -35,7 +35,7 @@ class VersionContractTest(unittest.TestCase):
 
     def test_rust_cli_names_and_versions_match_product(self):
         sources = {
-            "memory-wuxian-collector": RUST_ROOT / "src" / "main.rs",
+            "memory-wuxian-collector": RUST_ROOT / "src" / "lib.rs",
             "memory-wuxian-envelope": RUST_ROOT / "src" / "bin" / "memory-wuxian-envelope.rs",
         }
         for name, source in sources.items():

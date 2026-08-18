@@ -19,7 +19,7 @@ class V2125ReleaseContractTest(unittest.TestCase):
         self.assertTrue(contract["defect_workbook"]["project_workbook_updated"])
         self.assertIn("MW-R05", contract["defect_workbook"]["applicable_families"])
         python_source = (ROOT / "scripts/memory_cli.py").read_text(encoding="utf-8")
-        rust_source = (ROOT / "native-collector/src/main.rs").read_text(encoding="utf-8")
+        rust_source = (ROOT / "native-collector/src/lib.rs").read_text(encoding="utf-8")
         self.assertIn("if number <= 0:", python_source)
         self.assertIn("if number == 0 {", rust_source)
 

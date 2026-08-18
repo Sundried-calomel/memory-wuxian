@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.17.0 - 2026-08-18
+
+- Extract the native Capture Core into explicit runtime, source, store,
+  transaction, cursor, locking, and telemetry modules behind thin binaries.
+- Establish the filesystem watcher before startup enumeration and catch-up,
+  retaining queued changes until the initial synchronization completes.
+- Enforce the P0 one-way dependency boundary and preserve existing event
+  selection, raw archive bytes, cursor semantics, and summary job behavior.
+- Add the dedicated `memory-wuxian-core-launcher` entrypoint and byte-parity,
+  startup-order, architecture, and single-writer checks.
+
 ## 2.16.0 - 2026-08-18
 
 - Make Windows Task Scheduler and macOS launchd activation one durable

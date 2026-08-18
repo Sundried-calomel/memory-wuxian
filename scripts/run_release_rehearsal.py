@@ -435,7 +435,7 @@ def main() -> int:
                 python, "-c",
                 (
                     "from pathlib import Path;"
-                    "s=Path('native-collector/src/main.rs').read_text('utf-8');"
+                    "s=Path('native-collector/src/lib.rs').read_text('utf-8');"
                     "p=s.split('#[cfg(test)]',1)[0];"
                     "assert 'fn sync_startup_batch' in s;"
                     "assert 'self.sync_batch(paths)' in p;"

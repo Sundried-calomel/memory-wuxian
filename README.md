@@ -1,5 +1,11 @@
 # Memory無限
 
+> **2.17.0:** Extracts the P0 Capture Core behind the thin native
+> `memory-wuxian-core-launcher`.
+> Filesystem watchers are active before bounded startup catch-up, while source
+> selection, visible-event normalization, archive bytes, cursors, and summary
+> eligibility remain unchanged.
+
 > **2.16.0:** Makes collector installation and activation transactional on
 > Windows and macOS. A candidate must prove its exact startup owner, command,
 > archive root, live identity, and bounded watermark progress before commit;
