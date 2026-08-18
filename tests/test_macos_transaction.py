@@ -180,14 +180,15 @@ class MacosTransactionTest(unittest.TestCase):
                 kwargs.get("timeout_seconds"),
                 transaction.COLLECTOR_READY_TIMEOUT_SECONDS,
             )
+            watermark = kwargs.get("minimum_watermark") or "2026-07-29T00:00:00Z"
             return {
                 "pid": 42,
                 "ready": True,
                 "phase": "ready",
                 "updated_at": "2026-07-30T00:00:00Z",
                 "last_archive_update": "2026-07-30T00:00:00Z",
-                "source_watermark": "2026-07-29T00:00:00Z",
-                "archive_watermark": "2026-07-29T00:00:00Z",
+                "source_watermark": watermark,
+                "archive_watermark": watermark,
             }
 
         with (
