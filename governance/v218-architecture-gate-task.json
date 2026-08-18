@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-architecture-gate-v1",
+  "objective": "Make the existing architecture gate cover every tracked packaging artifact and enforce declared Rust Capture Core forbidden capabilities without changing runtime behavior.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian",
+  "owner_id": "product-quality",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "rust", "powershell", "shell"],
+  "path_globs": [
+    "docs/module-architecture.json",
+    "scripts/check_architecture_contract.py",
+    "tests/test_product_architecture.py",
+    "packaging/**"
+  ],
+  "entrypoints": ["architecture-contract-check"],
+  "resources": ["module-owner-registry", "tracked-production-surface", "rust-source-boundary"],
+  "operations": ["enumerate", "classify", "validate", "reject"],
+  "data_formats": ["json", "python", "rust", "powershell", "shell"],
+  "authorization_boundaries": [
+    "Do not modify runtime code, live archives, installed components, summary behavior, historical backfill, or cloud and federation protocols.",
+    "The gate may reject invalid source trees but must not rewrite, format, stage, install, or execute production artifacts."
+  ],
+  "implementation_units": [
+    {
+      "id": "packaging-owner-coverage",
+      "owner_id": "product-quality",
+      "paths": ["docs/module-architecture.json", "scripts/check_architecture_contract.py", "tests/test_product_architecture.py", "packaging/**"],
+      "entrypoints": ["architecture-contract-check"],
+      "resources": ["module-owner-registry", "tracked-production-surface"],
+      "operations": ["enumerate", "classify", "reject"],
+      "planned_check_ids": ["packaging-complete-enumeration", "unowned-packaging-rejection", "overlapping-owner-rejection"]
+    },
+    {
+      "id": "rust-capability-enforcement",
+      "owner_id": "product-quality",
+      "paths": ["docs/module-architecture.json", "scripts/check_architecture_contract.py", "tests/test_product_architecture.py", "native-collector/src/**"],
+      "entrypoints": ["architecture-contract-check"],
+      "resources": ["rust-source-boundary", "capture-core-owner-set"],
+      "operations": ["enumerate", "validate", "reject"],
+      "planned_check_ids": ["registered-rust-surface", "forbidden-rust-capability-negative-fixture", "capture-core-positive-scan"]
+    }
+  ],
+  "rule_exclusions": []
+}

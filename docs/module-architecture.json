@@ -3,6 +3,7 @@
   "source_roots": [
     {"path": "scripts", "extensions": [".py", ".ps1", ".sh"]},
     {"path": "native-collector/src", "extensions": [".rs"]},
+    {"path": "packaging", "all_files": true},
     {"path": "dashboard", "extensions": [".html", ".css", ".js"]},
     {"path": "schemas", "extensions": [".json"]},
     {"path": "contracts", "extensions": [".json"]}
@@ -68,6 +69,10 @@
         "scripts/memory_readonly_http.py",
         "scripts/memory_readonly_mcp.py",
         "scripts/memory_update_governance.py",
+        "packaging/macos/MemoryDashboard.swift",
+        "packaging/macos/scripts/postinstall",
+        "packaging/windows/install.ps1",
+        "packaging/windows/uninstall.ps1",
         "native-collector/src/bin/memory-wuxian-dashboard-launcher.rs"
       ]
     },
@@ -180,6 +185,9 @@
         "scripts/check_architecture_contract.py",
         "scripts/check_documentation_changes.py",
         "scripts/check_documentation_contract.py",
+        "packaging/macos/build_dashboard_app.sh",
+        "packaging/macos/build_pkg.sh",
+        "packaging/windows/MemoryWuxian.iss",
         "scripts/run_release_rehearsal.py",
         "scripts/run_unittest_shard.py"
       ]
@@ -213,6 +221,17 @@
         "memory_federation",
         "memory_cloud_transport"
       ]
+    }
+  },
+  "rust_capability_rules": {
+    "symbols": {
+      "ai": ["anthropic", "async_openai", "openai"],
+      "control": ["governance", "maintenance", "scheduler"],
+      "environment": ["environment"],
+      "exchange": ["cloud", "envelope", "federation", "reqwest", "ssh2"],
+      "memory": ["indexing", "retrieval", "semantic_dispatch", "semantic_worker", "summary", "summaries"],
+      "project": ["project"],
+      "ui": ["egui", "iced", "tao", "webview2", "wry"]
     }
   }
 }

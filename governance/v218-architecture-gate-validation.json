@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-architecture-gate-v1",
+  "base_commit": "72998fd4e051816f57ac2c56d94579e0db45f8b1",
+  "validated_at": "2026-08-18T12:23:27Z",
+  "runtime": "C:\\Users\\56453\\.codex\\runtimes\\memory-wuxian-e5-py312\\Scripts\\python.exe",
+  "checks": [
+    {
+      "command": "python scripts/check_architecture_contract.py",
+      "status": "passed",
+      "summary": "Schema v2, source ownership, Python dependency allowlists, and Rust capability boundaries passed."
+    },
+    {
+      "command": "python -m unittest tests.test_product_architecture tests.test_v217_release_contract tests.test_v218_release_contract tests.test_release_workflow_gate",
+      "status": "passed",
+      "tests_run": 39,
+      "summary": "All targeted architecture and adjacent release-contract tests passed."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "summary": "No whitespace errors; Git emitted only working-copy LF-to-CRLF notices."
+    }
+  ],
+  "validated_files": [
+    {
+      "path": "docs/module-architecture.json",
+      "sha256": "9875070d93d541f566f0a9b127eeef662ed2623bc0a404c6367e08bac9ac4acb"
+    },
+    {
+      "path": "scripts/check_architecture_contract.py",
+      "sha256": "f0308a7a29325404ef8677b1e2e250448ee56bae1da1b46761bcf645773499a3"
+    },
+    {
+      "path": "tests/test_product_architecture.py",
+      "sha256": "b485ccb013adf5eaff9d8aaf22c9c0b45da531d324a461fa6ff37ed6d21d30f6"
+    }
+  ],
+  "scope_exclusions": [
+    "runtime code",
+    "live archive",
+    "summary generation and backfill",
+    "cloud and federation protocols",
+    "installation and release"
+  ]
+}
