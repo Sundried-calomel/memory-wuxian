@@ -185,6 +185,15 @@ class MaintenanceQueueTests(unittest.TestCase):
             state = service_state(self.root, {"integration": {"codex": {"enabled": True}}})
         self.assertEqual(state["actual"]["collector"], "running")
 
+    def test_service_state_is_pure_read_and_does_not_recover_leases(self):
+        job = self.queue.enqueue("archive-health", "health:pure-read")
+        path = self.queue._path(job["job_id"])
+        before = path.read_bytes()
+        with patch("memory_service_state.MaintenanceQueue.recover_expired") as recover:
+            service_state(self.root, {"integration": {"codex": {"enabled": False}}})
+        recover.assert_not_called()
+        self.assertEqual(path.read_bytes(), before)
+
     def _pending_summary(self, name: str, signature: str, round_end: int = 2):
         pending = self.root / "pending"
         pending.mkdir(parents=True, exist_ok=True)

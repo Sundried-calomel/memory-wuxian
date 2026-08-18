@@ -38,6 +38,7 @@ use source::is_rollout_file;
 use store::cursor::{
     covers_source as cursor_covers_source, portable_path, requires_sync as cursor_requires_sync,
 };
+use store::wal::{CaptureWal, WalIntent, WalState};
 use store::{
     append_bytes, append_jsonl, atomic_write, atomic_write_json, atomic_write_jsonl, read_json,
 };
@@ -698,6 +699,7 @@ impl Store {
             python_executable,
         };
         store.init()?;
+        store.recover_capture_wal()?;
         Ok(store)
     }
 
@@ -717,6 +719,40 @@ impl Store {
             "dashboard",
         ] {
             fs::create_dir_all(self.root.join(relative))?;
+        }
+        Ok(())
+    }
+
+    fn capture_wal(&self) -> CaptureWal {
+        CaptureWal::new(&self.root)
+    }
+
+    fn capture_wal_state(&self) -> Result<WalState> {
+        self.capture_wal().state()
+    }
+
+    fn recover_capture_wal(&self) -> Result<()> {
+        let wal = self.capture_wal();
+        let state = wal.state()?;
+        for (transaction_id, intent) in state.pending {
+            let cursor_path = self.cursor_path(&intent.session_id);
+            if !cursor_path.is_file() {
+                continue;
+            }
+            let cursor = read_json(&cursor_path)?;
+            let same_source = cursor.get("source_path").and_then(Value::as_str)
+                == Some(intent.source_path.as_str());
+            let durable_offset = cursor
+                .get("committed_byte_offset")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let durable_line = cursor.get("last_line").and_then(Value::as_u64).unwrap_or(0);
+            if same_source
+                && durable_offset >= intent.committed_byte_offset
+                && durable_line >= intent.cursor_after_line
+            {
+                wal.recover(&transaction_id)?;
+            }
         }
         Ok(())
     }
@@ -2784,6 +2820,37 @@ impl Store {
         let mut repaired = 0;
         let mut token_usage_changed_events = 0;
         for prepared in prepared_files {
+            let transaction_id = sha256_hex(
+                format!(
+                    "{}\0{}\0{}\0{}\0{}",
+                    prepared.batch.session_id,
+                    portable_path(&prepared.source_path),
+                    prepared.last_line,
+                    prepared
+                        .batch
+                        .lines
+                        .last()
+                        .map(|line| line.number)
+                        .unwrap_or(prepared.resume_line),
+                    prepared.batch.committed_byte_offset,
+                )
+                .as_bytes(),
+            );
+            let intent = WalIntent {
+                transaction_id: transaction_id.clone(),
+                session_id: prepared.batch.session_id.clone(),
+                source_path: portable_path(&prepared.source_path),
+                cursor_before_line: prepared.last_line,
+                cursor_after_line: prepared
+                    .batch
+                    .lines
+                    .last()
+                    .map(|line| line.number)
+                    .unwrap_or(prepared.resume_line),
+                committed_byte_offset: prepared.batch.committed_byte_offset,
+            };
+            let wal = self.capture_wal();
+            wal.begin(&intent)?;
             let recovery_debt = self.root.join("pending/native-recovery-debt.json");
             let inherited_recovery_debt = recovery_debt.exists();
             if !inherited_recovery_debt {
@@ -2798,6 +2865,7 @@ impl Store {
                 )?;
             }
             let result = self.sync_prepared_file(prepared)?;
+            wal.commit(&transaction_id)?;
             if !inherited_recovery_debt {
                 remove_file_if_present(&recovery_debt)?;
             }
@@ -3111,33 +3179,36 @@ fn emit(value: &Value) -> Result<()> {
 }
 
 fn sync_and_emit(store: &Store, paths: Vec<PathBuf>) -> bool {
-    match store.sync_batch(paths) {
-        Ok(result) => {
-            let changed = result
-                .get("imported_messages")
-                .and_then(Value::as_u64)
-                .unwrap_or(0)
-                > 0
-                || result
-                    .get("repaired_transcripts")
+    let mut all_succeeded = true;
+    for path in paths {
+        match store.sync_batch(vec![path.clone()]) {
+            Ok(result) => {
+                let changed = result
+                    .get("imported_messages")
                     .and_then(Value::as_u64)
                     .unwrap_or(0)
                     > 0
-                || result
-                    .get("token_usage_changed_events")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0)
-                    > 0;
-            if changed && let Err(error) = emit(&result) {
-                eprintln!("output error: {error:#}");
+                    || result
+                        .get("repaired_transcripts")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0)
+                        > 0
+                    || result
+                        .get("token_usage_changed_events")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0)
+                        > 0;
+                if changed && let Err(error) = emit(&result) {
+                    eprintln!("output error: {error:#}");
+                }
             }
-            true
-        }
-        Err(error) => {
-            eprintln!("sync error: {error:#}");
-            false
+            Err(error) => {
+                all_succeeded = false;
+                eprintln!("source sync error ({}): {error:#}", path.display());
+            }
         }
     }
+    all_succeeded
 }
 
 #[cfg(target_os = "macos")]
@@ -3269,11 +3340,13 @@ fn write_collector_telemetry(
     telemetry: &mut CollectorTelemetry,
     store: &Store,
     interval: Duration,
-) -> Result<()> {
-    atomic_write_json(
+) {
+    if let Err(error) = atomic_write_json(
         &store.root.join("imports/codex/collector-telemetry.json"),
         &telemetry.document(interval),
-    )
+    ) {
+        eprintln!("collector telemetry error: {error:#}");
+    }
 }
 
 fn newest_source_watermark(stamps: &HashMap<PathBuf, (u64, SystemTime)>) -> Option<String> {
@@ -3304,7 +3377,7 @@ fn run_event_loop(
     telemetry.record_source_watermark(initial_watermark.clone());
     telemetry.record_archive(initial_watermark);
     telemetry.mark_ready();
-    write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK)?;
+    write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
     eprintln!(
         "memory-wuxian-collector ready (kqueue with adaptive 5s/30s/5m metadata fallback): {}",
         sessions_root.display()
@@ -3312,7 +3385,7 @@ fn run_event_loop(
     loop {
         let interval = adaptive_fallback(last_activity.elapsed());
         if CollectorTelemetry::mode(interval) != telemetry.last_mode {
-            write_collector_telemetry(&mut telemetry, store, interval)?;
+            write_collector_telemetry(&mut telemetry, store, interval);
         }
         let received_event = watcher.wait(interval)?;
         if received_event {
@@ -3332,7 +3405,7 @@ fn run_event_loop(
         }
         if received_event || had_pending_rollouts || known_stamps != current_stamps {
             last_activity = std::time::Instant::now();
-            write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK)?;
+            write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
         }
         if received_event || known_stamps.len() != current_stamps.len() {
             watcher = KqueueWatcher::new(sessions_root, since)?;
@@ -3340,7 +3413,7 @@ fn run_event_loop(
         if sync_succeeded {
             known_stamps = current_stamps;
         }
-        write_collector_telemetry(&mut telemetry, store, interval)?;
+        write_collector_telemetry(&mut telemetry, store, interval);
     }
 }
 
@@ -3361,7 +3434,7 @@ fn run_event_loop(
     telemetry.record_source_watermark(initial_watermark.clone());
     telemetry.record_archive(initial_watermark);
     telemetry.mark_ready();
-    write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK)?;
+    write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
     eprintln!(
         "memory-wuxian-collector ready (native watcher with adaptive 5s/30s/5m metadata fallback): {}",
         sessions_root.display()
@@ -3369,7 +3442,7 @@ fn run_event_loop(
     loop {
         let interval = adaptive_fallback(last_activity.elapsed());
         if CollectorTelemetry::mode(interval) != telemetry.last_mode {
-            write_collector_telemetry(&mut telemetry, store, interval)?;
+            write_collector_telemetry(&mut telemetry, store, interval);
         }
         let first = match receiver.recv_timeout(interval) {
             Ok(value) => Some(value),
@@ -3420,12 +3493,12 @@ fn run_event_loop(
         }
         if received_event || had_pending_rollouts || known_stamps != current_stamps {
             last_activity = std::time::Instant::now();
-            write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK)?;
+            write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
         }
         if sync_succeeded {
             known_stamps = current_stamps;
         }
-        write_collector_telemetry(&mut telemetry, store, interval)?;
+        write_collector_telemetry(&mut telemetry, store, interval);
     }
 }
 
@@ -3809,6 +3882,8 @@ fn run() -> Result<()> {
         args.codex_cli.clone(),
     )?;
     let mut startup_telemetry = CollectorTelemetry::new();
+    let wal_state = store.capture_wal_state()?;
+    startup_telemetry.record_wal(wal_state.pending.len(), wal_state.last_durable_transaction);
     #[cfg(target_os = "macos")]
     let prepared_watcher = if args.once {
         None
@@ -3823,7 +3898,7 @@ fn run() -> Result<()> {
     };
     if !args.once {
         startup_telemetry.mark_watcher_ready();
-        write_collector_telemetry(&mut startup_telemetry, &store, ACTIVE_FALLBACK)?;
+        write_collector_telemetry(&mut startup_telemetry, &store, ACTIVE_FALLBACK);
     }
     let initial_paths = if args.session_files.is_empty() {
         recent_rollouts(&sessions_root, since, &store.root)?

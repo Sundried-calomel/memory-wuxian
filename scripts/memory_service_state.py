@@ -25,7 +25,6 @@ def _json(path: Path) -> Dict[str, Any]:
 def service_state(archive_root: Path, config: Dict[str, Any]) -> Dict[str, Any]:
     root = Path(archive_root)
     queue = MaintenanceQueue(root)
-    queue.recover_expired()
     telemetry = _json(root / "imports" / "codex" / "collector-telemetry.json")
     semantic_enabled = bool(config.get("summaries", {}).get("automatic_semantic_jobs", True))
     collector_desired = bool(config.get("integration", {}).get("codex", {}).get("enabled", True))

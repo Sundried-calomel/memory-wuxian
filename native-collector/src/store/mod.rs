@@ -6,6 +6,7 @@ use serde_json::Value;
 
 pub(crate) mod cursor;
 pub(crate) mod transaction;
+pub(crate) mod wal;
 
 pub(crate) use transaction::{
     append_bytes, append_jsonl, atomic_write, atomic_write_json, atomic_write_jsonl,

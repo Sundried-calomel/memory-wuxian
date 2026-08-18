@@ -371,6 +371,15 @@ def main() -> int:
             ],
         ),
         (
+            "capture-core-wal-and-fault-isolation",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_v218_release_contract",
+                "tests.test_maintenance_scheduler.MaintenanceSchedulerTest.test_supervisor_returns_nonzero_when_a_cycle_fails",
+                "tests.test_memory_jobs.MaintenanceQueueTests.test_service_state_is_pure_read_and_does_not_recover_leases",
+            ],
+        ),
+        (
             "documentation-contract",
             [python, "scripts/check_documentation_contract.py"],
         ),

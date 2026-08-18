@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.18.0",
+  "candidate_id": "v2.18.0-capture-recovery-and-isolation",
+  "artifact_profile": "software-feature",
+  "classification": "repair",
+  "owner_id": "capture-core-control-plane-product-quality",
+  "validation_profile": "full",
+  "target": "Durable Capture Core recovery, source-local fault isolation, bounded health, and real-effect release evidence.",
+  "invariants": [
+    "The WAL contains only transaction metadata and hashes and never replaces human-readable raw authority.",
+    "A cursor advances only after the corresponding archive mutation is durable.",
+    "Optional telemetry, control, summary, index, exchange, environment, project, UI, and AI failures cannot stop capture."
+  ],
+  "allowed_changes": [
+    "Add bounded internal WAL prepare, commit, recovery, and compaction evidence.",
+    "Add source-local failure isolation, pure-read health, nonzero failure exits, and P0 release scenarios."
+  ],
+  "prohibited_changes": [
+    "Write dialogue content into the WAL or use it as a new source of truth.",
+    "Change raw bytes, summary rules, atomic summary work, historical backfill, or cloud protocols."
+  ],
+  "required_evidence": [
+    "wal-crash-recovery",
+    "partial-write-rejection",
+    "source-local-isolation",
+    "telemetry-failure-isolation",
+    "pure-read-health",
+    "nonzero-maintenance-failure",
+    "runtime-effect-gate",
+    "full-release-rehearsal",
+    "documentation-contract",
+    "independent-review"
+  ],
+  "lifecycle_state": "candidate"
+}
