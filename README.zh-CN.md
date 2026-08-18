@@ -3,6 +3,8 @@
 > **2.16.0：**Windows 与 macOS 的采集器安装和激活改为完整事务。候选版本只有在
 > 精确证明唯一启动 Owner、命令、归档根、活动进程身份和有界水位推进后才会提交；
 > 任一步失败都恢复上一份可运行版本，并在 `collector-lifecycle.json` 保留审计证据。
+> 采集器激活证据由 `collector_runtime_effect_gate.py` 独立负责；既有
+> `runtime_effect_gate.py` 的摘要与维护检查保持不变。
 
 > **2.15.0：**新增独立加密的 `project-attachment-v1` 大型项目附件流。它使用
 > 4 MiB 精确分块、SHA-256 清单、可续传交付和原子验证重建；原始文件继续保持

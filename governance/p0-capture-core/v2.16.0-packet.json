@@ -50,7 +50,6 @@
         "Installing a global dependency before checking a registered project runtime."
       ],
       "implementation_unit_ids": [
-        "v216-lifecycle-effect",
         "v216-platform-transaction"
       ],
       "invariants": [
@@ -60,14 +59,18 @@
       "match_reasons": [
         {
           "matches": [
-            "process"
+            "registry",
+            "runtime",
+            "installer"
           ],
           "signal": "resource-or-entrypoint",
           "weight": 40
         },
         {
           "matches": [
-            "scripts/runtime_effect_gate.py~**/runtime*"
+            "scripts/install_codex_autosync.py~**/install*",
+            "scripts/install_codex_autosync_windows.py~**/install*",
+            "scripts/install_macos_transaction.py~**/install*"
           ],
           "signal": "path",
           "weight": 40
@@ -82,8 +85,7 @@
         },
         {
           "matches": [
-            "launch",
-            "probe"
+            "install"
           ],
           "signal": "operation",
           "weight": 15
@@ -526,7 +528,8 @@
         },
         {
           "matches": [
-            "scripts/collector_lifecycle.py~**/collector*"
+            "scripts/collector_lifecycle.py~**/collector*",
+            "scripts/collector_runtime_effect_gate.py~**/collector*"
           ],
           "signal": "path",
           "weight": 40
@@ -807,14 +810,14 @@
     }
   ],
   "no_match_reason": null,
-  "packet_id": "packet:32f79f55939253413b2fe817",
-  "packet_sha256": "3e905429824f087525ded0d29bd649c0cbe7ebeb337ec9c58a3cd0c894a11b23",
+  "packet_id": "packet:1aed98559edb165dd72242fc",
+  "packet_sha256": "92115e66971323cf177a9f4602ba418d1659a53725207544b4d0f59efdb8fcea",
   "review_required_rule_ids": [],
   "schema_version": 1,
   "status": "ready",
   "task": {
     "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-core-refactor\\governance\\p0-capture-core\\v2.16.0-task.json",
-    "sha256": "651ac41b696818febf34ae9254ee3baee08b050775b612d9cf415a4189239b27",
+    "sha256": "5116f04ccf6f5c8f216f6c115d0502c0a7c12415b7c196515093c63736424957",
     "task_id": "memory-wuxian-v2.16.0-p0-lifecycle"
   },
   "thresholds": {

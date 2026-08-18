@@ -56,12 +56,13 @@ class V211ReleaseContractTest(unittest.TestCase):
         self.assertIn("str(expanded) if expanded.is_file()", dispatch)
         self.assertTrue((ROOT / "scripts/runtime_effect_gate.py").is_file())
         gate = (ROOT / "scripts/runtime_effect_gate.py").read_text(encoding="utf-8")
+        collector_gate = (ROOT / "scripts/collector_runtime_effect_gate.py").read_text(encoding="utf-8")
         lifecycle = (ROOT / "scripts/collector_lifecycle.py").read_text(encoding="utf-8")
-        maintenance = (ROOT / "scripts/memory_service_state.py").read_text(encoding="utf-8")
-        self.assertIn("verify_collector_lifecycle", gate)
+        self.assertIn("semantic-parent-job-missing", gate)
+        self.assertIn("maintenance-supervisor-not-healthy", gate)
+        self.assertIn("verify_collector_lifecycle", collector_gate)
         self.assertIn("collector-watermark-not-converged", lifecycle)
-        self.assertIn("maintenance supervisor state is stale", maintenance)
-        self.assertNotIn("semantic-parent-job-missing", gate)
+        self.assertNotIn("semantic-parent-job-missing", collector_gate)
 
     def test_mw2116_patch_rehearsal_is_explicitly_bounded(self):
         contract = json.loads(

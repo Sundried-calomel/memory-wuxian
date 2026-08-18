@@ -22,7 +22,7 @@ class V216ReleaseContractTests(unittest.TestCase):
     def test_lifecycle_gate_is_bounded_and_startup_authority_is_unique(self):
         lifecycle = (ROOT / "scripts/collector_lifecycle.py").read_text(encoding="utf-8")
         windows = (ROOT / "scripts/install_codex_autosync_windows.py").read_text(encoding="utf-8")
-        runtime_gate = (ROOT / "scripts/runtime_effect_gate.py").read_text(encoding="utf-8")
+        runtime_gate = (ROOT / "scripts/collector_runtime_effect_gate.py").read_text(encoding="utf-8")
         self.assertIn("collector-startup-owner-count-invalid", lifecycle)
         self.assertIn("collector-watermark-not-converged", lifecycle)
         self.assertNotIn("HKCU_RUN_KEY", windows)

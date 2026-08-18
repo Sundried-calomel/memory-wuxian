@@ -29,10 +29,22 @@ try:
     from install_maintenance_supervisor import retire_legacy_macos_semantic_backfill
     from migrate_config import migrate_config
     from platform_runtime import executable_entry_path
+    from collector_lifecycle import (
+        create_installed_effect_probe,
+        inspect_startup_owner,
+        remove_installed_effect_probe,
+        watermark_reached,
+    )
 except ModuleNotFoundError:
     from scripts.install_maintenance_supervisor import retire_legacy_macos_semantic_backfill
     from scripts.migrate_config import migrate_config
     from scripts.platform_runtime import executable_entry_path
+    from scripts.collector_lifecycle import (
+        create_installed_effect_probe,
+        inspect_startup_owner,
+        remove_installed_effect_probe,
+        watermark_reached,
+    )
 
 
 COLLECTOR_LABEL = "com.memorywuxian.codex-sync"
@@ -238,6 +250,8 @@ def wait_for_collector(
     archive_root: Path,
     *,
     previous_pid: int | None,
+    minimum_watermark: str | None = None,
+    effect_started_at: datetime | None = None,
     timeout_seconds: float = 300,
 ) -> dict[str, Any]:
     telemetry_path = archive_root / "imports" / "codex" / "collector-telemetry.json"
@@ -260,6 +274,10 @@ def wait_for_collector(
                 last_error = "collector is alive and still completing startup synchronization"
             elif age > 30:
                 last_error = f"collector telemetry is stale by {age:.1f} seconds"
+            elif minimum_watermark is not None and not watermark_reached(
+                telemetry.get("archive_watermark"), minimum_watermark
+            ):
+                last_error = "collector archive watermark has not reached the installed effect probe"
             else:
                 return telemetry
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
@@ -592,6 +610,8 @@ def validate_installed_launch_contract(
     active_root_pointer: Path,
     telemetry: dict[str, Any],
     previous_archive_watermark: str | None,
+    required_effect_watermark: str | None = None,
+    effect_started_at: datetime | None = None,
     runner: Runner,
 ) -> dict[str, Any]:
     activation = read_json(archive_root / "imports" / "codex" / "collector-activation.json")
@@ -637,6 +657,10 @@ def validate_installed_launch_contract(
         raise RuntimeError("collector source and archive watermarks did not converge")
     if not isinstance(telemetry.get("last_archive_update"), str):
         raise RuntimeError("collector did not publish a bounded archive effect")
+    if required_effect_watermark is not None and not watermark_reached(
+        archived, required_effect_watermark
+    ):
+        raise RuntimeError("collector did not reach the installed effect probe watermark")
     if previous_archive_watermark is not None and archived is not None:
         if datetime.fromisoformat(archived.replace("Z", "+00:00")) < datetime.fromisoformat(
             previous_archive_watermark.replace("Z", "+00:00")
@@ -648,6 +672,80 @@ def validate_installed_launch_contract(
         "expected_command": expected_arguments,
         "source_watermark": source,
         "archive_watermark": archived,
+    }
+
+
+def _command_value(command: list[str], option: str) -> str:
+    matches = [index for index, value in enumerate(command) if value == option]
+    if len(matches) != 1 or matches[0] + 1 >= len(command):
+        raise RuntimeError(f"restored collector command has no unique {option} value")
+    return command[matches[0] + 1]
+
+
+def verify_restored_collector_effect(
+    *,
+    lifecycle_path: Path,
+    plist: Path,
+    active_root_pointer: Path,
+    previous_pid: int | None,
+    runner: Runner,
+    timeout_seconds: float = COLLECTOR_READY_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    lifecycle = read_json(lifecycle_path)
+    owner = inspect_startup_owner(lifecycle)
+    if not owner.get("ok"):
+        raise RuntimeError("restored collector lifecycle is not a verified owner contract")
+    expected_command = owner["expected_command"]
+    archive_root = Path(owner["archive_root"])
+    sessions_root = Path(_command_value(expected_command, "--sessions-root"))
+    skill_root = Path(expected_command[0]).parent.parent
+    plist_payload = plistlib.loads(plist.read_bytes())
+    environment = plist_payload.get("EnvironmentVariables")
+    if not isinstance(environment, dict):
+        raise RuntimeError("restored collector environment is missing")
+    python_executable = Path(str(environment.get("MEMORY_WUXIAN_PYTHON", "")))
+    codex_cli = Path(str(environment.get("MEMORY_WUXIAN_CODEX", "")))
+    telemetry_path = archive_root / "imports" / "codex" / "collector-telemetry.json"
+    previous_watermark = None
+    try:
+        previous_watermark = _watermark(read_json(telemetry_path).get("archive_watermark"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    probe = create_installed_effect_probe(
+        sessions_root,
+        previous_watermark=previous_watermark,
+    )
+    try:
+        telemetry = wait_for_collector(
+            archive_root,
+            previous_pid=previous_pid,
+            minimum_watermark=probe["watermark"],
+            timeout_seconds=timeout_seconds,
+        )
+    finally:
+        remove_installed_effect_probe(probe)
+    effect = validate_installed_launch_contract(
+        skill_root=skill_root,
+        archive_root=archive_root,
+        sessions_root=sessions_root,
+        python_executable=python_executable,
+        codex_cli=codex_cli,
+        plist=plist,
+        active_root_pointer=active_root_pointer,
+        telemetry=telemetry,
+        previous_archive_watermark=previous_watermark,
+        required_effect_watermark=probe["watermark"],
+        runner=runner,
+    )
+    if effect["expected_command"] != expected_command:
+        raise RuntimeError("restored collector command does not match its lifecycle owner")
+    live_generation = telemetry.get("lifecycle_generation")
+    if live_generation is not None and live_generation != owner["generation"]:
+        raise RuntimeError("restored collector generation does not match its lifecycle owner")
+    return {
+        **effect,
+        "generation": owner["generation"],
+        "effect_probe": {key: value for key, value in probe.items() if key != "path"},
     }
 
 
@@ -767,6 +865,15 @@ def recover_interrupted_transactions(
                 text=True,
             )
             wait_for_launch_agent(COLLECTOR_LABEL, runner=runner)
+        restored_effect = None
+        if isinstance(lifecycle_snapshot, dict) and lifecycle_snapshot.get("existed"):
+            restored_effect = verify_restored_collector_effect(
+                lifecycle_path=archive_root / "imports" / "codex" / "collector-lifecycle.json",
+                plist=plist,
+                active_root_pointer=active_root_pointer,
+                previous_pid=None,
+                runner=runner,
+            )
         if snapshots["maintenance_plist"].get("existed"):
             runner(
                 [
@@ -794,6 +901,7 @@ def recover_interrupted_transactions(
             "rolled_back_at": datetime.now(timezone.utc).isoformat(),
             "candidate_evidence": str(failed_path),
             "error": "recovered interrupted transaction",
+            "restored_effect": restored_effect,
         }
         atomic_json(transaction_root / "rollback-receipt.json", receipt)
         transition(
@@ -924,6 +1032,20 @@ def install(
         if current_generation != candidate_generation:
             raise RuntimeError("commit receipt exists but the verified generation is not active")
         telemetry = wait_for_collector(archive_root, previous_pid=None, timeout_seconds=30)
+        effect_started_at = datetime.now(timezone.utc)
+        effect_probe = create_installed_effect_probe(
+            sessions_root, previous_watermark=previous_archive_watermark
+        )
+        try:
+            telemetry = wait_for_collector(
+                archive_root,
+                previous_pid=None,
+                minimum_watermark=effect_probe["watermark"],
+                effect_started_at=effect_started_at,
+                timeout_seconds=30,
+            )
+        finally:
+            remove_installed_effect_probe(effect_probe)
         effect = validate_installed_launch_contract(
             skill_root=skill_root,
             archive_root=archive_root,
@@ -934,6 +1056,8 @@ def install(
             active_root_pointer=active_root_pointer,
             telemetry=telemetry,
             previous_archive_watermark=previous_archive_watermark,
+            required_effect_watermark=effect_probe["watermark"],
+            effect_started_at=effect_started_at,
             runner=runner,
         )
         verify_collector_lifecycle_alignment(
@@ -1044,6 +1168,20 @@ def install(
             previous_pid=old_pid,
             timeout_seconds=COLLECTOR_READY_TIMEOUT_SECONDS,
         )
+        effect_started_at = datetime.now(timezone.utc)
+        effect_probe = create_installed_effect_probe(
+            sessions_root, previous_watermark=previous_archive_watermark
+        )
+        try:
+            telemetry = wait_for_collector(
+                archive_root,
+                previous_pid=old_pid,
+                minimum_watermark=effect_probe["watermark"],
+                effect_started_at=effect_started_at,
+                timeout_seconds=COLLECTOR_READY_TIMEOUT_SECONDS,
+            )
+        finally:
+            remove_installed_effect_probe(effect_probe)
         effect = validate_installed_launch_contract(
             skill_root=skill_root,
             archive_root=archive_root,
@@ -1054,6 +1192,8 @@ def install(
             active_root_pointer=active_root_pointer,
             telemetry=telemetry,
             previous_archive_watermark=previous_archive_watermark,
+            required_effect_watermark=effect_probe["watermark"],
+            effect_started_at=effect_started_at,
             runner=runner,
         )
         lifecycle = persist_collector_lifecycle(
@@ -1117,6 +1257,9 @@ def install(
             "prior_generation_path": str(prior_path) if moved_current else None,
             "paths": paths,
             "probe": probe,
+            "installed_effect_probe": {
+                key: value for key, value in effect_probe.items() if key != "path"
+            },
             "effect": effect,
         }
         atomic_json(commit_receipt, receipt)
@@ -1142,6 +1285,11 @@ def install(
             text=True,
         )
         try:
+            failed_pid = None
+            try:
+                failed_pid = int(read_json(telemetry_path)["pid"])
+            except (OSError, ValueError, KeyError, json.JSONDecodeError):
+                pass
             if candidate_active and skill_root.exists():
                 if failed_path.exists():
                     raise RuntimeError(f"failed candidate evidence already exists: {failed_path}")
@@ -1172,6 +1320,15 @@ def install(
                     text=True,
                 )
                 wait_for_launch_agent(COLLECTOR_LABEL, runner=runner)
+            rollback_effect = None
+            if bool(snapshots["collector_lifecycle"].get("existed")):
+                rollback_effect = verify_restored_collector_effect(
+                    lifecycle_path=lifecycle_path,
+                    plist=plist,
+                    active_root_pointer=active_root_pointer,
+                    previous_pid=failed_pid,
+                    runner=runner,
+                )
             if bool(snapshots["maintenance_plist"].get("existed")):
                 runner(
                     ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(maintenance_plist)],
@@ -1188,6 +1345,7 @@ def install(
                     "rolled_back_at": datetime.now(timezone.utc).isoformat(),
                     "candidate_evidence": str(failed_path) if failed_path.exists() else str(candidate),
                     "error": str(error),
+                    "restored_effect": rollback_effect,
                 },
             )
             transition(

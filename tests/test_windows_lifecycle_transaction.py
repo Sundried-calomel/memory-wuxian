@@ -4,7 +4,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 
@@ -175,6 +175,71 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
             ["prepare", "verify", "rollback"],
         )
 
+    def test_verified_previous_task_must_pass_effect_probe_after_rollback(self):
+        old_command = list(self.command)
+        old_command[0] = str(self.base / "old collector.exe")
+        old_xml = windows.task_xml(old_command)
+        lifecycle = self.archive / "imports" / "codex" / "collector-lifecycle.json"
+        lifecycle.parent.mkdir(parents=True)
+        lifecycle.write_text(json.dumps({
+            "format": "memory-wuxian-collector-lifecycle-v1",
+            "generation": "old-generation",
+            "archive_root": str(self.archive),
+            "expected_command": old_command,
+            "startup_owners": [{
+                "owner_id": f"task:{windows.DEFAULT_TASK_NAME}",
+                "kind": "windows-task",
+                "generation": "old-generation",
+                "archive_root": str(self.archive),
+                "command": old_command,
+                "pid_identity": "required",
+            }],
+        }) + "\n", encoding="utf-8")
+        candidate_watermark = (
+            datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=1)
+        ).isoformat().replace("+00:00", "Z")
+        telemetry = self.archive / "imports" / "codex" / "collector-telemetry.json"
+        telemetry.write_text(json.dumps({
+            "pid": 991,
+            "archive_watermark": candidate_watermark,
+        }), encoding="utf-8")
+        calls = []
+
+        def fail_then_restore(_archive_root, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise RuntimeError("candidate effect failed")
+            return {
+                "format_version": 2,
+                "phase": "ready",
+                "ready": True,
+                "pid": 413,
+                "source_watermark": kwargs["minimum_watermark"],
+                "archive_watermark": kwargs["minimum_watermark"],
+                "last_archive_update": datetime.now(timezone.utc).isoformat(),
+            }
+
+        with self.assertRaisesRegex(RuntimeError, "candidate effect failed"):
+            windows.install_transaction(
+                task_name=windows.DEFAULT_TASK_NAME,
+                command=self.command,
+                archive_root=self.archive,
+                command_manifest=self.manifest,
+                pointer=self.pointer,
+                journal_path=self.journal,
+                runner=FakeRunner(old_xml),
+                readiness_probe=fail_then_restore,
+            )
+        journal = json.loads(self.journal.read_text(encoding="utf-8"))
+        self.assertEqual(journal["phase"], "rollback")
+        self.assertEqual(journal["rollback_verification"]["pid"], 413)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1]["previous_pid"], 991)
+        self.assertGreater(
+            datetime.fromisoformat(calls[1]["minimum_watermark"].replace("Z", "+00:00")),
+            datetime.fromisoformat(candidate_watermark.replace("Z", "+00:00")),
+        )
+
     def test_candidate_probe_failure_never_replaces_old_task(self):
         old_command = [str(self.base / "old collector.exe"), "--archive-root", "old"]
         old_xml = windows.task_xml(old_command)
@@ -285,6 +350,22 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
         candidate_command = list(command)
         candidate_command[0] = str(candidate / "bin" / "memory-wuxian-collector.exe")
         candidate_command[candidate_command.index("--config") + 1] = str(candidate / "config.yaml")
+        lifecycle = self.archive / "imports" / "codex" / "collector-lifecycle.json"
+        lifecycle.parent.mkdir(parents=True)
+        lifecycle.write_text(json.dumps({
+            "format": "memory-wuxian-collector-lifecycle-v1",
+            "generation": "old-generation",
+            "archive_root": str(self.archive),
+            "expected_command": command,
+            "startup_owners": [{
+                "owner_id": f"task:{windows.DEFAULT_TASK_NAME}",
+                "kind": "windows-task",
+                "generation": "old-generation",
+                "archive_root": str(self.archive),
+                "command": command,
+                "pid_identity": "required",
+            }],
+        }) + "\n", encoding="utf-8")
         runner = FakeRunner(windows.task_xml(command))
         journal, journal_path = windows.install_generation_transaction(
             candidate_root=candidate,
@@ -302,8 +383,40 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
         )
         self.assertEqual(journal["phase"], "verify")
         self.assertEqual((skill / "SKILL.md").read_text(encoding="utf-8"), "new")
-        windows.rollback_transaction(journal_path, runner=runner, error="synthetic failure")
+        rollback_calls = []
+
+        def restored_probe(_archive_root, **kwargs):
+            rollback_calls.append(kwargs)
+            if len(rollback_calls) == 1:
+                raise RuntimeError("restored collector effect unavailable")
+            return {
+                "pid": 777,
+                "archive_watermark": kwargs["minimum_watermark"],
+            }
+
+        with self.assertRaisesRegex(RuntimeError, "effect unavailable"):
+            windows.rollback_transaction(
+                journal_path,
+                runner=runner,
+                readiness_probe=restored_probe,
+                error="synthetic failure",
+            )
+        interrupted = json.loads(journal_path.read_text(encoding="utf-8"))
+        self.assertFalse(interrupted["generation"]["switched"])
+        self.assertEqual(
+            interrupted["rollback_recovery"]["status"],
+            "restored-awaiting-verification",
+        )
         self.assertEqual((skill / "SKILL.md").read_text(encoding="utf-8"), "old")
+        rolled_back = windows.rollback_transaction(
+            journal_path,
+            runner=runner,
+            readiness_probe=restored_probe,
+            error="synthetic failure",
+        )
+        self.assertEqual((skill / "SKILL.md").read_text(encoding="utf-8"), "old")
+        self.assertEqual(rolled_back["rollback_verification"]["status"], "passed")
+        self.assertEqual(len(rollback_calls), 2)
 
     def test_watermark_probe_rejects_stale_or_unmatched_progress(self):
         telemetry = self.archive / "imports" / "codex" / "collector-telemetry.json"
@@ -330,6 +443,42 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
                 timeout_seconds=0.01,
                 sleep=lambda _seconds: None,
             )
+
+    def test_installed_effect_requires_watermark_newer_than_activation(self):
+        telemetry = self.archive / "imports" / "codex" / "collector-telemetry.json"
+        telemetry.parent.mkdir(parents=True)
+        payload = {
+            "format_version": 2,
+            "phase": "ready",
+            "pid": 9,
+            "ready": True,
+            "updated_at": "2026-08-18T00:00:03Z",
+            "last_archive_update": "2026-08-18T00:00:03Z",
+            "source_watermark": "2026-08-18T00:00:01Z",
+            "archive_watermark": "2026-08-18T00:00:01Z",
+        }
+        telemetry.write_text(json.dumps(payload), encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "effect probe"):
+            windows.wait_for_watermark_progress(
+                self.archive,
+                previous_pid=8,
+                started_at=datetime(2026, 8, 18, tzinfo=timezone.utc),
+                minimum_watermark="2026-08-18T00:00:02Z",
+                timeout_seconds=0.01,
+                sleep=lambda _seconds: None,
+            )
+        payload["source_watermark"] = "2026-08-18T00:00:02Z"
+        payload["archive_watermark"] = "2026-08-18T00:00:02Z"
+        telemetry.write_text(json.dumps(payload), encoding="utf-8")
+        result = windows.wait_for_watermark_progress(
+            self.archive,
+            previous_pid=8,
+            started_at=datetime(2026, 8, 18, tzinfo=timezone.utc),
+            minimum_watermark="2026-08-18T00:00:02Z",
+            timeout_seconds=0.01,
+            sleep=lambda _seconds: None,
+        )
+        self.assertEqual(result["archive_watermark"], "2026-08-18T00:00:02Z")
 
     def test_run_key_backend_is_not_a_supported_authority(self):
         with redirect_stderr(StringIO()), self.assertRaises(SystemExit):

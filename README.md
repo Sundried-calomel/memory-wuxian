@@ -4,7 +4,9 @@
 > Windows and macOS. A candidate must prove its exact startup owner, command,
 > archive root, live identity, and bounded watermark progress before commit;
 > failures restore the previous runnable generation and preserve evidence in
-> `collector-lifecycle.json`.
+> `collector-lifecycle.json`. Collector-only activation proof lives in
+> `collector_runtime_effect_gate.py`; the existing summary and maintenance
+> checks in `runtime_effect_gate.py` remain unchanged.
 
 > **2.15.0:** Adds the independent encrypted `project-attachment-v1` stream for
 > explicit large project deliverables. Exact 4 MiB chunks, SHA-256 manifests,
