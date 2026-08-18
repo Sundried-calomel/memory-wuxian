@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.17.0-capture-core",
+  "objective": "Extract the native collector into a mechanically enforced Capture Core with watcher-first readiness, typed ownership, and byte-for-byte behavior parity.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-core-refactor",
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian",
+  "owner_id": "capture-core-memory-plane-platform-foundation",
+  "platforms": ["windows", "macos"],
+  "languages": ["rust", "python"],
+  "path_globs": ["native-collector/src/**", "scripts/memory_cli.py", "scripts/collector_activation.py", "docs/module-architecture.json", "tests/**"],
+  "entrypoints": ["native-collector", "sync-codex", "collector-activation", "archive-transaction"],
+  "resources": ["rollout", "raw-archive", "cursor", "archive-lock", "telemetry", "coverage-ledger"],
+  "operations": ["watch", "parse", "normalize", "append", "commit", "recover", "report"],
+  "data_formats": ["jsonl", "json", "markdown", "yaml"],
+  "authorization_boundaries": ["Use only isolated fixtures and cloned archives during candidate rehearsal.", "Do not change visible-event selection, message identity, round closure, summary thresholds, summary formats, or existing raw bytes."],
+  "implementation_units": [
+    {
+      "id": "v217-rust-extraction",
+      "owner_id": "capture-core",
+      "paths": ["native-collector/src/main.rs", "native-collector/src/lib.rs", "native-collector/src/runtime.rs", "native-collector/src/source/**", "native-collector/src/store/**", "native-collector/src/locking.rs", "native-collector/src/telemetry.rs"],
+      "entrypoints": ["native-collector", "archive-transaction"],
+      "resources": ["rollout", "raw-archive", "cursor", "archive-lock", "telemetry"],
+      "operations": ["watch", "parse", "append", "commit", "recover"],
+      "planned_check_ids": ["rust-parity", "archive-byte-parity", "watcher-first-ready", "bounded-lock"]
+    },
+    {
+      "id": "v217-python-thin-adapter",
+      "owner_id": "product-shell-platform-foundation",
+      "paths": ["scripts/memory_cli.py", "scripts/collector_activation.py", "tests/**"],
+      "entrypoints": ["sync-codex", "collector-activation"],
+      "resources": ["cursor", "activation-boundary"],
+      "operations": ["delegate", "resolve", "validate"],
+      "planned_check_ids": ["single-parser-owner", "activation-boundary", "python-rust-parity"]
+    }
+  ],
+  "rule_exclusions": []
+}

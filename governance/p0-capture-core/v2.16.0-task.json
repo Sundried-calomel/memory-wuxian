@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.16.0-p0-lifecycle",
+  "objective": "Make the P0 collector lifecycle transactionally installed, restartable, rollback-safe, and independently verifiable on Windows and macOS without changing archive or summary semantics.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-core-refactor",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian",
+  "owner_id": "capture-core-platform-foundation-product-quality",
+  "platforms": ["windows", "macos"],
+  "languages": ["python", "powershell", "rust", "shell"],
+  "path_globs": ["PRODUCT_ARCHITECTURE.md", "docs/module-architecture.json", "references/decisions.md", "scripts/install*", "scripts/*transaction*", "scripts/runtime_effect_gate.py", "packaging/**", "native-collector/src/bin/**", "tests/**"],
+  "entrypoints": ["installer", "collector-launcher", "scheduled-task", "launch-agent", "runtime-effect-gate", "rollback"],
+  "resources": ["process", "task", "registry", "plist", "runtime", "active-root-pointer", "telemetry", "rollback-generation"],
+  "operations": ["install", "upgrade", "launch", "restart", "recover", "rollback", "uninstall", "report"],
+  "data_formats": ["json", "xml", "plist", "toml", "yaml"],
+  "authorization_boundaries": ["Do not install on the live device until the exact candidate passes isolated rehearsal and an explicit installation boundary is reached.", "Do not modify raw archives, summary artifacts, cloud folders, peer state, or historical catch-up data."],
+  "implementation_units": [
+    {
+      "id": "v216-architecture-contract",
+      "owner_id": "product-architecture",
+      "paths": ["PRODUCT_ARCHITECTURE.md", "docs/module-architecture.json", "scripts/check_architecture_contract.py", "references/decisions.md"],
+      "entrypoints": ["architecture-check"],
+      "resources": ["module-registry"],
+      "operations": ["classify", "validate"],
+      "planned_check_ids": ["architecture-contract", "p0-dependency-direction"]
+    },
+    {
+      "id": "v216-platform-transaction",
+      "owner_id": "platform-foundation",
+      "paths": ["scripts/install_codex_autosync_windows.py", "scripts/install_codex_autosync.py", "scripts/install_macos_transaction.py", "scripts/platform_transaction.py", "packaging/windows/**", "packaging/macos/**"],
+      "entrypoints": ["installer", "rollback", "uninstall"],
+      "resources": ["task", "registry", "plist", "runtime", "rollback-generation"],
+      "operations": ["install", "upgrade", "recover", "rollback", "uninstall"],
+      "planned_check_ids": ["runtime-capability-probe", "transaction-interruption", "rollback-effect"]
+    },
+    {
+      "id": "v216-lifecycle-effect",
+      "owner_id": "capture-core-control-plane",
+      "paths": ["scripts/collector_lifecycle.py", "scripts/runtime_effect_gate.py", "native-collector/src/bin/memory-wuxian-core-launcher.rs", "tests/**"],
+      "entrypoints": ["collector-launcher", "scheduled-task", "launch-agent", "runtime-effect-gate"],
+      "resources": ["process", "telemetry", "source-watermark", "archive-watermark"],
+      "operations": ["launch", "restart", "probe", "report"],
+      "planned_check_ids": ["installed-effect", "no-console", "watermark-progress", "missing-task-recovery"]
+    }
+  ],
+  "rule_exclusions": []
+}

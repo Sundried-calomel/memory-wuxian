@@ -9,9 +9,10 @@ inventing a new scope.
 
 The v2.6--v3.0 plan was recovered from repository commit
 `fad4a642dc1c9f49d53105f259103db89db0fcec`. This file restores that omitted
-authority on the current product line and extends it only with the separately
-approved v2.10 personal Environment convergence work. Do not reconstruct the
-roadmap from release numbers mentioned in conversation history.
+authority on the current product line. It also records the separately approved
+v2.10 personal Environment convergence work and the D-051 v2.16-v2.18 P0
+Capture Core sequence. Do not reconstruct the roadmap from release numbers
+mentioned in conversation history.
 
 `PRODUCT_ARCHITECTURE.md` remains the canonical owner of module boundaries,
 dependency direction, and phase order. `references/decisions.md` remains the
@@ -84,7 +85,12 @@ For every versioned work item:
 | v2.11.0 | Candidate | v2.10.0 | Continuous source catch-up and bounded debt convergence. |
 | v2.12.7 | Released | v2.11.0 | Stable live capture, catch-up, repair, and cross-platform activation baseline. |
 | v2.13.0 | Candidate | v2.12.7 | Explicit immutable project evidence packages and independent encrypted exchange. |
-| v3.0.0 | Conditional | v2.11.0 plus an accepted incompatibility decision | Cross-platform integration only when a real breaking public contract requires a major version. |
+| v2.14.0 | Candidate | v2.13.0 | Device-local Project Evidence owners. |
+| v2.15.0 | Current baseline | v2.14.0 | Baseline for the approved Capture Core isolation sequence. |
+| v2.16.0 | Approved | v2.15.0 | Transactional collector lifecycle, readiness, activation, and rollback. |
+| v2.17.0 | Approved | v2.16.0 | Extract the P0 native Capture Core with watcher-first byte parity. |
+| v2.18.0 | Approved | v2.17.0 | Durable transaction recovery, failure isolation, telemetry, and release evidence. |
+| v3.0.0 | Conditional | v2.18.0 plus an accepted incompatibility decision | Cross-platform integration only when a real breaking public contract requires a major version. |
 
 ## v2.5.0: completed foundation
 
@@ -414,11 +420,98 @@ regressions, architecture and documentation contracts, browser rehearsal,
 same-candidate macOS and Windows package rehearsal, transactional update, and
 rollback to v2.13.0 all pass.
 
+## v2.16.0: transactional collector lifecycle
+
+### Objective
+
+Make every collector lifecycle change one bounded, observable transaction
+before moving implementation ownership. Preserve the v2.15 persisted bytes and
+public behavior.
+
+### Implementation contract
+
+1. `scripts/collector_lifecycle.py` owns structured lifecycle orchestration:
+   inspect pre-state, stage, activate, prove runtime readiness, commit, and
+   restore the exact pre-state on failure.
+2. Lifecycle subprocesses use explicit UTF-8 and argument arrays. Tests cover
+   Chinese, Japanese, currency symbols, emoji, spaces, leading hyphens, and
+   long paths without shell reconstruction.
+3. Readiness proves the intended executable, configuration, archive identity,
+   single-writer lock, and live watcher state. Process existence alone is not
+   acceptance evidence.
+4. Capture remains available when optional control, memory, exchange,
+   environment, project, dashboard, or AI services fail.
+
+Release gate: lifecycle fault injection at every transition, exact rollback,
+installed Windows and macOS readiness evidence, and the schema-v2 architecture
+contract pass on one frozen candidate.
+
+## v2.17.0: P0 Capture Core extraction
+
+### Objective
+
+Move mechanical capture behind the D-051 boundary without changing accepted
+source events or persisted archive bytes.
+
+### Implementation contract
+
+1. Register and extract `native-collector/src/lib.rs`, `runtime.rs`,
+   `locking.rs`, `telemetry.rs`, `source/**`, `store/**`, and
+   `bin/memory-wuxian-core-launcher.rs` under the single `capture-core` owner.
+2. Establish filesystem watchers before bounded startup enumeration and catch-up
+   so a write during startup is observed or recovered exactly once.
+3. Preserve event selection, normalization, ordering, archive append, cursor,
+   and backup-debt bytes against frozen golden fixtures.
+4. Capture Core may depend only on Platform Foundation. No Control, Memory,
+   Exchange, Environment, Project Evidence, Product Shell/UI, product-quality,
+   or AI dependency may enter the crate or lifecycle adapter.
+
+Release gate: old/new byte parity, startup-race and restart fixtures,
+single-writer contention, architecture allowlist checks, and installed
+cross-platform launcher evidence pass on one frozen candidate.
+
+## v2.18.0: durable capture recovery and fault isolation
+
+### Objective
+
+Make interrupted Capture Core transactions recoverable and diagnosable without
+coupling P0 availability to any peripheral subsystem.
+
+### Implementation contract
+
+1. Persist bounded write-ahead transaction evidence before mutation and recover
+   it idempotently after interruption; advance a source cursor only after its
+   raw append is durable.
+2. Isolate source, store, lock, telemetry, and lifecycle failures with explicit
+   machine-readable states. Optional telemetry failure cannot stop capture.
+3. Emit privacy-safe bounded diagnostics for readiness, last durable append,
+   cursor position, replay, lock contention, and backup-debt handoff without
+   reading or exporting dialogue content.
+4. Prove crash recovery, disk-full behavior, partial-write rejection, lock loss,
+   stale readiness, and peripheral service failure on the frozen candidate.
+
+Release gate: fault-injection and restart matrices, byte and cursor invariants,
+bounded telemetry, no-peripheral-dependency checks, exact update rollback, and
+same-candidate Windows/macOS rehearsal all pass.
+
+### v2.16-v2.18 non-goals and prohibitions
+
+- Do not change Summary V1, Summary V2, summary eligibility, atomic summaries,
+  parent summaries, map-reduce summaries, or any AI worker behavior.
+- Do not add or change historical semantic backfill, historical mechanical
+  catch-up policy, repair policy, or retained-source coverage semantics.
+- Do not change cloud or federation protocols, including `archive-v1`,
+  `environment-v1`, `project-evidence-v1`, envelopes, acknowledgements,
+  peer-state, sequence, replica, or live-archive payload behavior.
+- Do not change public CLI behavior, persisted record schemas, raw bytes,
+  source selection, summary state, protocol state, or release version metadata
+  as a side effect of module extraction.
+
 ## v3.0.0: conditional major-version integration
 
 ### Decision rule
 
-Do not create v3.0 simply because v2.6--v2.11 are complete. Continue with a 2.x
+Do not create v3.0 simply because v2.6--v2.18 are complete. Continue with a 2.x
 release when all public contracts remain compatible. Start v3.0 only after an
 explicit accepted decision identifies an incompatible public CLI, persisted
 format, protocol, extension API, or compatibility-policy change.

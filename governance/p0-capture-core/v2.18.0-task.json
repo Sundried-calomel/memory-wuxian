@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.18.0-p0-resilience",
+  "objective": "Add durable capture transaction evidence, source-local fault isolation, bounded health projections, and real-effect release gates without changing public archive or summary contracts.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-core-refactor",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian",
+  "owner_id": "capture-core-control-plane-product-quality",
+  "platforms": ["windows", "macos"],
+  "languages": ["rust", "python", "powershell"],
+  "path_globs": ["native-collector/src/store/**", "native-collector/src/runtime.rs", "scripts/memory_service_state.py", "scripts/maintenance_supervisor.py", "scripts/runtime_effect_gate.py", "scripts/run_release_rehearsal.py", "tests/**", "docs/rehearsals/**"],
+  "entrypoints": ["capture-transaction", "collector-runtime", "service-state", "maintenance-supervisor", "runtime-effect-gate", "release-rehearsal"],
+  "resources": ["wal", "cursor", "raw-archive", "telemetry", "source-watermark", "archive-watermark", "maintenance-state", "release-evidence"],
+  "operations": ["prepare", "commit", "recover", "isolate", "observe", "rehearse", "release"],
+  "data_formats": ["jsonl", "json", "markdown", "yaml"],
+  "authorization_boundaries": ["WAL remains internal transaction evidence and never replaces human-readable raw authority.", "Do not alter summary generation, Summary V1 or V2 semantics, historical backfill, cloud protocol, peer state, or live archive bytes."],
+  "implementation_units": [
+    {
+      "id": "v218-wal-and-isolation",
+      "owner_id": "capture-core",
+      "paths": ["native-collector/src/store/wal.rs", "native-collector/src/store/transaction.rs", "native-collector/src/store/cursor.rs", "native-collector/src/runtime.rs", "native-collector/src/telemetry.rs"],
+      "entrypoints": ["capture-transaction", "collector-runtime"],
+      "resources": ["wal", "cursor", "raw-archive", "telemetry"],
+      "operations": ["prepare", "commit", "recover", "isolate"],
+      "planned_check_ids": ["transaction-crash-matrix", "exactly-once-replay", "source-local-isolation", "raw-immutability"]
+    },
+    {
+      "id": "v218-bounded-observability",
+      "owner_id": "control-plane",
+      "paths": ["scripts/memory_service_state.py", "scripts/maintenance_supervisor.py", "scripts/runtime_effect_gate.py", "tests/**"],
+      "entrypoints": ["service-state", "maintenance-supervisor", "runtime-effect-gate"],
+      "resources": ["watermarks", "maintenance-state", "telemetry"],
+      "operations": ["observe", "report", "fail-closed"],
+      "planned_check_ids": ["pure-read-state", "nonzero-failure", "bounded-scan", "false-health-zero"]
+    },
+    {
+      "id": "v218-release-evidence",
+      "owner_id": "product-quality",
+      "paths": ["scripts/run_release_rehearsal.py", "references/release-rehearsal.md", "tests/**", "docs/rehearsals/**"],
+      "entrypoints": ["release-rehearsal"],
+      "resources": ["candidate-sha", "installed-generation", "watermarks", "rollback-receipt"],
+      "operations": ["rehearse", "verify", "release"],
+      "planned_check_ids": ["candidate-identity", "production-entrypoint", "installed-recovery", "p0-slo"]
+    }
+  ],
+  "rule_exclusions": []
+}
