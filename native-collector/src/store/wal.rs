@@ -138,6 +138,7 @@ impl CaptureWal {
             bail!("capture WAL event exceeds the bounded event limit")
         }
         bytes.push(b'\n');
+        self.ensure_append_capacity(bytes.len() as u64)?;
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -147,10 +148,37 @@ impl CaptureWal {
         Ok(())
     }
 
-    fn compact_if_needed(&self) -> Result<()> {
+    fn ensure_append_capacity(&self, append_bytes: u64) -> Result<()> {
+        let current_bytes = Self::metadata_length(self.path.metadata().map(|value| value.len()))?;
+        if current_bytes > MAX_WAL_BYTES {
+            bail!("capture WAL exceeds the bounded write limit")
+        }
+        if current_bytes.saturating_add(append_bytes) > MAX_WAL_BYTES {
+            self.compact()?;
+        }
+        let compacted_bytes = Self::metadata_length(self.path.metadata().map(|value| value.len()))?;
+        if compacted_bytes.saturating_add(append_bytes) > MAX_WAL_BYTES {
+            bail!("capture WAL append would exceed the bounded write limit")
+        }
+        Ok(())
+    }
+
+    fn metadata_length(result: std::io::Result<u64>) -> Result<u64> {
+        match result {
+            Ok(length) => Ok(length),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    pub(crate) fn compact_if_needed(&self) -> Result<()> {
         if !self.path.exists() || fs::metadata(&self.path)?.len() <= COMPACT_WAL_BYTES {
             return Ok(());
         }
+        self.compact()
+    }
+
+    fn compact(&self) -> Result<()> {
         let state = self.state()?;
         let mut bytes = Vec::new();
         for intent in state.pending.values() {
@@ -169,6 +197,9 @@ impl CaptureWal {
                 "transaction_id": transaction_id,
             }))?);
             bytes.push(b'\n');
+        }
+        if bytes.len() as u64 > MAX_WAL_BYTES {
+            bail!("compacted capture WAL exceeds the bounded write limit")
         }
         super::transaction::atomic_write(&self.path, &bytes)
     }
@@ -215,5 +246,65 @@ mod tests {
         file.sync_data()?;
         assert!(wal.state().is_err());
         Ok(())
+    }
+
+    #[test]
+    fn recovery_is_idempotent_and_records_the_durable_transaction() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let wal = CaptureWal::new(temporary.path());
+        wal.begin(&intent())?;
+        wal.recover("tx-1")?;
+        let recovered_size = fs::metadata(&wal.path)?.len();
+        wal.recover("tx-1")?;
+        assert_eq!(fs::metadata(&wal.path)?.len(), recovered_size);
+        let state = wal.state()?;
+        assert!(state.pending.is_empty());
+        assert_eq!(state.last_durable_transaction.as_deref(), Some("tx-1"));
+        Ok(())
+    }
+
+    #[test]
+    fn near_limit_append_compacts_before_write_and_stays_bounded() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let wal = CaptureWal::new(temporary.path());
+        fs::create_dir_all(wal.path.parent().expect("WAL has a parent"))?;
+        let mut line = serde_json::to_vec(&json!({
+            "format": WAL_FORMAT,
+            "phase": "committed",
+            "transaction_id": "seed",
+        }))?;
+        line.push(b'\n');
+        let repeated = line.repeat(((MAX_WAL_BYTES - 1) / line.len() as u64) as usize);
+        fs::write(&wal.path, &repeated)?;
+        assert!(fs::metadata(&wal.path)?.len() > COMPACT_WAL_BYTES);
+
+        let mut next = intent();
+        next.transaction_id = "tx-after-compaction".to_owned();
+        wal.begin(&next)?;
+
+        let compacted_size = fs::metadata(&wal.path)?.len();
+        assert!(compacted_size <= MAX_WAL_BYTES);
+        assert!(compacted_size < COMPACT_WAL_BYTES);
+        assert_eq!(wal.state()?.pending.get(&next.transaction_id), Some(&next));
+        Ok(())
+    }
+
+    #[test]
+    fn metadata_failures_other_than_not_found_fail_closed() {
+        assert_eq!(
+            CaptureWal::metadata_length(Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "missing",
+            )))
+            .expect("not found means an empty new WAL"),
+            0
+        );
+        assert!(
+            CaptureWal::metadata_length(Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "denied",
+            )))
+            .is_err()
+        );
     }
 }

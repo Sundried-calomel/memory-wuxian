@@ -594,8 +594,15 @@ def verify_collector_lifecycle_alignment(
         launchd_pid=launchd_pid,
     )
     observed = read_json(path)
-    if observed != expected:
-        raise RuntimeError("collector lifecycle manifest does not align with the active generation")
+    for field in (
+        "format",
+        "generation",
+        "archive_root",
+        "expected_command",
+        "startup_owners",
+    ):
+        if observed.get(field) != expected.get(field):
+            raise RuntimeError("collector lifecycle manifest does not align with the active generation")
     return observed
 
 
@@ -1061,6 +1068,14 @@ def install(
             runner=runner,
         )
         verify_collector_lifecycle_alignment(
+            lifecycle_path,
+            generation=candidate_generation,
+            archive_root=archive_root,
+            expected_command=effect["expected_command"],
+            telemetry=telemetry,
+            launchd_pid=effect["launchd_pid"],
+        )
+        persist_collector_lifecycle(
             lifecycle_path,
             generation=candidate_generation,
             archive_root=archive_root,

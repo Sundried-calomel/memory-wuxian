@@ -458,6 +458,60 @@ class MacosTransactionTest(unittest.TestCase):
 
 
 class MacosTransactionPortableContractTest(unittest.TestCase):
+    def test_lifecycle_alignment_keeps_stable_identity_and_refreshes_telemetry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "collector-lifecycle.json"
+            command = ["/installed/memory-wuxian-collector", "--archive-root", str(root)]
+            old = {
+                "pid": 42,
+                "ready": True,
+                "phase": "ready",
+                "updated_at": "2026-08-18T00:00:00Z",
+                "source_watermark": "2026-08-18T00:00:00Z",
+                "archive_watermark": "2026-08-18T00:00:00Z",
+            }
+            new = {
+                **old,
+                "updated_at": "2026-08-18T00:00:02Z",
+                "source_watermark": "2026-08-18T00:00:02Z",
+                "archive_watermark": "2026-08-18T00:00:02Z",
+            }
+            transaction.persist_collector_lifecycle(
+                path,
+                generation="generation-a",
+                archive_root=root,
+                expected_command=command,
+                telemetry=old,
+                launchd_pid=42,
+            )
+            transaction.verify_collector_lifecycle_alignment(
+                path,
+                generation="generation-a",
+                archive_root=root,
+                expected_command=command,
+                telemetry=new,
+                launchd_pid=42,
+            )
+            with self.assertRaisesRegex(RuntimeError, "does not align"):
+                transaction.verify_collector_lifecycle_alignment(
+                    path,
+                    generation="generation-a",
+                    archive_root=root,
+                    expected_command=[*command, "--unexpected"],
+                    telemetry=new,
+                    launchd_pid=42,
+                )
+            refreshed = transaction.persist_collector_lifecycle(
+                path,
+                generation="generation-a",
+                archive_root=root,
+                expected_command=command,
+                telemetry=new,
+                launchd_pid=42,
+            )
+            self.assertEqual(refreshed["verified_telemetry"]["source_watermark"], "2026-08-18T00:00:02Z")
+
     def test_journal_retains_prepare_verify_commit_history(self):
         with tempfile.TemporaryDirectory() as temporary:
             journal_path = Path(temporary) / "事务 かな € 😀" / "journal.json"
