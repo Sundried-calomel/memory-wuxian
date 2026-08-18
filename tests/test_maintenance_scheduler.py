@@ -50,6 +50,17 @@ class MaintenanceSchedulerTest(unittest.TestCase):
                 maximum_semantic_jobs=9,
             )
 
+    def test_supervisor_returns_nonzero_when_a_cycle_fails(self):
+        with patch("maintenance_supervisor.run_supervisor_tick", side_effect=RuntimeError("boom")):
+            result = supervisor.run_supervisor(
+                self.archive,
+                self.skill / "config.yaml",
+                maximum_cycles=1,
+            )
+        self.assertEqual(result, 1)
+        state = self.archive / "maintenance" / "supervisor-state.json"
+        self.assertEqual(__import__("json").loads(state.read_text(encoding="utf-8"))["status"], "error")
+
     def test_supervisor_lock_serializes_overlapping_ticks(self):
         active = 0
         maximum_active = 0

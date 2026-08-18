@@ -140,6 +140,7 @@ def run_supervisor(
     root = root.resolve()
     state_path = root / "maintenance" / "supervisor-state.json"
     cycle = 0
+    had_error = False
     while maximum_cycles == 0 or cycle < maximum_cycles:
         cycle += 1
         try:
@@ -151,6 +152,7 @@ def run_supervisor(
             state["cycle"] = cycle
             atomic_write_canonical_json(state_path, state)
         except Exception as exc:
+            had_error = True
             write_maintenance_projection(root)
             atomic_write_canonical_json(
                 state_path,
@@ -165,7 +167,7 @@ def run_supervisor(
         if maximum_cycles and cycle >= maximum_cycles:
             break
         sleep(interval_seconds)
-    return 0
+    return 1 if had_error else 0
 
 
 def main() -> int:

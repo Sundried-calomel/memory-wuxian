@@ -14,6 +14,8 @@ pub(crate) struct CollectorTelemetry {
     last_archive_update: Option<String>,
     source_watermark: Option<String>,
     archive_watermark: Option<String>,
+    wal_pending_transactions: usize,
+    last_durable_transaction: Option<String>,
     wakeups: VecDeque<(Instant, String)>,
 }
 
@@ -27,6 +29,8 @@ impl CollectorTelemetry {
             last_archive_update: None,
             source_watermark: None,
             archive_watermark: None,
+            wal_pending_transactions: 0,
+            last_durable_transaction: None,
             wakeups: VecDeque::new(),
         }
     }
@@ -64,6 +68,11 @@ impl CollectorTelemetry {
         self.watcher_ready = true;
     }
 
+    pub(crate) fn record_wal(&mut self, pending: usize, last_durable: Option<String>) {
+        self.wal_pending_transactions = pending;
+        self.last_durable_transaction = last_durable;
+    }
+
     pub(crate) fn document(&mut self, interval: Duration) -> Value {
         while self
             .wakeups
@@ -85,6 +94,8 @@ impl CollectorTelemetry {
             "last_archive_update": self.last_archive_update,
             "source_watermark": self.source_watermark,
             "archive_watermark": self.archive_watermark,
+            "wal_pending_transactions": self.wal_pending_transactions,
+            "last_durable_transaction": self.last_durable_transaction,
             "wakeups_last_hour": self.wakeups.len(),
             "recent_wakeups": self.wakeups.iter().map(|(_, timestamp)| timestamp).collect::<Vec<_>>(),
             "updated_at": Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),

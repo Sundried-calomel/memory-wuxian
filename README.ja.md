@@ -1,5 +1,9 @@
 # Memory無限
 
+> **2.18.0:** 会話内容を含まない限定サイズの `capture-wal.jsonl` により、
+> 冪等な crash recovery、source 単位の障害分離、非致命 telemetry、純読取 health、
+> maintenance 失敗時の非ゼロ終了を追加します。原文、summary、backfill、cloud 契約は不変です。
+
 > **2.17.0:** P0 Capture Core を製品ロジックから分離し、薄いネイティブ
 > `memory-wuxian-core-launcher` から呼び出します。限定的な起動 catch-up より先に filesystem watcher を有効化し、
 > source 選択、可視イベント、archive bytes、cursor、summary 条件は変更しません。

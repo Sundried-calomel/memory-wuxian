@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.18.0 - 2026-08-18
+
+- Add a bounded, fsynced, content-free Capture Core WAL with deterministic
+  transaction identities, idempotent replay, strict partial-write rejection,
+  and atomic compaction.
+- Advance source cursors only after durable archive work and recover completed
+  interrupted intents without rewriting accepted raw history.
+- Isolate source failures so one malformed rollout cannot block healthy
+  sources, and make telemetry persistence non-fatal to capture availability.
+- Make service-state reads side-effect free, return nonzero from failed
+  maintenance cycles, and add P0-specific release and fault-injection gates.
+
 ## 2.17.0 - 2026-08-18
 
 - Extract the native Capture Core into explicit runtime, source, store,

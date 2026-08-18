@@ -1,5 +1,10 @@
 # Memory無限
 
+> **2.18.0:** Adds a bounded, content-free `capture-wal.jsonl` for idempotent
+> crash recovery, source-local failure isolation, non-fatal telemetry writes,
+> pure-read service health, and nonzero maintenance failure exits. Raw history,
+> summaries, backfill, and cloud protocols remain unchanged.
+
 > **2.17.0:** Extracts the P0 Capture Core behind the thin native
 > `memory-wuxian-core-launcher`.
 > Filesystem watchers are active before bounded startup catch-up, while source
