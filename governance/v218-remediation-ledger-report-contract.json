@@ -1,0 +1,20 @@
+{
+  "mode": "new_composition",
+  "review_depth": "source_grounded",
+  "source_required": true,
+  "source_available": true,
+  "required_sentence_ids": [],
+  "required_strings": [
+    "## 3. 已完成整改",
+    "## 4. 待实施整改",
+    "## 5. 明确延期",
+    "46,403",
+    "46,434",
+    "72998fd4e051816f57ac2c56d94579e0db45f8b1",
+    "6c514ccbdd075a5f45cf1d956471177edf7555ee"
+  ],
+  "required_provenance_paths": [
+    "../../governance/v218-architecture-gate-validation.json",
+    "../../governance/v218-lean-dedup-v2-validation.json"
+  ]
+}

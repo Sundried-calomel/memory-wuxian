@@ -1,0 +1,41 @@
+{
+  "evidence": [
+    {
+      "check_id": "source-grounded-claims",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-validation.json",
+      "sha256": "052f83a402ba59d1a047a585f41c7c768f69fe705488f7b015c281bae7c9eb57"
+    },
+    {
+      "check_id": "line-count-reproduction",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-validation.json",
+      "sha256": "052f83a402ba59d1a047a585f41c7c768f69fe705488f7b015c281bae7c9eb57"
+    },
+    {
+      "check_id": "status-separation",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-validation.json",
+      "sha256": "052f83a402ba59d1a047a585f41c7c768f69fe705488f7b015c281bae7c9eb57"
+    }
+  ],
+  "load_receipt_internal_sha256": "0c0e977f67a57439c350bb0f504f01209c31fd71f82c4ecd9ee37c60ba4709a9",
+  "load_receipt_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-load.json",
+  "load_receipt_sha256": "f73173c46d806f6b92fd7842e211b8ee843fa661ff1d94d70dada33a1eb06f10",
+  "packet_file_sha256": "12b3567e5d6760bf76e30c2a6edaebed1feec62774eec8879ce4aa7d60c714c5",
+  "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-packet.json",
+  "packet_sha256": "88146c4541ea8c2f9f0bbc8b82288be3989d28e7c29f7152fbc0fb5496b8cb53",
+  "passed_check_ids": [
+    "line-count-reproduction",
+    "source-grounded-claims",
+    "status-separation"
+  ],
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-preflight.json",
+  "preflight_sha256": "2e448d5c9150cbfdda6d737d60d0af7448360ee6cc6657cabaf4dec943dbe8a3",
+  "receipt_sha256": "1e3d9a9551b67d6441552d14d3d3f0624ec371d7cae42107fafc29c4ac9c63bc",
+  "receipt_type": "defect-prevention-verification",
+  "required_check_ids": [],
+  "results_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-results.json",
+  "results_sha256": "fd654c0af472f393b96fea1c74c635423c0d7564a1b88220ae352955c09b4fd3",
+  "schema_version": 1,
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "verified_at": "2026-08-18T13:51:24.937568+00:00"
+}

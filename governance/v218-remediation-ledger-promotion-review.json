@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-remediation-ledger",
+  "status": "no_promotion",
+  "reason": "This task restores a project-specific omitted deliverable. It introduces no new reusable defect family or cross-project governance rule."
+}

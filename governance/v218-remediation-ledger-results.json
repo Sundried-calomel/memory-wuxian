@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-remediation-ledger",
+  "packet_sha256": "88146c4541ea8c2f9f0bbc8b82288be3989d28e7c29f7152fbc0fb5496b8cb53",
+  "checks": [
+    {
+      "check_id": "source-grounded-claims",
+      "status": "passed",
+      "note": "Completed claims are bound to immutable commits and validation receipts; future claims remain explicitly estimated or deferred.",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-validation.json",
+          "sha256": "052f83a402ba59d1a047a585f41c7c768f69fe705488f7b015c281bae7c9eb57"
+        }
+      ]
+    },
+    {
+      "check_id": "line-count-reproduction",
+      "status": "passed",
+      "note": "The full declared production scope was recounted from the V0 Git object and the current V2 checkout.",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-validation.json",
+          "sha256": "052f83a402ba59d1a047a585f41c7c768f69fe705488f7b015c281bae7c9eb57"
+        }
+      ]
+    },
+    {
+      "check_id": "status-separation",
+      "status": "passed",
+      "note": "The ledger separates completed and measured work, pending estimates, and explicitly deferred work.",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-validation.json",
+          "sha256": "052f83a402ba59d1a047a585f41c7c768f69fe705488f7b015c281bae7c9eb57"
+        }
+      ]
+    }
+  ]
+}
