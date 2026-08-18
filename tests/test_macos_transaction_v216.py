@@ -78,6 +78,7 @@ class MacosTransactionV216Test(unittest.TestCase):
         telemetry = {
             "format_version": 2,
             "ready": True,
+            "phase": "ready",
             "pid": 42,
             "updated_at": "2026-08-18T00:00:00Z",
             "source_watermark": "2026-08-18T00:00:00Z",
@@ -264,6 +265,8 @@ class MacosTransactionV216Test(unittest.TestCase):
         pointer.write_bytes(f"{self.archive}\n".encode("utf-8"))
         telemetry = {
             "pid": 42,
+            "ready": True,
+            "phase": "ready",
             "source_watermark": "2026-08-18T00:00:00Z",
             "archive_watermark": "2026-08-18T00:00:00Z",
             "last_archive_update": "2026-08-18T00:00:00Z",

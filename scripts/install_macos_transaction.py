@@ -503,6 +503,8 @@ def collector_lifecycle_manifest(
     telemetry_pid = telemetry.get("pid")
     if telemetry_pid != launchd_pid:
         raise RuntimeError("lifecycle manifest PID does not align with collector telemetry")
+    if telemetry.get("ready") is not True or telemetry.get("phase") != "ready":
+        raise RuntimeError("lifecycle manifest requires ready collector telemetry")
     source = _watermark(telemetry.get("source_watermark"))
     archived = _watermark(telemetry.get("archive_watermark"))
     if source is None or source != archived:
@@ -526,6 +528,8 @@ def collector_lifecycle_manifest(
         "startup_owners": [owner],
         "verified_telemetry": {
             "pid": telemetry_pid,
+            "ready": True,
+            "phase": "ready",
             "updated_at": telemetry.get("updated_at"),
             "source_watermark": source,
             "archive_watermark": archived,
