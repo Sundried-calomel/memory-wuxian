@@ -1,0 +1,25 @@
+{
+  "change_kind": "modify",
+  "changed_catalog_entries": [],
+  "changed_workbook_entries": [
+    "memory-wuxian-project-defects"
+  ],
+  "created_at": "2026-08-18T04:52:51+00:00",
+  "no_applicable_family_reason": null,
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-core-refactor\\governance\\p0-capture-core\\v2.17.0-preflight.json",
+  "preflight_sha256": "c853e20f458269915dc046b1fc42892261a2db39f02011b454316ed68e7454a7",
+  "receipt_sha256": "a14ba41cb529d1fcc2b1b675f8dfde6dc19aa7ef767ed1df5594165fadb15373",
+  "receipt_type": "defect-workbook-completion",
+  "schema_version": 1,
+  "selected_families": [
+    "G03",
+    "G04",
+    "G05",
+    "G09",
+    "MW-R06",
+    "MW-R09",
+    "MW-R10"
+  ],
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-core-refactor"
+}
