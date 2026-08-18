@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-lean-dedup-v2",
+  "packet_sha256": "283aa1fdb30649353e68860d6ccdd5c866a8ca34433507755025427514f3010a",
+  "checks": [
+    {
+      "check_id": "unicode-path-fixtures",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-lean-dedup-v2-validation.json",
+          "sha256": "acdc7c67fed0d3fe299926b74f56c01eba6c032a42c347467caa7d59fe0c9347"
+        }
+      ],
+      "note": "Production command and path boundaries preserved multilingual text, currency signs, emoji, spaces, leading hyphens, and long values."
+    }
+  ]
+}

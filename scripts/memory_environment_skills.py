@@ -17,11 +17,16 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import yaml
 
-from memory_environment import EnvironmentRegistry
+from memory_environment import (
+    EnvironmentRegistry,
+    _strict_keys,
+    canonical_bytes as _canonical,
+    sha256_bytes as _sha256,
+)
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
 
@@ -89,16 +94,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _sha256(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
-
-
-def _canonical(value: Any) -> bytes:
-    return json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-
-
 def skill_package_contract_bytes(manifest: Mapping[str, Any]) -> bytes:
     """Return the Registry-bound package contract without the circular revision ID."""
 
@@ -149,22 +144,6 @@ def _atomic_json(path: Path, value: Dict[str, Any]) -> None:
     finally:
         if temporary.exists():
             temporary.unlink()
-
-
-def _strict_keys(
-    value: Mapping[str, Any],
-    allowed: Iterable[str],
-    required: Iterable[str],
-    label: str,
-) -> None:
-    allowed_set = set(allowed)
-    required_set = set(required)
-    unknown = set(value) - allowed_set
-    missing = required_set - set(value)
-    if unknown:
-        raise ValueError(f"{label}: unknown fields: {sorted(unknown)}")
-    if missing:
-        raise ValueError(f"{label}: missing fields: {sorted(missing)}")
 
 
 def _string(value: Any, label: str) -> str:

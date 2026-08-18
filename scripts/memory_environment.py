@@ -15,7 +15,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
@@ -98,7 +98,10 @@ def read_json(path: Path) -> Any:
 
 
 def _strict_keys(
-    value: Dict[str, Any], allowed: Iterable[str], required: Iterable[str], label: str
+    value: Mapping[str, Any],
+    allowed: Iterable[str],
+    required: Iterable[str],
+    label: str,
 ) -> None:
     allowed_set, required_set = set(allowed), set(required)
     unknown, missing = set(value) - allowed_set, required_set - set(value)
@@ -106,8 +109,6 @@ def _strict_keys(
         raise ValueError(f"{label}: unknown fields: {sorted(unknown)}")
     if missing:
         raise ValueError(f"{label}: missing fields: {sorted(missing)}")
-
-
 def _string(value: Any, label: str, *, maximum: Optional[int] = None) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{label}: expected non-empty string")

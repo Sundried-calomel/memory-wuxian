@@ -20,6 +20,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from console_encoding import configure_unicode_stdio
 from platform_lock import exclusive_lock
+from platform_paths import active_root_pointer
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
 from memory_cloud_transport import CloudFolderTransport
 import memory_configuration
@@ -4210,11 +4211,6 @@ def resolve_config(path: Path) -> Dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Config does not exist: {path}")
     return load_simple_yaml(path)
-
-
-def active_root_pointer() -> Path:
-    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
-    return codex_home / "memory-wuxian-active-root.txt"
 
 
 def resolve_root(root_argument: Optional[str], config: Dict[str, Any]) -> Path:

@@ -6,10 +6,11 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 
 from memory_environment import (
     EnvironmentRegistry,
+    _strict_keys,
     atomic_write_json,
     canonical_bytes,
     now_iso,
@@ -73,17 +74,6 @@ def _require_string(value: Any, label: str, *, nullable: bool = False) -> Option
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label}: expected non-empty string")
     return value
-
-
-def _strict_keys(
-    value: Dict[str, Any], allowed: Iterable[str], required: Iterable[str], label: str
-) -> None:
-    unknown = set(value) - set(allowed)
-    missing = set(required) - set(value)
-    if unknown:
-        raise ValueError(f"{label}: unknown fields: {sorted(unknown)}")
-    if missing:
-        raise ValueError(f"{label}: missing fields: {sorted(missing)}")
 
 
 class PromotionStore:

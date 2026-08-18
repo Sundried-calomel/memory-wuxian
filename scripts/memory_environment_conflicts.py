@@ -6,9 +6,15 @@ import json
 import re
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
+from typing import Any, Dict, List, Mapping, Optional, Set
 
-from memory_environment import EnvironmentRegistry, atomic_write_json, now_iso, read_json
+from memory_environment import (
+    EnvironmentRegistry,
+    _strict_keys,
+    atomic_write_json,
+    now_iso,
+    read_json,
+)
 from platform_lock import exclusive_lock
 
 
@@ -41,20 +47,6 @@ REVIEW_FLAGS = (
     ("platform_incompatible", "platform-incompatible"),
     ("unregistered_local_change", "unregistered-local-change"),
 )
-
-
-def _strict_keys(
-    value: Mapping[str, Any],
-    allowed: Iterable[str],
-    required: Iterable[str],
-    label: str,
-) -> None:
-    unknown = set(value) - set(allowed)
-    missing = set(required) - set(value)
-    if unknown:
-        raise ValueError(f"{label}: unknown fields: {sorted(unknown)}")
-    if missing:
-        raise ValueError(f"{label}: missing fields: {sorted(missing)}")
 
 
 def _optional_id(value: Any, label: str, pattern: re.Pattern[str]) -> Optional[str]:

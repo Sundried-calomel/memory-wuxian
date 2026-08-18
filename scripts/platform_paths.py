@@ -8,6 +8,13 @@ import os
 from pathlib import Path
 
 
+def active_root_pointer() -> Path:
+    codex_home = Path(
+        os.environ.get("CODEX_HOME", Path.home() / ".codex")
+    ).expanduser()
+    return codex_home / "memory-wuxian-active-root.txt"
+
+
 def is_link_like(path: Path) -> bool:
     """Return true for symbolic links and Windows directory junctions."""
     if path.is_symlink():

@@ -13,7 +13,12 @@ import uuid
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
-from memory_environment import EnvironmentRegistry
+from memory_environment import (
+    EnvironmentRegistry,
+    _strict_keys,
+    canonical_bytes as _canonical_bytes,
+    sha256_bytes as _sha256_bytes,
+)
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
 
@@ -39,16 +44,6 @@ def _current_platform() -> str:
     if sys.platform == "darwin":
         return "macos"
     return "linux"
-
-
-def _canonical_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-
-
-def _sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def _record_hash(value: Mapping[str, Any]) -> str:
@@ -94,22 +89,6 @@ def _atomic_write_json(path: Path, value: Any) -> None:
 
 def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _strict_keys(
-    value: Mapping[str, Any],
-    allowed: Iterable[str],
-    required: Iterable[str],
-    label: str,
-) -> None:
-    allowed_set = set(allowed)
-    required_set = set(required)
-    unknown = set(value) - allowed_set
-    missing = required_set - set(value)
-    if unknown:
-        raise ValueError(f"{label}: unknown fields: {sorted(unknown)}")
-    if missing:
-        raise ValueError(f"{label}: missing fields: {sorted(missing)}")
 
 
 def _required_string(value: Any, label: str, pattern: Optional[re.Pattern] = None) -> str:

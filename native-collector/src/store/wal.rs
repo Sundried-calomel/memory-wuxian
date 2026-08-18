@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -139,13 +138,7 @@ impl CaptureWal {
         }
         bytes.push(b'\n');
         self.ensure_append_capacity(bytes.len() as u64)?;
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)?;
-        file.write_all(&bytes)?;
-        file.sync_data()?;
-        Ok(())
+        super::transaction::append_bytes_prepared(&self.path, &bytes)
     }
 
     fn ensure_append_capacity(&self, append_bytes: u64) -> Result<()> {
@@ -208,6 +201,8 @@ impl CaptureWal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::OpenOptions;
+    use std::io::Write;
 
     fn intent() -> WalIntent {
         WalIntent {
@@ -245,6 +240,19 @@ mod tests {
         file.write_all(b"{\"format\":")?;
         file.sync_data()?;
         assert!(wal.state().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn prepared_event_bytes_remain_exact() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let wal = CaptureWal::new(temporary.path());
+        wal.begin(&intent())?;
+        assert_eq!(
+            fs::read(&wal.path)?,
+            br#"{"format":"memory-wuxian-capture-wal-v1","intent":{"committed_byte_offset":128,"cursor_after_line":2,"cursor_before_line":1,"session_id":"session-1","source_path":"C:/sessions/rollout.jsonl","transaction_id":"tx-1"},"phase":"prepared","transaction_id":"tx-1"}
+"#,
+        );
         Ok(())
     }
 

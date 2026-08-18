@@ -35,6 +35,7 @@ try:
         remove_installed_effect_probe,
         watermark_reached,
     )
+    from platform_process import _unique_command_argument
 except ModuleNotFoundError:
     from scripts.install_maintenance_supervisor import retire_legacy_macos_semantic_backfill
     from scripts.migrate_config import migrate_config
@@ -45,6 +46,7 @@ except ModuleNotFoundError:
         remove_installed_effect_probe,
         watermark_reached,
     )
+    from scripts.platform_process import _unique_command_argument
 
 
 COLLECTOR_LABEL = "com.memorywuxian.codex-sync"
@@ -683,10 +685,10 @@ def validate_installed_launch_contract(
 
 
 def _command_value(command: list[str], option: str) -> str:
-    matches = [index for index, value in enumerate(command) if value == option]
-    if len(matches) != 1 or matches[0] + 1 >= len(command):
+    value = _unique_command_argument(command, option)
+    if value is None:
         raise RuntimeError(f"restored collector command has no unique {option} value")
-    return command[matches[0] + 1]
+    return value
 
 
 def verify_restored_collector_effect(
