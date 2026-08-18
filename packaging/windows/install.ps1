@@ -1,4 +1,7 @@
-param([Parameter(Mandatory = $true)][string]$SkillRoot)
+param(
+  [Parameter(Mandatory = $true)][string]$SkillRoot,
+  [Parameter(Mandatory = $true)][string]$CandidateRoot
+)
 
 $ErrorActionPreference = "Stop"
 function Test-MemoryWuxianSkillRoot([string]$Candidate) {
@@ -12,11 +15,22 @@ function Test-MemoryWuxianSkillRoot([string]$Candidate) {
   if ((Split-Path -Leaf $codex) -ne ".codex") { return $false }
   return (Test-Path -LiteralPath (Join-Path $resolved "SKILL.md") -PathType Leaf)
 }
+function Test-MemoryWuxianCandidate([string]$Candidate) {
+  if (-not $Candidate) { return $false }
+  $resolved = [IO.Path]::GetFullPath($Candidate)
+  foreach ($required in @("SKILL.md", "config.yaml", "bin\memory-wuxian-collector.exe")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $resolved $required) -PathType Leaf)) { return $false }
+  }
+  return $true
+}
 
 # The package-provided path is authoritative when it is a complete installed
 # Skill root. Sandboxed launchers can have a service SID whose ProfileList entry
 # is not the interactive user's profile.
-if (-not (Test-MemoryWuxianSkillRoot $SkillRoot)) {
+if (-not (Test-MemoryWuxianCandidate $CandidateRoot)) {
+  throw "MemoryWuxian candidate Skill root is incomplete."
+}
+if ((Test-Path -LiteralPath $SkillRoot) -and -not (Test-MemoryWuxianSkillRoot $SkillRoot)) {
   $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
   $profileKey = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$currentSid"
   $profileImagePath = (Get-ItemProperty -LiteralPath $profileKey -Name ProfileImagePath).ProfileImagePath
@@ -44,7 +58,7 @@ if (Test-Path -LiteralPath $activeRootPointer) {
 }
 $sessionsRoot = Join-Path $codexHome "sessions"
 
-$bootstrapText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $SkillRoot "scripts\bootstrap_windows.ps1") -InstallMissing
+$bootstrapText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $CandidateRoot "scripts\bootstrap_windows.ps1") -InstallMissing
 if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian runtime bootstrap failed." }
 $bootstrapOutput = $bootstrapText | Out-String
 $jsonStart = $bootstrapOutput.IndexOf("{")
@@ -55,37 +69,47 @@ if (-not $bootstrap.ready) { throw "MemoryWuxian runtime requirements are incomp
 $python = $bootstrap.checks.python.path
 $codexCli = $bootstrap.checks.codex_cli.path
 New-Item -ItemType Directory -Force -Path $archiveRoot, $sessionsRoot | Out-Null
-& $python (Join-Path $SkillRoot "scripts\migrate_config.py") `
-  --current (Join-Path $SkillRoot "config.yaml") `
-  --defaults (Join-Path $SkillRoot "config.defaults.yaml") `
-  --apply | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian configuration migration failed." }
-& $python (Join-Path $SkillRoot "scripts\memory_cli.py") --root $archiveRoot --config (Join-Path $SkillRoot "config.yaml") init | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian archive initialization failed." }
-
-& $python (Join-Path $SkillRoot "scripts\memory_cli.py") `
-  --root $archiveRoot `
-  --config (Join-Path $SkillRoot "config.yaml") `
-  init-node `
-  --display-name $env:COMPUTERNAME | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian node initialization failed." }
-
-& $python (Join-Path $SkillRoot "scripts\install_codex_autosync_windows.py") `
+$transactionOutput = & $python (Join-Path $CandidateRoot "scripts\install_codex_autosync_windows.py") `
   --archive-root $archiveRoot `
   --skill-root $SkillRoot `
+  --candidate-root $CandidateRoot `
   --sessions-root $sessionsRoot `
   --python-executable $python `
   --codex-cli $codexCli `
+  --backend task `
+  --defer-commit `
   --load
 if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian background collector activation failed." }
+$journalLine = @($transactionOutput) | Where-Object { $_ -like "install-journal:*" } | Select-Object -Last 1
+if (-not $journalLine) { throw "MemoryWuxian installer did not return a durable journal." }
+$journalPath = $journalLine.Substring("install-journal:".Length)
 
-& $python (Join-Path $SkillRoot "scripts\install_auto_update.py") `
-  --skill-root $SkillRoot `
-  --python-executable $python
-if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian automatic update activation failed." }
+try {
+  & $python (Join-Path $SkillRoot "scripts\migrate_config.py") `
+    --current (Join-Path $SkillRoot "config.yaml") `
+    --defaults (Join-Path $SkillRoot "config.defaults.yaml") `
+    --apply | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian configuration migration failed." }
+  & $python (Join-Path $SkillRoot "scripts\memory_cli.py") --root $archiveRoot --config (Join-Path $SkillRoot "config.yaml") init | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian archive initialization failed." }
 
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $SkillRoot "scripts\install_dashboard_shortcut_windows.ps1") `
-  -SkillRoot $SkillRoot `
-  -ArchiveRoot $archiveRoot `
-  -PythonExecutable $python
-if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian dashboard shortcut installation failed." }
+  & $python (Join-Path $SkillRoot "scripts\memory_cli.py") `
+    --root $archiveRoot `
+    --config (Join-Path $SkillRoot "config.yaml") `
+    init-node `
+    --display-name $env:COMPUTERNAME | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian node initialization failed." }
+
+  & $python (Join-Path $SkillRoot "scripts\install_auto_update.py") --skill-root $SkillRoot --python-executable $python
+  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian automatic update activation failed." }
+
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $SkillRoot "scripts\install_dashboard_shortcut_windows.ps1") `
+    -SkillRoot $SkillRoot -ArchiveRoot $archiveRoot -PythonExecutable $python
+  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian dashboard shortcut installation failed." }
+
+  & $python (Join-Path $SkillRoot "scripts\install_codex_autosync_windows.py") --commit-journal $journalPath
+  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian transaction commit failed." }
+} catch {
+  & $python (Join-Path $CandidateRoot "scripts\install_codex_autosync_windows.py") --rollback-journal $journalPath
+  throw
+}

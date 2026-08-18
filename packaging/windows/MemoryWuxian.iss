@@ -25,14 +25,13 @@ OutputDir={#SourceRoot}\dist
 OutputBaseFilename=MemoryWuxian-{#AppVersion}-Windows-x64-Setup
 
 [Files]
-Source: "{#SourceRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config.yaml,.git\*,.github\*,memory\*,native-collector\target\*,packaging\*,dist\*,outputs\*,__pycache__\*,*.pyc"
-Source: "{#SourceRoot}\config.yaml"; DestDir: "{app}"; Flags: onlyifdoesntexist
-Source: "{#SourceRoot}\config.yaml"; DestDir: "{app}"; DestName: "config.defaults.yaml"; Flags: ignoreversion
+Source: "{#SourceRoot}\*"; DestDir: "{tmp}\MemoryWuxian\candidate"; Flags: ignoreversion recursesubdirs createallsubdirs deleteafterinstall; Excludes: ".git\*,.github\*,memory\*,native-collector\target\*,packaging\*,dist\*,outputs\*,__pycache__\*,*.pyc"
+Source: "{#SourceRoot}\config.yaml"; DestDir: "{tmp}\MemoryWuxian\candidate"; DestName: "config.defaults.yaml"; Flags: onlyifdoesntexist ignoreversion deleteafterinstall
 Source: "{#SourceRoot}\packaging\windows\install.ps1"; DestDir: "{tmp}\MemoryWuxian"; Flags: ignoreversion deleteafterinstall
-Source: "{#SourceRoot}\packaging\windows\uninstall.ps1"; DestDir: "{app}\packaging\windows"; Flags: ignoreversion
+Source: "{#SourceRoot}\packaging\windows\uninstall.ps1"; DestDir: "{tmp}\MemoryWuxian\candidate\packaging\windows"; Flags: ignoreversion deleteafterinstall
 
 [Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{tmp}\MemoryWuxian\install.ps1"" -SkillRoot ""{app}"""; StatusMsg: "Installing and activating MemoryWuxian..."; Flags: runhidden waituntilterminated
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{tmp}\MemoryWuxian\install.ps1"" -SkillRoot ""{app}"" -CandidateRoot ""{tmp}\MemoryWuxian\candidate"""; StatusMsg: "Installing and activating MemoryWuxian..."; Flags: runhidden waituntilterminated
 
 [UninstallRun]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\packaging\windows\uninstall.ps1"" -SkillRoot ""{app}"""; Flags: runhidden waituntilterminated; RunOnceId: "MemoryWuxianCollector"

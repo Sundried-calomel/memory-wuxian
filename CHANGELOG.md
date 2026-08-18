@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.16.0 - 2026-08-18
+
+- Make Windows Task Scheduler and macOS launchd activation one durable
+  prepare, verify, commit, or rollback transaction.
+- Keep the previous verified generation runnable until the candidate proves
+  its exact startup owner, command, archive root, PID identity, and bounded
+  source/archive watermark convergence.
+- Remove the Windows Run-key fallback as a competing startup authority, add
+  restart policy and durable receipts, and preserve multilingual long-path
+  arguments without shell reconstruction.
+- Replace broad runtime health scans with a bounded fail-closed collector
+  lifecycle gate. Summary, backfill, archive formats, and cloud protocols are
+  unchanged.
+
 ## 2.15.0 - 2026-08-04
 
 - Add the independent encrypted `project-attachment-v1` stream for explicit

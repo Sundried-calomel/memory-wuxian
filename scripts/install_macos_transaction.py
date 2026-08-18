@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import plistlib
@@ -39,6 +40,32 @@ COLLECTOR_READY_TIMEOUT_SECONDS = 900
 Runner = Callable[..., subprocess.CompletedProcess]
 
 
+def exact_macos_root(value: str, label: str, *, must_exist: bool = True) -> Path:
+    """Canonicalize roots while allowing only Apple's fixed /private aliases."""
+
+    supplied = Path(value).expanduser()
+    if not supplied.is_absolute():
+        raise ValueError(f"{label} must be an absolute path: {supplied}")
+    resolved = supplied.resolve(strict=must_exist)
+    lexical = Path(os.path.abspath(supplied))
+    if lexical != resolved:
+        aliases = {
+            Path("/var"): Path("/private/var"),
+            Path("/tmp"): Path("/private/tmp"),
+            Path("/etc"): Path("/private/etc"),
+        }
+        allowed = any(
+            lexical == alias
+            and resolved == target
+            or lexical.is_relative_to(alias)
+            and resolved == target / lexical.relative_to(alias)
+            for alias, target in aliases.items()
+        )
+        if not allowed:
+            raise ValueError(f"{label} contains an unsupported path alias: {supplied}")
+    return resolved
+
+
 def atomic_bytes(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -48,9 +75,37 @@ def atomic_bytes(path: Path, payload: bytes) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+        try:
+            directory = os.open(path.parent, os.O_RDONLY)
+        except (AttributeError, OSError):
+            directory = None
+        if directory is not None:
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def fsync_directory(path: Path) -> None:
+    if os.name == "nt":  # Portable contract tests run on Windows; install is macOS-only.
+        return
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def durable_replace(source: Path, destination: Path) -> None:
+    source_parent = Path(source).parent
+    destination_parent = Path(destination).parent
+    os.replace(source, destination)
+    fsync_directory(destination_parent)
+    if source_parent != destination_parent:
+        fsync_directory(source_parent)
 
 
 def event(timestamp: str, payload: dict[str, Any]) -> str:
@@ -318,7 +373,8 @@ def quiesce_collector_for_cutover(
 
 
 def prepare_candidate(source_root: Path, candidate: Path, current: Path) -> None:
-    shutil.rmtree(candidate, ignore_errors=True)
+    if candidate.exists():
+        raise FileExistsError(f"candidate staging path already exists: {candidate}")
     shutil.copytree(
         source_root,
         candidate,
@@ -347,6 +403,405 @@ def prepare_candidate(source_root: Path, candidate: Path, current: Path) -> None
         executable.chmod(executable.stat().st_mode | 0o111)
 
 
+def atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    atomic_bytes(
+        path,
+        (json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(
+            "utf-8"
+        ),
+    )
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"expected JSON object: {path}")
+    return payload
+
+
+def tree_generation(root: Path) -> tuple[str, list[dict[str, Any]]]:
+    entries: list[dict[str, Any]] = []
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            entries.append({"path": relative, "type": "symlink", "target": os.readlink(path)})
+        elif path.is_file():
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            entries.append(
+                {
+                    "path": relative,
+                    "type": "file",
+                    "size": path.stat().st_size,
+                    "sha256": digest,
+                    "mode": path.stat().st_mode & 0o777,
+                }
+            )
+    encoded = json.dumps(entries, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return f"mwg-{hashlib.sha256(encoded).hexdigest()}", entries
+
+
+def transaction_identifier(candidate_generation: str, paths: dict[str, str]) -> str:
+    encoded = json.dumps(
+        {"candidate_generation": candidate_generation, "paths": paths},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"mwt-{hashlib.sha256(encoded).hexdigest()}"
+
+
+def transition(journal_path: Path, journal: dict[str, Any], state: str, **details: Any) -> None:
+    allowed = {
+        "prepare": {"prepare", "verify", "rollback"},
+        "verify": {"commit", "rollback"},
+        "commit": set(),
+        "rollback": {"rollback"},
+    }
+    current = journal.get("state")
+    if current not in allowed or state not in allowed[current]:
+        raise RuntimeError(f"invalid transaction transition: {current} -> {state}")
+    timestamp = datetime.now(timezone.utc).isoformat()
+    journal["state"] = state
+    journal["updated_at"] = timestamp
+    journal.update(details)
+    journal.setdefault("events", []).append(
+        {"stage": state, "timestamp": timestamp, "details": details}
+    )
+    atomic_json(journal_path, journal)
+
+
+def snapshot_file(source: Path, destination: Path) -> dict[str, Any]:
+    if not source.is_file():
+        return {"existed": False}
+    payload = source.read_bytes()
+    atomic_bytes(destination, payload)
+    return {"existed": True, "sha256": hashlib.sha256(payload).hexdigest()}
+
+
+def restore_snapshot(destination: Path, snapshot: Path, record: dict[str, Any]) -> None:
+    if bool(record.get("existed")):
+        payload = snapshot.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != record.get("sha256"):
+            raise RuntimeError(f"rollback snapshot hash mismatch: {snapshot}")
+        atomic_bytes(destination, payload)
+    else:
+        destination.unlink(missing_ok=True)
+
+
+def _watermark(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def collector_lifecycle_manifest(
+    *,
+    generation: str,
+    archive_root: Path,
+    expected_command: list[str],
+    telemetry: dict[str, Any],
+    launchd_pid: int,
+) -> dict[str, Any]:
+    telemetry_pid = telemetry.get("pid")
+    if telemetry_pid != launchd_pid:
+        raise RuntimeError("lifecycle manifest PID does not align with collector telemetry")
+    source = _watermark(telemetry.get("source_watermark"))
+    archived = _watermark(telemetry.get("archive_watermark"))
+    if source is None or source != archived:
+        raise RuntimeError("lifecycle manifest requires converged telemetry watermarks")
+    live_generation = telemetry.get("lifecycle_generation")
+    if live_generation is not None and live_generation != generation:
+        raise RuntimeError("lifecycle generation does not align with collector telemetry")
+    owner = {
+        "owner_id": f"launchd:{COLLECTOR_LABEL}",
+        "kind": "launch-agent",
+        "generation": generation,
+        "archive_root": str(archive_root),
+        "command": list(expected_command),
+        "pid_identity": "required",
+    }
+    return {
+        "format": "memory-wuxian-collector-lifecycle-v1",
+        "generation": generation,
+        "archive_root": str(archive_root),
+        "expected_command": list(expected_command),
+        "startup_owners": [owner],
+        "verified_telemetry": {
+            "pid": telemetry_pid,
+            "updated_at": telemetry.get("updated_at"),
+            "source_watermark": source,
+            "archive_watermark": archived,
+        },
+    }
+
+
+def persist_collector_lifecycle(
+    path: Path,
+    *,
+    generation: str,
+    archive_root: Path,
+    expected_command: list[str],
+    telemetry: dict[str, Any],
+    launchd_pid: int,
+) -> dict[str, Any]:
+    manifest = collector_lifecycle_manifest(
+        generation=generation,
+        archive_root=archive_root,
+        expected_command=expected_command,
+        telemetry=telemetry,
+        launchd_pid=launchd_pid,
+    )
+    atomic_json(path, manifest)
+    if read_json(path) != manifest:
+        raise RuntimeError("collector lifecycle manifest verification failed")
+    return manifest
+
+
+def verify_collector_lifecycle_alignment(
+    path: Path,
+    *,
+    generation: str,
+    archive_root: Path,
+    expected_command: list[str],
+    telemetry: dict[str, Any],
+    launchd_pid: int,
+) -> dict[str, Any]:
+    expected = collector_lifecycle_manifest(
+        generation=generation,
+        archive_root=archive_root,
+        expected_command=expected_command,
+        telemetry=telemetry,
+        launchd_pid=launchd_pid,
+    )
+    observed = read_json(path)
+    if observed != expected:
+        raise RuntimeError("collector lifecycle manifest does not align with the active generation")
+    return observed
+
+
+def validate_installed_launch_contract(
+    *,
+    skill_root: Path,
+    archive_root: Path,
+    sessions_root: Path,
+    python_executable: Path,
+    codex_cli: Path,
+    plist: Path,
+    active_root_pointer: Path,
+    telemetry: dict[str, Any],
+    previous_archive_watermark: str | None,
+    runner: Runner,
+) -> dict[str, Any]:
+    activation = read_json(archive_root / "imports" / "codex" / "collector-activation.json")
+    since = activation.get("since")
+    if not isinstance(since, str) or not since:
+        raise RuntimeError("collector activation boundary is missing")
+    payload = plistlib.loads(plist.read_bytes())
+    expected_arguments = [
+        str(skill_root / "bin" / "memory-wuxian-collector"),
+        "--archive-root",
+        str(archive_root),
+        "--config",
+        str(skill_root / "config.yaml"),
+        "--sessions-root",
+        str(sessions_root),
+        "--since",
+        since,
+        "--debounce-ms",
+        "400",
+    ]
+    expected_logs = archive_root / "imports" / "codex"
+    if payload.get("Label") != COLLECTOR_LABEL or payload.get("ProgramArguments") != expected_arguments:
+        raise RuntimeError("installed collector command does not exactly match the candidate contract")
+    expected_environment = {
+        "RUST_BACKTRACE": "1",
+        "MEMORY_WUXIAN_PYTHON": str(python_executable),
+        "MEMORY_WUXIAN_CODEX": str(codex_cli),
+    }
+    if payload.get("EnvironmentVariables") != expected_environment:
+        raise RuntimeError("installed collector environment does not exactly match the candidate contract")
+    if payload.get("StandardOutPath") != str(expected_logs / "launch-agent.stdout.log") or payload.get(
+        "StandardErrorPath"
+    ) != str(expected_logs / "launch-agent.stderr.log"):
+        raise RuntimeError("installed collector log paths do not exactly match the archive root")
+    if active_root_pointer.read_bytes() != f"{archive_root}\n".encode("utf-8"):
+        raise RuntimeError("active archive root pointer does not exactly match the requested root")
+    launchd_pid = launchctl_pid(COLLECTOR_LABEL, runner)
+    if launchd_pid is None or launchd_pid != int(telemetry["pid"]):
+        raise RuntimeError("launchd PID does not match collector telemetry")
+    source = _watermark(telemetry.get("source_watermark"))
+    archived = _watermark(telemetry.get("archive_watermark"))
+    if telemetry.get("source_watermark") != telemetry.get("archive_watermark"):
+        raise RuntimeError("collector source and archive watermarks did not converge")
+    if not isinstance(telemetry.get("last_archive_update"), str):
+        raise RuntimeError("collector did not publish a bounded archive effect")
+    if previous_archive_watermark is not None and archived is not None:
+        if datetime.fromisoformat(archived.replace("Z", "+00:00")) < datetime.fromisoformat(
+            previous_archive_watermark.replace("Z", "+00:00")
+        ):
+            raise RuntimeError("collector archive watermark regressed")
+    return {
+        "status": "passed",
+        "launchd_pid": launchd_pid,
+        "expected_command": expected_arguments,
+        "source_watermark": source,
+        "archive_watermark": archived,
+    }
+
+
+def recover_interrupted_transactions(
+    *,
+    transactions_root: Path,
+    staging_root: Path,
+    generations_root: Path,
+    failed_root: Path,
+    skill_root: Path,
+    plist: Path,
+    maintenance_plist: Path,
+    active_root_pointer: Path,
+    runner: Runner,
+) -> None:
+    """Restore every uncommitted generation before admitting a new candidate."""
+
+    if not transactions_root.is_dir():
+        return
+    for transaction_root in sorted(path for path in transactions_root.iterdir() if path.is_dir()):
+        journal_path = transaction_root / "journal.json"
+        if not journal_path.is_file():
+            continue
+        journal = read_json(journal_path)
+        transaction = journal.get("transaction_id")
+        candidate_generation = journal.get("candidate_generation")
+        prior_generation = journal.get("prior_generation")
+        if not isinstance(transaction, str) or not isinstance(candidate_generation, str):
+            raise RuntimeError(f"invalid interrupted transaction journal: {journal_path}")
+        if (transaction_root / "commit-receipt.json").is_file():
+            if journal.get("state") == "verify":
+                transition(
+                    journal_path,
+                    journal,
+                    "commit",
+                    commit_receipt=str(transaction_root / "commit-receipt.json"),
+                    recovered=True,
+                )
+            continue
+        if (transaction_root / "rollback-receipt.json").is_file():
+            continue
+        if journal.get("state") == "commit":
+            raise RuntimeError("transaction journal claims commit without a commit receipt")
+        paths = journal.get("paths")
+        snapshots = journal.get("snapshots")
+        if not isinstance(paths, dict) or paths.get("skill_root") != str(skill_root):
+            raise RuntimeError("interrupted transaction does not match the requested Skill root")
+        if not isinstance(snapshots, dict):
+            raise RuntimeError("interrupted transaction has no rollback snapshots")
+        archive_root = Path(str(paths.get("archive_root", "")))
+        if not archive_root.is_absolute() or not archive_root.is_dir():
+            raise RuntimeError("interrupted transaction archive root is unavailable")
+        prior_path = generations_root / f"{prior_generation or 'none'}-{transaction}"
+        candidate = staging_root / candidate_generation
+        failed_path = failed_root / f"{candidate_generation}-{transaction}"
+        current_generation = tree_generation(skill_root)[0] if skill_root.is_dir() else None
+        switched = prior_path.is_dir() or current_generation == candidate_generation
+
+        if switched:
+            with quiesce_collector_for_cutover(archive_root, plist, runner=runner):
+                pass
+            runner(
+                [
+                    "/bin/launchctl",
+                    "bootout",
+                    f"gui/{os.getuid()}",
+                    str(maintenance_plist),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if current_generation == candidate_generation and skill_root.exists():
+                if failed_path.exists():
+                    existing_generation = tree_generation(failed_path)[0]
+                    if existing_generation != candidate_generation:
+                        raise RuntimeError("failed candidate evidence conflicts with recovery")
+                    shutil.rmtree(skill_root)
+                else:
+                    durable_replace(skill_root, failed_path)
+            if prior_generation is not None:
+                if not prior_path.is_dir():
+                    raise RuntimeError("interrupted transaction lost its prior generation")
+                durable_replace(prior_path, skill_root)
+        elif current_generation != prior_generation:
+            raise RuntimeError("interrupted transaction pre-state cannot be reconstructed")
+
+        restore_snapshot(
+            plist,
+            transaction_root / "collector.plist",
+            snapshots["collector_plist"],
+        )
+        restore_snapshot(
+            maintenance_plist,
+            transaction_root / "maintenance.plist",
+            snapshots["maintenance_plist"],
+        )
+        restore_snapshot(
+            active_root_pointer,
+            transaction_root / "active-root.txt",
+            snapshots["active_root_pointer"],
+        )
+        lifecycle_snapshot = snapshots.get("collector_lifecycle")
+        if isinstance(lifecycle_snapshot, dict):
+            restore_snapshot(
+                archive_root / "imports" / "codex" / "collector-lifecycle.json",
+                transaction_root / "collector-lifecycle.json",
+                lifecycle_snapshot,
+            )
+        if snapshots["collector_plist"].get("existed") and launchctl_pid(
+            COLLECTOR_LABEL, runner
+        ) is None:
+            runner(
+                ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            wait_for_launch_agent(COLLECTOR_LABEL, runner=runner)
+        if snapshots["maintenance_plist"].get("existed"):
+            runner(
+                [
+                    "/bin/launchctl",
+                    "bootstrap",
+                    f"gui/{os.getuid()}",
+                    str(maintenance_plist),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        if candidate.exists():
+            if failed_path.exists():
+                existing_generation = tree_generation(failed_path)[0]
+                if existing_generation != candidate_generation:
+                    raise RuntimeError("staged candidate conflicts with recovery evidence")
+                shutil.rmtree(candidate)
+            else:
+                durable_replace(candidate, failed_path)
+        receipt = {
+            "format_version": 1,
+            "status": "rolled-back",
+            "transaction_id": transaction,
+            "rolled_back_at": datetime.now(timezone.utc).isoformat(),
+            "candidate_evidence": str(failed_path),
+            "error": "recovered interrupted transaction",
+        }
+        atomic_json(transaction_root / "rollback-receipt.json", receipt)
+        transition(
+            journal_path,
+            journal,
+            "rollback",
+            phase="restored",
+            recovered=True,
+            rollback_receipt=str(transaction_root / "rollback-receipt.json"),
+        )
+
+
 def install(
     *,
     source_root: Path,
@@ -357,31 +812,185 @@ def install(
     codex_cli: Path,
     runner: Runner = subprocess.run,
 ) -> dict[str, Any]:
+    for name, path, kind in (
+        ("source root", source_root, "dir"),
+        ("archive root", archive_root, "dir"),
+        ("sessions root", sessions_root, "dir"),
+        ("Python executable", python_executable, "file"),
+        ("Codex CLI", codex_cli, "file"),
+    ):
+        if not path.is_absolute() or (kind == "dir" and not path.is_dir()) or (kind == "file" and not path.is_file()):
+            raise ValueError(f"{name} must be an existing absolute {kind}: {path}")
+    if not skill_root.is_absolute():
+        raise ValueError(f"skill root must be absolute: {skill_root}")
+    if source_root == skill_root or archive_root in (source_root, skill_root):
+        raise ValueError("source, Skill, and archive roots must be distinct")
+    for owner in (source_root, skill_root):
+        if archive_root.is_relative_to(owner):
+            raise ValueError(f"archive root must not be inside {owner}")
+    for required in (
+        source_root / "SKILL.md",
+        source_root / "config.yaml",
+        source_root / "scripts" / "install_codex_autosync.py",
+        source_root / "bin" / "memory-wuxian-collector",
+    ):
+        if not required.is_file():
+            raise ValueError(f"candidate package root is incomplete: {required}")
+
     codex_home = skill_root.parent.parent
     update_root = codex_home / "updates" / "memory-wuxian"
-    candidate = update_root / "candidate"
-    rollback = update_root / "rollback-current"
-    failed = update_root / "failed-candidate"
+    staging_root = update_root / "staging"
+    generations_root = update_root / "generations"
+    transactions_root = update_root / "transactions"
+    failed_root = update_root / "failed"
     plist = Path.home() / "Library" / "LaunchAgents" / f"{COLLECTOR_LABEL}.plist"
-    old_plist = plist.read_bytes() if plist.is_file() else None
     maintenance_plist = (
         Path.home()
         / "Library"
         / "LaunchAgents"
         / "com.openai.codex.memory-wuxian-maintenance.plist"
     )
-    old_maintenance_plist = (
-        maintenance_plist.read_bytes() if maintenance_plist.is_file() else None
-    )
     active_root_pointer = codex_home / "memory-wuxian-active-root.txt"
-    old_active_root = (
-        active_root_pointer.read_bytes() if active_root_pointer.is_file() else None
-    )
     old_pid = launchctl_pid(COLLECTOR_LABEL, runner)
+    old_telemetry: dict[str, Any] = {}
+    telemetry_path = archive_root / "imports" / "codex" / "collector-telemetry.json"
+    lifecycle_path = archive_root / "imports" / "codex" / "collector-lifecycle.json"
+    if telemetry_path.is_file():
+        try:
+            old_telemetry = read_json(telemetry_path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            old_telemetry = {}
+    previous_archive_watermark = _watermark(old_telemetry.get("archive_watermark"))
 
-    update_root.mkdir(parents=True, exist_ok=True)
-    prepare_candidate(source_root, candidate, skill_root)
+    for directory in (staging_root, generations_root, transactions_root, failed_root):
+        directory.mkdir(parents=True, exist_ok=True)
+    recover_interrupted_transactions(
+        transactions_root=transactions_root,
+        staging_root=staging_root,
+        generations_root=generations_root,
+        failed_root=failed_root,
+        skill_root=skill_root,
+        plist=plist,
+        maintenance_plist=maintenance_plist,
+        active_root_pointer=active_root_pointer,
+        runner=runner,
+    )
+    candidate_temporary = Path(tempfile.mkdtemp(prefix=".candidate-", dir=staging_root))
+    try:
+        candidate_temporary.rmdir()
+        prepare_candidate(source_root, candidate_temporary, skill_root)
+        candidate_generation, candidate_manifest = tree_generation(candidate_temporary)
+        candidate = staging_root / candidate_generation
+        if candidate.exists():
+            existing_generation, _ = tree_generation(candidate)
+            if existing_generation != candidate_generation:
+                raise RuntimeError("existing candidate staging generation is corrupt")
+            shutil.rmtree(candidate_temporary)
+        else:
+            durable_replace(candidate_temporary, candidate)
+    except Exception:
+        if candidate_temporary.exists():
+            shutil.rmtree(candidate_temporary)
+        raise
+
+    paths = {
+        "source_root": str(source_root),
+        "skill_root": str(skill_root),
+        "archive_root": str(archive_root),
+        "sessions_root": str(sessions_root),
+        "python_executable": str(python_executable),
+        "codex_cli": str(codex_cli),
+    }
+    transaction_id = transaction_identifier(candidate_generation, paths)
+    transaction_root = transactions_root / transaction_id
+    transaction_root.mkdir(parents=True, exist_ok=True)
+    journal_path = transaction_root / "journal.json"
+    commit_receipt = transaction_root / "commit-receipt.json"
+    rollback_receipt = transaction_root / "rollback-receipt.json"
+
+    if commit_receipt.is_file():
+        committed = read_json(commit_receipt)
+        if (
+            committed.get("status") != "committed"
+            or committed.get("transaction_id") != transaction_id
+            or committed.get("candidate_generation") != candidate_generation
+        ):
+            raise RuntimeError("commit receipt does not match the candidate transaction")
+        current_generation, _ = tree_generation(skill_root)
+        if current_generation != candidate_generation:
+            raise RuntimeError("commit receipt exists but the verified generation is not active")
+        telemetry = wait_for_collector(archive_root, previous_pid=None, timeout_seconds=30)
+        effect = validate_installed_launch_contract(
+            skill_root=skill_root,
+            archive_root=archive_root,
+            sessions_root=sessions_root,
+            python_executable=python_executable,
+            codex_cli=codex_cli,
+            plist=plist,
+            active_root_pointer=active_root_pointer,
+            telemetry=telemetry,
+            previous_archive_watermark=previous_archive_watermark,
+            runner=runner,
+        )
+        verify_collector_lifecycle_alignment(
+            lifecycle_path,
+            generation=candidate_generation,
+            archive_root=archive_root,
+            expected_command=effect["expected_command"],
+            telemetry=telemetry,
+            launchd_pid=effect["launchd_pid"],
+        )
+        if candidate.exists():
+            shutil.rmtree(candidate)
+            fsync_directory(candidate.parent)
+        committed_prior = committed.get("prior_generation_path")
+        if isinstance(committed_prior, str) and committed_prior:
+            committed_prior_path = Path(committed_prior)
+            if committed_prior_path.is_dir():
+                expected_prior = committed.get("prior_generation")
+                if tree_generation(committed_prior_path)[0] != expected_prior:
+                    raise RuntimeError("committed rollback generation hash mismatch")
+                shutil.rmtree(committed_prior_path)
+                fsync_directory(committed_prior_path.parent)
+        return {
+            "status": "installed",
+            "idempotent": True,
+            "transaction_id": transaction_id,
+            "candidate_generation": candidate_generation,
+            "active_pid": effect["launchd_pid"],
+            "archive_root": str(archive_root),
+        }
+
+    snapshots = {
+        "collector_plist": snapshot_file(plist, transaction_root / "collector.plist"),
+        "maintenance_plist": snapshot_file(maintenance_plist, transaction_root / "maintenance.plist"),
+        "active_root_pointer": snapshot_file(active_root_pointer, transaction_root / "active-root.txt"),
+        "collector_lifecycle": snapshot_file(
+            lifecycle_path, transaction_root / "collector-lifecycle.json"
+        ),
+    }
+    prior_generation = None
+    if skill_root.exists():
+        prior_generation, prior_manifest = tree_generation(skill_root)
+    else:
+        prior_manifest = []
+    journal: dict[str, Any] = {
+        "format_version": 1,
+        "transaction_id": transaction_id,
+        "state": "prepare",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "events": [],
+        "paths": paths,
+        "candidate_generation": candidate_generation,
+        "candidate_manifest": candidate_manifest,
+        "prior_generation": prior_generation,
+        "prior_manifest": prior_manifest,
+        "snapshots": snapshots,
+    }
+    transition(journal_path, journal, "prepare", phase="candidate-staged")
     probe = probe_candidate(candidate, runner)
+    transition(journal_path, journal, "prepare", phase="candidate-probed", probe=probe)
 
     with quiesce_collector_for_cutover(
         archive_root,
@@ -392,14 +1001,17 @@ def install(
 
     moved_current = False
     candidate_active = False
+    prior_path = generations_root / f"{prior_generation or 'none'}-{transaction_id}"
+    failed_path = failed_root / f"{candidate_generation}-{transaction_id}"
     legacy_semantic_backfill: dict[str, object] | None = None
     try:
-        shutil.rmtree(rollback, ignore_errors=True)
-        shutil.rmtree(failed, ignore_errors=True)
+        transition(journal_path, journal, "prepare", phase="activating", cutover=cutover)
         if skill_root.exists():
-            os.replace(skill_root, rollback)
+            if prior_path.exists():
+                raise RuntimeError(f"prior generation destination already exists: {prior_path}")
+            durable_replace(skill_root, prior_path)
             moved_current = True
-        os.replace(candidate, skill_root)
+        durable_replace(candidate, skill_root)
         candidate_active = True
         runner(
             [
@@ -427,6 +1039,33 @@ def install(
             archive_root,
             previous_pid=old_pid,
             timeout_seconds=COLLECTOR_READY_TIMEOUT_SECONDS,
+        )
+        effect = validate_installed_launch_contract(
+            skill_root=skill_root,
+            archive_root=archive_root,
+            sessions_root=sessions_root,
+            python_executable=python_executable,
+            codex_cli=codex_cli,
+            plist=plist,
+            active_root_pointer=active_root_pointer,
+            telemetry=telemetry,
+            previous_archive_watermark=previous_archive_watermark,
+            runner=runner,
+        )
+        lifecycle = persist_collector_lifecycle(
+            lifecycle_path,
+            generation=candidate_generation,
+            archive_root=archive_root,
+            expected_command=effect["expected_command"],
+            telemetry=telemetry,
+            launchd_pid=effect["launchd_pid"],
+        )
+        transition(
+            journal_path,
+            journal,
+            "verify",
+            effect=effect,
+            collector_lifecycle=lifecycle,
         )
         runner(
             [
@@ -464,7 +1103,23 @@ def install(
         legacy_semantic_backfill = retire_legacy_macos_semantic_backfill(
             runner=runner,
         )
+        receipt = {
+            "format_version": 1,
+            "status": "committed",
+            "transaction_id": transaction_id,
+            "committed_at": datetime.now(timezone.utc).isoformat(),
+            "candidate_generation": candidate_generation,
+            "prior_generation": prior_generation,
+            "prior_generation_path": str(prior_path) if moved_current else None,
+            "paths": paths,
+            "probe": probe,
+            "effect": effect,
+        }
+        atomic_json(commit_receipt, receipt)
+        transition(journal_path, journal, "commit", commit_receipt=str(commit_receipt))
     except Exception as error:
+        transition(journal_path, journal, "rollback", phase="started", error=str(error))
+        rollback_error: Exception | None = None
         runner(
             [
                 "/bin/launchctl",
@@ -482,38 +1137,73 @@ def install(
             capture_output=True,
             text=True,
         )
-        if candidate_active and skill_root.exists():
-            os.replace(skill_root, failed)
-        if moved_current and rollback.exists():
-            os.replace(rollback, skill_root)
-        if old_plist is not None:
-            atomic_bytes(plist, old_plist)
-        runner(
-            ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        wait_for_launch_agent(COLLECTOR_LABEL, runner=runner)
-        if old_maintenance_plist is None:
-            maintenance_plist.unlink(missing_ok=True)
-        else:
-            atomic_bytes(maintenance_plist, old_maintenance_plist)
-            runner(
-                [
-                    "/bin/launchctl",
-                    "bootstrap",
-                    f"gui/{os.getuid()}",
-                    str(maintenance_plist),
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
+        try:
+            if candidate_active and skill_root.exists():
+                if failed_path.exists():
+                    raise RuntimeError(f"failed candidate evidence already exists: {failed_path}")
+                durable_replace(skill_root, failed_path)
+            if moved_current and prior_path.exists():
+                durable_replace(prior_path, skill_root)
+            restore_snapshot(plist, transaction_root / "collector.plist", snapshots["collector_plist"])
+            restore_snapshot(
+                maintenance_plist,
+                transaction_root / "maintenance.plist",
+                snapshots["maintenance_plist"],
             )
-        if old_active_root is None:
-            active_root_pointer.unlink(missing_ok=True)
-        else:
-            atomic_bytes(active_root_pointer, old_active_root)
+            restore_snapshot(
+                active_root_pointer,
+                transaction_root / "active-root.txt",
+                snapshots["active_root_pointer"],
+            )
+            restore_snapshot(
+                lifecycle_path,
+                transaction_root / "collector-lifecycle.json",
+                snapshots["collector_lifecycle"],
+            )
+            if bool(snapshots["collector_plist"].get("existed")):
+                runner(
+                    ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                wait_for_launch_agent(COLLECTOR_LABEL, runner=runner)
+            if bool(snapshots["maintenance_plist"].get("existed")):
+                runner(
+                    ["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(maintenance_plist)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            atomic_json(
+                rollback_receipt,
+                {
+                    "format_version": 1,
+                    "status": "rolled-back",
+                    "transaction_id": transaction_id,
+                    "rolled_back_at": datetime.now(timezone.utc).isoformat(),
+                    "candidate_evidence": str(failed_path) if failed_path.exists() else str(candidate),
+                    "error": str(error),
+                },
+            )
+            transition(
+                journal_path,
+                journal,
+                "rollback",
+                phase="restored",
+                rollback_receipt=str(rollback_receipt),
+            )
+        except Exception as restore_error:
+            rollback_error = restore_error
+            transition(
+                journal_path,
+                journal,
+                "rollback",
+                phase="failed",
+                rollback_error=str(restore_error),
+            )
+        if rollback_error is not None:
+            raise RuntimeError(f"upgrade failed and rollback failed: {rollback_error}") from error
         if isinstance(error, subprocess.CalledProcessError):
             detail = (error.stderr or error.stdout or "").strip()
             command = " ".join(str(part) for part in error.cmd)
@@ -523,10 +1213,16 @@ def install(
             raise RuntimeError(message) from error
         raise
 
-    shutil.rmtree(rollback, ignore_errors=True)
-    shutil.rmtree(failed, ignore_errors=True)
+    if moved_current:
+        shutil.rmtree(prior_path, ignore_errors=True)
+        fsync_directory(prior_path.parent)
     return {
         "status": "installed",
+        "transaction_id": transaction_id,
+        "candidate_generation": candidate_generation,
+        "commit_receipt": str(commit_receipt),
+        "prior_generation_path": None,
+        "rollback_generation_pruned_after_commit": moved_current,
         "probe": probe,
         "cutover": cutover,
         "previous_pid": old_pid,
@@ -547,10 +1243,10 @@ def main() -> int:
     parser.add_argument("--codex-cli", required=True)
     args = parser.parse_args()
     result = install(
-        source_root=Path(args.source_root).expanduser().resolve(),
-        skill_root=Path(args.skill_root).expanduser().resolve(),
-        archive_root=Path(args.archive_root).expanduser().resolve(),
-        sessions_root=Path(args.sessions_root).expanduser().resolve(),
+        source_root=exact_macos_root(args.source_root, "source root"),
+        skill_root=exact_macos_root(args.skill_root, "Skill root", must_exist=False),
+        archive_root=exact_macos_root(args.archive_root, "archive root"),
+        sessions_root=exact_macos_root(args.sessions_root, "sessions root"),
         python_executable=executable_entry_path(args.python_executable),
         codex_cli=Path(args.codex_cli).expanduser().resolve(),
     )
