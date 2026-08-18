@@ -9,6 +9,7 @@ import os
 import subprocess
 import tempfile
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -46,6 +47,69 @@ def _parse_timestamp(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def create_installed_effect_probe(
+    sessions_root: str | Path,
+    *,
+    previous_watermark: str | None = None,
+) -> dict[str, Any]:
+    """Create one content-free rollout that proves the installed watcher ran."""
+    root = Path(sessions_root)
+    if not root.is_absolute() or not root.is_dir():
+        raise ValueError("collector effect probe requires an existing absolute sessions root")
+    previous = _parse_timestamp(previous_watermark)
+    if previous is not None:
+        previous = previous.replace(microsecond=0)
+        now = datetime.now(timezone.utc)
+        if (previous - now).total_seconds() > 5:
+            raise ValueError("collector source watermark is implausibly ahead of the system clock")
+        deadline = time.monotonic() + 6.5
+        while datetime.now(timezone.utc).replace(microsecond=0) <= previous:
+            if time.monotonic() >= deadline:
+                raise RuntimeError("collector effect probe could not advance beyond the previous watermark")
+            time.sleep(0.05)
+    probe_id = f"memory-wuxian-install-effect-{uuid.uuid4().hex}"
+    path = root / f"rollout-{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H-%M-%S')}-{probe_id}.jsonl"
+    payload = (
+        json.dumps(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "type": "session_meta",
+                "payload": {"id": probe_id, "source": "memory-wuxian-install-effect"},
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("utf-8")
+    with path.open("xb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    stamp = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).replace(microsecond=0)
+    if previous is not None and stamp <= previous:
+        path.unlink(missing_ok=True)
+        raise RuntimeError("collector effect probe did not advance beyond the previous watermark")
+    return {
+        "probe_id": probe_id,
+        "path": str(path),
+        "watermark": stamp.isoformat().replace("+00:00", "Z"),
+        "payload_sha256": hashlib.sha256(payload).hexdigest(),
+        "contains_visible_messages": False,
+    }
+
+
+def remove_installed_effect_probe(probe: Mapping[str, Any]) -> None:
+    raw_path = probe.get("path")
+    if isinstance(raw_path, str) and raw_path:
+        Path(raw_path).unlink(missing_ok=True)
+
+
+def watermark_reached(value: Any, minimum: str) -> bool:
+    observed = _parse_timestamp(value)
+    required = _parse_timestamp(minimum)
+    return observed is not None and required is not None and observed >= required
 
 
 def _command(value: Any) -> list[str] | None:

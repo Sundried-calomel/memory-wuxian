@@ -26,6 +26,7 @@
       "forbidden_capabilities": ["control", "memory", "exchange", "environment", "project", "ui", "ai"],
       "patterns": [
         "scripts/collector_lifecycle.py",
+        "scripts/collector_runtime_effect_gate.py",
         "native-collector/src/main.rs",
         "native-collector/src/lib.rs",
         "native-collector/src/runtime.rs",

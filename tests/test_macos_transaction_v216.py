@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -74,6 +75,14 @@ class MacosTransactionV216Test(unittest.TestCase):
             str(self.skill / "bin" / "memory-wuxian-collector"),
             "--archive-root",
             str(self.archive),
+            "--config",
+            str(self.skill / "config.yaml"),
+            "--sessions-root",
+            str(self.sessions),
+            "--since",
+            "2026-08-01T00:00:00Z",
+            "--debounce-ms",
+            "400",
         ]
         telemetry = {
             "format_version": 2,
@@ -139,14 +148,50 @@ class MacosTransactionV216Test(unittest.TestCase):
     def test_failure_restores_prior_and_retains_rollback_receipt(self):
         lifecycle_path = self.archive / "imports" / "codex" / "collector-lifecycle.json"
         lifecycle_path.parent.mkdir(parents=True, exist_ok=True)
-        old_lifecycle = b'{"generation":"old-generation"}\n'
+        old_command = [
+            str(self.skill / "bin" / "memory-wuxian-collector"),
+            "--archive-root", str(self.archive),
+            "--config", str(self.skill / "config.yaml"),
+            "--sessions-root", str(self.sessions),
+            "--since", "2026-08-01T00:00:00Z",
+            "--debounce-ms", "400",
+        ]
+        old_lifecycle = (json.dumps({
+            "format": "memory-wuxian-collector-lifecycle-v1",
+            "generation": "old-generation",
+            "archive_root": str(self.archive),
+            "expected_command": old_command,
+            "startup_owners": [{
+                "owner_id": f"launchd:{transaction.COLLECTOR_LABEL}",
+                "kind": "launch-agent",
+                "generation": "old-generation",
+                "archive_root": str(self.archive),
+                "command": old_command,
+                "pid_identity": "required",
+            }],
+        }) + "\n").encode("utf-8")
         lifecycle_path.write_bytes(old_lifecycle)
+        plist = self.home / "Library" / "LaunchAgents" / f"{transaction.COLLECTOR_LABEL}.plist"
+        plist.parent.mkdir(parents=True, exist_ok=True)
+        plist.write_bytes(plistlib.dumps({
+            "Label": transaction.COLLECTOR_LABEL,
+            "ProgramArguments": old_command,
+            "EnvironmentVariables": {
+                "RUST_BACKTRACE": "1",
+                "MEMORY_WUXIAN_PYTHON": str(self.python),
+                "MEMORY_WUXIAN_CODEX": str(self.codex),
+            },
+        }))
         with self.assertRaisesRegex(RuntimeError, "dashboard failed"):
             self.invoke(FakeRunner(fail_dashboard=True))
         self.assertEqual((self.skill / "marker").read_bytes(), b"prior-generation")
         transaction_roots = list((self.home / ".codex" / "updates" / "memory-wuxian" / "transactions").iterdir())
         self.assertEqual(len(transaction_roots), 1)
         self.assertTrue((transaction_roots[0] / "rollback-receipt.json").is_file())
+        rollback = json.loads(
+            (transaction_roots[0] / "rollback-receipt.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(rollback["restored_effect"]["launchd_pid"], 42)
         journal = json.loads((transaction_roots[0] / "journal.json").read_text(encoding="utf-8"))
         self.assertEqual(journal["state"], "rollback")
         self.assertEqual(journal["events"][-1]["details"]["phase"], "restored")
@@ -181,6 +226,13 @@ class MacosTransactionV216Test(unittest.TestCase):
         prior_path = generations / f"{prior_generation}-{transaction_id}"
         self.skill.replace(prior_path)
         final_candidate.replace(self.skill)
+        plist = self.home / "Library/LaunchAgents/com.memorywuxian.codex-sync.plist"
+        maintenance = self.home / "Library/LaunchAgents/maintenance.plist"
+        pointer = self.home / ".codex/memory-wuxian-active-root.txt"
+        old_plist = plistlib.dumps({"Label": transaction.COLLECTOR_LABEL})
+        old_lifecycle = b'{"format":"memory-wuxian-collector-lifecycle-v1"}\n'
+        (transaction_root / "collector.plist").write_bytes(old_plist)
+        (transaction_root / "collector-lifecycle.json").write_bytes(old_lifecycle)
         journal = {
             "format_version": 1,
             "transaction_id": transaction_id,
@@ -194,20 +246,30 @@ class MacosTransactionV216Test(unittest.TestCase):
             "prior_generation": prior_generation,
             "prior_manifest": prior_manifest,
             "snapshots": {
-                "collector_plist": {"existed": False},
+                "collector_plist": {
+                    "existed": True,
+                    "sha256": transaction.hashlib.sha256(old_plist).hexdigest(),
+                },
                 "maintenance_plist": {"existed": False},
                 "active_root_pointer": {"existed": False},
+                "collector_lifecycle": {
+                    "existed": True,
+                    "sha256": transaction.hashlib.sha256(old_lifecycle).hexdigest(),
+                },
             },
         }
         transaction.atomic_json(transaction_root / "journal.json", journal)
         runner = FakeRunner()
-        plist = self.home / "Library/LaunchAgents/com.memorywuxian.codex-sync.plist"
-        maintenance = self.home / "Library/LaunchAgents/maintenance.plist"
-        pointer = self.home / ".codex/memory-wuxian-active-root.txt"
+        restored_effect = {"status": "passed", "generation": "old-generation"}
 
         with (
             patch.object(transaction, "quiesce_collector_for_cutover", quiesced),
             patch.object(transaction.os, "getuid", create=True, return_value=501),
+            patch.object(
+                transaction,
+                "verify_restored_collector_effect",
+                return_value=restored_effect,
+            ) as verify_restored,
         ):
             transaction.recover_interrupted_transactions(
                 transactions_root=transactions,
@@ -235,6 +297,9 @@ class MacosTransactionV216Test(unittest.TestCase):
 
         self.assertEqual((self.skill / "marker").read_bytes(), b"prior-generation")
         self.assertTrue((transaction_root / "rollback-receipt.json").is_file())
+        rollback = json.loads((transaction_root / "rollback-receipt.json").read_text(encoding="utf-8"))
+        self.assertEqual(rollback["restored_effect"], restored_effect)
+        verify_restored.assert_called_once()
         self.assertEqual(len(runner.calls), calls_after_first)
 
     def test_exact_launch_contract_rejects_archive_argument_drift(self):
@@ -277,6 +342,19 @@ class MacosTransactionV216Test(unittest.TestCase):
                 python_executable=self.python, codex_cli=self.codex,
                 plist=plist, active_root_pointer=pointer, telemetry=telemetry,
                 previous_archive_watermark=None, runner=FakeRunner(),
+            )
+        with (
+            patch.object(transaction.os, "getuid", create=True, return_value=501),
+            self.assertRaisesRegex(RuntimeError, "effect probe watermark"),
+        ):
+            transaction.validate_installed_launch_contract(
+                skill_root=self.skill, archive_root=self.archive, sessions_root=self.sessions,
+                python_executable=self.python, codex_cli=self.codex,
+                plist=plist, active_root_pointer=pointer, telemetry=telemetry,
+                previous_archive_watermark=None,
+                required_effect_watermark="2026-08-18T00:00:01Z",
+                effect_started_at=datetime(2026, 8, 18, 0, 0, 0, tzinfo=timezone.utc),
+                runner=FakeRunner(),
             )
         payload["ProgramArguments"][2] = str(self.archive.parent / "wrong")
         plist.write_bytes(plistlib.dumps(payload))

@@ -21,9 +21,21 @@ from typing import Any, Callable, Optional, Sequence
 try:
     from platform_process import no_window_kwargs
     from collector_activation import resolve_activation_since
+    from collector_lifecycle import (
+        create_installed_effect_probe,
+        inspect_startup_owner,
+        remove_installed_effect_probe,
+        watermark_reached,
+    )
 except ModuleNotFoundError:
     from scripts.platform_process import no_window_kwargs
     from scripts.collector_activation import resolve_activation_since
+    from scripts.collector_lifecycle import (
+        create_installed_effect_probe,
+        inspect_startup_owner,
+        remove_installed_effect_probe,
+        watermark_reached,
+    )
 
 
 DEFAULT_TASK_NAME = "MemoryWuxianCodexSync"
@@ -302,6 +314,7 @@ def _restore_generation(journal: dict[str, Any]) -> None:
 def _restore_transaction(journal: dict[str, Any], runner: Runner) -> None:
     task_name = str(journal["task_name"])
     rollback = journal["rollback"]
+    _task_command(["schtasks.exe", "/End", "/TN", task_name], runner, check=False)
     remove_task(task_name, runner)
     # The restored task must never start against the failed generation.
     _restore_generation(journal)
@@ -334,6 +347,7 @@ def rollback_transaction(
     journal_path: Path,
     *,
     runner: Runner = subprocess.run,
+    readiness_probe: Callable[..., dict[str, Any]] | None = None,
     error: str = "requested rollback",
 ) -> dict[str, Any]:
     journal = json.loads(journal_path.read_text(encoding="utf-8"))
@@ -341,7 +355,13 @@ def rollback_transaction(
         return journal
     if journal.get("phase") == "commit":
         raise RuntimeError("committed transaction cannot be rolled back by the installer")
-    _restore_transaction(journal, runner)
+    _restore_and_verify_previous(
+        journal,
+        journal_path=journal_path,
+        runner=runner,
+        readiness_probe=readiness_probe or wait_for_watermark_progress,
+        previous_pid=None,
+    )
     _journal_phase(journal_path, journal, "rollback", error=error)
     return journal
 
@@ -355,6 +375,7 @@ def wait_for_watermark_progress(
     *,
     previous_pid: int | None,
     started_at: datetime,
+    minimum_watermark: str | None = None,
     timeout_seconds: float = 120,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
@@ -374,18 +395,109 @@ def wait_for_watermark_progress(
                 last_error = "collector has not reached the ready phase"
             elif previous_pid is not None and pid == previous_pid:
                 last_error = "collector PID did not change"
-            elif updated < started_at:
+            elif updated < started_at.replace(microsecond=0):
                 last_error = "collector telemetry did not advance after activation"
             elif not telemetry.get("ready"):
                 last_error = "collector has not reached watcher-ready state"
             elif source != archive:
                 last_error = "archive watermark has not reached the observed source watermark"
+            elif minimum_watermark is not None and not watermark_reached(archive, minimum_watermark):
+                last_error = "archive watermark has not reached the installed effect probe"
             else:
                 return telemetry
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
             last_error = str(error)
         sleep(0.25)
     raise RuntimeError(last_error)
+
+
+def _command_value(command: Sequence[str], option: str) -> str:
+    matches = [index for index, value in enumerate(command) if value == option]
+    if len(matches) != 1 or matches[0] + 1 >= len(command):
+        raise RuntimeError(f"restored collector command has no unique {option} value")
+    return command[matches[0] + 1]
+
+
+def _restore_and_verify_previous(
+    journal: dict[str, Any],
+    *,
+    journal_path: Path,
+    runner: Runner,
+    readiness_probe: Callable[..., dict[str, Any]],
+    previous_pid: int | None,
+) -> dict[str, Any] | None:
+    encoded_lifecycle = journal.get("rollback", {}).get("lifecycle_manifest")
+    previous_owner = None
+    if encoded_lifecycle is not None:
+        try:
+            lifecycle = json.loads(base64.b64decode(encoded_lifecycle).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RuntimeError("previous collector lifecycle snapshot is invalid") from error
+        previous_owner = inspect_startup_owner(lifecycle)
+        if not previous_owner.get("ok"):
+            raise RuntimeError("previous collector lifecycle snapshot is not verified")
+
+    telemetry_root = Path(
+        previous_owner["archive_root"] if previous_owner is not None else journal["archive_root"]
+    )
+    telemetry_path = telemetry_root / "imports" / "codex" / "collector-telemetry.json"
+    candidate_pid = previous_pid
+    candidate_watermark = journal.get("previous_archive_watermark")
+    try:
+        candidate_telemetry = json.loads(telemetry_path.read_text(encoding="utf-8"))
+        candidate_pid = int(candidate_telemetry["pid"])
+        observed_watermark = candidate_telemetry.get("archive_watermark")
+        if isinstance(observed_watermark, str) and (
+            not isinstance(candidate_watermark, str)
+            or (_parse_time(observed_watermark) > _parse_time(candidate_watermark))
+        ):
+            candidate_watermark = observed_watermark
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        pass
+
+    _restore_transaction(journal, runner)
+    journal["rollback_recovery"] = {
+        "status": "restored-awaiting-verification",
+        "candidate_pid": candidate_pid,
+        "candidate_archive_watermark": candidate_watermark,
+    }
+    atomic_write_bytes(journal_path, canonical_json(journal))
+    if previous_owner is None:
+        journal["rollback_verification"] = {"status": "no-verified-prior-owner"}
+        return None
+
+    command = previous_owner["expected_command"]
+    archive_root = Path(previous_owner["archive_root"])
+    sessions_root = Path(_command_value(command, "--sessions-root"))
+    task_xml_payload = query_task_xml(str(journal["task_name"]), runner)
+    if task_xml_payload is None:
+        raise RuntimeError("restored collector task is missing")
+    task = verify_task_definition(task_xml_payload, command)
+    probe = create_installed_effect_probe(
+        sessions_root,
+        previous_watermark=candidate_watermark,
+    )
+    try:
+        telemetry = readiness_probe(
+            archive_root,
+            previous_pid=candidate_pid,
+            started_at=datetime.now(timezone.utc).replace(microsecond=0),
+            minimum_watermark=probe["watermark"],
+        )
+    finally:
+        remove_installed_effect_probe(probe)
+    verification = {
+        "status": "passed",
+        "task": task,
+        "generation": previous_owner["generation"],
+        "pid": int(telemetry["pid"]),
+        "archive_watermark": telemetry.get("archive_watermark"),
+        "effect_probe": {key: value for key, value in probe.items() if key != "path"},
+    }
+    journal["rollback_verification"] = verification
+    journal["rollback_recovery"]["status"] = "verified"
+    atomic_write_bytes(journal_path, canonical_json(journal))
+    return verification
 
 
 def _restore_file(path: Path, payload: bytes | None) -> None:
@@ -423,6 +535,13 @@ def install_transaction(
         previous_pid = int(json.loads(telemetry_path.read_text(encoding="utf-8"))["pid"])
     except (OSError, ValueError, KeyError, json.JSONDecodeError):
         pass
+    previous_archive_watermark = None
+    try:
+        previous_archive_watermark = json.loads(
+            telemetry_path.read_text(encoding="utf-8")
+        ).get("archive_watermark")
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
     journal: dict[str, Any] = {
         "format": JOURNAL_FORMAT,
         "format_version": 1,
@@ -433,6 +552,7 @@ def install_transaction(
         "command_manifest": str(command_manifest),
         "active_root_pointer": str(pointer),
         "lifecycle_manifest": str(lifecycle_manifest),
+        "previous_archive_watermark": previous_archive_watermark,
         "rollback": {
             "task_xml": _encoded(old_task_xml),
             "command_manifest": _encoded(old_manifest),
@@ -456,6 +576,8 @@ def install_transaction(
             prepare_mutation(journal)
             atomic_write_bytes(journal_path, canonical_json(journal))
         remove_run_key(runner)
+        if old_task_xml is not None:
+            _task_command(["schtasks.exe", "/End", "/TN", task_name], runner, check=False)
         remove_task(task_name, runner)
         register_task(task_name, intended_xml, runner)
         actual_xml = query_task_xml(task_name, runner)
@@ -490,12 +612,27 @@ def install_transaction(
         }
         atomic_write_bytes(lifecycle_manifest, canonical_json(lifecycle))
         _task_command(["schtasks.exe", "/Run", "/TN", task_name], runner, check=True)
-        telemetry = readiness_probe(archive_root, previous_pid=previous_pid, started_at=started_at)
+        sessions_index = list(command).index("--sessions-root") + 1
+        effect_probe = create_installed_effect_probe(
+            Path(command[sessions_index]), previous_watermark=previous_archive_watermark
+        )
+        try:
+            telemetry = readiness_probe(
+                archive_root,
+                previous_pid=previous_pid,
+                started_at=started_at,
+                minimum_watermark=effect_probe["watermark"],
+            )
+        finally:
+            remove_installed_effect_probe(effect_probe)
         journal["verification"] = {
             "scheduled_task": actual_task,
             "pid": int(telemetry["pid"]),
             "source_watermark": telemetry.get("source_watermark"),
             "archive_watermark": telemetry.get("archive_watermark"),
+            "effect_probe": {
+                key: value for key, value in effect_probe.items() if key != "path"
+            },
         }
         atomic_write_bytes(journal_path, canonical_json(journal))
         if not defer_commit:
@@ -504,7 +641,19 @@ def install_transaction(
         return journal
     except BaseException as error:
         if mutated:
-            _restore_transaction(journal, runner)
+            failed_pid = None
+            try:
+                failed_pid = int(json.loads(telemetry_path.read_text(encoding="utf-8"))["pid"])
+            except (OSError, ValueError, KeyError, json.JSONDecodeError):
+                pass
+            _restore_and_verify_previous(
+                journal,
+                journal_path=journal_path,
+                runner=runner,
+                readiness_probe=readiness_probe,
+                previous_pid=failed_pid,
+            )
+            atomic_write_bytes(journal_path, canonical_json(journal))
         _journal_phase(journal_path, journal, "rollback", error=str(error))
         raise
 

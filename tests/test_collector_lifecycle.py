@@ -12,10 +12,13 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from collector_lifecycle import (
+    create_installed_effect_probe,
     inspect_live_effect,
     inspect_startup_owner,
+    remove_installed_effect_probe,
     run_isolated_watermark_probe,
     verify_collector_lifecycle,
+    watermark_reached,
 )
 
 
@@ -55,6 +58,33 @@ class CollectorLifecycleTests(unittest.TestCase):
             "updated_at": "2026-08-18T00:00:00Z",
         }
         self.now = datetime(2026, 8, 18, tzinfo=timezone.utc)
+
+    def test_installed_effect_probe_is_content_free_and_removable(self) -> None:
+        sessions = self.base / "会話 sessions"
+        sessions.mkdir()
+        probe = create_installed_effect_probe(sessions)
+        path = Path(probe["path"])
+        record = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(record["type"], "session_meta")
+        self.assertNotIn("message", path.read_text(encoding="utf-8"))
+        self.assertFalse(probe["contains_visible_messages"])
+        self.assertTrue(watermark_reached(probe["watermark"], probe["watermark"]))
+        remove_installed_effect_probe(probe)
+        self.assertFalse(path.exists())
+
+    def test_installed_effect_probe_advances_from_current_second(self) -> None:
+        sessions = self.base / "same-second-sessions"
+        sessions.mkdir()
+        previous = datetime.now(timezone.utc).replace(microsecond=0)
+        probe = create_installed_effect_probe(
+            sessions,
+            previous_watermark=previous.isoformat().replace("+00:00", "Z"),
+        )
+        try:
+            observed = datetime.fromisoformat(probe["watermark"].replace("Z", "+00:00"))
+            self.assertGreater(observed, previous)
+        finally:
+            remove_installed_effect_probe(probe)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()

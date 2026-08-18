@@ -9,7 +9,7 @@
   "owner_id": "capture-core-platform-foundation-product-quality",
   "platforms": ["windows", "macos"],
   "languages": ["python", "powershell", "rust", "shell"],
-  "path_globs": ["PRODUCT_ARCHITECTURE.md", "docs/module-architecture.json", "references/decisions.md", "scripts/install*", "scripts/*transaction*", "scripts/runtime_effect_gate.py", "packaging/**", "native-collector/src/bin/**", "tests/**"],
+  "path_globs": ["PRODUCT_ARCHITECTURE.md", "docs/module-architecture.json", "references/decisions.md", "scripts/install*", "scripts/*transaction*", "scripts/collector_runtime_effect_gate.py", "packaging/**", "native-collector/src/bin/**", "tests/**"],
   "entrypoints": ["installer", "collector-launcher", "scheduled-task", "launch-agent", "runtime-effect-gate", "rollback"],
   "resources": ["process", "task", "registry", "plist", "runtime", "active-root-pointer", "telemetry", "rollback-generation"],
   "operations": ["install", "upgrade", "launch", "restart", "recover", "rollback", "uninstall", "report"],
@@ -37,7 +37,7 @@
     {
       "id": "v216-lifecycle-effect",
       "owner_id": "capture-core-control-plane",
-      "paths": ["scripts/collector_lifecycle.py", "scripts/runtime_effect_gate.py", "native-collector/src/bin/memory-wuxian-core-launcher.rs", "tests/**"],
+      "paths": ["scripts/collector_lifecycle.py", "scripts/collector_runtime_effect_gate.py", "native-collector/src/bin/memory-wuxian-core-launcher.rs", "tests/**"],
       "entrypoints": ["collector-launcher", "scheduled-task", "launch-agent", "runtime-effect-gate"],
       "resources": ["process", "telemetry", "source-watermark", "archive-watermark"],
       "operations": ["launch", "restart", "probe", "report"],

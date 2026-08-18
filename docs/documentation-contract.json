@@ -25,7 +25,7 @@
     },
     {
       "id": "native-codex-capture",
-      "required_tokens": ["memory-wuxian-collector", "install_codex_autosync.py", "install_codex_autosync_windows.py", "collector-telemetry.json", "collector-lifecycle.json"]
+      "required_tokens": ["memory-wuxian-collector", "install_codex_autosync.py", "install_codex_autosync_windows.py", "collector-telemetry.json", "collector-lifecycle.json", "collector_runtime_effect_gate.py"]
     },
     {
       "id": "transactional-macos-update",
