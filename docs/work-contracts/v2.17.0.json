@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.17.0",
+  "candidate_id": "v2.17.0-capture-core-extraction",
+  "artifact_profile": "software-feature",
+  "classification": "modify",
+  "owner_id": "capture-core",
+  "validation_profile": "full",
+  "target": "A P0 native Capture Core with watcher-first startup and byte-for-byte behavior parity.",
+  "invariants": [
+    "Capture Core depends only on Platform Foundation.",
+    "Watchers become active before startup enumeration and bounded catch-up.",
+    "Accepted events, raw bytes, cursors, ordering, and summary eligibility remain unchanged."
+  ],
+  "allowed_changes": [
+    "Move native implementation into runtime, source, store, transaction, cursor, locking, and telemetry modules.",
+    "Add a thin dedicated Capture Core launcher and watcher-ready telemetry."
+  ],
+  "prohibited_changes": [
+    "Change Summary V1, Summary V2, atomic summaries, historical backfill, or any cloud protocol.",
+    "Change source selection, visible-event normalization, persisted archive bytes, or cursor advancement semantics."
+  ],
+  "required_evidence": [
+    "architecture-contract",
+    "native-tests",
+    "python-native-byte-parity",
+    "watcher-first-startup",
+    "single-writer-contention",
+    "full-release-rehearsal",
+    "documentation-contract",
+    "independent-review"
+  ],
+  "lifecycle_state": "candidate"
+}

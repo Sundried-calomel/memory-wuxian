@@ -23,7 +23,7 @@ class V2121ReleaseContractTest(unittest.TestCase):
         )
 
     def test_native_collector_rebuilds_instead_of_rejecting_v1_ledger(self):
-        source = (ROOT / "native-collector/src/main.rs").read_text(encoding="utf-8")
+        source = (ROOT / "native-collector/src/lib.rs").read_text(encoding="utf-8")
         self.assertNotIn("unsupported token usage ledger format", source)
         self.assertIn("new_ledger()", source)
         self.assertIn("remove_file_if_present(&recovery_debt)?", source)

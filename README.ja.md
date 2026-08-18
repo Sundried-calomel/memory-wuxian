@@ -1,5 +1,9 @@
 # Memory無限
 
+> **2.17.0:** P0 Capture Core を製品ロジックから分離し、薄いネイティブ
+> `memory-wuxian-core-launcher` から呼び出します。限定的な起動 catch-up より先に filesystem watcher を有効化し、
+> source 選択、可視イベント、archive bytes、cursor、summary 条件は変更しません。
+
 > **2.16.0:** Windows と macOS のコレクター導入・有効化を完全なトランザクションに
 > します。候補は唯一の起動 Owner、コマンド、アーカイブルート、実プロセス識別、
 > 限定的な waterline 進行を証明した後だけ commit され、失敗時は旧世代へ復元し、

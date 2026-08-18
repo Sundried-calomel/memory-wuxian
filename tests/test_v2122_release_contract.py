@@ -27,7 +27,7 @@ class V2122ReleaseContractTest(unittest.TestCase):
         self.assertIn(".bar.local{left:0;right:0", dashboard)
         self.assertIn("font-weight:700", dashboard)
         self.assertIn("bottom:2px", dashboard)
-        collector = (ROOT / "native-collector/src/main.rs").read_text(encoding="utf-8")
+        collector = (ROOT / "native-collector/src/lib.rs").read_text(encoding="utf-8")
         self.assertIn("message_last_line", collector)
         cli = (ROOT / "scripts/memory_cli.py").read_text(encoding="utf-8")
         self.assertIn("pending_children", cli)
