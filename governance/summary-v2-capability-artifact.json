@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "algorithm": "sha256-of-compressed-json-ordered-path-hash-list",
-  "artifact_sha256": "746f12e674c7f363d814b7cc72e7ae841b9fbdc7c7cde111b023b7686b416acc",
+  "artifact_sha256": "21f99e76b1db54e96fd2a4783807feafd3c5c9c706546db1b1d0f25acb8efb00",
   "files": [
     {"path": "docs/module-architecture.json", "sha256": "93ff522587929d3ae8f42c9a317b566d16430305fdea2741b0ee6e1f10e1aaba"},
     {"path": "prompts/summarize-v2-parent.md", "sha256": "ee2efae3f3c2c9ad994b560df90a79f19be500b5b68f53ce5886dc859357ba96"},
@@ -9,12 +9,12 @@
     {"path": "prompts/summarize-v2-rescue-reduce.md", "sha256": "933bc115139aa7fd7d964701ef6fdbbadf60c77db0e398bd6bd7ffd7df1de80c"},
     {"path": "prompts/summarize-v2.md", "sha256": "d52c355a61013dc6de63ef08c62ce625631277a562d6057c9496d7db6d732479"},
     {"path": "references/summary-v2.md", "sha256": "a2e36fb0b34c776bfe638640b478ebef339eb8fde7939f2064d9a5de92fa0d1c"},
-    {"path": "schemas/summary-v2-parent-result.schema.json", "sha256": "94d205c27d7bcb324ee96d0cccb1e2d6ddfd2513deb85f949e432d72f2e4bbd4"},
-    {"path": "schemas/summary-v2-result.schema.json", "sha256": "b8b9bc8834ffb0cdfdcf19e8213b677afcb3f338d8cfc4e71f5a1aacb649f80e"},
+    {"path": "schemas/summary-v2-parent-result.schema.json", "sha256": "bfdfba22d550c58518f9bee02590c6935800e3329a191f6ef815d26ffbd2203c"},
+    {"path": "schemas/summary-v2-result.schema.json", "sha256": "8efed822f09de9cbc1b2c70c626398c4b1792fd7feb0c65f795b360291b39699"},
     {"path": "scripts/memory_summary_v2.py", "sha256": "2fcc67b18f6682703c3053cf747962f4a8687d345273cfe77b611d2aab258dde"},
-    {"path": "scripts/summary_v2_backfill.py", "sha256": "af1c445fb72c8af7dabbbe56c11d47ccd2f15af3609d0bd7dd5232f538d5951b"},
+    {"path": "scripts/summary_v2_backfill.py", "sha256": "061c013d7db5ff4092e18215b88251287ee0aa5f5d7bc2de1f029474befac5d6"},
     {"path": "scripts/summary_v2_worker.py", "sha256": "9c0e6b689c69597b662c8f70e4c289a0182349a22186bf64017b86bae3f48bf5"},
-    {"path": "tests/test_memory_summary_v2.py", "sha256": "a8d47ba04dd74c8cd7f25dd9fca75941509c8ef3edc828a3665dec855d5e0293"},
-    {"path": "tests/test_summary_v2_backfill.py", "sha256": "c9e892d454bbc129e717bc076a86c559310a75d48c9d293d8d2c7e20395c635e"}
+    {"path": "tests/test_memory_summary_v2.py", "sha256": "881dbbac875220c95e38e4e370a3559dc57401a1f5b7d291b3e00520a0f6e65b"},
+    {"path": "tests/test_summary_v2_backfill.py", "sha256": "f2923c005d8f4e13cfcee14c346fa5d9309fdfc7841ad2b55fdc4123d9811cb1"}
   ]
 }

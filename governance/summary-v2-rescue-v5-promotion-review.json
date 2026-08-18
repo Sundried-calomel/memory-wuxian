@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "review_id": "summary-v2-rescue-v5-promotion-20260818",
+  "work_item_id": "summary-v2-schema-hotfix-20260818",
+  "candidate_id": "memory-wuxian-summary-v2",
+  "owner_id": "memory-plane",
+  "source_revision": "summary-v2-rescue-v5-20260818",
+  "product_evolution_record_id": "references/summary-v2.md",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The confirmed defect is specific to the Summary V2 Structured Outputs schemas and release canary. Global G11 already requires executable release evidence and fail-closed completion; the concrete schema subset and dual-path canary remain project implementation contracts.",
+  "evidence_refs": [
+    "docs/rehearsals/summary-v2-schema-hotfix-canary-results.json",
+    "docs/retrospectives/memory-wuxian-defect-workbook.md",
+    "governance/summary-v2-capability-admission-receipt.json"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-18T00:00:00Z"
+}

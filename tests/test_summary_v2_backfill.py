@@ -25,6 +25,7 @@ from summary_v2_backfill import (  # noqa: E402
     _chunk_job,
     _load_rescue_attempt_state,
     _refresh_plan,
+    _rescue_quarantine_is_eligible,
     _rescue_artifact_root,
     _rescue_state_path,
     _run_rescue_map_chunk,
@@ -458,6 +459,24 @@ class SummaryV2BackfillTest(unittest.TestCase):
         self.assertEqual([], selected)
         self.assertEqual(["L1-infra"], deferred)
         self.assertEqual(0, state["attempts"])
+
+        next_revision = MAP_RESCUE_REVISION + ".schema-fixed"
+        selected, deferred = _select_single_attempt_candidates(
+            [task], self.output, "map", next_revision, 1
+        )
+        self.assertEqual([task], selected)
+        self.assertEqual([], deferred)
+        self.assertFalse(
+            _rescue_state_path(
+                self.output, "map", next_revision, task["summary_id"]
+            ).exists()
+        )
+
+    def test_new_revision_candidate_pool_reincludes_infrastructure_failures(self):
+        self.assertTrue(_rescue_quarantine_is_eligible("infra-blocked"))
+        self.assertTrue(_rescue_quarantine_is_eligible("model-failure-limit"))
+        self.assertFalse(_rescue_quarantine_is_eligible("conflicting-existing-sidecars"))
+        self.assertFalse(_rescue_quarantine_is_eligible(None))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,6 @@
+2026-08-18 Summary V2 schema hotfix validation
+Runtime: C:\Users\56453\AppData\Local\Programs\Python\Python314\python.exe
+Command: python -m unittest tests.test_memory_summary_v2 tests.test_summary_v2_backfill
+Result: Ran 42 tests in 1.525s; OK
+Command: python scripts/check_architecture_contract.py
+Result: Architecture contract passed: every production file has one owner.

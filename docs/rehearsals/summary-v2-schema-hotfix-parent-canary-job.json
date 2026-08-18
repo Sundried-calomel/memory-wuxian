@@ -1,0 +1,35 @@
+{
+  "conversation_id": "codex:summary-v2-schema-canary",
+  "format_version": 1,
+  "job_id": "summary-v2-schema-hotfix-parent-canary",
+  "source_message_ids": [
+    "codex-summary-v2-schema-canary-00000002-u"
+  ],
+  "source_records": [
+    {
+      "completes_round": true,
+      "content_sha256": "4ced004121c578df065c2e69a8606c8098fa98017d03f7fd2f1d631e75b23ead",
+      "conversation_id": "codex:summary-v2-schema-canary",
+      "message_id": "codex-summary-v2-schema-canary-00000002-u",
+      "record_type": "raw_message",
+      "redacted": false,
+      "reply_to": null,
+      "round_number": 2,
+      "round_scope": "conversation",
+      "sequence": 2,
+      "source": {
+        "kind": "synthetic-release-canary",
+        "line": 1,
+        "path": "summary-v2-schema-hotfix-parent-canary-job.json",
+        "phase": "user",
+        "session_id": "summary-v2-schema-canary"
+      },
+      "speaker": "user",
+      "text": "Synthetic canary: the parent schema must merge two explicit facts.",
+      "timestamp": "2026-08-18T00:01:00+00:00"
+    }
+  ],
+  "source_sha256": "c3062e9342d6945771166e280cf426b40cece2f232560069ebd1f4c38a272840",
+  "summary_level": 1,
+  "target_summary_id": "L1-SCHEMA-PARENT-CANARY"
+}

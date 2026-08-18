@@ -7,16 +7,16 @@
   "authorization_gated_actions": [
     "generate-semantic-summary"
   ],
-  "binding_sha256": "2806e9a4d707694b85e5ae95e6f1ec3faf4723b03a41334f3632ec315cde87a1",
+  "binding_sha256": "9b8cb3b1a1673629474c059e47654fcd8185d9af9700ee6ad4e714f17c50fad7",
   "candidate_id": "memory-wuxian-summary-v2",
-  "candidate_revision": "summary-v2-rescue-v4-20260818",
+  "candidate_revision": "summary-v2-rescue-v5-20260818",
   "deterministic_check_version": 1,
-  "manifest_sha256": "84a16cd2d82a39bcd264929bfe28179f25a517e9f9cc1123a5fcc2c28575a4b9",
+  "manifest_sha256": "7fbeef2f2510d85200b84cd8eecfdc8d904cfb080346bb914adc126c902ab3a2",
   "owner_id": "memory-plane",
   "project_id": "memory-wuxian",
-  "receipt_id": "car:87cd517807731bef8836eeac4476f5e7e77a9af51fba721e2ddb05173f161bde",
+  "receipt_id": "car:21dca8273afec22a8f4ede412580198140ced82beb0d03b2c12e8bc35d5847c0",
   "registry_sha256": "0513cb7bdc56992ee908a271c834788fd386969a93822a89319b6e181dd27ef2",
   "schema_version": 1,
-  "semantic_review_sha256": "90f8d5dd2ee89653cf35653b2212a00fa6dd284aa07aa5bf45e959f6436ca604",
+  "semantic_review_sha256": "84a5655af46ddc2cf0ee98a9cb623668f430a9bd97932dce06f780c8d71d002a",
   "status": "allowed"
 }

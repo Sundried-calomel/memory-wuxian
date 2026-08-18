@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "candidate_id": "memory-wuxian-summary-v2",
-  "candidate_revision": "summary-v2-rescue-v4-20260818",
-  "candidate_manifest_sha256": "84a16cd2d82a39bcd264929bfe28179f25a517e9f9cc1123a5fcc2c28575a4b9",
+  "candidate_revision": "summary-v2-rescue-v5-20260818",
+  "candidate_manifest_sha256": "7fbeef2f2510d85200b84cd8eecfdc8d904cfb080346bb914adc126c902ab3a2",
   "registry_sha256": "0513cb7bdc56992ee908a271c834788fd386969a93822a89319b6e181dd27ef2",
   "reviewer_identity": "governance-contract-reviewer",
   "classification": "extension",
@@ -16,6 +16,7 @@
     "Model formatting normalization is deterministic and conservative: strict semantic coverage validation remains unchanged, declared locators replace model anchors, reference order is canonicalized, and unsupported optional relations are discarded.",
     "A source reference polluted by trailing model text is repaired only when it begins with exactly one complete declared source ID; unknown and ambiguous references still fail strict validation. Failure budgets and every artifact are revision-bound, rejected candidates remain evidence-only, and successful partial maps resume only with exact hash bindings.",
     "Parent model input uses a compact allowlisted projection with full-sidecar hashes; raw message manifests remain local. Every invocation writes structured diagnostics and infrastructure failures are terminal without consuming semantic content attempts.",
+    "Both Structured Outputs schemas use complete closed union branches and only the verified Codex schema subset. Synthetic L1 and parent production canaries must pass before a schema-changing revision is activated; old infrastructure failures remain immutable evidence and are re-admitted only under a new revision.",
     "No trigger, call-cycle, or resource conflict was found in the project-bound registry."
   ],
   "trigger_resolutions": []

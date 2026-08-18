@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-schema-hotfix-20260818",
+  "objective": "Make both Summary V2 schemas valid for the Codex Structured Outputs subset, prove L1 and parent production paths with synthetic API canaries, and re-admit prior infrastructure failures only through new runner revisions.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian",
+  "owner_id": "memory-plane.summary-engine",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["json", "python", "markdown"],
+  "path_globs": [
+    "schemas/summary-v2-result.schema.json",
+    "schemas/summary-v2-parent-result.schema.json",
+    "tests/test_memory_summary_v2.py",
+    "scripts/summary_v2_backfill.py",
+    "tests/test_summary_v2_backfill.py",
+    "docs/retrospectives/memory-wuxian-defect-workbook.md",
+    "governance/summary-v2-capability-*.json",
+    "docs/rehearsals/summary-v2-schema-hotfix-*"
+  ],
+  "entrypoints": ["codex-one-shot-summary-model", "test-harness"],
+  "resources": ["structured-output-schema", "model-call", "rescue-state"],
+  "operations": ["validate", "repair", "report"],
+  "data_formats": ["utf-8-json"],
+  "authorization_boundaries": [
+    "The canaries use only two explicit synthetic records and write derived sidecars only below the repository temporary directory.",
+    "Existing infra-blocked states remain evidence and are not silently rewritten.",
+    "Raw, Summary V1, and successful Summary V2 remain byte-immutable.",
+    "Heartbeat stays paused until both real API paths accept the corrected schemas and the new revisions pass all gates."
+  ],
+  "implementation_units": [
+    {
+      "id": "summary-v2-structured-output-schema",
+      "owner_id": "memory-plane.summary-engine",
+      "paths": [
+        "schemas/summary-v2-result.schema.json",
+        "schemas/summary-v2-parent-result.schema.json",
+        "tests/test_memory_summary_v2.py"
+      ],
+      "entrypoints": ["codex-one-shot-summary-model", "test-harness"],
+      "resources": ["structured-output-schema", "model-call"],
+      "operations": ["validate", "repair"],
+      "planned_check_ids": ["real-entrypoint-effect", "fail-closed-completion"]
+    },
+    {
+      "id": "summary-v2-schema-revision-recovery",
+      "owner_id": "memory-plane.summary-engine",
+      "paths": [
+        "scripts/summary_v2_backfill.py",
+        "tests/test_summary_v2_backfill.py",
+        "docs/retrospectives/memory-wuxian-defect-workbook.md"
+      ],
+      "entrypoints": ["summary_v2_backfill.py"],
+      "resources": ["rescue-state"],
+      "operations": ["repair", "validate", "report"],
+      "planned_check_ids": ["evidence-roundtrip", "fail-closed-completion"]
+    }
+  ],
+  "rule_exclusions": []
+}

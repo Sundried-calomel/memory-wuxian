@@ -40,10 +40,10 @@ PLAN_FORMAT = "memory-wuxian-summary-v2-backfill-plan-v1"
 MAX_BATCH = 20
 MAX_PARALLEL = 3
 FAILURE_LIMIT = 1
-RUNNER_REVISION = "summary-v2-backfill-normalizer-v4"
+RUNNER_REVISION = "summary-v2-backfill-normalizer-v5"
 DIRECT_RESCUE_REVISION = "summary-v2-direct-rescue-v1"
-MAP_RESCUE_REVISION = "summary-v2-map-reduce-v4"
-PARENT_RESCUE_REVISION = "summary-v2-parent-map-reduce-v3"
+MAP_RESCUE_REVISION = "summary-v2-map-reduce-v5"
+PARENT_RESCUE_REVISION = "summary-v2-parent-map-reduce-v4"
 MAP_PROMPT_TARGET = 240_000
 REDUCE_PROMPT_LIMIT = 900_000
 EXECUTION_CONTRACT_FORMAT = "memory-wuxian-summary-v2-execution-contract-v1"
@@ -1042,6 +1042,10 @@ def _quarantine_reason_by_id(plan: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _rescue_quarantine_is_eligible(reason: str | None) -> bool:
+    return reason in {"model-failure-limit", "infra-blocked"}
+
+
 @_single_instance("rescue-direct")
 def run_direct_rescue(
     archive_root: Path,
@@ -1077,7 +1081,7 @@ def run_direct_rescue(
             if task["status"] == "quarantined"
             and task.get("job")
             and task["summary_id"] not in attempted
-            and reasons.get(task["summary_id"]) == "model-failure-limit"
+            and _rescue_quarantine_is_eligible(reasons.get(task["summary_id"]))
         ),
         key=lambda item: item["summary_id"],
     )
@@ -1249,7 +1253,7 @@ def run_map_rescue(
             for task in plan["tasks"]
             if task["status"] == "quarantined"
             and task.get("job")
-            and reasons.get(task["summary_id"]) == "model-failure-limit"
+            and _rescue_quarantine_is_eligible(reasons.get(task["summary_id"]))
         ),
         key=lambda item: item["summary_id"],
     )

@@ -682,7 +682,41 @@ class SummaryV2Test(unittest.TestCase):
         )
         self.assertEqual(2, parent_schema["properties"]["summary_level"]["minimum"])
         self.assertEqual(0, parent_schema["properties"]["retrieval_anchors"]["maxItems"])
-        self.assertEqual(4, len(parent_schema["$defs"]["atom"]["anyOf"]))
+        required_atom_fields = {
+            "local_id",
+            "atom_type",
+            "statement",
+            "epistemic_status",
+            "scope",
+            "source_refs",
+        }
+        for result_schema in (schema, parent_schema):
+            atom_variants = result_schema["$defs"]["atom"]["anyOf"]
+            self.assertEqual(4, len(atom_variants))
+            self.assertEqual(
+                {"work_fact", "work_task", "work_method", "work_artifact"},
+                {
+                    variant["properties"]["atom_type"]["const"]
+                    for variant in atom_variants
+                },
+            )
+            for variant in atom_variants:
+                self.assertEqual("object", variant["type"])
+                self.assertFalse(variant["additionalProperties"])
+                self.assertEqual(required_atom_fields, set(variant["required"]))
+                self.assertEqual(required_atom_fields, set(variant["properties"]))
+                self.assertEqual("string", variant["properties"]["atom_type"]["type"])
+                self.assertEqual("string", variant["properties"]["epistemic_status"]["type"])
+            pending = [schema]
+            while pending:
+                node = pending.pop()
+                if isinstance(node, dict):
+                    self.assertNotIn("uniqueItems", node)
+                    if node.get("type") == "array":
+                        self.assertIn("items", node)
+                    pending.extend(node.values())
+                elif isinstance(node, list):
+                    pending.extend(node)
         for path in (
             ROOT / "scripts" / "semantic_worker.py",
             ROOT / "scripts" / "semantic_dispatch.py",

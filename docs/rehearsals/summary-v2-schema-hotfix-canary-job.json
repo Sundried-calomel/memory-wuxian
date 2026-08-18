@@ -1,0 +1,35 @@
+{
+  "conversation_id": "codex:summary-v2-schema-canary",
+  "format_version": 1,
+  "job_id": "summary-v2-schema-hotfix-canary",
+  "source_message_ids": [
+    "codex-summary-v2-schema-canary-00000001-u"
+  ],
+  "source_records": [
+    {
+      "completes_round": true,
+      "content_sha256": "e25fcc147d07aed470c6068c1ea07006477ceece108af39e138dd7ef7a1247ae",
+      "conversation_id": "codex:summary-v2-schema-canary",
+      "message_id": "codex-summary-v2-schema-canary-00000001-u",
+      "record_type": "raw_message",
+      "redacted": false,
+      "reply_to": null,
+      "round_number": 1,
+      "round_scope": "conversation",
+      "sequence": 1,
+      "source": {
+        "kind": "synthetic-release-canary",
+        "line": 1,
+        "path": "summary-v2-schema-hotfix-canary-job.json",
+        "phase": "user",
+        "session_id": "summary-v2-schema-canary"
+      },
+      "speaker": "user",
+      "text": "Synthetic canary: the schema must accept one explicit fact.",
+      "timestamp": "2026-08-18T00:00:00+00:00"
+    }
+  ],
+  "source_sha256": "9aa6e8905c766c6415a424f05d67eee7df9d68c09bbbb6b9b7cfd0b38150ccbe",
+  "summary_level": 1,
+  "target_summary_id": "L1-SCHEMA-CANARY"
+}

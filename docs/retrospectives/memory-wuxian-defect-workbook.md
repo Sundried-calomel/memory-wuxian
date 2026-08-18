@@ -351,6 +351,26 @@
   既有成功 Summary V2 哈希不变。
 - Families: `MW-R05`, `MW-R08`, `MW-R10`, `MW-R11`, `G08`, `G11`.
 
+### MW-SUM-027：本地 JSON Schema 校验通过但真实 Structured Outputs 拒绝
+
+- 证据：`本机已核验`。`summary-v2-map-reduce-v4` 首批 20 个 L1 节点在
+  模型调用前全部返回 HTTP 400 `invalid_json_schema`，先后暴露三条真实 API
+  子集限制：`anyOf` 对象分支必须完整声明 `additionalProperties: false`，
+  `const`/`enum` 属性必须同时声明显式 `type`，且 `uniqueItems` 不被允许。
+  既有单元测试只证明通用 JSON Schema 可解析，没有经过实际 Codex
+  `--output-schema` 入口，因此错误直到正式批次才被发现。
+- 根因：发布门只覆盖本地 schema 结构与 fake invoker，没有为 L1 和 parent
+  分别设置不含真实历史的生产 API canary；parent 独有 schema 关键字也未单独覆盖。
+- 永久门槛：两份输出 schema 的联合分支必须是完整、封闭、全字段对象；所有
+  `const`/`enum` 属性显式声明类型，数组声明 `items`，并递归拒绝
+  `uniqueItems`。每次 schema 变更必须用固定合成输入分别通过真实 L1 与 parent
+  worker canary，才可提升 runner revision。schema 失败记为 `infra-blocked`，不消耗
+  内容尝试；旧状态只作证据，新机会只能通过新 revision 获得。
+- 回归：两份 schema 的递归子集约束测试、L1 合成生产 canary、双 child parent
+  合成生产 canary、同 revision terminal/new revision re-admission，以及 raw、
+  Summary V1、既有成功 Summary V2 不变核验。
+- Families: `MW-R08`, `MW-R11`, `G08`, `G11`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。

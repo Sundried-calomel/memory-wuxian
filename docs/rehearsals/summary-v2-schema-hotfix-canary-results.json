@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-schema-hotfix-20260818",
+  "status": "passed",
+  "runtime": "C:\\Users\\56453\\AppData\\Local\\Programs\\Python\\Python314\\python.exe",
+  "model_path": "scripts/summary_v2_worker.py production Codex invocation",
+  "failed_closed_findings": [
+    {
+      "stage": "l1-initial",
+      "error": "anyOf object branches require additionalProperties=false"
+    },
+    {
+      "stage": "l1-second",
+      "error": "const and enum properties require an explicit type"
+    },
+    {
+      "stage": "parent-initial",
+      "error": "uniqueItems is not permitted"
+    }
+  ],
+  "final_canaries": [
+    {
+      "stage": "l1",
+      "job_path": "docs/rehearsals/summary-v2-schema-hotfix-canary-job.json",
+      "job_sha256": "5c928f6d371cb6bf69562e73b45ae24ea69aed1d7c1f5c8a32e4cb4f2ce51d74",
+      "schema_path": "schemas/summary-v2-result.schema.json",
+      "schema_sha256": "8efed822f09de9cbc1b2c70c626398c4b1792fd7feb0c65f795b360291b39699",
+      "prompt_sha256": "22f3b70243cd9a6cde017a52409ef65ba0652f375d2a8e07be9737cf29ca6007",
+      "projection_sha256": "4bf7a8ed440ad47d0e6bcce0f227029147dc2ea34d097b9ae6c9ef0a053790a5",
+      "status": "completed"
+    },
+    {
+      "stage": "l1-parent-child",
+      "job_path": "docs/rehearsals/summary-v2-schema-hotfix-parent-canary-job.json",
+      "job_sha256": "450d8eaf0e6796974305952e9c411550c97138c9916129f40717aae471a476b1",
+      "schema_path": "schemas/summary-v2-result.schema.json",
+      "schema_sha256": "8efed822f09de9cbc1b2c70c626398c4b1792fd7feb0c65f795b360291b39699",
+      "prompt_sha256": "5848dfa6019e4b03a9c3e3f53972e568073428e65ca2050776aa09f9ca8c7c47",
+      "projection_sha256": "602692bf14202cf75ec877e97211e6df12d2eb5050e337f3acac1c91fbbef9c3",
+      "status": "completed"
+    },
+    {
+      "stage": "parent",
+      "schema_path": "schemas/summary-v2-parent-result.schema.json",
+      "schema_sha256": "bfdfba22d550c58518f9bee02590c6935800e3329a191f6ef815d26ffbd2203c",
+      "prompt_sha256": "cfb2e766d5f11023fcf90ee4c291ae2b5b970dd800846bc4057e829a66dc53d5",
+      "projection_sha256": "889cabba911de2d21c401082d1263c7d218572dd248f7dec40623cb5e31f57b4",
+      "status": "completed"
+    }
+  ],
+  "privacy": "Only the two explicit synthetic canary records were sent; no archived conversation content was used."
+}

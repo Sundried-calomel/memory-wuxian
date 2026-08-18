@@ -39,22 +39,56 @@
       }
     },
     "atom": {
-      "type": "object", "additionalProperties": false,
-      "required": ["local_id", "atom_type", "statement", "epistemic_status", "scope", "source_refs"],
       "anyOf": [
-        { "properties": { "atom_type": { "const": "work_fact" }, "epistemic_status": { "enum": ["explicit_fact", "uncertain", "withdrawn"] } }, "required": ["atom_type", "epistemic_status"] },
-        { "properties": { "atom_type": { "const": "work_task" }, "epistemic_status": { "enum": ["accepted_decision", "proposal", "open_question", "uncertain", "withdrawn"] } }, "required": ["atom_type", "epistemic_status"] },
-        { "properties": { "atom_type": { "const": "work_method" }, "epistemic_status": { "enum": ["accepted_decision", "proposal", "uncertain", "withdrawn"] } }, "required": ["atom_type", "epistemic_status"] },
-        { "properties": { "atom_type": { "const": "work_artifact" }, "epistemic_status": { "enum": ["explicit_fact", "proposal", "uncertain", "withdrawn"] } }, "required": ["atom_type", "epistemic_status"] }
-      ],
-      "properties": {
-        "local_id": { "$ref": "#/$defs/local_id" },
-        "atom_type": { "type": "string", "enum": ["work_fact", "work_task", "work_method", "work_artifact"] },
-        "statement": { "type": "string", "minLength": 1, "maxLength": 4000 },
-        "epistemic_status": { "type": "string", "enum": ["explicit_fact", "accepted_decision", "proposal", "open_question", "uncertain", "withdrawn"] },
-        "scope": { "type": "string", "minLength": 1, "maxLength": 512 },
-        "source_refs": { "$ref": "#/$defs/source_refs" }
-      }
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["local_id", "atom_type", "statement", "epistemic_status", "scope", "source_refs"],
+          "properties": {
+            "local_id": { "$ref": "#/$defs/local_id" },
+            "atom_type": { "type": "string", "const": "work_fact" },
+            "statement": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "epistemic_status": { "type": "string", "enum": ["explicit_fact", "uncertain", "withdrawn"] },
+            "scope": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "source_refs": { "$ref": "#/$defs/source_refs" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["local_id", "atom_type", "statement", "epistemic_status", "scope", "source_refs"],
+          "properties": {
+            "local_id": { "$ref": "#/$defs/local_id" },
+            "atom_type": { "type": "string", "const": "work_task" },
+            "statement": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "epistemic_status": { "type": "string", "enum": ["accepted_decision", "proposal", "open_question", "uncertain", "withdrawn"] },
+            "scope": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "source_refs": { "$ref": "#/$defs/source_refs" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["local_id", "atom_type", "statement", "epistemic_status", "scope", "source_refs"],
+          "properties": {
+            "local_id": { "$ref": "#/$defs/local_id" },
+            "atom_type": { "type": "string", "const": "work_method" },
+            "statement": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "epistemic_status": { "type": "string", "enum": ["accepted_decision", "proposal", "uncertain", "withdrawn"] },
+            "scope": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "source_refs": { "$ref": "#/$defs/source_refs" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["local_id", "atom_type", "statement", "epistemic_status", "scope", "source_refs"],
+          "properties": {
+            "local_id": { "$ref": "#/$defs/local_id" },
+            "atom_type": { "type": "string", "const": "work_artifact" },
+            "statement": { "type": "string", "minLength": 1, "maxLength": 4000 },
+            "epistemic_status": { "type": "string", "enum": ["explicit_fact", "proposal", "uncertain", "withdrawn"] },
+            "scope": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "source_refs": { "$ref": "#/$defs/source_refs" }
+          }
+        }
+      ]
     },
     "relation": {
       "type": "object", "additionalProperties": false,
