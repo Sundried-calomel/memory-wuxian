@@ -40,8 +40,8 @@
     "preflight_receipt": "governance/p0-capture-core/v2.16.0-preflight.json",
     "preflight_sha256": "a55857b2197fabef5ca0e50a1f78b657d4e5d3b2587c907ea1c3d1f8c0abbaa3",
     "completion_receipt": "governance/p0-capture-core/v2.16.0-completion.json",
-    "completion_sha256": "82e99b33fe8940973823efccc0decf5de696e9371c983c90ef4c797615633309",
-    "applicable_families": ["G01", "G02", "G04", "G05", "G06", "G07", "G09", "MW-R03", "MW-R05", "MW-R06", "MW-R10"],
+    "completion_sha256": "379c27d2ef315a4e7b656f68394601c1d61a2743cf3bb6a5501fad33dcd621cf",
+    "applicable_families": ["G01", "G02", "G03", "G04", "G05", "G06", "G07", "G09", "MW-R03", "MW-R05", "MW-R06", "MW-R10"],
     "project_workbook_updated": true,
     "original_triggers": ["MW-REL-025", "MW-WIN-017", "MW-REL-024"]
   },
