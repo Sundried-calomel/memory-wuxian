@@ -1,4 +1,5 @@
 # Hash-bound V3 evidence must have identical bytes on Windows and macOS checkouts.
+.gitattributes text eol=lf
 native-collector/src/lib.rs text eol=lf
 tests/test_v218_v3_contract.py text eol=lf
 docs/work-contracts/v2.18-v3.json text eol=lf

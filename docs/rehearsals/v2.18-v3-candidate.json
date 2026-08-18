@@ -34,7 +34,7 @@
       "side_effects": "isolated",
       "expected": "byte-identical stdout JSON",
       "status": "pass",
-      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "4b14c10ab1a05232106464a4d65a480f1a093a3716136d71d6c47550ee0648e1", "accepted_by": null, "acceptance_evidence": null}
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
     },
     {
       "case_id": "V3-NEG-001",
@@ -48,7 +48,7 @@
       "side_effects": "isolated",
       "expected": "partial result with one source error and one synchronized session",
       "status": "pass",
-      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "4b14c10ab1a05232106464a4d65a480f1a093a3716136d71d6c47550ee0648e1", "accepted_by": null, "acceptance_evidence": null}
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
     },
     {
       "case_id": "V3-BND-001",
@@ -62,7 +62,7 @@
       "side_effects": "isolated",
       "expected": "byte-identical stdout JSON across multiple chunks",
       "status": "pass",
-      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "4b14c10ab1a05232106464a4d65a480f1a093a3716136d71d6c47550ee0648e1", "accepted_by": null, "acceptance_evidence": null}
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
     },
     {
       "case_id": "V3-FAIL-001",
@@ -76,7 +76,7 @@
       "side_effects": "isolated",
       "expected": "sync failure and unchanged known stamps",
       "status": "pass",
-      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "4b14c10ab1a05232106464a4d65a480f1a093a3716136d71d6c47550ee0648e1", "accepted_by": null, "acceptance_evidence": null}
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
     },
     {
       "case_id": "V3-HIST-001",
@@ -90,7 +90,7 @@
       "side_effects": "isolated",
       "expected": "cursor debt remains discoverable",
       "status": "pass",
-      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "4b14c10ab1a05232106464a4d65a480f1a093a3716136d71d6c47550ee0648e1", "accepted_by": null, "acceptance_evidence": null}
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
     },
     {
       "case_id": "V3-REC-001",
@@ -104,7 +104,7 @@
       "side_effects": "isolated",
       "expected": "exactly-once recovery with unchanged raw bytes",
       "status": "pass",
-      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "4b14c10ab1a05232106464a4d65a480f1a093a3716136d71d6c47550ee0648e1", "accepted_by": null, "acceptance_evidence": null}
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
     },
     {
       "case_id": "V3-ID-001",
@@ -118,7 +118,7 @@
       "side_effects": "none",
       "expected": "exact artifact hash match",
       "status": "pass",
-      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "4b14c10ab1a05232106464a4d65a480f1a093a3716136d71d6c47550ee0648e1", "accepted_by": null, "acceptance_evidence": null}
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
     },
     {
       "case_id": "V3-MAC-001",
@@ -132,7 +132,7 @@
       "side_effects": "none",
       "expected": "cross-compile pass with explicit no-native-runtime limitation",
       "status": "pass",
-      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "4b14c10ab1a05232106464a4d65a480f1a093a3716136d71d6c47550ee0648e1", "accepted_by": null, "acceptance_evidence": null}
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
     }
   ],
   "historical_failures": [
