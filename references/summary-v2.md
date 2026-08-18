@@ -85,7 +85,7 @@ summary ID.
 
 The `run` command processes at most twenty ready nodes per explicit invocation
 with no more than three one-shot model calls concurrently. A node is
-quarantined after three failed attempts. L1 nodes are completed before their
+quarantined after one content attempt in the active runner revision. L1 nodes are completed before their
 matching V1 parent grouping becomes ready; each parent is generated only after
 all direct child sidecars validate. Conflicting valid V2 candidates for one V1
 node are preserved and quarantined for explicit arbitration while unrelated
@@ -94,6 +94,31 @@ output root outside the archive. The authoritative raw history is scanned once
 when the plan is built; later batches refresh from sidecars and failure receipts
 without rescanning the full archive. The runner registers no scheduler or
 production queue and can be safely invoked again after interruption.
+
+### Revision-bounded rescue campaigns
+
+Normal, Level-1 map rescue, and parent rescue are one-shot campaigns. A content
+failure is terminal for its explicit runner revision; only a revision change
+can admit that node again. An infrastructure timeout, network/permission
+failure, or CLI process failure is recorded as `infra-blocked`: it does not
+consume a semantic content attempt, but it is not automatically looped.
+
+Every rescue artifact is stored beneath its family and revision. Rejected
+candidates are immutable diagnostic evidence only. A later revision must call
+the model again; only successful partial maps whose source, prompt, schema,
+projector, runner, and worker bindings still match may resume.
+
+Parent map prompts use a compact, type-allowlisted projection containing child
+identity, projection/source hashes, overview, scenes, atoms, relations,
+omissions, and bounded coverage counts. Raw message manifests and message-ID
+catalogs remain in the full validated sidecars and are verified locally, not
+sent in the compact model payload. Grouping is bounded by UTF-8 prompt bytes.
+
+The worker persists one structured diagnostic receipt per invocation with
+revision, stage, source/prompt hashes, byte counts, elapsed time, return code,
+exception type, stdout/stderr hashes and bounded head/tail projections, and
+candidate/projection hashes when available. Plan entries separately expose
+dependency readiness, campaign status, eligibility, and blocking reason.
 
 ## First Authorized Real A/B
 

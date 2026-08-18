@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "review_id": "summary-v2-rescue-v4-promotion-20260818",
+  "work_item_id": "summary-v2-rescue-v4-20260818",
+  "candidate_id": "memory-wuxian-summary-v2",
+  "owner_id": "memory-plane",
+  "source_revision": "summary-v2-rescue-v4-20260818",
+  "product_evolution_record_id": "references/summary-v2.md",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "Existing global G08 already owns evidence round-trip and immutable-source requirements, while G11 owns registered preflight, revision-bounded one-shot attempts, and fail-closed completion. Revision-scoped rejected artifacts, compact parent projections, structured invocation diagnostics, and Rescue-specific terminal states remain implementation contracts of the experimental Memory Wuxian summary-v2 capability, so this round does not propose another global rule.",
+  "evidence_refs": [
+    "docs/rehearsals/summary-v2-rescue-v4-verification.json",
+    "docs/rehearsals/summary-v2-rescue-v4-completion.json",
+    "docs/rehearsals/summary-v2-rescue-v4-results.json",
+    "references/summary-v2.md"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-18T00:00:00Z"
+}

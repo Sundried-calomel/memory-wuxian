@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-rescue-v4-convergence",
+  "objective": "Repair revision isolation, diagnostics, deterministic L1 reconciliation, compact parent rescue, one-shot campaign state, and infra classification before starting one new bounded rescue round.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian",
+  "owner_id": "memory-plane.summary-engine",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "json", "markdown"],
+  "path_globs": [
+    "scripts/memory_summary_v2.py",
+    "scripts/summary_v2_worker.py",
+    "scripts/summary_v2_backfill.py",
+    "schemas/summary-v2-*-result.schema.json",
+    "tests/test_memory_summary_v2.py",
+    "tests/test_summary_v2_backfill.py",
+    "references/summary-v2.md",
+    "docs/retrospectives/memory-wuxian-defect-workbook.md",
+    "docs/rehearsals/summary-v2-rescue-v4-*"
+  ],
+  "entrypoints": ["explicit-opt-in-cli", "one-shot-model-worker", "heartbeat"],
+  "resources": ["raw-evidence", "summary-v1", "successful-summary-v2", "rescue-state", "model-call"],
+  "operations": ["filter", "summarize", "validate", "persist-derived", "report"],
+  "data_formats": ["utf-8-json", "utf-8-markdown"],
+  "authorization_boundaries": [
+    "Raw archive, Summary V1, and successful Summary V2 remain byte-immutable.",
+    "Rejected candidates are evidence only and never bypass a model call in a new revision.",
+    "Only successful hash-bound partial maps may resume within the same revision.",
+    "Each content node receives at most one formal attempt per revision.",
+    "Infra failures stop the node without consuming its content attempt or looping automatically.",
+    "Model concurrency is at most three and each explicit batch contains at most twenty nodes."
+  ],
+  "implementation_units": [
+    {
+      "id": "summary-v2-rescue-runtime",
+      "owner_id": "memory-plane.summary-engine",
+      "paths": ["scripts/memory_summary_v2.py", "scripts/summary_v2_worker.py", "scripts/summary_v2_backfill.py", "schemas/summary-v2-result.schema.json", "schemas/summary-v2-parent-result.schema.json"],
+      "entrypoints": ["explicit-opt-in-cli", "one-shot-model-worker", "heartbeat"],
+      "resources": ["raw-evidence", "summary-v1", "successful-summary-v2", "rescue-state", "model-call"],
+      "operations": ["filter", "summarize", "validate", "persist-derived", "report"],
+      "planned_check_ids": ["evidence-roundtrip", "real-entrypoint-effect"]
+    },
+    {
+      "id": "summary-v2-rescue-regressions",
+      "owner_id": "product-quality",
+      "paths": ["tests/test_memory_summary_v2.py", "tests/test_summary_v2_backfill.py", "references/summary-v2.md", "docs/retrospectives/memory-wuxian-defect-workbook.md", "docs/rehearsals/summary-v2-rescue-v4-*"],
+      "entrypoints": ["test-harness", "governance"],
+      "resources": ["failure-corpus", "receipt", "hash"],
+      "operations": ["validate", "report"],
+      "planned_check_ids": ["evidence-roundtrip", "real-entrypoint-effect"]
+    }
+  ],
+  "rule_exclusions": []
+}

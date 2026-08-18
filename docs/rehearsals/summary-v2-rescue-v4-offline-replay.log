@@ -1,0 +1,19 @@
+{
+  "total": 38,
+  "passed": 35,
+  "failed": 3,
+  "failures": [
+    {
+      "candidate": "L1-000216\\map-001.json",
+      "error": "candidate.atoms[2].epistemic_status is incompatible"
+    },
+    {
+      "candidate": "L1-000334\\map-004.json",
+      "error": "candidate silently loses source refs: codex-019f757d-873d-7262-bd47-b1cb5c1c5677-00022857-a"
+    },
+    {
+      "candidate": "L1-000416\\map-002.json",
+      "error": "candidate.atoms[18].epistemic_status is incompatible"
+    }
+  ]
+}

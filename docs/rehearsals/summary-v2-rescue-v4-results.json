@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-rescue-v4-convergence",
+  "packet_sha256": "1283fe6d3f2bdaf3cc73bc7c538fbdf6cd0f0d35e8d5f5178b96b513e7427080",
+  "checks": [
+    {
+      "check_id": "real-entrypoint-effect",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-rescue-v4-tests.log",
+          "sha256": "18e5833537d26cb789b1b1e52721f03ad37380b98fc42a9142e7ed35c33bbde4"
+        }
+      ],
+      "note": "Production worker, candidate normalization, campaign selection, revision isolation, structured diagnostics, compact parent projection, and immutable archive fixtures passed 41 focused tests."
+    },
+    {
+      "check_id": "evidence-roundtrip",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-rescue-v4-tests.log",
+          "sha256": "18e5833537d26cb789b1b1e52721f03ad37380b98fc42a9142e7ed35c33bbde4"
+        },
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-rescue-v4-offline-replay.log",
+          "sha256": "cff27f0094fa7f2201ebd72f6d80d7094ec71610d3534d095c9729049cf1f4e1"
+        }
+      ],
+      "note": "Compact parent items retain child and projection/source hashes for full-sidecar lookup; rejected candidates remain evidence-only and source coverage stays strict. The repaired normalizer validates 35 of 38 historical rejected map candidates offline; the remaining three require new model content because two contain incompatible atom epistemic states and one truly omits a source reference."
+    },
+    {
+      "check_id": "registered-preflight",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-rescue-v4-preflight.json",
+          "sha256": "1e50510bd2ab97e589e18b47365e31cd785660f55e79a818b8ae373b208e514e"
+        }
+      ],
+      "note": "Target-based workbook discovery and hash-bound preflight completed before implementation."
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-rescue-v4-governor-tests.log",
+          "sha256": "5094d5b85cca684bbc96bfe5fc2a5a6310e1109c964cd905898af02d2534d230"
+        }
+      ],
+      "note": "The registered completion gate rejects missing receipts, registry drift, unknown families, and unchanged required project workbooks."
+    }
+  ]
+}

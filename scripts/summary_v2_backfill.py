@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
 import json
 import os
 import socket
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -16,10 +18,12 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from console_encoding import configure_unicode_stdio
-from memory_cli import MemoryStore, file_sha256, parse_summary_markdown
+from memory_cli import MemoryStore, file_sha256, load_simple_yaml, parse_summary_markdown
 from memory_atoms import _source_sha256
 from memory_summary_v2 import (
     FORMAT,
+    PARENT_PROJECTOR,
+    PROJECTOR,
     SummaryV2Error,
     build_level_1_source,
     build_parent_source,
@@ -28,17 +32,18 @@ from memory_summary_v2 import (
     validate_sidecar,
 )
 from platform_transaction import atomic_write_canonical_json
-from summary_v2_worker import build_prompt, load_sidecar, run_source
+from platform_process import no_window_kwargs
+from summary_v2_worker import build_prompt, codex_command, load_sidecar, run_source
 
 
 PLAN_FORMAT = "memory-wuxian-summary-v2-backfill-plan-v1"
 MAX_BATCH = 20
 MAX_PARALLEL = 3
-FAILURE_LIMIT = 3
-RUNNER_REVISION = "summary-v2-backfill-normalizer-v3"
+FAILURE_LIMIT = 1
+RUNNER_REVISION = "summary-v2-backfill-normalizer-v4"
 DIRECT_RESCUE_REVISION = "summary-v2-direct-rescue-v1"
-MAP_RESCUE_REVISION = "summary-v2-map-reduce-v3"
-PARENT_RESCUE_REVISION = "summary-v2-parent-map-reduce-v2"
+MAP_RESCUE_REVISION = "summary-v2-map-reduce-v4"
+PARENT_RESCUE_REVISION = "summary-v2-parent-map-reduce-v3"
 MAP_PROMPT_TARGET = 240_000
 REDUCE_PROMPT_LIMIT = 900_000
 EXECUTION_CONTRACT_FORMAT = "memory-wuxian-summary-v2-execution-contract-v1"
@@ -46,6 +51,13 @@ NON_RETRYABLE_ERRORS = (
     "prompt exceeds the",
     "backfill job drifted",
     "source-validation:",
+)
+INFRA_ERROR_MARKERS = (
+    "timed out after",
+    "network",
+    "permission denied",
+    "access is denied",
+    "model-process-failure",
 )
 
 
@@ -178,6 +190,77 @@ def _rescue_state_path(
     )
 
 
+def _rescue_artifact_root(
+    output_root: Path,
+    family: str,
+    revision: str,
+    summary_id: str,
+) -> Path:
+    safe_revision = "".join(
+        character if character.isalnum() or character in {"-", "."} else "_"
+        for character in revision
+    )
+    return output_root / "backfill" / "rescue" / "artifacts" / family / safe_revision / summary_id
+
+
+def _classify_failure(exc: Exception) -> str:
+    diagnostic = getattr(exc, "diagnostic", {})
+    classification = str(diagnostic.get("classification", ""))
+    text = f"{classification} {exc}".lower()
+    if any(marker in text for marker in INFRA_ERROR_MARKERS):
+        return "infra-blocked"
+    return "content-failed-terminal"
+
+
+def _bind_rescue_attempt(
+    path: Path,
+    state: dict[str, Any],
+    source: dict[str, Any],
+    *,
+    parent: bool,
+    config_path: Path,
+) -> None:
+    prompt = build_prompt(source).encode("utf-8")
+    schema = Path(__file__).resolve().parent.parent / "schemas" / (
+        "summary-v2-parent-result.schema.json" if parent else "summary-v2-result.schema.json"
+    )
+    command, _, _ = codex_command(load_simple_yaml(Path(config_path)), source)
+    codex_path = Path(command[0]).expanduser().resolve()
+    try:
+        version = subprocess.run(
+            [str(codex_path), "--version"],
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            timeout=30,
+            check=False,
+            **no_window_kwargs(),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise SummaryV2Error(f"cannot identify configured Codex CLI: {exc}") from exc
+    if version.returncode != 0 or not version.stdout.strip():
+        raise SummaryV2Error(
+            f"configured Codex CLI version check failed ({version.returncode}): {version.stderr}"
+        )
+    binding = {
+        "source_sha256": source["source_sha256"],
+        "prompt_sha256": hashlib.sha256(prompt).hexdigest(),
+        "schema_sha256": file_sha256(schema),
+        "projector": PARENT_PROJECTOR if parent else PROJECTOR,
+        "runner_sha256": file_sha256(Path(__file__)),
+        "worker_sha256": file_sha256(Path(__file__).with_name("summary_v2_worker.py")),
+        "codex_executable": str(codex_path),
+        "codex_sha256": file_sha256(codex_path),
+        "codex_version": version.stdout.strip(),
+    }
+    previous = state.get("binding")
+    if previous is not None and previous != binding:
+        raise SummaryV2Error("rescue attempt binding changed within one revision")
+    state["binding"] = binding
+    _write_rescue_state(path, state)
+
+
 def _load_rescue_attempt_state(
     path: Path,
     revision: str,
@@ -198,12 +281,17 @@ def _load_rescue_attempt_state(
 def _rescue_attempt_is_terminal(state: dict[str, Any]) -> bool:
     if state.get("completed"):
         return True
-    return state.get("attempt_status") in {"completed", "failed"}
+    return state.get("attempt_status") in {
+        "completed",
+        "failed",
+        "content-failed-terminal",
+        "infra-blocked",
+    }
 
 
 def _begin_rescue_attempt(path: Path, state: dict[str, Any]) -> None:
     status = state.get("attempt_status")
-    if status in {"completed", "failed"}:
+    if _rescue_attempt_is_terminal(state):
         raise SummaryV2Error("rescue attempt is already terminal for this revision")
     state["attempt_status"] = "in-progress"
     state["attempts"] = 1
@@ -312,14 +400,13 @@ def _compact_l1_rescue_maps(
             )
         reduced: list[dict[str, Any]] = []
         groups = [current[index : index + 2] for index in range(0, len(current), 2)]
-        reduction_root = (
-            output_root
-            / "backfill"
-            / "rescue"
-            / "map-reductions"
-            / str(job["target_summary_id"])
-            / f"stage-{stage:03d}"
+        artifact_root = _rescue_artifact_root(
+            output_root,
+            "map",
+            MAP_RESCUE_REVISION,
+            str(job["target_summary_id"]),
         )
+        reduction_root = artifact_root / "map-reductions" / f"stage-{stage:03d}"
         reductions = state.setdefault("reductions", {})
         for index, group in enumerate(groups, 1):
             if len(group) == 1:
@@ -356,12 +443,19 @@ def _compact_l1_rescue_maps(
                     archive_root,
                     config_path=config_path,
                     rejected_candidate_path=(
-                        output_root
-                        / "backfill"
-                        / "rescue"
+                        artifact_root
                         / "rejected-reduction-candidates"
-                        / f"{job['target_summary_id']}-{key}.json"
+                        / f"{key}.json"
                     ),
+                    diagnostic_path=(
+                        artifact_root / "diagnostics" / f"{key}.json"
+                    ),
+                    invocation_context={
+                        "family": "map",
+                        "revision": MAP_RESCUE_REVISION,
+                        "summary_id": str(job["target_summary_id"]),
+                        "stage": key,
+                    },
                 )
                 sidecar = load_sidecar(Path(result["bundle"]))
                 reductions[key] = {
@@ -383,18 +477,16 @@ def _run_rescue_map_chunk(
     config_path: Path,
     rejected_candidate_path: Path,
 ) -> dict[str, Any]:
-    candidate = (
-        json.loads(rejected_candidate_path.read_text(encoding="utf-8"))
-        if rejected_candidate_path.exists()
-        else None
+    diagnostic_path = rejected_candidate_path.with_name(
+        rejected_candidate_path.stem + ".diagnostic.json"
     )
     return run_source(
         source,
         map_root,
         archive_root,
         config_path=config_path,
-        candidate=candidate,
         rejected_candidate_path=rejected_candidate_path,
+        diagnostic_path=diagnostic_path,
     )
 
 
@@ -703,7 +795,7 @@ def _refresh_plan(
     quarantine = [
         item
         for item in plan.get("quarantine", [])
-        if item.get("reason") != "model-failure-limit"
+        if item.get("reason") not in {"model-failure-limit", "infra-blocked"}
     ]
     for task in plan["tasks"]:
         summary_id = task["summary_id"]
@@ -734,14 +826,19 @@ def _refresh_plan(
         if failure_path.exists():
             failure = json.loads(failure_path.read_text(encoding="utf-8"))
             if (
-                failure.get("runner_revision") == RUNNER_REVISION
-                and int(failure.get("attempts", 0)) >= FAILURE_LIMIT
+                int(failure.get("attempts", 0)) >= FAILURE_LIMIT
+                or failure.get("attempt_status") == "infra-blocked"
             ):
                 task["status"] = "quarantined"
+                reason = (
+                    "infra-blocked"
+                    if failure.get("attempt_status") == "infra-blocked"
+                    else "model-failure-limit"
+                )
                 quarantine.append(
                     {
                         "summary_id": summary_id,
-                        "reason": "model-failure-limit",
+                        "reason": reason,
                         "attempts": int(failure["attempts"]),
                     }
                 )
@@ -752,6 +849,41 @@ def _refresh_plan(
             task["status"] = "ready"
         else:
             task["status"] = "waiting-for-children"
+    quarantine_reason = {
+        str(item.get("summary_id")): str(item.get("reason"))
+        for item in quarantine
+        if item.get("summary_id")
+    }
+    for task in plan["tasks"]:
+        summary_id = str(task["summary_id"])
+        dependency_ready = int(task["level"]) == 1 or all(
+            child in sidecars for child in task.get("children", [])
+        )
+        task["dependency_status"] = "ready" if dependency_ready else "waiting-for-children"
+        reason = quarantine_reason.get(summary_id)
+        if task["status"] == "existing":
+            campaign_status = "completed"
+        elif reason == "conflicting-existing-sidecars":
+            campaign_status = "conflict-quarantined"
+        elif reason == "infra-blocked":
+            campaign_status = "infra-blocked"
+        elif reason == "model-failure-limit":
+            family = "map" if int(task["level"]) == 1 else "parent"
+            revision = MAP_RESCUE_REVISION if family == "map" else PARENT_RESCUE_REVISION
+            rescue_state = _load_rescue_attempt_state(
+                _rescue_state_path(output_root, family, revision, summary_id),
+                revision,
+                summary_id,
+            )
+            campaign_status = str(rescue_state.get("attempt_status", "pending"))
+        else:
+            campaign_status = "pending"
+        eligible = dependency_ready and campaign_status == "pending" and task["status"] == "ready"
+        task["campaign_status"] = campaign_status
+        task["eligible"] = eligible
+        task["blocking_reason"] = None if eligible else (
+            reason or ("waiting-for-children" if not dependency_ready else campaign_status)
+        )
     counts: dict[str, int] = {}
     for task in plan["tasks"]:
         key = f"level_{task['level']}_{task['status'].replace('-', '_')}"
@@ -781,11 +913,22 @@ def _run_task(
             [sidecars[child] for child in task["children"]],
             parallel_summary_id=task["summary_id"],
         )
+    artifact_root = _rescue_artifact_root(
+        output_root, "normal", RUNNER_REVISION, str(task["summary_id"])
+    )
     result = run_source(
         source,
         output_root,
         archive_root,
         config_path=config_path,
+        rejected_candidate_path=artifact_root / "rejected-candidate.json",
+        diagnostic_path=artifact_root / "diagnostic.json",
+        invocation_context={
+            "family": "normal",
+            "revision": RUNNER_REVISION,
+            "summary_id": str(task["summary_id"]),
+            "stage": "direct",
+        },
     )
     return {"summary_id": task["summary_id"], **result}
 
@@ -817,7 +960,11 @@ def run_batch(
     else:
         plan = build_plan(archive_root, output_root, existing_roots)
     ready = sorted(
-        (task for task in plan["tasks"] if task["status"] == "ready"),
+        (
+            task
+            for task in plan["tasks"]
+            if task["status"] == "ready" and task.get("eligible", True)
+        ),
         key=lambda item: (int(item["level"]), item["summary_id"]),
     )[:maximum_jobs]
     completed: list[dict[str, Any]] = []
@@ -839,9 +986,10 @@ def run_batch(
                 try:
                     completed.append(future.result())
                 except Exception as exc:
-                    error = str(exc).replace("\r", " ").replace("\n", " ")[:500]
+                    error = str(exc).replace("\r", " ").replace("\n", " ")
+                    attempt_status = _classify_failure(exc)
                     failure_path = _failure_path(output_root, task["summary_id"])
-                    attempts = FAILURE_LIMIT if any(
+                    attempts = 0 if attempt_status == "infra-blocked" else FAILURE_LIMIT if any(
                         marker in error for marker in NON_RETRYABLE_ERRORS
                     ) else 1
                     if failure_path.exists():
@@ -858,7 +1006,9 @@ def run_batch(
                             "summary_id": task["summary_id"],
                             "runner_revision": RUNNER_REVISION,
                             "attempts": attempts,
+                            "attempt_status": attempt_status,
                             "last_error": error,
+                            "diagnostic": getattr(exc, "diagnostic", None),
                         },
                     )
                     failed.append(
@@ -1129,9 +1279,19 @@ def run_map_rescue(
             _begin_rescue_attempt(state_path, state)
             job = json.loads(Path(task["job"]).read_text(encoding="utf-8"))
             formal_source = build_level_1_source(job)
+            _bind_rescue_attempt(
+                state_path,
+                state,
+                formal_source,
+                parent=False,
+                config_path=config_path,
+            )
             chunks = _chunk_job(job)
             map_sidecars_by_key: dict[str, dict[str, Any]] = {}
-            map_root = output_root / "backfill" / "rescue" / "map-artifacts" / summary_id
+            artifact_root = _rescue_artifact_root(
+                output_root, "map", MAP_RESCUE_REVISION, summary_id
+            )
+            map_root = artifact_root / "maps"
             _recover_rescue_maps(map_root, chunks, state)
             _write_rescue_state(state_path, state)
             missing: list[tuple[str, dict[str, Any]]] = []
@@ -1155,12 +1315,7 @@ def run_map_rescue(
                             archive_root,
                             config_path,
                             (
-                                output_root
-                                / "backfill"
-                                / "rescue"
-                                / "rejected-map-candidates"
-                                / summary_id
-                                / f"{key}.json"
+                                artifact_root / "rejected-map-candidates" / f"{key}.json"
                             ),
                         ): (key, chunk)
                         for key, chunk in missing
@@ -1196,35 +1351,31 @@ def run_map_rescue(
                 raise SummaryV2Error(
                     f"rescue reduce prompt exceeds staged limit: {reduce_bytes} bytes"
                 )
-            rejected_candidate_path = (
-                output_root
-                / "backfill"
-                / "rescue"
-                / "rejected-candidates"
-                / f"{summary_id}.json"
-            )
-            saved_candidate = (
-                json.loads(rejected_candidate_path.read_text(encoding="utf-8"))
-                if rejected_candidate_path.exists()
-                else None
-            )
+            rejected_candidate_path = artifact_root / "rejected-candidates" / "reduce.json"
             result = run_source(
                 rescue_source,
                 output_root,
                 archive_root,
                 config_path=config_path,
-                candidate=saved_candidate,
                 rejected_candidate_path=rejected_candidate_path,
+                diagnostic_path=artifact_root / "diagnostics" / "reduce.json",
+                invocation_context={
+                    "family": "map",
+                    "revision": MAP_RESCUE_REVISION,
+                    "summary_id": summary_id,
+                    "stage": "reduce",
+                },
             )
             state["completed"] = result
             state["attempt_status"] = "completed"
             _write_rescue_state(state_path, state)
             completed.append({"summary_id": summary_id, "map_count": len(chunks), **result})
         except Exception as exc:
-            error = str(exc).replace("\r", " ").replace("\n", " ")[:500]
+            error = str(exc).replace("\r", " ").replace("\n", " ")
             state["last_error"] = error
             state["reduce_attempts"] = 1
-            state["attempt_status"] = "failed"
+            state["attempt_status"] = _classify_failure(exc)
+            state["diagnostic"] = getattr(exc, "diagnostic", None)
             _write_rescue_state(state_path, state)
             failed.append({"summary_id": summary_id, "error": error})
     refreshed = _refresh_plan(plan, existing_roots)
@@ -1236,6 +1387,9 @@ def run_map_rescue(
         "failed": failed,
         "deferred_current_revision": deferred_current_revision,
         "quarantined": len(refreshed["quarantine"]),
+        "remaining_ready": sum(
+            1 for task in refreshed["tasks"] if task["status"] == "ready"
+        ),
         "remaining_waiting": sum(
             1 for task in refreshed["tasks"] if task["status"] == "waiting-for-children"
         ),
@@ -1269,10 +1423,7 @@ def run_parent_rescue(
             for task in plan["tasks"]
             if task["status"] == "quarantined"
             and int(task["level"]) > 1
-            and _failure_path(output_root, task["summary_id"]).exists()
-            and "prompt exceeds" in str(
-                json.loads(_failure_path(output_root, task["summary_id"]).read_text(encoding="utf-8")).get("last_error", "")
-            )
+            and reasons.get(task["summary_id"]) == "model-failure-limit"
         ),
         key=lambda item: (int(item["level"]), item["summary_id"]),
     )
@@ -1306,17 +1457,48 @@ def run_parent_rescue(
             if len(children) < 4:
                 raise SummaryV2Error("parent rescue needs at least four direct children")
             formal_source = build_parent_source(children, parallel_summary_id=summary_id)
-            groups = [children[index : index + 2] for index in range(0, len(children), 2)]
-            if len(groups[-1]) == 1:
-                groups[-2].extend(groups.pop())
+            formal_binding_source = dict(formal_source)
+            formal_binding_source["compact_parent_prompt"] = True
+            _bind_rescue_attempt(
+                state_path,
+                state,
+                formal_binding_source,
+                parent=True,
+                config_path=config_path,
+            )
+            groups: list[list[dict[str, Any]]] = []
+            active: list[dict[str, Any]] = []
+            for child in children:
+                candidate = [*active, child]
+                if len(candidate) >= 2:
+                    probe = build_parent_source(candidate, parallel_summary_id=summary_id + "-probe")
+                    probe["compact_parent_prompt"] = True
+                    if active and len(build_prompt(probe).encode("utf-8")) > MAP_PROMPT_TARGET:
+                        groups.append(active)
+                        active = [child]
+                        continue
+                active = candidate
+            if active:
+                if len(active) == 1 and groups:
+                    groups[-1].extend(active)
+                else:
+                    groups.append(active)
+            if len(groups) < 2 or any(len(group) < 2 for group in groups):
+                groups = [children[index : index + 2] for index in range(0, len(children), 2)]
+                if len(groups[-1]) == 1:
+                    groups[-2].extend(groups.pop())
             map_sidecars: list[dict[str, Any]] = []
-            map_root = output_root / "backfill" / "rescue" / "parent-artifacts" / summary_id
+            artifact_root = _rescue_artifact_root(
+                output_root, "parent", PARENT_RESCUE_REVISION, summary_id
+            )
+            map_root = artifact_root / "maps"
             for index, group in enumerate(groups, 1):
                 key = f"map-{index:03d}"
                 source = build_parent_source(
                     group,
                     parallel_summary_id=f"{summary_id}-map-{index:03d}",
                 )
+                source["compact_parent_prompt"] = True
                 saved = state["maps"].get(key)
                 if saved:
                     sidecar = load_sidecar(Path(saved["bundle"]))
@@ -1329,6 +1511,16 @@ def run_parent_rescue(
                     map_root,
                     archive_root,
                     config_path=config_path,
+                    rejected_candidate_path=(
+                        artifact_root / "rejected-map-candidates" / f"{key}.json"
+                    ),
+                    diagnostic_path=artifact_root / "diagnostics" / f"{key}.json",
+                    invocation_context={
+                        "family": "parent",
+                        "revision": PARENT_RESCUE_REVISION,
+                        "summary_id": summary_id,
+                        "stage": key,
+                    },
                 )
                 sidecar = load_sidecar(Path(result["bundle"]))
                 state["maps"][key] = {
@@ -1350,22 +1542,26 @@ def run_parent_rescue(
                 archive_root,
                 config_path=config_path,
                 rejected_candidate_path=(
-                    output_root
-                    / "backfill"
-                    / "rescue"
-                    / "rejected-parent-candidates"
-                    / f"{summary_id}.json"
+                    artifact_root / "rejected-parent-candidates" / "reduce.json"
                 ),
+                diagnostic_path=artifact_root / "diagnostics" / "reduce.json",
+                invocation_context={
+                    "family": "parent",
+                    "revision": PARENT_RESCUE_REVISION,
+                    "summary_id": summary_id,
+                    "stage": "reduce",
+                },
             )
             state["completed"] = result
             state["attempt_status"] = "completed"
             _write_rescue_state(state_path, state)
             completed.append({"summary_id": summary_id, "map_count": len(groups), **result})
         except Exception as exc:
-            error = str(exc).replace("\r", " ").replace("\n", " ")[:500]
+            error = str(exc).replace("\r", " ").replace("\n", " ")
             state["last_error"] = error
             state["attempts"] = 1
-            state["attempt_status"] = "failed"
+            state["attempt_status"] = _classify_failure(exc)
+            state["diagnostic"] = getattr(exc, "diagnostic", None)
             _write_rescue_state(state_path, state)
             failed.append({"summary_id": summary_id, "error": error})
     refreshed = _refresh_plan(plan, existing_roots)
@@ -1377,6 +1573,9 @@ def run_parent_rescue(
         "failed": failed,
         "deferred_current_revision": deferred_current_revision,
         "quarantined": len(refreshed["quarantine"]),
+        "remaining_ready": sum(
+            1 for task in refreshed["tasks"] if task["status"] == "ready"
+        ),
         "remaining_waiting": sum(
             1 for task in refreshed["tasks"] if task["status"] == "waiting-for-children"
         ),

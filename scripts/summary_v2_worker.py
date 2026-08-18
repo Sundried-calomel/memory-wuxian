@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -40,6 +41,46 @@ DEFAULT_CODEX = Path(
 )
 DEFAULT_PROMPT_LIMIT = 900_000
 MAX_CANDIDATE_BYTES = 8 * 1024 * 1024
+
+
+class CodexInvocationError(SummaryV2Error):
+    """A one-shot invocation failed with structured diagnostic evidence."""
+
+    def __init__(self, message: str, diagnostic: dict[str, Any]):
+        super().__init__(message)
+        self.diagnostic = diagnostic
+
+
+def _text_evidence(value: str) -> dict[str, Any]:
+    encoded = value.encode("utf-8", errors="replace")
+    return {
+        "utf8_bytes": len(encoded),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "head": value[:2000],
+        "tail": value[-8000:],
+    }
+
+
+def _compact_parent_child(sidecar: dict[str, Any]) -> dict[str, Any]:
+    """Keep model-useful parent evidence while retaining hashes for full lookup."""
+    return {
+        "summary_v2_id": sidecar["summary_v2_id"],
+        "summary_level": sidecar["summary_level"],
+        "projection_sha256": sidecar["projection_sha256"],
+        "source_sha256": sidecar["source"]["source_sha256"],
+        "overview": sidecar["overview"],
+        "scenes": sidecar["scenes"],
+        "atoms": sidecar["atoms"],
+        "relations": sidecar["relations"],
+        "omissions": sidecar["omissions"],
+        "coverage": {
+            "source_ref_count": sidecar["coverage"]["source_ref_count"],
+            "represented_source_refs": sidecar["coverage"]["represented_source_refs"],
+            "omitted_source_refs": sidecar["coverage"]["omitted_source_refs"],
+            "raw_message_count": sidecar["coverage"]["raw_message_count"],
+            "silent_loss_count": sidecar["coverage"]["silent_loss_count"],
+        },
+    }
 
 
 def parse_result(path: Path) -> dict[str, Any]:
@@ -76,6 +117,13 @@ def build_prompt(source: dict[str, Any]) -> str:
         SOURCE_PARENT_RESCUE_MAPS,
     }
     source_payload = source["prompt_payload"]
+    if source["source_kind"] == SOURCE_CHILDREN and source.get("compact_parent_prompt"):
+        source_payload = {
+            "child_sidecars": [
+                _compact_parent_child(sidecar)
+                for sidecar in source_payload.get("child_sidecars", [])
+            ]
+        }
     if rescue_source:
         source_payload = {
             "map_sidecars": [
@@ -108,6 +156,21 @@ def build_prompt(source: dict[str, Any]) -> str:
         "source_ref_catalog": source["ref_catalog"],
         "required_locators": source["required_locators"],
     }
+    if source["source_kind"] == SOURCE_CHILDREN and source.get("compact_parent_prompt"):
+        task["source_ref_catalog"] = [
+            {
+                "source_ref": item["source_ref"],
+                "source_message_count": len(item["source_message_ids"]),
+                "source_message_ids_sha256": hashlib.sha256(
+                    json.dumps(
+                        item["source_message_ids"],
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest(),
+            }
+            for item in source["ref_catalog"]
+        ]
     if rescue_source:
         task["required_locators"] = []
         task["deterministic_locator_count"] = len(source["required_locators"])
@@ -169,21 +232,47 @@ def codex_command(
 def invoke_codex(command: list[str], timeout: int, prompt: str) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="memory-wuxian-summary-v2-") as temporary:
         output = Path(temporary) / "candidate.json"
-        completed = subprocess.run(
-            [*command, "--output-last-message", str(output), "-"],
-            input=prompt,
-            text=True,
-            encoding="utf-8",
-            capture_output=True,
-            timeout=timeout,
-            check=False,
-            cwd=tempfile.gettempdir(),
-            **no_window_kwargs(),
-        )
+        started = time.monotonic()
+        try:
+            completed = subprocess.run(
+                [*command, "--output-last-message", str(output), "-"],
+                input=prompt,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                timeout=timeout,
+                check=False,
+                cwd=tempfile.gettempdir(),
+                **no_window_kwargs(),
+            )
+        except subprocess.TimeoutExpired as exc:
+            stdout = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+            stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+            raise CodexInvocationError(
+                f"one-shot summary-v2 model call timed out after {timeout}s",
+                {
+                    "classification": "infra-timeout",
+                    "elapsed_seconds": round(time.monotonic() - started, 3),
+                    "returncode": None,
+                    "stdout": _text_evidence(stdout),
+                    "stderr": _text_evidence(stderr),
+                    "candidate_exists": output.exists(),
+                    "candidate_sha256": hashlib.sha256(output.read_bytes()).hexdigest() if output.exists() else None,
+                },
+            ) from exc
         if completed.returncode != 0:
-            raise SummaryV2Error(
-                f"one-shot summary-v2 model call failed ({completed.returncode}): "
-                + completed.stderr[-2000:]
+            raise CodexInvocationError(
+                f"one-shot summary-v2 model call failed ({completed.returncode})",
+                {
+                    "classification": "model-process-failure",
+                    "elapsed_seconds": round(time.monotonic() - started, 3),
+                    "returncode": completed.returncode,
+                    "stdout": _text_evidence(completed.stdout),
+                    "stderr": _text_evidence(completed.stderr),
+                    "candidate_exists": output.exists(),
+                    "candidate_sha256": hashlib.sha256(output.read_bytes()).hexdigest() if output.exists() else None,
+                },
             )
         return parse_result(output)
 
@@ -198,6 +287,8 @@ def run_source(
     dry_run: bool = False,
     invoker: Callable[[list[str], int, str], dict[str, Any]] = invoke_codex,
     rejected_candidate_path: Path | None = None,
+    diagnostic_path: Path | None = None,
+    invocation_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     prompt = build_prompt(source)
     prompt_bytes = len(prompt.encode("utf-8"))
@@ -225,17 +316,76 @@ def run_source(
         }
     model_called = candidate is None
     if candidate is None:
-        candidate = invoker(command, timeout, prompt)
+        try:
+            candidate = invoker(command, timeout, prompt)
+        except Exception as exc:
+            if diagnostic_path is not None:
+                diagnostic = {
+                    "status": "failed",
+                    "model_called": True,
+                    "job_id": source["job_id"],
+                    "summary_level": source["summary_level"],
+                    "source_sha256": source["source_sha256"],
+                    "prompt_utf8_bytes": prompt_bytes,
+                    "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                    "exception_type": type(exc).__name__,
+                    "error": str(exc),
+                    **(invocation_context or {}),
+                }
+                if isinstance(exc, CodexInvocationError):
+                    diagnostic.update(exc.diagnostic)
+                Path(diagnostic_path).parent.mkdir(parents=True, exist_ok=True)
+                atomic_write_canonical_json(Path(diagnostic_path), diagnostic)
+            raise
     candidate = normalize_model_candidate(candidate, source)
     try:
         sidecar = project(source, candidate)
-    except Exception:
+    except Exception as exc:
         if rejected_candidate_path is not None:
             rejected_candidate_path = Path(rejected_candidate_path)
             rejected_candidate_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_write_canonical_json(rejected_candidate_path, candidate)
+        if diagnostic_path is not None:
+            candidate_bytes = json.dumps(
+                candidate, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+            Path(diagnostic_path).parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_canonical_json(
+                Path(diagnostic_path),
+                {
+                    "status": "failed",
+                    "classification": "candidate-validation-failure",
+                    "model_called": model_called,
+                    "job_id": source["job_id"],
+                    "summary_level": source["summary_level"],
+                    "source_sha256": source["source_sha256"],
+                    "prompt_utf8_bytes": prompt_bytes,
+                    "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                    "candidate_utf8_bytes": len(candidate_bytes),
+                    "candidate_sha256": hashlib.sha256(candidate_bytes).hexdigest(),
+                    "exception_type": type(exc).__name__,
+                    "error": str(exc),
+                    **(invocation_context or {}),
+                },
+            )
         raise
     bundle, status = persist_sidecar(sidecar, output_directory, archive_root)
+    if diagnostic_path is not None:
+        Path(diagnostic_path).parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_canonical_json(
+            Path(diagnostic_path),
+            {
+                "status": "completed",
+                "model_called": model_called,
+                "job_id": source["job_id"],
+                "summary_level": source["summary_level"],
+                "source_sha256": source["source_sha256"],
+                "prompt_utf8_bytes": prompt_bytes,
+                "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                "projection_sha256": sidecar["projection_sha256"],
+                **(invocation_context or {}),
+            },
+        )
     return {
         "status": status,
         "bundle": str(bundle),

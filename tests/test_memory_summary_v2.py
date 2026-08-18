@@ -295,6 +295,51 @@ class SummaryV2Test(unittest.TestCase):
         )
         project(rescue, normalized)
 
+    def test_rescue_normalizer_restores_a_totally_lost_ref_from_validated_map(self):
+        left_job = self.job()
+        right_job = self.job(offset=3)
+        records = [*left_job["source_records"], *right_job["source_records"]]
+        formal_job = {
+            **left_job,
+            "job_id": "formal-total-loss-repair",
+            "target_summary_id": "L1-000779",
+            "source_sha256": _source_sha256(records),
+            "source_message_ids": [item["message_id"] for item in records],
+            "source_records": records,
+        }
+        formal = build_level_1_source(formal_job)
+        maps = [
+            project(build_level_1_source(job), self.candidate(build_level_1_source(job)))
+            for job in (left_job, right_job)
+        ]
+        rescue = build_rescue_reduce_source(formal, maps)
+        candidate = self.candidate(rescue)
+        lost = rescue["source_refs"][-1]
+        for group in ("overview", "scenes", "atoms", "retrieval_anchors"):
+            for item in candidate[group]:
+                item["source_refs"] = [ref for ref in item["source_refs"] if ref != lost]
+        normalized = normalize_model_candidate(candidate, rescue)
+        self.assertTrue(any(lost in item["source_refs"] for item in normalized["scenes"]))
+        self.assertTrue(any(lost in item["source_refs"] for item in normalized["atoms"]))
+        project(rescue, normalized)
+
+    def test_normalizer_drops_conflicting_omission_and_invalid_relation(self):
+        source = build_level_1_source(self.job())
+        candidate = self.candidate(source)
+        represented = source["source_refs"][0]
+        candidate["omissions"] = [{"source_ref": represented, "reason": "conflict"}]
+        candidate["relations"] = [
+            {
+                "from_local_id": "missing",
+                "to_local_id": "missing",
+                "relation_type": "supports",
+                "source_refs": [represented],
+            }
+        ]
+        normalized = normalize_model_candidate(candidate, source)
+        self.assertEqual([], normalized["omissions"])
+        self.assertEqual([], normalized["relations"])
+
     def test_normalizer_adds_navigation_atom_for_scene_only_refs(self):
         source = build_level_1_source(self.job())
         candidate = self.candidate(source)
@@ -528,6 +573,31 @@ class SummaryV2Test(unittest.TestCase):
         self.assertTrue(result["model_called"])
         self.assertEqual("created", result["status"])
 
+    def test_worker_persists_structured_invocation_failure_diagnostic(self):
+        source = build_level_1_source(self.job())
+        config = self.base / "config.yaml"
+        config.write_text("ai_summary:\n  timeout_seconds: 30\n", encoding="utf-8")
+        diagnostic = self.base / "diagnostics" / "call.json"
+
+        def failing_invoker(command, timeout, prompt):
+            raise SummaryV2Error("fixture network failure with complete evidence")
+
+        with self.assertRaisesRegex(SummaryV2Error, "fixture network failure"):
+            run_source(
+                source,
+                self.base / "worker-output",
+                self.archive,
+                config_path=config,
+                invoker=failing_invoker,
+                diagnostic_path=diagnostic,
+                invocation_context={"revision": "fixture-v2", "stage": "map-001"},
+            )
+        receipt = json.loads(diagnostic.read_text(encoding="utf-8"))
+        self.assertEqual("failed", receipt["status"])
+        self.assertTrue(receipt["model_called"])
+        self.assertEqual("fixture-v2", receipt["revision"])
+        self.assertEqual(64, len(receipt["prompt_sha256"]))
+
     def test_real_cli_candidate_path_handles_multilingual_paths(self):
         job = self.job()
         source = build_level_1_source(job)
@@ -595,6 +665,12 @@ class SummaryV2Test(unittest.TestCase):
         parent_prompt = build_prompt(parent_source)
         self.assertIn("lossless navigation layer", parent_prompt)
         self.assertIn("promotion_manifest", parent_prompt)
+        compact_source = dict(parent_source)
+        compact_source["compact_parent_prompt"] = True
+        compact_prompt = build_prompt(compact_source)
+        self.assertLess(len(compact_prompt.encode("utf-8")), len(parent_prompt.encode("utf-8")))
+        self.assertNotIn("raw_message_manifest", compact_prompt)
+        self.assertIn(parent_source["source_sha256"], compact_prompt)
         command, _, _ = codex_command({}, parent_source)
         self.assertTrue(
             any(value.endswith("summary-v2-parent-result.schema.json") for value in command)
@@ -606,6 +682,7 @@ class SummaryV2Test(unittest.TestCase):
         )
         self.assertEqual(2, parent_schema["properties"]["summary_level"]["minimum"])
         self.assertEqual(0, parent_schema["properties"]["retrieval_anchors"]["maxItems"])
+        self.assertEqual(4, len(parent_schema["$defs"]["atom"]["anyOf"]))
         for path in (
             ROOT / "scripts" / "semantic_worker.py",
             ROOT / "scripts" / "semantic_dispatch.py",

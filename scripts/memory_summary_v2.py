@@ -620,8 +620,9 @@ def normalize_model_candidate(candidate: Any, source: dict[str, Any]) -> Any:
             continue
         left = atom_by_id.get(item.get("from_local_id"))
         right = atom_by_id.get(item.get("to_local_id"))
-        if left is None or right is None:
-            relations.append(item)
+        if left is None or right is None or left is right:
+            continue
+        if item.get("relation_type") not in RELATION_TYPES:
             continue
         allowed = set(left.get("source_refs", [])) | set(right.get("source_refs", []))
         canonical_refs = refs(item.get("source_refs"))
@@ -641,6 +642,7 @@ def normalize_model_candidate(candidate: Any, source: dict[str, Any]) -> Any:
             key=lambda item: source_order.get(item.get("source_ref"), len(source_order)),
         )
     if source["source_kind"] in {SOURCE_RESCUE_MAPS, SOURCE_PARENT_RESCUE_MAPS}:
+        maps = source["prompt_payload"]["map_sidecars"]
         content_refs = {
             source_ref
             for group in ("overview", "scenes", "atoms", "retrieval_anchors")
@@ -651,11 +653,73 @@ def normalize_model_candidate(candidate: Any, source: dict[str, Any]) -> Any:
         for relation in normalized.get("relations", []):
             if isinstance(relation, dict):
                 content_refs.update(relation.get("source_refs", []))
-        normalized["omissions"] = [
-            item
+        omission_by_ref = {
+            item["source_ref"]: item["reason"]
+            for sidecar in maps
+            for item in sidecar.get("omissions", [])
+        }
+        existing_omissions = {
+            item.get("source_ref")
             for item in normalized.get("omissions", [])
-            if item.get("source_ref") not in content_refs
-        ]
+            if isinstance(item, dict)
+        }
+        for source_ref in source["source_refs"]:
+            if source_ref in content_refs or source_ref in existing_omissions:
+                continue
+            if source_ref in omission_by_ref:
+                normalized.setdefault("omissions", []).append(
+                    {"source_ref": source_ref, "reason": omission_by_ref[source_ref]}
+                )
+                existing_omissions.add(source_ref)
+                continue
+            evidence = next(
+                (
+                    sidecar
+                    for sidecar in maps
+                    if source_ref in sidecar["source"]["source_refs"]
+                    and source_ref in sidecar["coverage"]["represented_source_refs"]
+                ),
+                None,
+            )
+            if evidence is None:
+                continue
+            scene = next(
+                (item for item in evidence["scenes"] if source_ref in item["source_refs"]),
+                evidence["scenes"][0],
+            )
+            scene_id = f"restored_scene_{len(normalized.get('scenes', [])) + 1}"
+            while scene_id in used_ids:
+                scene_id = "mw_" + scene_id
+            used_ids.add(scene_id)
+            normalized.setdefault("scenes", []).append(
+                {
+                    "local_id": scene_id,
+                    "title": scene["title"],
+                    "summary": scene["summary"],
+                    "source_refs": [source_ref],
+                }
+            )
+            if source["source_kind"] == SOURCE_RESCUE_MAPS:
+                atom = next(
+                    (item for item in evidence["atoms"] if source_ref in item["source_refs"]),
+                    None,
+                )
+                if atom is not None:
+                    atom_id = f"restored_atom_{len(normalized.get('atoms', [])) + 1}"
+                    while atom_id in used_ids:
+                        atom_id = "mw_" + atom_id
+                    used_ids.add(atom_id)
+                    normalized.setdefault("atoms", []).append(
+                        {
+                            "local_id": atom_id,
+                            "atom_type": atom["atom_type"],
+                            "statement": atom["statement"],
+                            "epistemic_status": atom["epistemic_status"],
+                            "scope": atom["scope"],
+                            "source_refs": [source_ref],
+                        }
+                    )
+            content_refs.add(source_ref)
         scene_refs = {
             source_ref
             for scene in normalized.get("scenes", [])
@@ -663,7 +727,6 @@ def normalize_model_candidate(candidate: Any, source: dict[str, Any]) -> Any:
             for source_ref in scene.get("source_refs", [])
         }
         missing_scene_refs = content_refs - scene_refs
-        maps = source["prompt_payload"]["map_sidecars"]
         for map_index, sidecar in enumerate(maps, 1):
             missing = [
                 source_ref
@@ -690,6 +753,45 @@ def normalize_model_candidate(candidate: Any, source: dict[str, Any]) -> Any:
                     }
                 )
                 missing_scene_refs.difference_update(batch)
+    content_refs = {
+        source_ref
+        for group in ("overview", "scenes", "atoms", "retrieval_anchors")
+        for item in normalized.get(group, [])
+        if isinstance(item, dict)
+        for source_ref in item.get("source_refs", [])
+    }
+    for relation in normalized.get("relations", []):
+        if isinstance(relation, dict):
+            content_refs.update(relation.get("source_refs", []))
+    scene_refs = {
+        source_ref
+        for scene in normalized.get("scenes", [])
+        if isinstance(scene, dict)
+        for source_ref in scene.get("source_refs", [])
+    }
+    for source_ref in sorted(content_refs - scene_refs, key=source_order.__getitem__):
+        evidence_text = next(
+            (
+                str(item.get(field, "")).strip()
+                for group, field in (("atoms", "statement"), ("overview", "text"))
+                for item in normalized.get(group, [])
+                if isinstance(item, dict) and source_ref in item.get("source_refs", [])
+                if str(item.get(field, "")).strip()
+            ),
+            "Source evidence retained for raw-message verification.",
+        )[:MAX_TEXT_CHARACTERS]
+        local_id = f"source_route_{len(normalized.get('scenes', [])) + 1}"
+        while local_id in used_ids:
+            local_id = "mw_" + local_id
+        used_ids.add(local_id)
+        normalized.setdefault("scenes", []).append(
+            {
+                "local_id": local_id,
+                "title": "Source evidence route",
+                "summary": evidence_text,
+                "source_refs": [source_ref],
+            }
+        )
     if source["source_kind"] not in {SOURCE_CHILDREN, SOURCE_PARENT_RESCUE_MAPS}:
         detail_refs = {
             source_ref
@@ -749,6 +851,26 @@ def normalize_model_candidate(candidate: Any, source: dict[str, Any]) -> Any:
                     }
                 )
                 missing_detail_refs.difference_update(batch)
+    represented_refs = {
+        source_ref
+        for group in ("overview", "scenes", "atoms", "retrieval_anchors")
+        for item in normalized.get(group, [])
+        if isinstance(item, dict)
+        for source_ref in item.get("source_refs", [])
+    }
+    for relation in normalized.get("relations", []):
+        if isinstance(relation, dict):
+            represented_refs.update(relation.get("source_refs", []))
+    if isinstance(normalized.get("omissions"), list):
+        normalized["omissions"] = sorted(
+            [
+                item
+                for item in normalized["omissions"]
+                if isinstance(item, dict)
+                and item.get("source_ref") not in represented_refs
+            ],
+            key=lambda item: source_order.get(item.get("source_ref"), len(source_order)),
+        )
     return normalized
 
 

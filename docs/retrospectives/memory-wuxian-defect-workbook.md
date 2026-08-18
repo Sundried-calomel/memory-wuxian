@@ -326,6 +326,31 @@
   可续传、新 revision 可重新准入，以及 raw、Summary V1、既有成功 Summary V2 哈希不变。
 - Families: `MW-R08`, `MW-R11`, `G02`, `G08`, `G11`.
 
+### MW-SUM-026：跨 revision 候选复用、诊断截断和 parent 载荷膨胀掩盖真实失败
+
+- 证据：`本机已核验`。旧 map/reduce/parent rejected candidate 与成功 partial map
+  没有按 revision 隔离；新 revision 可能直接重放旧失败候选并报告
+  `model_called=false`。worker 只保留 stderr 尾部，runner 又把异常压到 500 字符，
+  23 个 parent 失败因而无法定位。parent map 同时把完整 raw manifest 和消息目录送入
+  模型，双 child prompt 曾达到约 169955--518131 UTF-8 bytes。
+- 伴随内容失败：旧 map 候选包含“内容引用与 omission 重叠”、已表示引用缺 scene、
+  悬空/自指关系、非法 epistemic 组合和 silent loss。旧 normal runner 允许三次，
+  Rescue runner 又单独计数，导致 dependency ready 与本轮 eligible 被混为一谈。
+- 根因：attempt state 虽带 revision，artifact 路径、候选复用、诊断、normal 状态和
+  parent prompt projection 没有共享同一 campaign 合同。
+- 永久门槛：所有 Rescue artifact 按 family/revision/node 隔离并绑定 source、prompt、
+  schema、projector、runner 与 worker hash；rejected candidate 只作证据。每次调用写
+  结构化诊断。normal/map/parent 同轮每节点至多一次，infra failure 单独终止且不消耗
+  内容尝试。parent 仅发送可回查 hash 的紧凑白名单投影，并按 UTF-8 bytes 分组。
+  确定性修复只能依据候选或已验证 map：represented 覆盖冲突 omission、补 scene route、
+  删除无效可选 relation、按 map ledger 恢复或继承 omission；无证据 silent loss 和
+  epistemic 冲突仍失败关闭。
+- 回归：同 revision 第二次零模型调用、新 revision 不复用 rejected candidate、精确
+  partial-map 续传、timeout 分类、结构化 stdout/stderr 证据、parent compact 投影证据
+  回查、真实 rejected-candidate 离线重放、campaign eligibility，以及 raw、Summary V1、
+  既有成功 Summary V2 哈希不变。
+- Families: `MW-R05`, `MW-R08`, `MW-R10`, `MW-R11`, `G08`, `G11`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。

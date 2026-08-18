@@ -25,7 +25,9 @@ from summary_v2_backfill import (  # noqa: E402
     _chunk_job,
     _load_rescue_attempt_state,
     _refresh_plan,
+    _rescue_artifact_root,
     _rescue_state_path,
+    _run_rescue_map_chunk,
     _select_single_attempt_candidates,
     _write_rescue_state,
     build_plan,
@@ -370,6 +372,30 @@ class SummaryV2BackfillTest(unittest.TestCase):
             ).exists()
         )
 
+    def test_rejected_candidate_is_evidence_only_and_artifacts_are_revision_scoped(self):
+        source = {"job_id": "fixture"}
+        rejected = self.output / "old-rejected.json"
+        rejected.parent.mkdir(parents=True, exist_ok=True)
+        rejected.write_text('{"stale":true}', encoding="utf-8")
+        with patch("summary_v2_backfill.run_source", return_value={"status": "created"}) as call:
+            _run_rescue_map_chunk(
+                source,
+                self.output / "maps",
+                self.archive,
+                self.base / "config.yaml",
+                rejected,
+            )
+        self.assertNotIn("candidate", call.call_args.kwargs)
+        self.assertEqual(rejected, call.call_args.kwargs["rejected_candidate_path"])
+        old_root = _rescue_artifact_root(
+            self.output, "map", MAP_RESCUE_REVISION, "L1-fixture"
+        )
+        new_root = _rescue_artifact_root(
+            self.output, "map", MAP_RESCUE_REVISION + ".next", "L1-fixture"
+        )
+        self.assertNotEqual(old_root, new_root)
+        self.assertFalse(str(new_root).startswith(str(old_root)))
+
     def test_rescue_selection_reports_terminal_nodes_beyond_batch_limit(self):
         tasks = [
             {"summary_id": "L1-ready"},
@@ -395,6 +421,43 @@ class SummaryV2BackfillTest(unittest.TestCase):
         )
         self.assertEqual([tasks[0]], selected)
         self.assertEqual(["L1-terminal"], deferred)
+
+    def test_old_normal_failure_routes_to_new_rescue_campaign_once(self):
+        plan = build_plan(self.archive, self.output)
+        failure = self.output / "backfill" / "failures" / "L1-000001.json"
+        failure.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_canonical_json(
+            failure,
+            {
+                "summary_id": "L1-000001",
+                "runner_revision": "older-normal-revision",
+                "attempts": 1,
+                "attempt_status": "content-failed-terminal",
+                "last_error": "fixture content failure",
+            },
+        )
+        refreshed = _refresh_plan(plan, [])
+        task = next(item for item in refreshed["tasks"] if item["summary_id"] == "L1-000001")
+        self.assertEqual("quarantined", task["status"])
+        self.assertEqual("pending", task["campaign_status"])
+        self.assertFalse(task["eligible"])
+
+    def test_infra_blocked_state_is_terminal_without_consuming_content_retry(self):
+        task = {"summary_id": "L1-infra"}
+        path = _rescue_state_path(
+            self.output, "map", MAP_RESCUE_REVISION, task["summary_id"]
+        )
+        state = _load_rescue_attempt_state(path, MAP_RESCUE_REVISION, task["summary_id"])
+        _begin_rescue_attempt(path, state)
+        state["attempt_status"] = "infra-blocked"
+        state["attempts"] = 0
+        _write_rescue_state(path, state)
+        selected, deferred = _select_single_attempt_candidates(
+            [task], self.output, "map", MAP_RESCUE_REVISION, 1
+        )
+        self.assertEqual([], selected)
+        self.assertEqual(["L1-infra"], deferred)
+        self.assertEqual(0, state["attempts"])
 
 
 if __name__ == "__main__":
