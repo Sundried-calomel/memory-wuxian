@@ -183,6 +183,7 @@ class MacosTransactionTest(unittest.TestCase):
             return {
                 "pid": 42,
                 "ready": True,
+                "phase": "ready",
                 "updated_at": "2026-07-30T00:00:00Z",
                 "last_archive_update": "2026-07-30T00:00:00Z",
                 "source_watermark": "2026-07-29T00:00:00Z",
