@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.18-r1-r8",
+  "objective": "Complete the approved behavior-preserving R1 through R8 modularization sequence with stage gates and a final candidate audit.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian-v2.18",
+  "owner_id": "product-architecture",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "powershell", "shell", "rust", "json"],
+  "path_globs": ["scripts/**/*.py", "tests/**/*.py", "native-collector/src/**/*.rs", "docs/module-architecture.json", "docs/refactoring/*.md"],
+  "entrypoints": ["cli", "dashboard", "scheduler", "installer", "cloud-transport", "environment-installer", "test-runner"],
+  "resources": ["persistent-state", "subprocess", "scheduler", "transaction", "rollback", "exchange-stream", "command-contract", "test-evidence"],
+  "operations": ["refactor", "validate", "render", "install-preview", "import", "export", "recover"],
+  "data_formats": ["utf-8", "json", "jsonl", "toml", "xml", "plist", "zip"],
+  "authorization_boundaries": ["No archive mutation, live installation, scheduler activation, network write, publication, release, version change, or external deployment."],
+  "implementation_units": [
+    {"id": "r1-platform-atomic", "owner_id": "platform-foundation", "paths": ["scripts/platform_atomic.py", "scripts/platform_transaction.py", "scripts/**/*.py", "tests/test_platform_atomic.py"], "entrypoints": ["filesystem"], "resources": ["persistent-state", "transaction"], "operations": ["refactor", "validate"], "planned_check_ids": ["unicode-path-fixtures", "entrypoint-inventory", "cross-entrypoint-contract"]},
+    {"id": "r2-platform-scheduler", "owner_id": "platform-foundation", "paths": ["scripts/platform_scheduler.py", "scripts/install_cloud_sync.py", "scripts/install_governance_ai.py", "scripts/install_maintenance_supervisor.py", "tests/**/*scheduler*.py"], "entrypoints": ["scheduler", "installer"], "resources": ["scheduler", "subprocess"], "operations": ["render", "install-preview", "validate"], "planned_check_ids": ["runtime-capability-probe", "target-platform-effect", "cross-entrypoint-contract"]},
+    {"id": "r3-environment-lifecycle", "owner_id": "environment-plane", "paths": ["scripts/memory_environment_install_lifecycle.py", "scripts/memory_environment_rules.py", "scripts/memory_environment_skills.py", "tests/test_memory_environment*.py"], "entrypoints": ["environment-installer"], "resources": ["transaction", "rollback", "persistent-state"], "operations": ["refactor", "recover", "validate"], "planned_check_ids": ["legacy-fixture-matrix", "migration-idempotence", "cross-entrypoint-contract"]},
+    {"id": "r4-exchange-contract", "owner_id": "exchange-plane", "paths": ["scripts/memory_exchange_contract.py", "scripts/memory_federation.py", "scripts/memory_environment_exchange.py", "scripts/memory_project_evidence.py", "scripts/memory_project_attachments.py", "scripts/memory_cloud_transport.py"], "entrypoints": ["cloud-transport"], "resources": ["exchange-stream", "persistent-state"], "operations": ["import", "export", "refactor", "validate"], "planned_check_ids": ["legacy-fixture-matrix", "migration-idempotence", "cross-entrypoint-contract"]},
+    {"id": "r5-cloud-application-service", "owner_id": "application-services", "paths": ["scripts/memory_cloud_streams.py", "scripts/memory_cli.py", "scripts/memory_dashboard.py"], "entrypoints": ["cli", "dashboard"], "resources": ["exchange-stream"], "operations": ["refactor", "validate"], "planned_check_ids": ["entrypoint-inventory", "cross-entrypoint-contract", "real-entrypoint-effect"]},
+    {"id": "r6-immutable-environment-store", "owner_id": "environment-plane", "paths": ["scripts/memory_environment_immutable_records.py", "scripts/memory_environment_governance.py", "scripts/memory_environment_evolution.py"], "entrypoints": ["environment-installer"], "resources": ["persistent-state"], "operations": ["refactor", "validate"], "planned_check_ids": ["unicode-path-fixtures", "cross-entrypoint-contract"]},
+    {"id": "r7-cli-owner-migration", "owner_id": "product-shell", "paths": ["scripts/memory_cli.py", "scripts/memory_cli_*.py", "scripts/memory_*store.py", "scripts/memory_*retrieval.py", "tests/test_cli_contract_snapshot.py"], "entrypoints": ["cli"], "resources": ["command-contract", "persistent-state"], "operations": ["refactor", "validate"], "planned_check_ids": ["entrypoint-inventory", "cross-entrypoint-contract", "unicode-path-fixtures"]},
+    {"id": "r8-test-infrastructure", "owner_id": "product-quality", "paths": ["tests/**/*.py", "tests/support/**/*.py", "native-collector/src/**/*.rs", "scripts/run_release_rehearsal.py"], "entrypoints": ["test-runner"], "resources": ["test-evidence"], "operations": ["refactor", "validate"], "planned_check_ids": ["entrypoint-inventory", "evidence-roundtrip"]}
+  ],
+  "rule_exclusions": []
+}
