@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-parent-v6-convergence",
+  "packet_sha256": "6db6e90d2b2b7116e1134fee4a9ee5bd3a9e4d2b678bfad2b612ea22dafcacf8",
+  "checks": [
+    {
+      "check_id": "bounded-cycle-work",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-tests.log", "sha256": "cf2ad99d897483b47989acd2aa2924b04c2747cb3d72cf4d1bb29a3ed05e7a87"}],
+      "note": "The parent batch remains capped at three and hierarchical reduction is covered by a bounded four-map fixture."
+    },
+    {
+      "check_id": "cross-entrypoint-contract",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-tests.log", "sha256": "cf2ad99d897483b47989acd2aa2924b04c2747cb3d72cf4d1bb29a3ed05e7a87"}],
+      "note": "Shared worker, projector, parent rescue, and backfill entrypoint contracts pass together."
+    },
+    {
+      "check_id": "entrypoint-inventory",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-architecture.log", "sha256": "3c77897aee0b93a4a5fefecb3057c89e345a5c676181ff60b6141ffc559de515"}],
+      "note": "The architecture checker confirms one owner for every production file and the task manifest lists all affected entrypoints."
+    },
+    {
+      "check_id": "evidence-roundtrip",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-tests.log", "sha256": "cf2ad99d897483b47989acd2aa2924b04c2747cb3d72cf4d1bb29a3ed05e7a87"}],
+      "note": "Direct child routes, promoted atoms, source hashes, projection hashes, and immutable archive bytes round-trip through hierarchical rescue."
+    },
+    {
+      "check_id": "exact-candidate-release",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-release.log", "sha256": "471658e02027157d6e08214b44201a28239bab27f3435b71daf10e099c0f85f8"}],
+      "note": "The tested commit 6d6237d is the exact SHA published on the authorized GitHub branch."
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-completion.json", "sha256": "79867c64fd7230cefdd9f84927c7ef1243f21430d58b7e5f7382bde7d665440e"}],
+      "note": "The registered workbook completion gate passed with explicit G02, G08, and G11 families."
+    },
+    {
+      "check_id": "legacy-fixture-matrix",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-full-tests.log", "sha256": "cef37d65b561a7727edd303bded7cacee1bc26f12c7328ff5930917c2e1e15f1"}, {"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-environment-recheck.log", "sha256": "45250c3c88514cff902ea99d85ad0cd41b1e84adab895cb991965e79e07e2be4"}],
+      "note": "The full 698-test matrix ran; its four Git ownership environment failures passed on isolated recheck without changing global configuration."
+    },
+    {
+      "check_id": "migration-idempotence",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-tests.log", "sha256": "cf2ad99d897483b47989acd2aa2924b04c2747cb3d72cf4d1bb29a3ed05e7a87"}],
+      "note": "No format migration is introduced; same-revision state merge and exact orphan resume are idempotent with zero repeated model calls."
+    },
+    {
+      "check_id": "promotion-boundary-review",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-completion.json", "sha256": "79867c64fd7230cefdd9f84927c7ef1243f21430d58b7e5f7382bde7d665440e"}],
+      "note": "The project incident remains project-scoped; only portable fail-closed families were selected globally."
+    },
+    {
+      "check_id": "real-entrypoint-effect",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-runtime-start.json", "sha256": "51dab04da6f5c1acc74ccd0d4e0ecae96063c90db05bb139b45f978b9ff8ca0c"}],
+      "note": "The real rescue-parent CLI created a v6 in-progress state for L2-000002 and launched a read-only Codex child process."
+    },
+    {
+      "check_id": "registered-preflight",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-preflight.json", "sha256": "1644ba1d570b0509ab913d44253dfd93a0dd3a5b04c8ed2175f285af6ec35559"}],
+      "note": "Target-based registry discovery and hash-bound preflight completed before implementation edits."
+    },
+    {
+      "check_id": "runtime-capability-probe",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-runtime-start.json", "sha256": "51dab04da6f5c1acc74ccd0d4e0ecae96063c90db05bb139b45f978b9ff8ca0c"}],
+      "note": "The execution contract selected Python 3.14 for Windows user 56453 and the real process started successfully in the declared repository."
+    },
+    {
+      "check_id": "target-platform-effect",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-runtime-start.json", "sha256": "51dab04da6f5c1acc74ccd0d4e0ecae96063c90db05bb139b45f978b9ff8ca0c"}],
+      "note": "Windows persisted a real revision-scoped node transition and active runner lock through the production entrypoint."
+    },
+    {
+      "check_id": "unicode-path-fixtures",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-tests.log", "sha256": "cf2ad99d897483b47989acd2aa2924b04c2747cb3d72cf4d1bb29a3ed05e7a87"}],
+      "note": "Chinese, Japanese, currency, and emoji fixture values pass through source, sidecar, resume, and projection boundaries."
+    }
+  ]
+}

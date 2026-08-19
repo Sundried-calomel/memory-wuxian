@@ -1,0 +1,116 @@
+{
+  "evidence": [
+    {
+      "check_id": "bounded-cycle-work",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-tests.log",
+      "sha256": "cf2ad99d897483b47989acd2aa2924b04c2747cb3d72cf4d1bb29a3ed05e7a87"
+    },
+    {
+      "check_id": "cross-entrypoint-contract",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-tests.log",
+      "sha256": "cf2ad99d897483b47989acd2aa2924b04c2747cb3d72cf4d1bb29a3ed05e7a87"
+    },
+    {
+      "check_id": "entrypoint-inventory",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-architecture.log",
+      "sha256": "3c77897aee0b93a4a5fefecb3057c89e345a5c676181ff60b6141ffc559de515"
+    },
+    {
+      "check_id": "evidence-roundtrip",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-tests.log",
+      "sha256": "cf2ad99d897483b47989acd2aa2924b04c2747cb3d72cf4d1bb29a3ed05e7a87"
+    },
+    {
+      "check_id": "exact-candidate-release",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-release.log",
+      "sha256": "471658e02027157d6e08214b44201a28239bab27f3435b71daf10e099c0f85f8"
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-completion.json",
+      "sha256": "79867c64fd7230cefdd9f84927c7ef1243f21430d58b7e5f7382bde7d665440e"
+    },
+    {
+      "check_id": "legacy-fixture-matrix",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-full-tests.log",
+      "sha256": "cef37d65b561a7727edd303bded7cacee1bc26f12c7328ff5930917c2e1e15f1"
+    },
+    {
+      "check_id": "legacy-fixture-matrix",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-environment-recheck.log",
+      "sha256": "45250c3c88514cff902ea99d85ad0cd41b1e84adab895cb991965e79e07e2be4"
+    },
+    {
+      "check_id": "migration-idempotence",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-tests.log",
+      "sha256": "cf2ad99d897483b47989acd2aa2924b04c2747cb3d72cf4d1bb29a3ed05e7a87"
+    },
+    {
+      "check_id": "promotion-boundary-review",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-completion.json",
+      "sha256": "79867c64fd7230cefdd9f84927c7ef1243f21430d58b7e5f7382bde7d665440e"
+    },
+    {
+      "check_id": "real-entrypoint-effect",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-runtime-start.json",
+      "sha256": "51dab04da6f5c1acc74ccd0d4e0ecae96063c90db05bb139b45f978b9ff8ca0c"
+    },
+    {
+      "check_id": "registered-preflight",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-preflight.json",
+      "sha256": "1644ba1d570b0509ab913d44253dfd93a0dd3a5b04c8ed2175f285af6ec35559"
+    },
+    {
+      "check_id": "runtime-capability-probe",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-runtime-start.json",
+      "sha256": "51dab04da6f5c1acc74ccd0d4e0ecae96063c90db05bb139b45f978b9ff8ca0c"
+    },
+    {
+      "check_id": "target-platform-effect",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-runtime-start.json",
+      "sha256": "51dab04da6f5c1acc74ccd0d4e0ecae96063c90db05bb139b45f978b9ff8ca0c"
+    },
+    {
+      "check_id": "unicode-path-fixtures",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-tests.log",
+      "sha256": "cf2ad99d897483b47989acd2aa2924b04c2747cb3d72cf4d1bb29a3ed05e7a87"
+    }
+  ],
+  "load_receipt_internal_sha256": "552d3a77727ffc007383f894d8efbeadbb35e6d0f11a62e18752390887ad751f",
+  "load_receipt_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-load.json",
+  "load_receipt_sha256": "0b1d8a3c14e999329491760116e1d2ca1f7ead047abd5ebbf838ff601ebcd8f0",
+  "packet_file_sha256": "5c558ff9a8a77e473dbb25341acb9c455b85beee49c310d6953a700880d879e1",
+  "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-packet.json",
+  "packet_sha256": "6db6e90d2b2b7116e1134fee4a9ee5bd3a9e4d2b678bfad2b612ea22dafcacf8",
+  "passed_check_ids": [
+    "bounded-cycle-work",
+    "cross-entrypoint-contract",
+    "entrypoint-inventory",
+    "evidence-roundtrip",
+    "exact-candidate-release",
+    "fail-closed-completion",
+    "legacy-fixture-matrix",
+    "migration-idempotence",
+    "promotion-boundary-review",
+    "real-entrypoint-effect",
+    "registered-preflight",
+    "runtime-capability-probe",
+    "target-platform-effect",
+    "unicode-path-fixtures"
+  ],
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-preflight.json",
+  "preflight_sha256": "1644ba1d570b0509ab913d44253dfd93a0dd3a5b04c8ed2175f285af6ec35559",
+  "receipt_sha256": "d2f7620eff0a1d33a7f5bd0d955ef7c6485357c2bc26c9a993f210b4b9aad02f",
+  "receipt_type": "defect-prevention-verification",
+  "required_check_ids": [
+    "evidence-roundtrip",
+    "fail-closed-completion",
+    "registered-preflight"
+  ],
+  "results_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\docs\\rehearsals\\summary-v2-parent-v6-results.json",
+  "results_sha256": "a464e73ee188ef583dd732be4ab82def083a9e375fe4933706ea1d8459b63a1a",
+  "schema_version": 1,
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main",
+  "verified_at": "2026-08-19T13:44:53.401418+00:00"
+}

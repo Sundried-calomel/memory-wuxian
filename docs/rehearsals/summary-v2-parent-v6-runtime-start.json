@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "status": "started",
+  "recorded_at": "2026-08-19T22:42:00+09:00",
+  "revision": "summary-v2-parent-map-reduce-v6",
+  "commit": "6d6237d",
+  "branch": "codex/summary-v2-progressive-hierarchy",
+  "runner_pid": 20804,
+  "current_summary_id": "L2-000002",
+  "attempt_status": "in-progress",
+  "attempts": 1,
+  "completed_maps": 0,
+  "completed_reductions": 0,
+  "codex_child_pid": 20004,
+  "runner_started_at": "2026-08-19T22:41:11+09:00",
+  "codex_child_started_at": "2026-08-19T22:41:18+09:00",
+  "runner_lock_present": true,
+  "pre_v6_plan_snapshot": {
+    "completed": 452,
+    "failed": 0,
+    "quarantined": 43,
+    "remaining_ready": 0,
+    "remaining_waiting": 5,
+    "level_2_quarantined": 37
+  },
+  "v6_live_counts": {
+    "completed": 0,
+    "content_failed_terminal": 0,
+    "infra_blocked": 0,
+    "in_progress": 1,
+    "not_started": 36
+  },
+  "immutability_scope": [
+    "raw archive",
+    "Summary V1",
+    "existing successful Summary V2"
+  ],
+  "note": "The real rescue-parent entrypoint admitted the first old-v5 terminal node exactly once under v6 and launched one read-only Codex model subprocess. The batch cap is three; subsequent nodes remain serial inside this batch."
+}

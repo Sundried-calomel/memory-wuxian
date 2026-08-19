@@ -1,0 +1,21 @@
+6d6237d (HEAD -> codex/summary-v2-progressive-hierarchy) Fix hierarchical Summary V2 parent rescue
+ .../summary-v2-parent-v6-architecture.log          |   1 +
+ docs/rehearsals/summary-v2-parent-v6-brief.md      |  41 ++
+ .../summary-v2-parent-v6-completion.json           |  19 +
+ .../summary-v2-parent-v6-environment-recheck.log   |  21 +
+ .../rehearsals/summary-v2-parent-v6-full-tests.log | 214 ++++++
+ docs/rehearsals/summary-v2-parent-v6-load.json     |  17 +
+ docs/rehearsals/summary-v2-parent-v6-packet.json   | 729 +++++++++++++++++++++
+ .../rehearsals/summary-v2-parent-v6-preflight.json |  49 ++
+ docs/rehearsals/summary-v2-parent-v6-task.json     |  55 ++
+ docs/rehearsals/summary-v2-parent-v6-tests.log     |   5 +
+ .../memory-wuxian-defect-workbook.md               |  29 +
+ prompts/summarize-v2-parent-rescue-reduce.md       |   6 +-
+ references/summary-v2.md                           |  10 +
+ scripts/memory_summary_v2.py                       |  34 +
+ scripts/summary_v2_backfill.py                     | 201 +++++-
+ scripts/summary_v2_worker.py                       |  17 +-
+ tests/test_memory_summary_v2.py                    | 150 +++++
+ tests/test_summary_v2_backfill.py                  |   6 +
+ 18 files changed, 1588 insertions(+), 16 deletions(-)
+6d6237db5552a5069f5579ea06268ef730123ef5	refs/heads/codex/summary-v2-progressive-hierarchy
