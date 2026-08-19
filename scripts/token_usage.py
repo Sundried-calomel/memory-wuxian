@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-import os
 import re
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Sequence
+
+from platform_atomic import atomic_replace_bytes
 
 
 FORMAT_VERSION = 2
@@ -94,22 +94,10 @@ def load_token_usage(path: Path) -> Optional[Dict[str, Any]]:
 
 
 def atomic_write_json(path: Path, value: Dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        dir=path.parent,
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
-            json.dump(value, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    payload = (
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    atomic_replace_bytes(path, payload)
 
 
 def new_ledger(session_id: str, source_path: Path) -> Dict[str, Any]:

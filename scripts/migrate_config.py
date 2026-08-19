@@ -6,12 +6,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from platform_atomic import atomic_replace_bytes
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -32,16 +32,7 @@ def merge_missing(current: dict[str, Any], defaults: dict[str, Any], prefix: str
 
 
 def atomic_write(path: Path, payload: bytes) -> None:
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    atomic_replace_bytes(path, payload, create_parent=False)
 
 
 def migrate_config(current_path: Path, defaults_path: Path, *, apply: bool) -> dict[str, Any]:

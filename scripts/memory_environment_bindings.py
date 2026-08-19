@@ -8,7 +8,6 @@ import json
 import os
 import re
 import sys
-import tempfile
 import uuid
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, List, Mapping, Optional
@@ -19,6 +18,7 @@ from memory_environment import (
     canonical_bytes as _canonical_bytes,
     sha256_bytes as _sha256_bytes,
 )
+from platform_atomic import ParentSync, atomic_replace_bytes, sync_directory
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
 
@@ -51,40 +51,14 @@ def _record_hash(value: Mapping[str, Any]) -> str:
 
 
 def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY
-    if hasattr(os, "O_DIRECTORY"):
-        flags |= os.O_DIRECTORY
-    try:
-        descriptor = os.open(path, flags)
-    except OSError:
-        return
-    try:
-        os.fsync(descriptor)
-    except OSError:
-        pass
-    finally:
-        os.close(descriptor)
+    sync_directory(path, policy=ParentSync.BEST_EFFORT)
 
 
 def _atomic_write_json(path: Path, value: Any) -> None:
     payload = (
         json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
     ).encode("utf-8")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        _fsync_directory(path.parent)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
+    atomic_replace_bytes(path, payload, parent_sync=ParentSync.BEST_EFFORT)
 
 
 def _read_json(path: Path) -> Any:

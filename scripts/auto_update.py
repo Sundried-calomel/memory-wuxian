@@ -19,6 +19,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+from platform_atomic import atomic_replace_bytes
 from platform_process import no_window_kwargs
 from memory_update_governance import apply_delta_bundle, load_signed_metadata, select_release, stage_update
 
@@ -58,18 +59,10 @@ def asset_names(version: str, system: str) -> tuple[str, str]:
 
 
 def atomic_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    payload_bytes = (
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    atomic_replace_bytes(path, payload_bytes)
 
 
 def fetch_json(url: str) -> dict[str, Any]:

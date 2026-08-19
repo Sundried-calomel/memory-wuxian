@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from platform_atomic import atomic_replace_bytes
 from platform_process import no_window_kwargs
 
 PROTOCOL_VERSION = 2
@@ -87,17 +88,7 @@ def read_jsonl(path: Path) -> List[Dict[str, Any]]:
 
 
 def atomic_write_bytes(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    atomic_replace_bytes(path, payload)
 
 
 def atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:

@@ -27,6 +27,7 @@ from memory_environment import (
     canonical_bytes as _canonical,
     sha256_bytes as _sha256,
 )
+from platform_atomic import ParentSync, atomic_replace_bytes, sync_directory
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
 
@@ -108,42 +109,14 @@ def skill_package_contract_bytes(manifest: Mapping[str, Any]) -> bytes:
 
 
 def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY
-    if hasattr(os, "O_DIRECTORY"):
-        flags |= os.O_DIRECTORY
-    try:
-        descriptor = os.open(path, flags)
-    except OSError:
-        return
-    try:
-        os.fsync(descriptor)
-    except OSError:
-        pass
-    finally:
-        os.close(descriptor)
+    sync_directory(path, policy=ParentSync.BEST_EFFORT)
 
 
 def _atomic_json(path: Path, value: Dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(
-                json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode(
-                    "utf-8"
-                )
-                + b"\n"
-            )
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        _fsync_directory(path.parent)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
+    payload = (
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    atomic_replace_bytes(path, payload, parent_sync=ParentSync.BEST_EFFORT)
 
 
 def _string(value: Any, label: str) -> str:

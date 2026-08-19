@@ -8,15 +8,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
-import tempfile
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
+from platform_atomic import atomic_replace_bytes
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
 
@@ -70,19 +69,7 @@ def revision_id_for(revision: Dict[str, Any]) -> str:
 
 
 def atomic_write_bytes(path: Path, value: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(
-        prefix=f".{path.name}.", dir=str(path.parent)
-    )
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(value)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    atomic_replace_bytes(path, value)
 
 
 def atomic_write_json(path: Path, value: Any) -> None:

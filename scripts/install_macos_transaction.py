@@ -28,6 +28,12 @@ import yaml
 try:
     from install_maintenance_supervisor import retire_legacy_macos_semantic_backfill
     from migrate_config import migrate_config
+    from platform_atomic import (
+        ParentSync,
+        atomic_replace_bytes,
+        durable_replace as platform_durable_replace,
+        sync_directory,
+    )
     from platform_runtime import executable_entry_path
     from collector_lifecycle import (
         create_installed_effect_probe,
@@ -39,6 +45,12 @@ try:
 except ModuleNotFoundError:
     from scripts.install_maintenance_supervisor import retire_legacy_macos_semantic_backfill
     from scripts.migrate_config import migrate_config
+    from scripts.platform_atomic import (
+        ParentSync,
+        atomic_replace_bytes,
+        durable_replace as platform_durable_replace,
+        sync_directory,
+    )
     from scripts.platform_runtime import executable_entry_path
     from scripts.collector_lifecycle import (
         create_installed_effect_probe,
@@ -81,45 +93,19 @@ def exact_macos_root(value: str, label: str, *, must_exist: bool = True) -> Path
 
 
 def atomic_bytes(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        try:
-            directory = os.open(path.parent, os.O_RDONLY)
-        except (AttributeError, OSError):
-            directory = None
-        if directory is not None:
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    atomic_replace_bytes(path, payload, parent_sync=ParentSync.REQUIRED)
 
 
 def fsync_directory(path: Path) -> None:
-    if os.name == "nt":  # Portable contract tests run on Windows; install is macOS-only.
-        return
-    descriptor = os.open(path, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    sync_directory(path, policy=ParentSync.REQUIRED)
 
 
 def durable_replace(source: Path, destination: Path) -> None:
-    source_parent = Path(source).parent
-    destination_parent = Path(destination).parent
-    os.replace(source, destination)
-    fsync_directory(destination_parent)
-    if source_parent != destination_parent:
-        fsync_directory(source_parent)
+    platform_durable_replace(
+        source,
+        destination,
+        parent_sync=ParentSync.REQUIRED,
+    )
 
 
 def event(timestamp: str, payload: dict[str, Any]) -> str:

@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from memory_environment import EnvironmentRegistry
+from platform_atomic import ParentSync, atomic_replace_bytes, sync_directory
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
 
@@ -39,47 +40,16 @@ def _atomic_json(path: Path, value: Dict[str, Any]) -> None:
     payload = (
         json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
     ).encode("utf-8")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        _fsync_directory(path.parent)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
+    atomic_replace_bytes(path, payload, parent_sync=ParentSync.BEST_EFFORT)
 
 
 def _atomic_bytes(path: Path, value: bytes, mode: int = 0o600) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    atomic_replace_bytes(
+        path,
+        value,
+        mode=mode,
+        parent_sync=ParentSync.BEST_EFFORT,
     )
-    temporary = Path(temporary_name)
-    try:
-        if hasattr(os, "fchmod"):
-            os.fchmod(descriptor, mode)
-        handle = os.fdopen(descriptor, "wb")
-        descriptor = -1
-        with handle:
-            handle.write(value)
-            handle.flush()
-            os.fsync(handle.fileno())
-        if not hasattr(os, "fchmod"):
-            os.chmod(temporary, mode)
-        os.replace(temporary, path)
-        _fsync_directory(path.parent)
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-        if temporary.exists():
-            temporary.unlink()
 
 
 def _canonical_json(value: Dict[str, Any]) -> bytes:
@@ -89,20 +59,7 @@ def _canonical_json(value: Dict[str, Any]) -> bytes:
 
 
 def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY
-    if hasattr(os, "O_DIRECTORY"):
-        flags |= os.O_DIRECTORY
-    try:
-        descriptor = os.open(path, flags)
-    except OSError:
-        return
-    try:
-        os.fsync(descriptor)
-    except OSError:
-        # Directory fsync is unavailable on some Windows filesystems.
-        pass
-    finally:
-        os.close(descriptor)
+    sync_directory(path, policy=ParentSync.BEST_EFFORT)
 
 
 class RuleInstallationError(RuntimeError):
