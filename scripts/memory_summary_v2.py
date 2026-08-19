@@ -753,6 +753,40 @@ def normalize_model_candidate(candidate: Any, source: dict[str, Any]) -> Any:
                     }
                 )
                 missing_scene_refs.difference_update(batch)
+    if source["source_kind"] == SOURCE_PARENT_RESCUE_MAPS:
+        atoms = normalized.setdefault("atoms", [])
+        for index, promoted in enumerate(source["promotion_manifest"], 1):
+            matching = next(
+                (
+                    atom
+                    for atom in atoms
+                    if isinstance(atom, dict)
+                    and atom.get("atom_type") == promoted["atom_type"]
+                    and atom.get("statement") == promoted["statement"]
+                    and atom.get("epistemic_status") == promoted["epistemic_status"]
+                    and atom.get("scope") == promoted["scope"]
+                ),
+                None,
+            )
+            if matching is not None:
+                matching["source_refs"] = refs(
+                    [*matching.get("source_refs", []), promoted["child_summary_id"]]
+                )
+                continue
+            local_id = f"promoted_state_{index}"
+            while local_id in used_ids:
+                local_id = "mw_" + local_id
+            used_ids.add(local_id)
+            atoms.append(
+                {
+                    "local_id": local_id,
+                    "atom_type": promoted["atom_type"],
+                    "statement": promoted["statement"],
+                    "epistemic_status": promoted["epistemic_status"],
+                    "scope": promoted["scope"],
+                    "source_refs": [promoted["child_summary_id"]],
+                }
+            )
     content_refs = {
         source_ref
         for group in ("overview", "scenes", "atoms", "retrieval_anchors")

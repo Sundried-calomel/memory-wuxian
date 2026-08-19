@@ -279,15 +279,21 @@ class SummaryV2BackfillTest(unittest.TestCase):
             "revision": "fixture-v1",
             "summary_id": "L1-fixture",
             "maps": {"map-001": {"source_sha256": "one"}},
+            "reductions": {"stage-001-map-001": {"source_sha256": "reduce-one"}},
         }
         _write_rescue_state(path, base)
         stale = {
             "revision": "fixture-v1",
             "summary_id": "L1-fixture",
             "maps": {"map-002": {"source_sha256": "two"}},
+            "reductions": {"stage-001-map-002": {"source_sha256": "reduce-two"}},
         }
         _write_rescue_state(path, stale)
         self.assertEqual({"map-001", "map-002"}, set(stale["maps"]))
+        self.assertEqual(
+            {"stage-001-map-001", "stage-001-map-002"},
+            set(stale["reductions"]),
+        )
 
     def test_failed_rescue_revision_schedules_zero_followup_work(self):
         before = {

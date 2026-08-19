@@ -1,0 +1,21 @@
+..warning: in the working copy of 'docs/retrospectives/memory-wuxian-defect-workbook.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'prompts/summarize-v2-parent-rescue-reduce.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'references/summary-v2.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/memory_summary_v2.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/summary_v2_backfill.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/summary_v2_worker.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_memory_summary_v2.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_summary_v2_backfill.py', LF will be replaced by CRLF the next time Git touches it
+.warning: in the working copy of 'docs/retrospectives/memory-wuxian-defect-workbook.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'prompts/summarize-v2-parent-rescue-reduce.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'references/summary-v2.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/memory_summary_v2.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/summary_v2_backfill.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/summary_v2_worker.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_memory_summary_v2.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_summary_v2_backfill.py', LF will be replaced by CRLF the next time Git touches it
+.
+----------------------------------------------------------------------
+Ran 4 tests in 6.811s
+
+OK

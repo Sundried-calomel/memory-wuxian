@@ -393,6 +393,35 @@
   V1 和既有成功 Summary V2 哈希不变。
 - Families: `MW-R08`, `MW-R11`, `G02`, `G08`, `G11`.
 
+### MW-SUM-029：parent Rescue 只有 map 分段，没有有界 reduce 树，且最终模型可漏掉晋升事实
+
+- 证据：`本机已核验`。`summary-v2-parent-map-reduce-v5` 对 37 个 eligible parent
+  各执行一次后全部终止：26 个在合并所有 map sidecar 后触发
+  `parent rescue reduce prompt exceeds staged limit`，另外 11 个通过 prompt 大小门后因
+  `parent candidate lost promoted durable state` 被 projector 拒绝。抽查 `L2-000005`
+  显示正式 source 与两个 map sidecar 均保留 108 个 promotion，最终 rejected candidate
+  只输出 31 个，说明丢失发生在最终模型归并而不是 map 持久化。
+- 根因：parent runner 只把 direct children 分成 map 组，却一次性把全部 map 交给最终
+  reduce，没有像 L1 Rescue 那样建立递归有界的 reduce 层。与此同时，worker 为紧凑
+  parent-rescue prompt 要求模型精确复制正式 promotion ledger，但紧凑 payload 并未提供该
+  ledger，normalizer 又只对 L1 Rescue 恢复原子；projector 的严格检查因此只能在末端发现
+  模型省略，不能确定性修复已有证据。更根本的问题是把正式 durable state 的完整性错误地
+  交给概率模型，而不是交给本地 formal source owner。
+- 逃逸边界：既有 parent 测试只覆盖少量 map 的单层成功路径；prompt 大小测试没有覆盖
+  多级 fan-in，晋升测试只验证 projector 会拒绝缺失，没有验证 Rescue normalizer 从 formal
+  source 原样恢复。中间 reduce 成功后、state 写入前的崩溃窗口也没有续传测试。
+- 永久门槛：parent Rescue 必须在每一层按 UTF-8 bytes 有界归并，保持原始 direct-child
+  顺序与精确分区。中间成功结果只有在 source、prompt、projection 与输入 projection 哈希
+  全部匹配时才可续传；失败诊断、未知状态、不可读 sidecar 或多重匹配一律失败关闭。
+  compact prompt 不得重复正式 promotion ledger；normalizer 必须直接从哈希绑定的 formal
+  source 将全部正式晋升原子原样注入并保留原 child route，之后仍由 projector 验证，不能
+  依赖模型精确复制。新机会只能提升 parent revision，同 revision 不重试。
+- 回归：八个 direct children 的四路 map 必须归并为两路且每个中间 prompt 低于限制；删除
+  state 后只能从 prompt/source/projection/input 哈希精确绑定的成功产物恢复，模型调用为零；
+  删除候选中的正式 promotion 后 normalization 必须恢复且 projector 通过；并继续验证
+  raw、Summary V1、已有成功 Summary V2 哈希不变、同 revision 零重试和新 revision 准入。
+- Families: `MW-R05`, `MW-R08`, `MW-R10`, `MW-R11`, `G02`, `G08`, `G11`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。

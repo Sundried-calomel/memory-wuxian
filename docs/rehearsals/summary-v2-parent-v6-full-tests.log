@@ -1,0 +1,214 @@
+.............................................................................sssssssssss..............----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 7267)
+Traceback (most recent call last):
+  File "C:\Users\56453\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\56453\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\56453\AppData\Local\Programs\Python\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\56453\Documents\ChatGPT\memory����\candidate-memory-wuxian-main\scripts\memory_dashboard.py", line 1749, in handle
+    super().handle()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\56453\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 502, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\56453\AppData\Local\Programs\Python\Python314\Lib\http\server.py", line 468, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\56453\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] ��������е�������ֹ��һ���ѽ��������ӡ�
+----------------------------------------
+{
+  "checked_at_epoch": 1787146351,
+  "installed_version": "1.2.1",
+  "latest_version": "1.3.0-beta.1",
+  "channel": "beta",
+  "package": "C:\\Users\\56453\\AppData\\Local\\Temp\\tmpuepw3yo7\\downloads\\1.3.0-beta.1\\candidate.exe",
+  "sha256": "1d8d3b8f9cebbf1acdb571c48b2f51408d5eee15e4ed7002085c286d1eab91d7",
+  "status": "staged-awaiting-user-approval",
+  "artifact_kind": "full",
+  "attempts": [
+    {
+      "kind": "delta",
+      "status": "failed",
+      "reason": "delta bundle is not valid UTF-8 JSON"
+    },
+    {
+      "kind": "full",
+      "status": "verified"
+    }
+  ],
+  "install_approved": false
+}
+{
+  "status": "failed",
+  "checked_at_epoch": 1787146351,
+  "error": "staged update bytes no longer match approval"
+}
+{
+  "checked_at_epoch": 1787146351,
+  "installed_version": "1.2.1",
+  "latest_version": "1.2.1",
+  "status": "up-to-date"
+}
+{
+  "status": "failed",
+  "checked_at_epoch": 1787146351,
+  "error": "GitHub latest release is not a stable published release"
+}
+{
+  "status": "failed",
+  "checked_at_epoch": 1787146351,
+  "error": "network or signature failure",
+  "staged_approval_preserved": true
+}
+{
+  "checked_at_epoch": 1787146351,
+  "last_check_failure": {
+    "checked_at_epoch": 1787146351,
+    "error": "network or signature failure",
+    "status": "failed"
+  },
+  "latest_version": "1.3.0",
+  "package": "C:\\Users\\56453\\AppData\\Local\\Temp\\tmpvzck9g3y\\candidate.exe",
+  "sha256": "dc6de0ea4bf4203381496744d8bb3acc341f601dc7a70cdbaec50af9e4b78aec",
+  "status": "staged-for-next-login",
+  "install_approved": true,
+  "approved_at_epoch": 1787146351
+}
+{
+  "checked_at_epoch": 1787146352,
+  "installed_version": "1.2.1",
+  "latest_version": "1.3.0",
+  "status": "staged-awaiting-user-approval",
+  "package": "C:\\Users\\56453\\AppData\\Local\\Temp\\tmpujj8zaif\\downloads\\1.3.0\\MemoryWuxian-1.3.0-Windows-x64-Setup.exe",
+  "sha256": "2b561511c0ef48d741f65886a734aabb3c0858a234c4c857ea6420e0e9861c9f",
+  "install_approved": false
+}
+{
+  "checked_at_epoch": 1787146352,
+  "install_approved": true,
+  "installed_version": "1.2.1",
+  "latest_version": "1.3.0",
+  "package": "C:\\Users\\56453\\AppData\\Local\\Temp\\tmpujj8zaif\\downloads\\1.3.0\\MemoryWuxian-1.3.0-Windows-x64-Setup.exe",
+  "sha256": "2b561511c0ef48d741f65886a734aabb3c0858a234c4c857ea6420e0e9861c9f",
+  "status": "staged-for-next-login",
+  "approved_at_epoch": 1787146352
+}
+{
+  "checked_at_epoch": 1787146352,
+  "installed_version": "1.2.1",
+  "latest_version": "1.3.0",
+  "status": "staged-awaiting-user-approval",
+  "package": "C:\\Users\\56453\\AppData\\Local\\Temp\\tmp55ct3cvz\\downloads\\1.3.0\\MemoryWuxian-1.3.0-Windows-x64-Setup.exe",
+  "sha256": "2b561511c0ef48d741f65886a734aabb3c0858a234c4c857ea6420e0e9861c9f",
+  "install_approved": false
+}
+C:\Users\56453\AppData\Local\Temp\tmpm8p_pyt5\User Home\Library\LaunchAgents\com.openai.codex.memory-wuxian-cloud-sync.plist
+C:\Users\56453\AppData\Local\Temp\tmpm8p_pyt5\User Home\Library\LaunchAgents\com.openai.codex.memory-wuxian-cloud-sync.plist
+C:\Users\56453\AppData\Local\Temp\tmpm8p_pyt5\User Home\Library\LaunchAgents\com.openai.codex.memory-wuxian-cloud-sync.plist
+C:\Users\56453\AppData\Local\Temp\tmp3ow1oruq\User Home\Library\LaunchAgents\com.openai.codex.memory-wuxian-cloud-sync.plist
+{"task": "MemoryWuxianCloudSync", "wrapper": "C:\\Users\\56453\\AppData\\Local\\Temp\\tmp1gb_j7l4\\User Home\\Documents\\Memory\u7121\u9650 Archive\\federation\\run-cloud-sync.ps1"}
+{"task": "MemoryWuxianCloudSync"}
+{"task": "MemoryWuxianCloudSync"}
+{"task": "MemoryWuxianCloudSync", "wrapper": "C:\\Users\\56453\\AppData\\Local\\Temp\\tmpa63xo9yq\\User Home\\Documents\\Memory\u7121\u9650 Archive\\federation\\run-cloud-sync.ps1"}
+{"status": "serving", "url": "http://127.0.0.1:8765/"}
+..................................................................................................................................................................................................................................................................s...........................s................................................................................................................................................s...........................FFfatal: detected dubious ownership in repository at 'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main'
+'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main' is owned by:
+	����һ�Ļ���/CodexSandboxOnline (S-1-5-21-4264115984-4109001030-2440231340-1004)
+but the current user is:
+	����һ�Ļ���/56453 (S-1-5-21-4264115984-4109001030-2440231340-1001)
+To add an exception for this directory, call:
+
+	git config --global --add safe.directory 'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main'
+Efatal: detected dubious ownership in repository at 'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main'
+'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main' is owned by:
+	����һ�Ļ���/CodexSandboxOnline (S-1-5-21-4264115984-4109001030-2440231340-1004)
+but the current user is:
+	����һ�Ļ���/56453 (S-1-5-21-4264115984-4109001030-2440231340-1001)
+To add an exception for this directory, call:
+
+	git config --global --add safe.directory 'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main'
+E.....................................................................................................................................
+======================================================================
+ERROR: test_required_signature_skip_is_rejected (test_rehearsal_evidence_reuse.RehearsalEvidenceReuseTests.test_required_signature_skip_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\56453\Documents\ChatGPT\memory无限\candidate-memory-wuxian-main\tests\test_rehearsal_evidence_reuse.py", line 126, in test_required_signature_skip_is_rejected
+    f"SOURCE_CONTENT_SHA256={source_identity()[2]}\n"
+                             ~~~~~~~~~~~~~~~^^
+  File "C:\Users\56453\Documents\ChatGPT\memory无限\candidate-memory-wuxian-main\scripts\run_release_rehearsal.py", line 45, in source_identity
+    revision = subprocess.check_output(
+               ~~~~~~~~~~~~~~~~~~~~~~~^
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, encoding="utf-8"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).strip()
+    ^
+  File "C:\Users\56453\AppData\Local\Programs\Python\Python314\Lib\subprocess.py", line 473, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               **kwargs).stdout
+               ^^^^^^^^^
+  File "C:\Users\56453\AppData\Local\Programs\Python\Python314\Lib\subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['git', 'rev-parse', 'HEAD']' returned non-zero exit status 128.
+
+======================================================================
+ERROR: test_reuses_full_suite_evidence_for_focused_unittest_contracts (test_rehearsal_evidence_reuse.RehearsalEvidenceReuseTests.test_reuses_full_suite_evidence_for_focused_unittest_contracts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\56453\Documents\ChatGPT\memory无限\candidate-memory-wuxian-main\tests\test_rehearsal_evidence_reuse.py", line 23, in test_reuses_full_suite_evidence_for_focused_unittest_contracts
+    f"SOURCE_CONTENT_SHA256={source_identity()[2]}\n"
+                             ~~~~~~~~~~~~~~~^^
+  File "C:\Users\56453\Documents\ChatGPT\memory无限\candidate-memory-wuxian-main\scripts\run_release_rehearsal.py", line 45, in source_identity
+    revision = subprocess.check_output(
+               ~~~~~~~~~~~~~~~~~~~~~~~^
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, encoding="utf-8"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).strip()
+    ^
+  File "C:\Users\56453\AppData\Local\Programs\Python\Python314\Lib\subprocess.py", line 473, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               **kwargs).stdout
+               ^^^^^^^^^
+  File "C:\Users\56453\AppData\Local\Programs\Python\Python314\Lib\subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['git', 'rev-parse', 'HEAD']' returned non-zero exit status 128.
+
+======================================================================
+FAIL: test_failed_unittest_evidence_is_rejected (test_rehearsal_evidence_reuse.RehearsalEvidenceReuseTests.test_failed_unittest_evidence_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\56453\Documents\ChatGPT\memory无限\candidate-memory-wuxian-main\tests\test_rehearsal_evidence_reuse.py", line 116, in test_failed_unittest_evidence_is_rejected
+    self.assertIn(
+    ~~~~~~~~~~~~~^
+        "Reusable unittest evidence has no final OK result",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        completed.stderr,
+        ^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: 'Reusable unittest evidence has no final OK result' not found in 'fatal: detected dubious ownership in repository at \'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main\'\n\'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main\' is owned by:\n\t����һ�Ļ���/CodexSandboxOnline (S-1-5-21-4264115984-4109001030-2440231340-1004)\nbut the current user is:\n\t����һ�Ļ���/56453 (S-1-5-21-4264115984-4109001030-2440231340-1001)\nTo add an exception for this directory, call:\n\n\tgit config --global --add safe.directory \'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main\'\nTraceback (most recent call last):\n  File "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\scripts\\run_release_rehearsal.py", line 848, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\scripts\\run_release_rehearsal.py", line 137, in main\n    initial_revision, initial_source_clean, initial_source_content_sha256 = source_identity()\n                                                                            ~~~~~~~~~~~~~~~^^\n  File "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\scripts\\run_release_rehearsal.py", line 45, in source_identity\n    revision = subprocess.check_output(\n               ~~~~~~~~~~~~~~~~~~~~~~~^\n        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, encoding="utf-8"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ).strip()\n    ^\n  File "C:\\Users\\56453\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\subprocess.py", line 473, in check_output\n    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,\n           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n               **kwargs).stdout\n               ^^^^^^^^^\n  File "C:\\Users\\56453\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\subprocess.py", line 578, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command \'[\'git\', \'rev-parse\', \'HEAD\']\' returned non-zero exit status 128.\n'
+
+======================================================================
+FAIL: test_missing_reused_evidence_fails_closed (test_rehearsal_evidence_reuse.RehearsalEvidenceReuseTests.test_missing_reused_evidence_fails_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\56453\Documents\ChatGPT\memory无限\candidate-memory-wuxian-main\tests\test_rehearsal_evidence_reuse.py", line 88, in test_missing_reused_evidence_fails_closed
+    self.assertIn("Reusable unittest evidence is missing", completed.stderr)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'Reusable unittest evidence is missing' not found in 'fatal: detected dubious ownership in repository at \'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main\'\n\'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main\' is owned by:\n\t����һ�Ļ���/CodexSandboxOnline (S-1-5-21-4264115984-4109001030-2440231340-1004)\nbut the current user is:\n\t����һ�Ļ���/56453 (S-1-5-21-4264115984-4109001030-2440231340-1001)\nTo add an exception for this directory, call:\n\n\tgit config --global --add safe.directory \'C:/Users/56453/Documents/ChatGPT/memory无限/candidate-memory-wuxian-main\'\nTraceback (most recent call last):\n  File "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\scripts\\run_release_rehearsal.py", line 848, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\scripts\\run_release_rehearsal.py", line 137, in main\n    initial_revision, initial_source_clean, initial_source_content_sha256 = source_identity()\n                                                                            ~~~~~~~~~~~~~~~^^\n  File "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main\\scripts\\run_release_rehearsal.py", line 45, in source_identity\n    revision = subprocess.check_output(\n               ~~~~~~~~~~~~~~~~~~~~~~~^\n        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, encoding="utf-8"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ).strip()\n    ^\n  File "C:\\Users\\56453\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\subprocess.py", line 473, in check_output\n    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,\n           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n               **kwargs).stdout\n               ^^^^^^^^^\n  File "C:\\Users\\56453\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\subprocess.py", line 578, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command \'[\'git\', \'rev-parse\', \'HEAD\']\' returned non-zero exit status 128.\n'
+
+----------------------------------------------------------------------
+Ran 698 tests in 338.606s
+
+FAILED (failures=2, errors=2, skipped=14)

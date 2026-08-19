@@ -114,6 +114,16 @@ omissions, and bounded coverage counts. Raw message manifests and message-ID
 catalogs remain in the full validated sidecars and are verified locally, not
 sent in the compact model payload. Grouping is bounded by UTF-8 prompt bytes.
 
+Parent rescue reduction is hierarchical when the combined map prompt would
+exceed the staged byte limit. Each intermediate reduction covers one exact,
+ordered partition of the original direct children; its successful bundle is
+bound to the source hash, prompt hash, projection hash, and input projection
+hashes before it can resume after interruption. A failed or mismatched stage
+is terminal for that revision. The compact parent prompt does not duplicate the
+formal promotion ledger. Normalization deterministically injects every formal
+promoted durable atom from the hash-bound source with its original child-summary
+route before validation, so semantic completeness does not depend on model copy.
+
 The worker persists one structured diagnostic receipt per invocation with
 revision, stage, source/prompt hashes, byte counts, elapsed time, return code,
 exception type, stdout/stderr hashes and bounded head/tail projections, and

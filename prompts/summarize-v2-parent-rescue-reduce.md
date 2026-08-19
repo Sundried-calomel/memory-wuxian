@@ -13,9 +13,9 @@ temporary map IDs. Use no information outside the payload.
 - Copy `job_id`, `summary_level`, and `source_sha256` exactly.
 - Cite only declared direct child summary IDs. Never output a temporary map ID.
 - Create chronological navigation scenes that cover every direct child ID.
-- Carry every formal `source_manifest.promotion_manifest` entry into atoms
-  verbatim for type, statement, status, and scope, citing its original direct
-  child summary ID.
+- Summarize navigation and ordinary parent context from the validated maps.
+  The deterministic local projector injects every formal promoted durable atom
+  after model output; do not expand or paraphrase atoms merely for completeness.
 - Do not create retrieval anchors or omissions.
 - Preserve uncertainty, open questions, withdrawals, tasks, artifact routes,
   and explicit correction relations. Recency alone never supersedes state.

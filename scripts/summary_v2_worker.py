@@ -175,16 +175,17 @@ def build_prompt(source: dict[str, Any]) -> str:
         task["required_locators"] = []
         task["deterministic_locator_count"] = len(source["required_locators"])
         task["deterministic_locator_source_refs"] = required_locator_refs
+    source_manifest = (
+        {
+            "kind": public["source_manifest"]["kind"],
+            "validated_record_count": len(public["raw_message_manifest"]),
+        }
+        if rescue_source
+        else public["source_manifest"]
+    )
     payload = {
         "task": task,
-        "source_manifest": (
-            {
-                "kind": public["source_manifest"]["kind"],
-                "validated_record_count": len(public["raw_message_manifest"]),
-            }
-            if rescue_source
-            else public["source_manifest"]
-        ),
+        "source_manifest": source_manifest,
         "source_payload": source_payload,
     }
     return instructions + "\n\n" + json.dumps(

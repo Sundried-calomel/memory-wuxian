@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "task_id": "summary-v2-parent-v6-convergence",
+  "objective": "Repair unbounded parent reduce fan-in and preserve every hash-bound promoted durable atom across parent rescue stages before granting one new revision-bounded attempt.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\candidate-memory-wuxian-main",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian",
+  "owner_id": "memory-plane.summary-engine",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "json", "markdown"],
+  "path_globs": [
+    "scripts/memory_summary_v2.py",
+    "scripts/summary_v2_backfill.py",
+    "tests/test_memory_summary_v2.py",
+    "tests/test_summary_v2_backfill.py",
+    "references/summary-v2.md",
+    "docs/retrospectives/memory-wuxian-defect-workbook.md",
+    "docs/rehearsals/summary-v2-parent-v6-*"
+  ],
+  "entrypoints": ["explicit-opt-in-cli", "one-shot-model-worker", "heartbeat"],
+  "resources": ["raw-evidence", "summary-v1", "successful-summary-v2", "rescue-state", "model-call"],
+  "operations": ["summarize", "validate", "persist-derived", "resume", "report"],
+  "data_formats": ["utf-8-json", "utf-8-markdown"],
+  "authorization_boundaries": [
+    "Raw archive, Summary V1, and successful Summary V2 remain byte-immutable.",
+    "Every model prompt remains below the configured UTF-8 byte limit.",
+    "Every promoted durable atom remains traceable to its original child summary and raw messages.",
+    "Rejected candidates are evidence only and never become a new revision input.",
+    "Only successful hash-bound maps and intermediate reductions may resume within the same revision.",
+    "Each content node receives at most one formal attempt per revision.",
+    "Model concurrency remains at most three and parent nodes remain serial within one batch."
+  ],
+  "implementation_units": [
+    {
+      "id": "summary-v2-parent-v6-runtime",
+      "owner_id": "memory-plane.summary-engine",
+      "paths": ["scripts/memory_summary_v2.py", "scripts/summary_v2_backfill.py"],
+      "entrypoints": ["explicit-opt-in-cli", "one-shot-model-worker", "heartbeat"],
+      "resources": ["raw-evidence", "summary-v1", "successful-summary-v2", "rescue-state", "model-call"],
+      "operations": ["summarize", "validate", "persist-derived", "resume", "report"],
+      "planned_check_ids": ["bounded-reduce-fan-in", "promoted-state-roundtrip", "crash-resume", "real-entrypoint-effect"]
+    },
+    {
+      "id": "summary-v2-parent-v6-regressions",
+      "owner_id": "product-quality",
+      "paths": ["tests/test_memory_summary_v2.py", "tests/test_summary_v2_backfill.py", "references/summary-v2.md", "docs/retrospectives/memory-wuxian-defect-workbook.md", "docs/rehearsals/summary-v2-parent-v6-*"],
+      "entrypoints": ["test-harness", "governance"],
+      "resources": ["failure-corpus", "receipt", "hash"],
+      "operations": ["validate", "report"],
+      "planned_check_ids": ["same-revision-zero-call", "new-revision-readmission", "immutable-authority-hashes", "real-entrypoint-effect"]
+    }
+  ],
+  "rule_exclusions": []
+}

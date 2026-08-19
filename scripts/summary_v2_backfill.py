@@ -43,7 +43,7 @@ FAILURE_LIMIT = 1
 RUNNER_REVISION = "summary-v2-backfill-normalizer-v5"
 DIRECT_RESCUE_REVISION = "summary-v2-direct-rescue-v1"
 MAP_RESCUE_REVISION = "summary-v2-map-reduce-v5"
-PARENT_RESCUE_REVISION = "summary-v2-parent-map-reduce-v5"
+PARENT_RESCUE_REVISION = "summary-v2-parent-map-reduce-v6"
 MAP_PROMPT_TARGET = 240_000
 REDUCE_PROMPT_LIMIT = 900_000
 EXECUTION_CONTRACT_FORMAT = "memory-wuxian-summary-v2-execution-contract-v1"
@@ -163,6 +163,10 @@ def _write_rescue_state(path: Path, state: dict[str, Any]) -> dict[str, Any]:
             raise SummaryV2Error("rescue state identity changed before write")
         merged = {**disk, **state}
         merged["maps"] = {**disk.get("maps", {}), **state.get("maps", {})}
+        merged["reductions"] = {
+            **disk.get("reductions", {}),
+            **state.get("reductions", {}),
+        }
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_canonical_json(path, merged)
     state.clear()
@@ -353,6 +357,54 @@ def _recover_rescue_maps(
         }
 
 
+def _recover_completed_rescue_stage(
+    bundle_root: Path,
+    diagnostic_path: Path,
+    source: dict[str, Any],
+    invocation_context: dict[str, Any],
+) -> tuple[dict[str, Any], Path] | None:
+    if not diagnostic_path.exists():
+        return None
+    try:
+        diagnostic = json.loads(diagnostic_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise SummaryV2Error(
+            f"rescue stage diagnostic is unreadable: {diagnostic_path}"
+        ) from exc
+    expected = {
+        "job_id": source["job_id"],
+        "summary_level": source["summary_level"],
+        "source_sha256": source["source_sha256"],
+        "prompt_sha256": hashlib.sha256(
+            build_prompt(source).encode("utf-8")
+        ).hexdigest(),
+        **invocation_context,
+    }
+    if any(diagnostic.get(key) != value for key, value in expected.items()):
+        raise SummaryV2Error("rescue stage diagnostic binding drifted")
+    if diagnostic.get("status") == "failed":
+        raise SummaryV2Error("persisted rescue stage model call already failed")
+    if diagnostic.get("status") != "completed":
+        raise SummaryV2Error("rescue stage diagnostic has an unknown status")
+    projection_sha = diagnostic.get("projection_sha256")
+    if not isinstance(projection_sha, str):
+        raise SummaryV2Error("completed rescue stage diagnostic lost projection hash")
+    matches: list[tuple[dict[str, Any], Path]] = []
+    if bundle_root.exists():
+        for path in sorted(bundle_root.rglob("summary.json")):
+            sidecar = load_sidecar(path)
+            if (
+                sidecar["source"]["source_sha256"] == source["source_sha256"]
+                and sidecar["projection_sha256"] == projection_sha
+            ):
+                matches.append((sidecar, path.parent))
+    if len(matches) != 1:
+        raise SummaryV2Error(
+            "completed rescue stage does not resolve to exactly one bound bundle"
+        )
+    return matches[0]
+
+
 def _rescue_subjob(
     job: dict[str, Any],
     source_refs: list[str],
@@ -462,6 +514,127 @@ def _compact_l1_rescue_maps(
                     "bundle": result["bundle"],
                     "source_sha256": subformal["source_sha256"],
                     "projection_sha256": sidecar["projection_sha256"],
+                }
+                _write_rescue_state(state_path, state)
+            reduced.append(sidecar)
+        current = reduced
+        stage += 1
+    return current
+
+
+def _compact_parent_rescue_maps(
+    formal_source: dict[str, Any],
+    children: list[dict[str, Any]],
+    map_sidecars: list[dict[str, Any]],
+    state: dict[str, Any],
+    state_path: Path,
+    output_root: Path,
+    archive_root: Path,
+    config_path: Path,
+) -> list[dict[str, Any]]:
+    current = list(map_sidecars)
+    child_by_id = {child["summary_v2_id"]: child for child in children}
+    stage = 1
+    while (
+        len(build_prompt(build_parent_rescue_reduce_source(formal_source, current)).encode("utf-8"))
+        > REDUCE_PROMPT_LIMIT
+    ):
+        if len(current) < 3:
+            raise SummaryV2Error(
+                "two parent rescue maps still exceed the staged reduce prompt limit"
+            )
+        reduced: list[dict[str, Any]] = []
+        groups = [current[index : index + 2] for index in range(0, len(current), 2)]
+        artifact_root = _rescue_artifact_root(
+            output_root,
+            "parent",
+            PARENT_RESCUE_REVISION,
+            str(formal_source["parallel_summary_id"]),
+        )
+        reduction_root = artifact_root / "parent-reductions" / f"stage-{stage:03d}"
+        reductions = state.setdefault("reductions", {})
+        for index, group in enumerate(groups, 1):
+            if len(group) == 1:
+                reduced.append(group[0])
+                continue
+            source_refs = [
+                source_ref
+                for sidecar in group
+                for source_ref in sidecar["source"]["source_refs"]
+            ]
+            if len(source_refs) != len(set(source_refs)):
+                raise SummaryV2Error("parent reduction maps overlap direct child summaries")
+            try:
+                source_children = [child_by_id[source_ref] for source_ref in source_refs]
+            except KeyError as exc:
+                raise SummaryV2Error(
+                    f"parent reduction lost direct child source: {exc.args[0]}"
+                ) from exc
+            subformal = build_parent_source(
+                source_children,
+                parallel_summary_id=(
+                    f"{formal_source['parallel_summary_id']}-reduce-"
+                    f"{stage:03d}-{index:03d}"
+                ),
+            )
+            subformal["compact_parent_prompt"] = True
+            if subformal["source_refs"] != source_refs:
+                raise SummaryV2Error("parent reduction direct child order drifted")
+            reduce_source = build_parent_rescue_reduce_source(subformal, group)
+            prompt_size = len(build_prompt(reduce_source).encode("utf-8"))
+            if prompt_size > REDUCE_PROMPT_LIMIT:
+                raise SummaryV2Error(
+                    f"intermediate parent rescue prompt exceeds staged limit: {prompt_size} bytes"
+                )
+            key = f"stage-{stage:03d}-map-{index:03d}"
+            input_projections = [sidecar["projection_sha256"] for sidecar in group]
+            saved = reductions.get(key)
+            if saved:
+                sidecar = load_sidecar(Path(saved["bundle"]))
+                if (
+                    saved.get("source_sha256") != subformal["source_sha256"]
+                    or sidecar["source"]["source_sha256"] != subformal["source_sha256"]
+                    or sidecar["projection_sha256"] != saved.get("projection_sha256")
+                    or saved.get("input_projection_sha256") != input_projections
+                ):
+                    raise SummaryV2Error(f"saved parent rescue reduction drifted: {key}")
+            else:
+                diagnostic_path = artifact_root / "diagnostics" / f"{key}.json"
+                invocation_context = {
+                    "family": "parent",
+                    "revision": PARENT_RESCUE_REVISION,
+                    "summary_id": str(formal_source["parallel_summary_id"]),
+                    "stage": key,
+                }
+                recovered = _recover_completed_rescue_stage(
+                    reduction_root,
+                    diagnostic_path,
+                    reduce_source,
+                    invocation_context,
+                )
+                if recovered is None:
+                    result = run_source(
+                        reduce_source,
+                        reduction_root,
+                        archive_root,
+                        config_path=config_path,
+                        rejected_candidate_path=(
+                            artifact_root
+                            / "rejected-reduction-candidates"
+                            / f"{key}.json"
+                        ),
+                        diagnostic_path=diagnostic_path,
+                        invocation_context=invocation_context,
+                    )
+                    sidecar = load_sidecar(Path(result["bundle"]))
+                    bundle = Path(result["bundle"])
+                else:
+                    sidecar, bundle = recovered
+                reductions[key] = {
+                    "bundle": str(bundle),
+                    "source_sha256": subformal["source_sha256"],
+                    "projection_sha256": sidecar["projection_sha256"],
+                    "input_projection_sha256": input_projections,
                 }
                 _write_rescue_state(state_path, state)
             reduced.append(sidecar)
@@ -1492,22 +1665,30 @@ def run_parent_rescue(
                 groups = [children[index : index + 2] for index in range(0, len(children), 2)]
                 if len(groups[-1]) == 1:
                     groups[-2].extend(groups.pop())
-            map_sidecars: list[dict[str, Any]] = []
             artifact_root = _rescue_artifact_root(
                 output_root, "parent", PARENT_RESCUE_REVISION, summary_id
             )
             map_root = artifact_root / "maps"
+            map_sources: list[dict[str, Any]] = []
             for index, group in enumerate(groups, 1):
-                key = f"map-{index:03d}"
                 source = build_parent_source(
                     group,
                     parallel_summary_id=f"{summary_id}-map-{index:03d}",
                 )
                 source["compact_parent_prompt"] = True
+                map_sources.append(source)
+            _recover_rescue_maps(map_root, map_sources, state)
+            _write_rescue_state(state_path, state)
+            map_sidecars: list[dict[str, Any]] = []
+            for index, source in enumerate(map_sources, 1):
+                key = f"map-{index:03d}"
                 saved = state["maps"].get(key)
                 if saved:
                     sidecar = load_sidecar(Path(saved["bundle"]))
-                    if sidecar["source"]["source_sha256"] != source["source_sha256"]:
+                    if (
+                        sidecar["source"]["source_sha256"] != source["source_sha256"]
+                        or sidecar["projection_sha256"] != saved.get("projection_sha256")
+                    ):
                         raise SummaryV2Error(f"saved parent rescue map drifted: {key}")
                     map_sidecars.append(sidecar)
                     continue
@@ -1535,9 +1716,19 @@ def run_parent_rescue(
                 }
                 _write_rescue_state(state_path, state)
                 map_sidecars.append(sidecar)
+            map_sidecars = _compact_parent_rescue_maps(
+                formal_source,
+                children,
+                map_sidecars,
+                state,
+                state_path,
+                output_root,
+                archive_root,
+                config_path,
+            )
             rescue_source = build_parent_rescue_reduce_source(formal_source, map_sidecars)
             reduce_bytes = len(build_prompt(rescue_source).encode("utf-8"))
-            if reduce_bytes > 900_000:
+            if reduce_bytes > REDUCE_PROMPT_LIMIT:
                 raise SummaryV2Error(
                     f"parent rescue reduce prompt exceeds staged limit: {reduce_bytes} bytes"
                 )

@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,10 @@ from memory_summary_v2 import (  # noqa: E402
 )
 from platform_transaction import canonical_json_bytes  # noqa: E402
 from summary_v2_worker import build_prompt, codex_command, run_source  # noqa: E402
+from summary_v2_backfill import (  # noqa: E402
+    PARENT_RESCUE_REVISION,
+    _compact_parent_rescue_maps,
+)
 
 
 class SummaryV2Test(unittest.TestCase):
@@ -267,6 +272,151 @@ class SummaryV2Test(unittest.TestCase):
         reduced = project(rescue, self.parent_candidate(rescue))
         self.assertEqual("L2-000777", reduced["parallel_summary_id"])
         self.assertEqual(formal["source_refs"], reduced["coverage"]["represented_source_refs"])
+
+    def test_parent_rescue_restores_promoted_state_without_prompt_duplication(self):
+        children = []
+        for offset in (0, 3, 6, 9):
+            source = build_level_1_source(self.job(offset=offset))
+            children.append(project(source, self.candidate(source)))
+        formal = build_parent_source(children, parallel_summary_id="L2-000780")
+        maps = []
+        for index in (0, 2):
+            source = build_parent_source(
+                children[index : index + 2],
+                parallel_summary_id=f"L2-000780-map-{index // 2 + 1}",
+            )
+            maps.append(project(source, self.parent_candidate(source)))
+        rescue = build_parent_rescue_reduce_source(formal, maps)
+        prompt = build_prompt(rescue)
+        first = formal["promotion_manifest"][0]
+        self.assertIn("deterministic local projector injects every", prompt)
+        self.assertNotIn('"promotion_manifest"', prompt)
+
+        candidate = self.parent_candidate(rescue)
+        candidate["atoms"] = [
+            atom
+            for atom in candidate["atoms"]
+            if not (
+                atom["atom_type"] == first["atom_type"]
+                and atom["statement"] == first["statement"]
+                and atom["epistemic_status"] == first["epistemic_status"]
+                and atom["scope"] == first["scope"]
+                and first["child_summary_id"] in atom["source_refs"]
+            )
+        ]
+        normalized = normalize_model_candidate(candidate, rescue)
+        restored = [
+            atom
+            for atom in normalized["atoms"]
+            if atom["atom_type"] == first["atom_type"]
+            and atom["statement"] == first["statement"]
+            and atom["epistemic_status"] == first["epistemic_status"]
+            and atom["scope"] == first["scope"]
+            and first["child_summary_id"] in atom["source_refs"]
+        ]
+        self.assertEqual(1, len(restored))
+        project(rescue, normalized)
+
+    def test_parent_rescue_compacts_hierarchically_and_recovers_orphan_reductions(self):
+        children = []
+        for offset in range(0, 24, 3):
+            source = build_level_1_source(self.job(offset=offset))
+            children.append(project(source, self.candidate(source)))
+        formal = build_parent_source(children, parallel_summary_id="L2-000781")
+        maps = []
+        for index in range(0, len(children), 2):
+            source = build_parent_source(
+                children[index : index + 2],
+                parallel_summary_id=f"L2-000781-map-{index // 2 + 1}",
+            )
+            maps.append(project(source, self.parent_candidate(source)))
+
+        output = self.base / "summary-v2"
+        state_path = output / "state.json"
+        state = {
+            "revision": PARENT_RESCUE_REVISION,
+            "summary_id": "L2-000781",
+            "maps": {},
+        }
+        before = {
+            path.relative_to(self.archive): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in self.archive.rglob("*")
+            if path.is_file()
+        }
+
+        def staged_prompt(source):
+            map_count = len(source.get("prompt_payload", {}).get("map_sidecars", []))
+            return "x" * (900_001 if map_count > 2 else 100)
+
+        def persist_reduction(source, output_directory, archive_root, **kwargs):
+            result = run_source(
+                source,
+                output_directory,
+                archive_root,
+                candidate=self.parent_candidate(source),
+                diagnostic_path=kwargs["diagnostic_path"],
+                invocation_context=kwargs["invocation_context"],
+            )
+            diagnostic_path = Path(kwargs["diagnostic_path"])
+            diagnostic = json.loads(diagnostic_path.read_text(encoding="utf-8"))
+            diagnostic["prompt_sha256"] = hashlib.sha256(
+                staged_prompt(source).encode("utf-8")
+            ).hexdigest()
+            diagnostic_path.write_bytes(canonical_json_bytes(diagnostic))
+            return result
+
+        with (
+            patch("summary_v2_backfill.build_prompt", side_effect=staged_prompt),
+            patch(
+                "summary_v2_backfill.run_source",
+                side_effect=persist_reduction,
+            ) as model_calls,
+        ):
+            reduced = _compact_parent_rescue_maps(
+                formal,
+                children,
+                maps,
+                state,
+                state_path,
+                output,
+                self.archive,
+                self.base / "config.yaml",
+            )
+        self.assertEqual(2, len(reduced))
+        self.assertEqual(2, model_calls.call_count)
+        self.assertEqual(2, len(state["reductions"]))
+
+        state_path.unlink()
+        resumed_state = {
+            "revision": PARENT_RESCUE_REVISION,
+            "summary_id": "L2-000781",
+            "maps": {},
+        }
+        with (
+            patch("summary_v2_backfill.build_prompt", side_effect=staged_prompt),
+            patch("summary_v2_backfill.run_source") as resumed_calls,
+        ):
+            resumed = _compact_parent_rescue_maps(
+                formal,
+                children,
+                maps,
+                resumed_state,
+                state_path,
+                output,
+                self.archive,
+                self.base / "config.yaml",
+            )
+        self.assertEqual(
+            [item["projection_sha256"] for item in reduced],
+            [item["projection_sha256"] for item in resumed],
+        )
+        resumed_calls.assert_not_called()
+        after = {
+            path.relative_to(self.archive): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in self.archive.rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(before, after)
 
     def test_rescue_normalizer_restores_scene_routes_from_maps(self):
         left_job = self.job()
