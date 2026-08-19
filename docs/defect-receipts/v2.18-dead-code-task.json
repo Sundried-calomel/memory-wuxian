@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.18-dead-code-cleanup",
+  "objective": "Remove repository-proven dead code and duplicate wrappers without changing runtime behavior, public protocols, packaging, or release state.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian-v2.18",
+  "owner_id": "product-quality",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "powershell", "json"],
+  "path_globs": [
+    "scripts/run_unittest_shard.py",
+    "scripts/platform_process.py",
+    "scripts/memory_dashboard.py",
+    "packaging/windows/uninstall.ps1",
+    "tests/test_v214*_release_contract.py",
+    "docs/module-architecture.json"
+  ],
+  "entrypoints": ["dashboard", "uninstaller", "test-runner", "architecture-check"],
+  "resources": ["subprocess", "runtime", "test-contract", "module-registry"],
+  "operations": ["remove", "reuse", "validate"],
+  "data_formats": ["json", "utf-8"],
+  "authorization_boundaries": [
+    "No archive access, installation, release, external write, protocol change, or runtime activation."
+  ],
+  "implementation_units": [
+    {
+      "id": "dead-production-surface",
+      "owner_id": "product-quality",
+      "paths": [
+        "scripts/run_unittest_shard.py",
+        "scripts/platform_process.py",
+        "docs/module-architecture.json"
+      ],
+      "entrypoints": ["test-runner", "architecture-check"],
+      "resources": ["test-contract", "module-registry"],
+      "operations": ["remove", "validate"],
+      "planned_check_ids": ["entrypoint-inventory", "registered-preflight", "fail-closed-completion"]
+    },
+    {
+      "id": "dashboard-subprocess-reuse",
+      "owner_id": "product-shell",
+      "paths": ["scripts/memory_dashboard.py", "tests/test_dashboard_subprocess.py"],
+      "entrypoints": ["dashboard"],
+      "resources": ["subprocess"],
+      "operations": ["reuse", "validate"],
+      "planned_check_ids": ["entrypoint-inventory", "cross-entrypoint-contract", "unicode-path-fixtures", "registered-preflight", "fail-closed-completion"]
+    },
+    {
+      "id": "windows-uninstall-probe-deduplication",
+      "owner_id": "product-quality",
+      "paths": ["packaging/windows/uninstall.ps1"],
+      "entrypoints": ["uninstaller"],
+      "resources": ["runtime"],
+      "operations": ["reuse", "validate"],
+      "planned_check_ids": ["runtime-capability-probe", "unicode-path-fixtures", "registered-preflight", "fail-closed-completion"]
+    },
+    {
+      "id": "obsolete-release-contract-tests",
+      "owner_id": "product-quality",
+      "paths": ["tests/test_v2142_release_contract.py", "tests/test_v2143_release_contract.py"],
+      "entrypoints": ["test-runner"],
+      "resources": ["test-contract"],
+      "operations": ["remove", "validate"],
+      "planned_check_ids": ["entrypoint-inventory", "registered-preflight", "fail-closed-completion"]
+    }
+  ],
+  "rule_exclusions": []
+}

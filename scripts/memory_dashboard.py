@@ -133,15 +133,6 @@ def project_attachment_lifecycle(
     }
 
 
-def background_subprocess_kwargs() -> dict[str, Any]:
-    """Compatibility wrapper for the shared no-console process policy."""
-    if sys.platform != "win32":
-        return {}
-    return {
-        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
-    }
-
-
 def windows_process_running(pid: int, kernel32: Any | None = None) -> bool:
     """Check a Windows process without sending a console-control signal."""
     if pid <= 0:
@@ -281,7 +272,7 @@ def set_governance_ai_scheduler(store: MemoryStore, enabled: bool) -> dict[str, 
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        **background_subprocess_kwargs(),
+        **no_window_kwargs(),
     )
     return governance_ai_scheduler_status()
 
@@ -303,7 +294,7 @@ def set_cloud_scheduler(store: MemoryStore, enabled: bool) -> dict[str, Any]:
         check=True,
         capture_output=True,
         text=True,
-        **background_subprocess_kwargs(),
+        **no_window_kwargs(),
     )
     return {
         "command": "installed" if enabled else "uninstalled",

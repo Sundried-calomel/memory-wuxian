@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.18-dead-code-cleanup",
+  "packet_sha256": "7ac57a90601ad8aed135079c353c7636691d05d523111b6d32aad4063e6d9716",
+  "checks": [
+    {
+      "check_id": "entrypoint-inventory",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-validation.log",
+          "sha256": "8d60ffbf48459d77680ce79a8f4877e9354cedce4c96e648262dc2d86c70a335"
+        }
+      ],
+      "note": "Tracked callers and package references were inventoried before deletion."
+    },
+    {
+      "check_id": "cross-entrypoint-contract",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-validation.log",
+          "sha256": "8d60ffbf48459d77680ce79a8f4877e9354cedce4c96e648262dc2d86c70a335"
+        }
+      ],
+      "note": "Both dashboard scheduler mutation entrypoints use the shared no-window policy."
+    },
+    {
+      "check_id": "targeted-regressions",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-validation.log",
+          "sha256": "8d60ffbf48459d77680ce79a8f4877e9354cedce4c96e648262dc2d86c70a335"
+        }
+      ],
+      "note": "The 53-test affected contract matrix passed."
+    },
+    {
+      "check_id": "architecture-contract",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-validation.log",
+          "sha256": "8d60ffbf48459d77680ce79a8f4877e9354cedce4c96e648262dc2d86c70a335"
+        }
+      ],
+      "note": "The schema-v2 ownership and dependency contract passed after registry cleanup."
+    },
+    {
+      "check_id": "powershell-parse",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-validation.log",
+          "sha256": "8d60ffbf48459d77680ce79a8f4877e9354cedce4c96e648262dc2d86c70a335"
+        }
+      ],
+      "note": "The edited Windows uninstaller parses without PowerShell syntax errors."
+    }
+  ]
+}

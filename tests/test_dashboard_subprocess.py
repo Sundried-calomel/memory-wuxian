@@ -16,9 +16,9 @@ import memory_dashboard
 
 class DashboardSubprocessTest(unittest.TestCase):
     def test_windows_background_calls_never_create_a_console(self):
-        with patch.object(memory_dashboard.sys, "platform", "win32"):
+        with patch.object(memory_dashboard.os, "name", "nt"):
             self.assertEqual(
-                memory_dashboard.background_subprocess_kwargs(),
+                memory_dashboard.no_window_kwargs(),
                 {
                     "creationflags": getattr(
                         subprocess, "CREATE_NO_WINDOW", 0x08000000
@@ -27,8 +27,31 @@ class DashboardSubprocessTest(unittest.TestCase):
             )
 
     def test_non_windows_background_calls_keep_default_process_flags(self):
-        with patch.object(memory_dashboard.sys, "platform", "darwin"):
-            self.assertEqual(memory_dashboard.background_subprocess_kwargs(), {})
+        with patch.object(memory_dashboard.os, "name", "posix"):
+            self.assertEqual(memory_dashboard.no_window_kwargs(), {})
+
+    def test_scheduler_mutations_use_shared_no_window_policy(self):
+        store = types.SimpleNamespace(root=Path("C:/MemoryWuxianArchive"))
+        cases = (
+            (memory_dashboard.set_cloud_scheduler, "cloud_scheduler_status"),
+            (
+                memory_dashboard.set_governance_ai_scheduler,
+                "governance_ai_scheduler_status",
+            ),
+        )
+        for setter, status_name in cases:
+            with (
+                self.subTest(setter=setter.__name__),
+                patch.object(
+                    memory_dashboard,
+                    "no_window_kwargs",
+                    return_value={"creationflags": 123},
+                ),
+                patch.object(memory_dashboard.subprocess, "run") as run,
+                patch.object(memory_dashboard, status_name, return_value={}),
+            ):
+                setter(store, True)
+            self.assertEqual(run.call_args.kwargs["creationflags"], 123)
 
     def test_windows_scheduler_status_does_not_spawn_a_process(self):
         fake_key = unittest.mock.MagicMock()

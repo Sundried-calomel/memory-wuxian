@@ -24,7 +24,6 @@ if ($python -and (Test-Path (Join-Path $SkillRoot "scripts\install_auto_update.p
   & $python.Source (Join-Path $SkillRoot "scripts\install_auto_update.py") --skill-root $SkillRoot --uninstall
 }
 
-$python = Get-Command python.exe -ErrorAction SilentlyContinue
 if ($python) {
   & $python.Source (Join-Path $SkillRoot "scripts\install_codex_autosync_windows.py") --archive-root $archiveRoot --uninstall
 } else {

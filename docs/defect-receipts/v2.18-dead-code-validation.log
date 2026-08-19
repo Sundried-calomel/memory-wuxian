@@ -1,0 +1,41 @@
+Memory Wuxian v2.18 dead-code cleanup targeted validation
+Candidate base: aa50976002bae6e389df968e5936d15f05643003
+
+PASS: Python compile
+  scripts/platform_process.py
+  scripts/memory_dashboard.py
+  tests/test_dashboard_subprocess.py
+
+PASS: PowerShell parser
+  packaging/windows/uninstall.ps1
+
+PASS: architecture contract
+  schema v2, ownership, dependency allowlists, and Rust capability boundaries
+
+PASS: 53 targeted tests
+  tests.test_dashboard_subprocess
+  tests.test_version_contract
+  tests.test_product_architecture
+  tests.test_release_workflow_gate
+  tests.test_v2144_release_contract
+  tests.test_v218_release_contract
+  tests.test_rehearsal_evidence_reuse
+
+PASS: tracked-reference inventory
+  No remaining tracked caller for run_unittest_shard,
+  detached_no_window_kwargs, background_subprocess_kwargs,
+  test_v2142_release_contract, or test_v2143_release_contract.
+
+PASS: shared dashboard subprocess policy
+  Both scheduler mutation entrypoints are asserted to consume
+  platform_process.no_window_kwargs.
+
+PASS: scope boundary
+  No archive access, installation, runtime activation, protocol change,
+  release, external write, or full-suite rehearsal was performed.
+
+Code-scope result:
+  Expanded production: 49,460 -> 49,392 physical lines (-68)
+  Standalone tests:     23,253 -> 23,223 physical lines (-30)
+  Combined:             72,713 -> 72,615 physical lines (-98)
+  Gross removed code: 121 lines; added regression coverage: 23 lines.

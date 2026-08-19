@@ -188,8 +188,7 @@
         "packaging/macos/build_dashboard_app.sh",
         "packaging/macos/build_pkg.sh",
         "packaging/windows/MemoryWuxian.iss",
-        "scripts/run_release_rehearsal.py",
-        "scripts/run_unittest_shard.py"
+        "scripts/run_release_rehearsal.py"
       ]
     }
   ],

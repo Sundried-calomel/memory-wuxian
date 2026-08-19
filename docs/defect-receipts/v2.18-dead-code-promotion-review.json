@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-v2.18-dead-code-cleanup",
+  "work_item_id": "memory-wuxian-v2.18-dead-code-cleanup",
+  "candidate_id": "v2.18-dead-code-cleanup-working-tree",
+  "owner_id": "product-quality",
+  "source_revision": "aa50976002bae6e389df968e5936d15f05643003-plus-verified-working-tree",
+  "product_evolution_record_id": "v2.18-dead-code-verification",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The change applied existing G03, G04, and G11 prevention rules and introduced no new defect family or reusable cross-product governance lesson.",
+  "evidence_refs": ["docs/defect-receipts/v2.18-dead-code-verification.json"],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-19T13:13:00Z"
+}
