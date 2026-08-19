@@ -197,7 +197,6 @@
     "exact_byte_primitive": "scripts/platform_atomic.py:atomic_replace_bytes",
     "forbidden_call_set": ["tempfile.mkstemp", "os.fsync", "os.replace"],
     "approved_specialized_writers": [
-      {"path": "scripts/install_cloud_sync.py", "symbol": "atomic_write_bytes", "reason": "R2 scheduler-owned CRLF and BOM wrapper path remains frozen"},
       {"path": "scripts/install_codex_autosync.py", "symbol": "atomic_write_plist", "reason": "collector scheduler lifecycle remains outside R1"},
       {"path": "scripts/install_codex_autosync.py", "symbol": "atomic_write_text", "reason": "collector scheduler lifecycle remains outside R1"},
       {"path": "scripts/install_codex_autosync_windows.py", "symbol": "atomic_write_bytes", "reason": "Windows collector launcher bytes remain outside R1"},
@@ -208,6 +207,20 @@
       {"path": "scripts/memory_environment_profiles.py", "symbol": "_atomic_pointer", "reason": "profile pointer canonical JSON plus one LF remains frozen"},
       {"path": "scripts/memory_environment_skills.py", "symbol": "_cache_verified_package", "reason": "verified package cache create-if-absent contract"},
       {"path": "scripts/memory_federation.py", "symbol": "export_delta", "reason": "temporary ZIP bundle publication is not a state-file replacement"}
+    ]
+  },
+  "python_scheduler_rules": {
+    "canonical_owner": "platform-foundation",
+    "mechanics": "scripts/platform_scheduler.py",
+    "domain_policy_owners": [
+      "scripts/install_cloud_sync.py",
+      "scripts/install_governance_ai.py",
+      "scripts/install_maintenance_supervisor.py"
+    ],
+    "intentionally_separate": [
+      "scripts/install_codex_autosync.py",
+      "scripts/install_codex_autosync_windows.py",
+      "scripts/install_auto_update.py"
     ]
   },
   "python_dependency_rules": {

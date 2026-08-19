@@ -5,42 +5,34 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import getpass
 import json
-import os
-import plistlib
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Callable, Optional, Sequence
-from xml.etree import ElementTree as ET
 
 try:
+    from platform_atomic import atomic_replace_bytes
     from platform_runtime import executable_entry_path
+    import platform_scheduler as scheduler
 except ModuleNotFoundError:
+    from scripts.platform_atomic import atomic_replace_bytes
     from scripts.platform_runtime import executable_entry_path
+    from scripts import platform_scheduler as scheduler
 
 
 MACOS_LABEL = "com.openai.codex.memory-wuxian-cloud-sync"
 WINDOWS_TASK_NAME = "MemoryWuxianCloudSync"
 INTERVAL_SECONDS = 300
-TASK_XML_NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
+TASK_XML_NAMESPACE = scheduler.TASK_XML_NAMESPACE
+launchctl_domain = scheduler.launchctl_domain
+windows_system_executable = scheduler.windows_system_executable
+windows_user_id = scheduler.windows_user_id
 Runner = Callable[..., subprocess.CompletedProcess]
 
 
 def atomic_write_bytes(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    atomic_replace_bytes(path, payload)
 
 
 def atomic_write_text(
@@ -74,33 +66,32 @@ def cloud_command(
     ]
 
 
+def macos_job_spec(
+    python_executable: Path,
+    skill_root: Path,
+    archive_root: Path,
+) -> scheduler.MacOSJobSpec:
+    log_dir = archive_root / "federation"
+    return scheduler.MacOSJobSpec(
+        label=MACOS_LABEL,
+        command=tuple(cloud_command(python_executable, skill_root, archive_root)),
+        interval_seconds=INTERVAL_SECONDS,
+        run_at_load=True,
+        keep_alive=False,
+        process_type="Background",
+        stdout_path=log_dir / "cloud-sync.stdout.log",
+        stderr_path=log_dir / "cloud-sync.stderr.log",
+    )
+
+
 def macos_plist(
     python_executable: Path,
     skill_root: Path,
     archive_root: Path,
-) -> dict:
-    log_dir = archive_root / "federation"
-    return {
-        "Label": MACOS_LABEL,
-        "ProgramArguments": cloud_command(python_executable, skill_root, archive_root),
-        "RunAtLoad": True,
-        "StartInterval": INTERVAL_SECONDS,
-        "KeepAlive": False,
-        "ProcessType": "Background",
-        "StandardOutPath": str(log_dir / "cloud-sync.stdout.log"),
-        "StandardErrorPath": str(log_dir / "cloud-sync.stderr.log"),
-    }
-
-
-def windows_user_id() -> str:
-    domain = os.environ.get("USERDOMAIN", "").strip()
-    username = os.environ.get("USERNAME", "").strip() or getpass.getuser()
-    return f"{domain}\\{username}" if domain else username
-
-
-def windows_system_executable(relative_path: str) -> Path:
-    system_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
-    return system_root / relative_path
+) -> dict[str, object]:
+    return scheduler.render_macos_plist(
+        macos_job_spec(python_executable, skill_root, archive_root)
+    )
 
 
 def windows_wrapper(
@@ -123,6 +114,34 @@ def windows_wrapper(
     )
 
 
+def windows_task_spec(
+    python_executable: Path,
+    skill_root: Path,
+    archive_root: Path,
+) -> scheduler.WindowsTaskSpec:
+    pythonw = python_executable.with_name("pythonw.exe")
+    if not pythonw.is_file():
+        pythonw = python_executable
+    return scheduler.WindowsTaskSpec(
+        task_name=WINDOWS_TASK_NAME,
+        description="Run one MemoryWuxian cloud-folder synchronization pass every five minutes.",
+        command=pythonw,
+        arguments=tuple(cloud_command(python_executable, skill_root, archive_root)[1:]),
+        interval="PT5M",
+        execution_limit="PT10M",
+        priority="7",
+        allow_hard_terminate=True,
+        multiple_instances="IgnoreNew",
+        disallow_start_on_batteries=False,
+        stop_on_batteries=False,
+        start_when_available=True,
+        network_required=False,
+        hidden=True,
+        logon_type="InteractiveToken",
+        run_level="LeastPrivilege",
+    )
+
+
 def windows_task_xml(
     python_executable: Path,
     skill_root: Path,
@@ -131,65 +150,14 @@ def windows_task_xml(
     user_id: str,
     start_boundary: Optional[str] = None,
 ) -> bytes:
-    ET.register_namespace("", TASK_XML_NAMESPACE)
-    task = ET.Element(f"{{{TASK_XML_NAMESPACE}}}Task", {"version": "1.4"})
-    registration = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}RegistrationInfo")
-    ET.SubElement(registration, f"{{{TASK_XML_NAMESPACE}}}Description").text = (
-        "Run one MemoryWuxian cloud-folder synchronization pass every five minutes."
+    boundary = start_boundary or (
+        dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
     )
-
-    triggers = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Triggers")
-    time_trigger = ET.SubElement(triggers, f"{{{TASK_XML_NAMESPACE}}}TimeTrigger")
-    repetition = ET.SubElement(time_trigger, f"{{{TASK_XML_NAMESPACE}}}Repetition")
-    ET.SubElement(repetition, f"{{{TASK_XML_NAMESPACE}}}Interval").text = "PT5M"
-    ET.SubElement(repetition, f"{{{TASK_XML_NAMESPACE}}}StopAtDurationEnd").text = "false"
-    ET.SubElement(time_trigger, f"{{{TASK_XML_NAMESPACE}}}StartBoundary").text = (
-        start_boundary
-        or dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
+    return scheduler.render_windows_task_xml(
+        windows_task_spec(python_executable, skill_root, archive_root),
+        user_id=user_id,
+        start_boundary=boundary,
     )
-    ET.SubElement(time_trigger, f"{{{TASK_XML_NAMESPACE}}}Enabled").text = "true"
-
-    principals = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Principals")
-    principal = ET.SubElement(
-        principals,
-        f"{{{TASK_XML_NAMESPACE}}}Principal",
-        {"id": "Author"},
-    )
-    ET.SubElement(principal, f"{{{TASK_XML_NAMESPACE}}}UserId").text = user_id
-    ET.SubElement(principal, f"{{{TASK_XML_NAMESPACE}}}LogonType").text = "InteractiveToken"
-    ET.SubElement(principal, f"{{{TASK_XML_NAMESPACE}}}RunLevel").text = "LeastPrivilege"
-
-    settings = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Settings")
-    for name, value in (
-        ("MultipleInstancesPolicy", "IgnoreNew"),
-        ("DisallowStartIfOnBatteries", "false"),
-        ("StopIfGoingOnBatteries", "false"),
-        ("AllowHardTerminate", "true"),
-        ("StartWhenAvailable", "true"),
-        ("RunOnlyIfNetworkAvailable", "false"),
-        ("Enabled", "true"),
-        ("Hidden", "true"),
-        ("ExecutionTimeLimit", "PT10M"),
-        ("Priority", "7"),
-    ):
-        ET.SubElement(settings, f"{{{TASK_XML_NAMESPACE}}}{name}").text = value
-
-    actions = ET.SubElement(
-        task,
-        f"{{{TASK_XML_NAMESPACE}}}Actions",
-        {"Context": "Author"},
-    )
-    exec_action = ET.SubElement(actions, f"{{{TASK_XML_NAMESPACE}}}Exec")
-    pythonw = python_executable.with_name("pythonw.exe")
-    if not pythonw.is_file():
-        pythonw = python_executable
-    ET.SubElement(exec_action, f"{{{TASK_XML_NAMESPACE}}}Command").text = str(pythonw)
-    ET.SubElement(exec_action, f"{{{TASK_XML_NAMESPACE}}}Arguments").text = (
-        subprocess.list2cmdline(
-            cloud_command(python_executable, skill_root, archive_root)[1:]
-        )
-    )
-    return ET.tostring(task, encoding="utf-16", xml_declaration=True)
 
 
 def validate_install_paths(
@@ -212,12 +180,6 @@ def validate_install_paths(
         raise SystemExit(f"Python executable is not a file: {python_executable}")
 
 
-def launchctl_domain() -> str:
-    getuid = getattr(os, "getuid", None)
-    uid = int(getuid()) if callable(getuid) else int(os.environ.get("UID", "0"))
-    return f"gui/{uid}"
-
-
 def install_macos(
     archive_root: Path,
     skill_root: Path,
@@ -226,34 +188,25 @@ def install_macos(
     load: bool,
     runner: Runner,
 ) -> Path:
-    output = Path.home() / "Library" / "LaunchAgents" / f"{MACOS_LABEL}.plist"
     log_dir = archive_root / "federation"
     log_dir.mkdir(parents=True, exist_ok=True)
-    payload = macos_plist(python_executable, skill_root, archive_root)
-    atomic_write_bytes(output, plistlib.dumps(payload, sort_keys=True))
-    if load:
-        domain = launchctl_domain()
-        runner(
-            ["/bin/launchctl", "bootout", domain, str(output)],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        runner(["/bin/launchctl", "bootstrap", domain, str(output)], check=True)
-    return output
+    return scheduler.install_macos_job(
+        macos_job_spec(python_executable, skill_root, archive_root),
+        load=load,
+        runner=runner,
+        write_bytes=atomic_write_bytes,
+        domain=launchctl_domain() if load else None,
+        bootout_kwargs={"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL},
+    )
 
 
 def uninstall_macos(*, runner: Runner) -> Path:
-    output = Path.home() / "Library" / "LaunchAgents" / f"{MACOS_LABEL}.plist"
-    domain = launchctl_domain()
-    runner(
-        ["/bin/launchctl", "bootout", domain, str(output)],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+    return scheduler.uninstall_macos_job(
+        MACOS_LABEL,
+        runner=runner,
+        domain=launchctl_domain(),
+        bootout_kwargs={"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL},
     )
-    output.unlink(missing_ok=True)
-    return output
 
 
 def install_windows(
@@ -279,47 +232,27 @@ def install_windows(
         archive_root,
         user_id=windows_user_id(),
     )
-    fd, temporary = tempfile.mkstemp(prefix=".memory-wuxian-cloud-sync.", suffix=".xml")
-    os.close(fd)
-    temporary_path = Path(temporary)
     schtasks = windows_system_executable(r"System32\schtasks.exe")
-    try:
-        atomic_write_bytes(temporary_path, task_xml)
-        runner(
-            [
-                str(schtasks),
-                "/Create",
-                "/TN",
-                WINDOWS_TASK_NAME,
-                "/XML",
-                str(temporary_path),
-                "/F",
-            ],
-            check=True,
-        )
-    finally:
-        temporary_path.unlink(missing_ok=True)
-    if load:
-        runner(
-            [str(schtasks), "/Run", "/TN", WINDOWS_TASK_NAME],
-            check=True,
-        )
+    scheduler.install_windows_task(
+        windows_task_spec(python_executable, skill_root, archive_root),
+        task_xml,
+        temporary_prefix=".memory-wuxian-cloud-sync.",
+        schtasks=schtasks,
+        load=load,
+        runner=runner,
+        write_bytes=atomic_write_bytes,
+    )
     return wrapper_path
 
 
 def uninstall_windows(*, runner: Runner) -> None:
     schtasks = windows_system_executable(r"System32\schtasks.exe")
-    runner(
-        [str(schtasks), "/End", "/TN", WINDOWS_TASK_NAME],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    runner(
-        [str(schtasks), "/Delete", "/TN", WINDOWS_TASK_NAME, "/F"],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+    scheduler.uninstall_windows_task(
+        WINDOWS_TASK_NAME,
+        schtasks=schtasks,
+        runner=runner,
+        end_first=True,
+        runner_kwargs={"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL},
     )
 
 

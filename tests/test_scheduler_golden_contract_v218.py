@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import install_cloud_sync as cloud
 import install_governance_ai as governance
 import install_maintenance_supervisor as maintenance
+import platform_scheduler
 
 
 FIXTURE_PATH = ROOT / "tests" / "fixtures" / "scheduler-golden-v218.json"
@@ -346,7 +347,7 @@ class SchedulerGoldenContractV218Test(unittest.TestCase):
             patch.object(governance, "windows_user_id", return_value=FIXTURE["windows"]["user_id"]),
             patch.object(governance, "windows_system_executable", return_value=Path("C:/Windows/System32/schtasks.exe")),
             patch.object(governance, "dt", SimpleNamespace(datetime=FixedDateTime)),
-            patch.object(governance.tempfile, "mkstemp", side_effect=mkstemp),
+            patch.object(platform_scheduler.tempfile, "mkstemp", side_effect=mkstemp),
             patch.object(governance, "atomic_write_bytes", side_effect=lambda path, data: writes.__setitem__(str(path), data)),
             patch.object(governance.subprocess, "run", side_effect=runner),
             patch.object(Path, "exists", return_value=True),
@@ -393,7 +394,7 @@ class SchedulerGoldenContractV218Test(unittest.TestCase):
                     patch.object(Path, "is_file", return_value=True),
                     patch.object(Path, "mkdir"),
                     patch.object(Path, "unlink"),
-                    patch.object(module.tempfile, "mkstemp", side_effect=mkstemp),
+                    patch.object(platform_scheduler.tempfile, "mkstemp", side_effect=mkstemp),
                     patch.object(module, "atomic_write_bytes", side_effect=lambda path, data: writes.__setitem__(str(path), data)),
                 )
                 with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:

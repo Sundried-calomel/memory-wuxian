@@ -5,24 +5,21 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import getpass
-import os
-import plistlib
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Callable, Optional, Sequence
-from xml.etree import ElementTree as ET
 
 try:
-    from install_cloud_sync import TASK_XML_NAMESPACE, atomic_write_bytes, launchctl_domain
+    from platform_atomic import atomic_replace_bytes
     from platform_process import no_window_kwargs
     from platform_runtime import executable_entry_path
+    import platform_scheduler as scheduler
 except ModuleNotFoundError:
-    from scripts.install_cloud_sync import TASK_XML_NAMESPACE, atomic_write_bytes, launchctl_domain
+    from scripts.platform_atomic import atomic_replace_bytes
     from scripts.platform_process import no_window_kwargs
     from scripts.platform_runtime import executable_entry_path
+    from scripts import platform_scheduler as scheduler
 
 
 MACOS_LABEL = "com.openai.codex.memory-wuxian-maintenance"
@@ -36,7 +33,13 @@ WINDOWS_EXECUTION_LIMIT_SECONDS = (
     DEFAULT_MAXIMUM_SEMANTIC_JOBS * SEMANTIC_JOB_TIMEOUT_SECONDS
     + MAINTENANCE_CLOSEOUT_MARGIN_SECONDS
 )
+TASK_XML_NAMESPACE = scheduler.TASK_XML_NAMESPACE
+launchctl_domain = scheduler.launchctl_domain
 Runner = Callable[..., subprocess.CompletedProcess]
+
+
+def atomic_write_bytes(path: Path, payload: bytes) -> None:
+    atomic_replace_bytes(path, payload)
 
 
 def retire_legacy_macos_semantic_backfill(
@@ -79,70 +82,62 @@ def maintenance_command(python: Path, skill: Path, archive: Path) -> list[str]:
     ]
 
 
-def macos_plist(python: Path, skill: Path, archive: Path) -> dict:
+def macos_job_spec(python: Path, skill: Path, archive: Path) -> scheduler.MacOSJobSpec:
     logs = archive / "maintenance"
-    return {
-        "Label": MACOS_LABEL,
-        "ProgramArguments": maintenance_command(python, skill, archive),
-        "RunAtLoad": True,
-        "StartInterval": INTERVAL_SECONDS,
-        "KeepAlive": False,
-        "ProcessType": "Background",
-        "StandardOutPath": str(logs / "scheduler.stdout.log"),
-        "StandardErrorPath": str(logs / "scheduler.stderr.log"),
-    }
+    return scheduler.MacOSJobSpec(
+        label=MACOS_LABEL,
+        command=tuple(maintenance_command(python, skill, archive)),
+        interval_seconds=INTERVAL_SECONDS,
+        run_at_load=True,
+        keep_alive=False,
+        process_type="Background",
+        stdout_path=logs / "scheduler.stdout.log",
+        stderr_path=logs / "scheduler.stderr.log",
+    )
+
+
+def macos_plist(python: Path, skill: Path, archive: Path) -> dict[str, object]:
+    return scheduler.render_macos_plist(macos_job_spec(python, skill, archive))
 
 
 def _windows_user_id() -> str:
-    domain = os.environ.get("USERDOMAIN", "").strip()
-    user = os.environ.get("USERNAME", "").strip() or getpass.getuser()
-    return f"{domain}\\{user}" if domain else user
+    return scheduler.windows_user_id()
 
 
-def windows_xml(python: Path, skill: Path, archive: Path) -> bytes:
+def windows_task_spec(python: Path, skill: Path, archive: Path) -> scheduler.WindowsTaskSpec:
     pythonw = python.with_name("pythonw.exe")
     if not pythonw.is_file():
         raise ValueError(f"pythonw.exe is required for focus-safe maintenance: {pythonw}")
-    ET.register_namespace("", TASK_XML_NAMESPACE)
-    task = ET.Element(f"{{{TASK_XML_NAMESPACE}}}Task", {"version": "1.4"})
-    info = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}RegistrationInfo")
-    ET.SubElement(info, f"{{{TASK_XML_NAMESPACE}}}Description").text = (
-        "Reconcile MemoryWuxian capture, summary, and backup debt without opening a console window."
+    return scheduler.WindowsTaskSpec(
+        task_name=WINDOWS_TASK_NAME,
+        description=(
+            "Reconcile MemoryWuxian capture, summary, and backup debt without "
+            "opening a console window."
+        ),
+        command=pythonw,
+        arguments=tuple(maintenance_command(python, skill, archive)[1:]),
+        interval="PT5M",
+        execution_limit=iso8601_duration(WINDOWS_EXECUTION_LIMIT_SECONDS),
+        priority="7",
+        allow_hard_terminate=None,
+        multiple_instances="IgnoreNew",
+        disallow_start_on_batteries=False,
+        stop_on_batteries=False,
+        start_when_available=True,
+        network_required=False,
+        hidden=True,
+        logon_type="InteractiveToken",
+        run_level="LeastPrivilege",
     )
-    triggers = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Triggers")
-    trigger = ET.SubElement(triggers, f"{{{TASK_XML_NAMESPACE}}}TimeTrigger")
-    repetition = ET.SubElement(trigger, f"{{{TASK_XML_NAMESPACE}}}Repetition")
-    ET.SubElement(repetition, f"{{{TASK_XML_NAMESPACE}}}Interval").text = "PT5M"
-    ET.SubElement(repetition, f"{{{TASK_XML_NAMESPACE}}}StopAtDurationEnd").text = "false"
-    ET.SubElement(trigger, f"{{{TASK_XML_NAMESPACE}}}StartBoundary").text = (
-        dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
+
+
+def windows_xml(python: Path, skill: Path, archive: Path) -> bytes:
+    boundary = dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
+    return scheduler.render_windows_task_xml(
+        windows_task_spec(python, skill, archive),
+        user_id=_windows_user_id(),
+        start_boundary=boundary,
     )
-    ET.SubElement(trigger, f"{{{TASK_XML_NAMESPACE}}}Enabled").text = "true"
-    principals = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Principals")
-    principal = ET.SubElement(principals, f"{{{TASK_XML_NAMESPACE}}}Principal", {"id": "Author"})
-    ET.SubElement(principal, f"{{{TASK_XML_NAMESPACE}}}UserId").text = _windows_user_id()
-    ET.SubElement(principal, f"{{{TASK_XML_NAMESPACE}}}LogonType").text = "InteractiveToken"
-    ET.SubElement(principal, f"{{{TASK_XML_NAMESPACE}}}RunLevel").text = "LeastPrivilege"
-    settings = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Settings")
-    for name, value in (
-        ("MultipleInstancesPolicy", "IgnoreNew"),
-        ("DisallowStartIfOnBatteries", "false"),
-        ("StopIfGoingOnBatteries", "false"),
-        ("StartWhenAvailable", "true"),
-        ("RunOnlyIfNetworkAvailable", "false"),
-        ("Enabled", "true"),
-        ("Hidden", "true"),
-        ("ExecutionTimeLimit", iso8601_duration(WINDOWS_EXECUTION_LIMIT_SECONDS)),
-        ("Priority", "7"),
-    ):
-        ET.SubElement(settings, f"{{{TASK_XML_NAMESPACE}}}{name}").text = value
-    actions = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Actions", {"Context": "Author"})
-    action = ET.SubElement(actions, f"{{{TASK_XML_NAMESPACE}}}Exec")
-    ET.SubElement(action, f"{{{TASK_XML_NAMESPACE}}}Command").text = str(pythonw)
-    ET.SubElement(action, f"{{{TASK_XML_NAMESPACE}}}Arguments").text = subprocess.list2cmdline(
-        maintenance_command(python, skill, archive)[1:]
-    )
-    return ET.tostring(task, encoding="utf-16", xml_declaration=True)
 
 
 def install(
@@ -159,38 +154,46 @@ def install(
             raise ValueError(f"required maintenance path does not exist: {path}")
     (archive / "maintenance").mkdir(parents=True, exist_ok=True)
     if platform_name == "darwin":
-        output = Path.home() / "Library" / "LaunchAgents" / f"{MACOS_LABEL}.plist"
-        atomic_write_bytes(output, plistlib.dumps(macos_plist(python, skill, archive), sort_keys=True))
-        if load:
-            domain = launchctl_domain()
-            runner(["/bin/launchctl", "bootout", domain, str(output)], check=False)
-            runner(["/bin/launchctl", "bootstrap", domain, str(output)], check=True)
+        output = scheduler.install_macos_job(
+            macos_job_spec(python, skill, archive),
+            load=load,
+            runner=runner,
+            write_bytes=atomic_write_bytes,
+            domain=launchctl_domain() if load else None,
+        )
         return str(output)
     if platform_name == "win32":
-        payload = windows_xml(python, skill, archive)
-        fd, temporary = tempfile.mkstemp(prefix=".memory-wuxian-maintenance.", suffix=".xml")
-        os.close(fd)
-        temporary_path = Path(temporary)
-        try:
-            atomic_write_bytes(temporary_path, payload)
-            runner(["schtasks.exe", "/Create", "/TN", WINDOWS_TASK_NAME, "/XML", str(temporary_path), "/F"], check=True, **no_window_kwargs())
-        finally:
-            temporary_path.unlink(missing_ok=True)
-        if load:
-            runner(["schtasks.exe", "/Run", "/TN", WINDOWS_TASK_NAME], check=True, **no_window_kwargs())
+        spec = windows_task_spec(python, skill, archive)
+        scheduler.install_windows_task(
+            spec,
+            windows_xml(python, skill, archive),
+            temporary_prefix=".memory-wuxian-maintenance.",
+            schtasks="schtasks.exe",
+            load=load,
+            runner=runner,
+            write_bytes=atomic_write_bytes,
+            runner_kwargs=no_window_kwargs(),
+        )
         return WINDOWS_TASK_NAME
     raise ValueError("maintenance scheduling supports Windows and macOS")
 
 
 def uninstall(*, platform_name: str, runner: Runner) -> None:
     if platform_name == "darwin":
-        output = Path.home() / "Library" / "LaunchAgents" / f"{MACOS_LABEL}.plist"
-        runner(["/bin/launchctl", "bootout", launchctl_domain(), str(output)], check=False)
-        output.unlink(missing_ok=True)
+        scheduler.uninstall_macos_job(
+            MACOS_LABEL,
+            runner=runner,
+            domain=launchctl_domain(),
+        )
         return
     if platform_name == "win32":
-        runner(["schtasks.exe", "/End", "/TN", WINDOWS_TASK_NAME], check=False, **no_window_kwargs())
-        runner(["schtasks.exe", "/Delete", "/TN", WINDOWS_TASK_NAME, "/F"], check=False, **no_window_kwargs())
+        scheduler.uninstall_windows_task(
+            WINDOWS_TASK_NAME,
+            schtasks="schtasks.exe",
+            runner=runner,
+            end_first=True,
+            runner_kwargs=no_window_kwargs(),
+        )
         return
     raise ValueError("maintenance scheduling supports Windows and macOS")
 
