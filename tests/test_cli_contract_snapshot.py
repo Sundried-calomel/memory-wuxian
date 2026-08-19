@@ -256,7 +256,8 @@ def _write_fixture() -> None:
     payload = json.dumps(
         build_cli_contract_snapshot(),
         ensure_ascii=False,
-        indent=2,
+        sort_keys=True,
+        separators=(",", ":"),
     ) + "\n"
     FIXTURE.write_text(payload, encoding="utf-8", newline="\n")
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
