@@ -1,7 +1,6 @@
 import hashlib
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -15,20 +14,7 @@ from memory_environment import EnvironmentRegistry, revision_id_for
 from memory_environment_bindings import EnvironmentBindingRegistry
 from memory_environment_rules import EnvironmentRuleInstaller
 from memory_environment_skills import EnvironmentSkillInstaller
-
-
-def make_directory_link(link: Path, target: Path) -> None:
-    if os.name == "nt":
-        completed = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if completed.returncode:
-            raise OSError(completed.stderr or completed.stdout)
-    else:
-        link.symlink_to(target, target_is_directory=True)
+from support.filesystem import make_directory_link
 
 
 def authority_hashes(root):

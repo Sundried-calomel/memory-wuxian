@@ -35,6 +35,7 @@ from semantic_worker import (
     unpack_source_summaries,
 )
 from semantic_backfill import ordered_pending_jobs, run_backfill
+from support.rollouts import event
 
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"
@@ -1802,12 +1803,6 @@ summaries:
         legacy_snapshot.joinpath("legacy.txt").write_text("legacy snapshot", encoding="utf-8")
         session = self.base / "rollout-2026-07-16T10-00-00-thread-001.jsonl"
 
-        def event(timestamp, outer_type, payload):
-            return json.dumps(
-                {"timestamp": timestamp, "type": outer_type, "payload": payload},
-                ensure_ascii=False,
-            ) + "\n"
-
         session.write_text(
             event(
                 "2026-07-16T10:00:00Z",
@@ -1928,12 +1923,6 @@ summaries:
     def test_codex_subagent_sessions_are_excluded(self):
         session = self.base / "rollout-guardian.jsonl"
 
-        def event(timestamp, outer_type, payload):
-            return json.dumps(
-                {"timestamp": timestamp, "type": outer_type, "payload": payload},
-                ensure_ascii=False,
-            ) + "\n"
-
         session.write_text(
             event(
                 "2026-07-16T10:00:00Z",
@@ -1971,12 +1960,6 @@ summaries:
 
     def test_codex_exec_sessions_are_excluded(self):
         session = self.base / "rollout-exec.jsonl"
-
-        def event(timestamp, outer_type, payload):
-            return json.dumps(
-                {"timestamp": timestamp, "type": outer_type, "payload": payload},
-                ensure_ascii=False,
-            ) + "\n"
 
         session.write_text(
             event(
@@ -2203,12 +2186,6 @@ summaries:
         sessions_root = self.base / "native-sessions"
         sessions_root.mkdir()
         session = sessions_root / "rollout-2026-07-16T10-00-00-native-parity.jsonl"
-
-        def event(timestamp, outer_type, payload):
-            return json.dumps(
-                {"timestamp": timestamp, "type": outer_type, "payload": payload},
-                ensure_ascii=False,
-            ) + "\n"
 
         session.write_text(
             event("2026-07-16T10:00:00Z", "session_meta", {"id": "native-parity"})

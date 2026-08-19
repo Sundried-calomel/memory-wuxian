@@ -13,7 +13,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from memory_cli import MemoryStore, load_simple_yaml
-from memory_cloud_transport import AuthenticatedOpenResult, _AUTHENTICATED_OPEN_AUTHORITY
 from memory_federation import FederationManager
 from memory_project_attachments import (
     CHUNK_BYTES,
@@ -21,22 +20,7 @@ from memory_project_attachments import (
     ProjectAttachmentExchangeManager,
     ProjectAttachmentStore,
 )
-
-
-def authenticated_import(manager, bundle):
-    manifest = manager.read_bundle_manifest(bundle)
-    return manager._import_authenticated_delta(
-        bundle,
-        expected_node_id=manifest["origin_node_id"],
-        authenticated_open_result=AuthenticatedOpenResult(
-            _AUTHENTICATED_OPEN_AUTHORITY,
-            {
-                "origin_node_id": manifest["origin_node_id"],
-                "target_node_id": manager.node()["node_id"],
-                "payload_sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
-            },
-        ),
-    )
+from support.federation import authenticated_import
 
 
 class ProjectAttachmentTests(unittest.TestCase):

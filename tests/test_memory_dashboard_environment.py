@@ -22,6 +22,7 @@ from memory_environment import EnvironmentRegistry, revision_id_for
 from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_promotions import PromotionStore
 from memory_environment_profiles import EnvironmentProfileManager
+from support.filesystem import file_hashes
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -30,14 +31,6 @@ def write_json(path: Path, value: dict) -> None:
         json.dumps(value, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-
-
-def file_hashes(root: Path) -> dict[str, str]:
-    return {
-        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-    }
 
 
 class EnvironmentDashboardCacheTest(unittest.TestCase):
