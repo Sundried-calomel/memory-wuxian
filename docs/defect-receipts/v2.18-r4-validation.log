@@ -1,0 +1,35 @@
+Memory Wuxian v2.18 R4 targeted validation
+Date: 2026-08-20
+Runtime: C:\Users\56453\.codex\runtimes\memory-wuxian-e5-py312\Scripts\python.exe
+Working directory: C:\Users\56453\Documents\ChatGPT\memory无限\memory-wuxian-v218
+
+Final unique targeted cases: 101 passed, 0 failed, 0 skipped.
+
+Suites:
+- tests.test_memory_exchange_contract: 5 passed
+- tests.test_memory_project_attachments: 9 passed
+- tests.test_memory_project_evidence: 13 passed
+- tests.test_memory_federation: 12 passed
+- tests.test_memory_environment_exchange: 27 passed
+- tests.test_memory_cloud_transport: 24 passed
+- tests.test_exchange_contract_snapshot: 5 passed
+- tests.test_v215_release_contract: 6 passed
+
+Additional gates:
+- py_compile passed for all six R4 production modules and the new contract test.
+- scripts/check_architecture_contract.py passed schema-v2 ownership and dependency checks.
+- git diff --check passed.
+- No live OneDrive, network, installation, scheduler, release, or primary archive path was used.
+- Filesystem, cloud-folder, CLI, crypto-envelope, replay, gap, overlap, tamper,
+  Unicode, yen-sign, and failure-isolation paths ran in isolated temporary roots.
+
+Golden fixture:
+- tests/fixtures/exchange-contract-v218.json
+  sha256=7b21f29aab84de27888e1c034ba3bbbc0ec838b768566efa64535427c7a881a4
+
+Observed correction during bounded execution:
+- The first Environment cloud construction exposed that authenticated-only
+  streams have no plain import_delta method. The explicit port now models the
+  plain slot as optional and fails closed if a plain stream omits it.
+- The two originally failing cases passed after that bounded correction, and
+  the complete Environment and Cloud transport targeted suites then passed.

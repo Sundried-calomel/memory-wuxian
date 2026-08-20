@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.18-r1-r8",
+  "packet_sha256": "23a86f7164335597e38cbe744057d6319d3fb9bac3802cc0a4a1ea80e2dc967e",
+  "checks": [
+    {
+      "check_id": "runtime-capability-probe",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r4-validation.log",
+          "sha256": "0df8f98b4c081db6369e5d54591b484561665f0932650d60f02b4e2f06de8a01"
+        }
+      ],
+      "note": "Python 3.12.13 executed all six R4 production modules through 101 unique targeted cases in the repository working directory."
+    },
+    {
+      "check_id": "unicode-path-fixtures",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r4-validation.log",
+          "sha256": "0df8f98b4c081db6369e5d54591b484561665f0932650d60f02b4e2f06de8a01"
+        }
+      ],
+      "note": "Golden and isolated stream fixtures preserved Chinese, Japanese, yen signs, spaces, exact manifest bytes, payload hashes, and structured crypto arguments."
+    },
+    {
+      "check_id": "target-platform-effect",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r4-validation.log",
+          "sha256": "0df8f98b4c081db6369e5d54591b484561665f0932650d60f02b4e2f06de8a01"
+        }
+      ],
+      "note": "Windows temporary filesystems exercised real ZIP, cursor, replica, lock, CLI, folder transport, envelope, quarantine, replay, and recovery effects without live cloud or archive mutation."
+    }
+  ]
+}

@@ -14,6 +14,16 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional
 
 from memory_environment import EnvironmentRegistry, canonical_bytes
+from memory_exchange_contract import (
+    ExchangeStreamFacade,
+    ExchangeStreamPort,
+    build_bundle_manifest,
+    validate_authenticated_binding,
+    validate_export_cursor,
+    validate_strict_replica_continuity,
+    verify_bundle_identity,
+    verify_payload,
+)
 from memory_federation import (
     FederationManager,
     atomic_write_bytes,
@@ -518,7 +528,7 @@ class ProjectEvidenceStore:
         return {"status": "completed" if apply else "preview", "applied": apply, "writes": writes, "conflicts": []}
 
 
-class ProjectEvidenceExchangeManager:
+class ProjectEvidenceExchangeManager(ExchangeStreamFacade):
     """Independent project-evidence-v1 stream; old clients safely ignore it."""
 
     requires_authenticated_transport = True
@@ -544,6 +554,26 @@ class ProjectEvidenceExchangeManager:
             atomic_write_json(self.export_state_path, {"format_version": 1, "next_event_sequence": 1, "source_events": {}})
         if not self.sync_log_path.exists():
             atomic_write_bytes(self.sync_log_path, b"")
+
+    def exchange_port(self) -> ExchangeStreamPort:
+        return ExchangeStreamPort(
+            store=self.store,
+            root=self.root,
+            metadata_root=self.metadata_root,
+            replica_root=self.replica_root,
+            exchange_lock_path=self.exchange_lock_path,
+            requires_authenticated_transport=True,
+            node=self.node,
+            peers=self.peers,
+            status=self.status,
+            exchange_observation=self.exchange_observation,
+            replica_state=self.replica_state,
+            read_bundle_manifest=self.read_bundle_manifest,
+            export_delta=self.export_delta,
+            import_delta=self.import_delta,
+            import_authenticated_delta=self._import_authenticated_delta,
+            log_sync=self.log_sync,
+        )
 
     def node(self) -> Dict[str, Any]:
         return self.federation.node()
@@ -590,12 +620,18 @@ class ProjectEvidenceExchangeManager:
     def export_delta(self, output: Path, after_event_sequence: int = 0, target_node_id: Optional[str] = None, previous_bundle_sha256: Optional[str] = None) -> Dict[str, Any]:
         ledger = self.refresh_export_ledger()
         latest = max((int(item["event_sequence"]) for item in ledger), default=0)
-        if after_event_sequence < 0 or after_event_sequence > latest:
-            raise ValueError("project evidence export cursor is invalid")
-        if after_event_sequence and not re.fullmatch(r"[0-9a-f]{64}", str(previous_bundle_sha256 or "")):
-            raise ValueError("project evidence predecessor hash is required")
-        if not after_event_sequence and previous_bundle_sha256 is not None:
-            raise ValueError("initial project evidence export cannot name a predecessor")
+        validate_export_cursor(
+            after_event_sequence,
+            latest,
+            previous_bundle_sha256,
+            cursor_error=lambda _after, _latest: "project evidence export cursor is invalid",
+            predecessor_error="project evidence predecessor hash is required",
+            initial_predecessor_error="initial project evidence export cannot name a predecessor",
+            predecessor_is_valid=lambda value: bool(
+                re.fullmatch(r"[0-9a-f]{64}", str(value or ""))
+            ),
+            initial_predecessor_is_declared=lambda value: value is not None,
+        )
         pending = [item for item in ledger if int(item["event_sequence"]) > after_event_sequence][:MAX_EVENTS_PER_BUNDLE]
         if not pending:
             return {"status": "no-change", "after_event_sequence": after_event_sequence}
@@ -617,7 +653,9 @@ class ProjectEvidenceExchangeManager:
             "payload_bytes": len(payload),
             "payload_sha256": bytes_sha256(payload),
         }
-        manifest = {**manifest_base, "bundle_id": "mwb-" + canonical_sha256(manifest_base)[:32]}
+        manifest = build_bundle_manifest(
+            manifest_base, canonical_sha256=canonical_sha256
+        )
         output.parent.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("manifest.json", canonical_bytes(manifest) + b"\n")
@@ -660,9 +698,11 @@ class ProjectEvidenceExchangeManager:
             raise ValueError("project evidence bundle payload path is invalid")
         if not 0 <= int(manifest["payload_bytes"]) <= MAX_BUNDLE_BYTES or not re.fullmatch(r"[0-9a-f]{64}", str(manifest["payload_sha256"])):
             raise ValueError("project evidence bundle payload metadata is invalid")
-        identity = {key: value for key, value in manifest.items() if key != "bundle_id"}
-        if manifest["bundle_id"] != "mwb-" + canonical_sha256(identity)[:32]:
-            raise ValueError("project evidence bundle identity mismatch")
+        verify_bundle_identity(
+            manifest,
+            canonical_sha256=canonical_sha256,
+            error="project evidence bundle identity mismatch",
+        )
         return manifest
 
     def replica_state(self, node_id: str) -> Dict[str, Any]:
@@ -675,28 +715,37 @@ class ProjectEvidenceExchangeManager:
         raise TypeError("project evidence import requires authenticated transport")
 
     def _import_authenticated_delta(self, bundle: Path, *, expected_node_id: str, authenticated_open_result: Any) -> Dict[str, Any]:
-        origin, target, payload_sha256 = authenticated_open_result.consume_environment_binding()
         expected = safe_node_id(expected_node_id)
-        if origin != expected or target != safe_node_id(self.node()["node_id"]):
-            raise ValueError("project evidence authenticated transport binding mismatch")
-        if payload_sha256 != bytes_sha256(bundle.read_bytes()):
-            raise ValueError("project evidence authenticated payload hash mismatch")
+        origin, target, payload_sha256 = validate_authenticated_binding(
+            authenticated_open_result.consume_environment_binding(),
+            expected_origin=expected,
+            expected_target=safe_node_id(self.node()["node_id"]),
+            expected_payload_sha256=bytes_sha256(bundle.read_bytes()),
+            identity_error="project evidence authenticated transport binding mismatch",
+            payload_error="project evidence authenticated payload hash mismatch",
+        )
         manifest = self.read_bundle_manifest(bundle)
         if safe_node_id(manifest["origin_node_id"]) != origin or safe_node_id(manifest["target_node_id"]) != target:
             raise ValueError("project evidence bundle target binding mismatch")
         state = self.replica_state(origin)
-        expected_sequence = int(state["last_event_sequence"]) + 1
-        if int(manifest["from_event_sequence"]) != expected_sequence:
-            raise ValueError("project evidence bundle sequence is not contiguous")
-        if int(state["last_event_sequence"]):
-            if manifest["previous_bundle_sha256"] != state["last_bundle_sha256"]:
-                raise ValueError("project evidence bundle predecessor hash mismatch")
-        elif manifest["previous_bundle_sha256"] is not None:
-            raise ValueError("initial project evidence bundle names a predecessor")
+        validate_strict_replica_continuity(
+            manifest,
+            state,
+            manifest_sequence_field="from_event_sequence",
+            state_offset=1,
+            sequence_error=lambda _expected, _actual: "project evidence bundle sequence is not contiguous",
+            predecessor_error="project evidence bundle predecessor hash mismatch",
+            initial_predecessor_error="initial project evidence bundle names a predecessor",
+        )
         with zipfile.ZipFile(bundle, "r") as archive:
             payload = archive.read(manifest["payload_path"])
-        if len(payload) != manifest["payload_bytes"] or bytes_sha256(payload) != manifest["payload_sha256"]:
-            raise ValueError("project evidence bundle payload integrity failed")
+        verify_payload(
+            manifest,
+            payload,
+            bytes_sha256=bytes_sha256,
+            size_error="project evidence bundle payload integrity failed",
+            hash_error="project evidence bundle payload integrity failed",
+        )
         records = [json.loads(line) for line in payload.splitlines() if line.strip()]
         expected_sequences = list(range(
             int(manifest["from_event_sequence"]),

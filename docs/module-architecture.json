@@ -151,6 +151,7 @@
       "allowed_dependencies": ["control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "platform-foundation"],
       "forbidden_dependencies": ["capture-core", "product-shell"],
       "patterns": [
+        "scripts/memory_exchange_contract.py",
         "scripts/memory_cloud_transport.py",
         "scripts/memory_federation.py",
         "scripts/memory_resumable_sync.py",

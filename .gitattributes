@@ -6,3 +6,4 @@ docs/work-contracts/v2.18-v3.json text eol=lf
 docs/rehearsals/v2.18-v3-candidate.json text eol=lf
 governance/v218-v3-*.json text eol=lf
 governance/v218-v3-*.md text eol=lf
+docs/defect-receipts/v2.18-r4-* -text whitespace=cr-at-eol
