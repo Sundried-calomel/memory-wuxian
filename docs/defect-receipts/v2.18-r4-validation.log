@@ -25,7 +25,7 @@ Additional gates:
 
 Golden fixture:
 - tests/fixtures/exchange-contract-v218.json
-  sha256=7b21f29aab84de27888e1c034ba3bbbc0ec838b768566efa64535427c7a881a4
+  sha256=89c25348a581b968808a77528edf8e3c745f2f88075f71332efeb62a55b85073
 
 Observed correction during bounded execution:
 - The first Environment cloud construction exposed that authenticated-only
@@ -33,3 +33,9 @@ Observed correction during bounded execution:
   plain slot as optional and fails closed if a plain stream omits it.
 - The two originally failing cases passed after that bounded correction, and
   the complete Environment and Cloud transport targeted suites then passed.
+- The post-implementation simplify review found and corrected four uncovered
+  equivalence defects: replica state now fails closed on missing sequence data,
+  project streams retain strict payload-size types, attachment pagination keeps
+  the original oversize ordering, and JSONL assembly uses one bounded buffer.
+- R4 evidence and the exchange golden fixture are now explicitly LF-bound;
+  no CRLF waiver is used to make diff or hash checks pass.

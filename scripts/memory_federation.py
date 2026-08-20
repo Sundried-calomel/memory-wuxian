@@ -206,7 +206,7 @@ class FederationManager(ExchangeStreamFacade):
 
     def exchange_port(self) -> ExchangeStreamPort:
         return ExchangeStreamPort(
-            store=self.store,
+            stream_id="archive-v1",
             root=self.root,
             metadata_root=self.metadata_root,
             replica_root=self.replica_root,
@@ -220,7 +220,6 @@ class FederationManager(ExchangeStreamFacade):
             read_bundle_manifest=self.read_bundle_manifest,
             export_delta=self.export_delta,
             import_delta=self.import_delta,
-            import_authenticated_delta=None,
             log_sync=self.log_sync,
         )
 
@@ -748,6 +747,7 @@ class FederationManager(ExchangeStreamFacade):
             bytes_sha256=bytes_sha256,
             size_error="Bundle payload size mismatch",
             hash_error="Bundle payload SHA-256 mismatch",
+            coerce_size=True,
         )
         verify_bundle_identity(
             manifest,

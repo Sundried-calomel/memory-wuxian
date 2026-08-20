@@ -148,7 +148,7 @@ class EnvironmentExchangeManager(ExchangeStreamFacade):
 
     def exchange_port(self) -> ExchangeStreamPort:
         return ExchangeStreamPort(
-            store=self.store,
+            stream_id="environment-v1",
             root=self.root,
             metadata_root=self.metadata_root,
             replica_root=self.replica_root,
@@ -161,8 +161,7 @@ class EnvironmentExchangeManager(ExchangeStreamFacade):
             replica_state=self.replica_state,
             read_bundle_manifest=self.read_bundle_manifest,
             export_delta=self.export_delta,
-            import_delta=None,
-            import_authenticated_delta=self._import_authenticated_delta,
+            import_delta=self._import_authenticated_delta,
             log_sync=self.log_sync,
             resolve_quarantine_path=self._resolve_cloud_quarantine_path,
         )
@@ -621,6 +620,7 @@ class EnvironmentExchangeManager(ExchangeStreamFacade):
             bytes_sha256=bytes_sha256,
             size_error="environment payload size mismatch",
             hash_error="environment payload hash mismatch",
+            coerce_size=True,
         )
         verify_bundle_identity(
             manifest,
@@ -1088,7 +1088,7 @@ class EnvironmentExchangeManager(ExchangeStreamFacade):
         if not isinstance(authenticated_open_result, AuthenticatedOpenResult):
             raise TypeError("authenticated environment import requires crypto-open evidence")
         validate_authenticated_binding(
-            authenticated_open_result.consume_environment_binding(),
+            authenticated_open_result.consume_stream_binding(),
             expected_origin=origin,
             expected_target=local_node["node_id"],
             expected_payload_sha256=bundle_hash,

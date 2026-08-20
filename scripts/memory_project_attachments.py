@@ -530,7 +530,7 @@ class ProjectAttachmentExchangeManager(ExchangeStreamFacade):
 
     def exchange_port(self) -> ExchangeStreamPort:
         return ExchangeStreamPort(
-            store=self.store,
+            stream_id=STREAM_ID,
             root=self.root,
             metadata_root=self.metadata_root,
             replica_root=self.replica_root,
@@ -543,8 +543,7 @@ class ProjectAttachmentExchangeManager(ExchangeStreamFacade):
             replica_state=self.replica_state,
             read_bundle_manifest=self.read_bundle_manifest,
             export_delta=self.export_delta,
-            import_delta=self.import_delta,
-            import_authenticated_delta=self._import_authenticated_delta,
+            import_delta=self._import_authenticated_delta,
             log_sync=self.log_sync,
         )
 
@@ -629,7 +628,7 @@ class ProjectAttachmentExchangeManager(ExchangeStreamFacade):
 
     def _import_authenticated_delta(self, bundle: Path, *, expected_node_id: str, authenticated_open_result: Any) -> Dict[str, Any]:
         origin, target, payload_sha256 = validate_authenticated_binding(
-            authenticated_open_result.consume_environment_binding(),
+            authenticated_open_result.consume_stream_binding(),
             expected_origin=safe_node_id(expected_node_id),
             expected_target=safe_node_id(self.node()["node_id"]),
             expected_payload_sha256=bytes_sha256(bundle.read_bytes()),

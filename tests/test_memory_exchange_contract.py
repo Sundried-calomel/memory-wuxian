@@ -50,7 +50,7 @@ class ExchangeContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "initial"):
             validate_export_cursor(0, 2, "a" * 64, **policy)
 
-    def test_jsonl_page_is_bounded_without_consuming_the_next_page(self):
+    def test_jsonl_page_preserves_stream_paging_and_oversize_order(self):
         records = [{"event_sequence": 1}, {"event_sequence": 2}, {"event_sequence": 3}]
         selected, payload = select_jsonl_page(
             records,
@@ -61,6 +61,16 @@ class ExchangeContractTests(unittest.TestCase):
         )
         self.assertEqual(selected, records[:2])
         self.assertEqual(payload, b"1\n2\n")
+
+        selected, payload = select_jsonl_page(
+            records[:2],
+            encode=lambda item: b"ok" if item["event_sequence"] == 1 else b"oversized",
+            maximum_items=3,
+            maximum_bytes=4,
+            oversized_item_error=lambda _item: "oversized",
+        )
+        self.assertEqual(selected, records[:1])
+        self.assertEqual(payload, b"ok")
 
         with self.assertRaisesRegex(ValueError, "oversized"):
             select_jsonl_page(
@@ -106,6 +116,22 @@ class ExchangeContractTests(unittest.TestCase):
                 size_error="size",
                 hash_error="hash",
             )
+        with self.assertRaisesRegex(ValueError, "size"):
+            verify_payload(
+                {**payload_manifest, "payload_bytes": str(len(payload))},
+                payload,
+                bytes_sha256=bytes_sha256,
+                size_error="size",
+                hash_error="hash",
+            )
+        verify_payload(
+            {**payload_manifest, "payload_bytes": str(len(payload))},
+            payload,
+            bytes_sha256=bytes_sha256,
+            size_error="size",
+            hash_error="hash",
+            coerce_size=True,
+        )
         with self.assertRaisesRegex(ValueError, "hash"):
             verify_payload(
                 {**payload_manifest, "payload_sha256": "0" * 64},
@@ -156,6 +182,22 @@ class ExchangeContractTests(unittest.TestCase):
                 sequence_error=lambda _expected, _actual: "sequence",
                 predecessor_error="predecessor",
             )
+        with self.assertRaises(KeyError):
+            validate_strict_replica_continuity(
+                manifest,
+                {"last_bundle_sha256": "e" * 64},
+                manifest_sequence_field="from_event_sequence",
+                state_offset=1,
+                sequence_error=lambda _expected, _actual: "sequence",
+                predecessor_error="predecessor",
+            )
+        with self.assertRaises(KeyError):
+            classify_replica_window(
+                {"from_event_sequence": 1, "to_event_sequence": 1},
+                {},
+                gap_error="gap",
+                stale_error="stale",
+            )
 
         window = classify_replica_window(
             {"from_event_sequence": 3, "to_event_sequence": 7},
@@ -180,7 +222,7 @@ class ExchangeContractTests(unittest.TestCase):
             return {"status": "authenticated"}
 
         common = dict(
-            store=object(),
+            stream_id="archive-v1",
             root=Path("root"),
             metadata_root=Path("metadata"),
             replica_root=Path("replica"),
@@ -198,7 +240,6 @@ class ExchangeContractTests(unittest.TestCase):
         plain_port = ExchangeStreamPort(
             **common,
             requires_authenticated_transport=False,
-            import_authenticated_delta=None,
         )
         self.assertEqual(
             plain_port.import_bundle(
@@ -209,9 +250,12 @@ class ExchangeContractTests(unittest.TestCase):
             "plain",
         )
         authenticated_port = ExchangeStreamPort(
-            **common,
+            **{
+                **common,
+                "stream_id": "environment-v1",
+                "import_delta": authenticated,
+            },
             requires_authenticated_transport=True,
-            import_authenticated_delta=authenticated,
         )
         self.assertEqual(
             authenticated_port.import_bundle(
@@ -222,19 +266,6 @@ class ExchangeContractTests(unittest.TestCase):
             "authenticated",
         )
         self.assertEqual([item[0] for item in calls], ["plain", "authenticated"])
-
-        incomplete_port = ExchangeStreamPort(
-            **{**common, "import_delta": None},
-            requires_authenticated_transport=False,
-            import_authenticated_delta=None,
-        )
-        with self.assertRaisesRegex(TypeError, "plain exchange port is incomplete"):
-            incomplete_port.import_bundle(
-                Path("missing.mwxb"),
-                expected_node_id="node-a",
-                authenticated_open_result=None,
-            )
-
 
 if __name__ == "__main__":
     unittest.main()

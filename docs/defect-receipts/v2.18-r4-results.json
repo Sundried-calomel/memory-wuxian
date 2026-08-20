@@ -9,7 +9,7 @@
       "evidence": [
         {
           "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r4-validation.log",
-          "sha256": "0df8f98b4c081db6369e5d54591b484561665f0932650d60f02b4e2f06de8a01"
+          "sha256": "d2b19d30ddab8a8932a63461f7fc89328e99933d433e8b1b5ac747aa4c8b225e"
         }
       ],
       "note": "Python 3.12.13 executed all six R4 production modules through 101 unique targeted cases in the repository working directory."
@@ -20,7 +20,7 @@
       "evidence": [
         {
           "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r4-validation.log",
-          "sha256": "0df8f98b4c081db6369e5d54591b484561665f0932650d60f02b4e2f06de8a01"
+          "sha256": "d2b19d30ddab8a8932a63461f7fc89328e99933d433e8b1b5ac747aa4c8b225e"
         }
       ],
       "note": "Golden and isolated stream fixtures preserved Chinese, Japanese, yen signs, spaces, exact manifest bytes, payload hashes, and structured crypto arguments."
@@ -31,7 +31,7 @@
       "evidence": [
         {
           "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r4-validation.log",
-          "sha256": "0df8f98b4c081db6369e5d54591b484561665f0932650d60f02b4e2f06de8a01"
+          "sha256": "d2b19d30ddab8a8932a63461f7fc89328e99933d433e8b1b5ac747aa4c8b225e"
         }
       ],
       "note": "Windows temporary filesystems exercised real ZIP, cursor, replica, lock, CLI, folder transport, envelope, quarantine, replay, and recovery effects without live cloud or archive mutation."

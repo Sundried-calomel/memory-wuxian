@@ -333,7 +333,6 @@ class CloudFolderTransport:
             raise TypeError("cloud transport requires an ExchangeStreamFacade")
         self.port: ExchangeStreamPort = manager.exchange_port()
         self.manager = manager
-        self.store = self.port.store
         self.archive_root = self.port.root
         self.stream_id = stream_id
         if stream_id is not None and not re.fullmatch(

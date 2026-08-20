@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 class ExchangeStreamPort:
     """Explicit cloud-transport boundary implemented by one stream facade."""
 
-    store: Any
+    stream_id: str
     root: Path
     metadata_root: Path
     replica_root: Path
@@ -26,8 +26,7 @@ class ExchangeStreamPort:
     replica_state: Callable[[str], Dict[str, Any]]
     read_bundle_manifest: Callable[[Path], Dict[str, Any]]
     export_delta: Callable[..., Dict[str, Any]]
-    import_delta: Optional[Callable[..., Dict[str, Any]]]
-    import_authenticated_delta: Optional[Callable[..., Dict[str, Any]]]
+    import_delta: Callable[..., Dict[str, Any]]
     log_sync: Callable[[str, str, Dict[str, Any]], None]
     resolve_quarantine_path: Optional[Callable[[Path], Path]] = None
 
@@ -39,15 +38,11 @@ class ExchangeStreamPort:
         authenticated_open_result: Any,
     ) -> Dict[str, Any]:
         if self.requires_authenticated_transport:
-            if self.import_authenticated_delta is None:
-                raise TypeError("authenticated exchange port is incomplete")
-            return self.import_authenticated_delta(
+            return self.import_delta(
                 bundle,
                 expected_node_id=expected_node_id,
                 authenticated_open_result=authenticated_open_result,
             )
-        if self.import_delta is None:
-            raise TypeError("plain exchange port is incomplete")
         return self.import_delta(bundle, expected_node_id=expected_node_id)
 
 
@@ -87,23 +82,19 @@ def select_jsonl_page(
     oversized_item_error: Callable[[Dict[str, Any]], str],
 ) -> Tuple[List[Dict[str, Any]], bytes]:
     selected: List[Dict[str, Any]] = []
-    encoded_records: List[bytes] = []
-    payload_bytes = 0
+    payload = bytearray()
     for record in records:
         encoded = encode(record)
-        if len(encoded) > maximum_bytes:
-            raise ValueError(oversized_item_error(record))
         if selected and (
             len(selected) >= maximum_items
-            or payload_bytes + len(encoded) > maximum_bytes
+            or len(payload) + len(encoded) > maximum_bytes
         ):
             break
-        if not selected and len(selected) >= maximum_items:
-            break
+        if len(encoded) > maximum_bytes:
+            raise ValueError(oversized_item_error(record))
         selected.append(record)
-        encoded_records.append(encoded)
-        payload_bytes += len(encoded)
-    return selected, b"".join(encoded_records)
+        payload.extend(encoded)
+    return selected, bytes(payload)
 
 
 def build_bundle_manifest(
@@ -135,8 +126,12 @@ def verify_payload(
     bytes_sha256: Callable[[bytes], str],
     size_error: str,
     hash_error: str,
+    coerce_size: bool = False,
 ) -> None:
-    if int(manifest.get("payload_bytes", -1)) != len(payload):
+    expected_size = manifest.get("payload_bytes", -1)
+    if coerce_size:
+        expected_size = int(expected_size)
+    if expected_size != len(payload):
         raise ValueError(size_error)
     if manifest.get("payload_sha256") != bytes_sha256(payload):
         raise ValueError(hash_error)
@@ -169,7 +164,7 @@ def validate_strict_replica_continuity(
     predecessor_error: str,
     initial_predecessor_error: Optional[str] = None,
 ) -> None:
-    last_sequence = int(state.get("last_event_sequence", 0))
+    last_sequence = int(state["last_event_sequence"])
     expected_sequence = last_sequence + state_offset
     actual_sequence = int(manifest[manifest_sequence_field])
     if actual_sequence != expected_sequence:
@@ -195,7 +190,7 @@ def classify_replica_window(
     gap_error: str,
     stale_error: str,
 ) -> ReplicaWindow:
-    expected_sequence = int(state.get("last_event_sequence", 0)) + 1
+    expected_sequence = int(state["last_event_sequence"]) + 1
     from_sequence = int(manifest["from_event_sequence"])
     to_sequence = int(manifest["to_event_sequence"])
     if from_sequence > expected_sequence:
