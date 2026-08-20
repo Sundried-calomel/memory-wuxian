@@ -27,6 +27,7 @@ from memory_environment import (
     canonical_bytes as _canonical,
     sha256_bytes as _sha256,
 )
+from memory_environment_install_lifecycle import InstallLifecycleCoordinator
 from platform_atomic import ParentSync, atomic_replace_bytes, sync_directory
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
@@ -252,38 +253,18 @@ class EnvironmentSkillInstaller:
     ) -> Dict[str, Any]:
         """Validate and preview by default; mutate only with explicit apply."""
 
-        package = Path(package_path)
         with exclusive_lock(self.lock_path):
-            self.recover_transactions()
-            prepared = self._prepare(
-                package=package,
+            adapter = _SkillInstallLifecycleAdapter(
+                self,
+                package=Path(package_path),
                 artifact_id=artifact_id,
                 revision_id=revision_id,
                 target_binding=target_binding,
             )
-            if prepared["decision"] == "no-change":
-                return {
-                    "status": "no-change",
-                    "artifact_id": artifact_id,
-                    "revision_id": revision_id,
-                    "target_binding": target_binding,
-                    "target_path": str(prepared["target_path"]),
-                }
-            preview = {
-                "status": "preview",
-                "artifact_id": artifact_id,
-                "revision_id": revision_id,
-                "target_binding": target_binding,
-                "target_path": str(prepared["target_path"]),
-                "decision": prepared["decision"],
-                "package_sha256": prepared["package_sha256"],
-                "previous_installed_sha256": prepared["previous_hash"],
-                "final_installed_sha256": prepared["logical_hash"],
-                "rehearsal": prepared["rehearsal"],
-            }
-            if not apply:
-                return preview
-            return self._apply(prepared)
+            return InstallLifecycleCoordinator[Dict[str, Any], Dict[str, Any]]().run(
+                adapter,
+                apply=apply,
+            )
 
     def _prepare(
         self,
@@ -1641,3 +1622,63 @@ class EnvironmentSkillInstaller:
 
     def _after_rollback_saved(self, target: Path) -> None:
         """Test seam after durable rollback creation and before transaction mutation."""
+
+
+class _SkillInstallLifecycleAdapter:
+    """Map the Skill facade onto the shared non-persisting stage order."""
+
+    def __init__(
+        self,
+        installer: EnvironmentSkillInstaller,
+        *,
+        package: Path,
+        artifact_id: str,
+        revision_id: str,
+        target_binding: str,
+    ):
+        self.installer = installer
+        self.package = package
+        self.artifact_id = artifact_id
+        self.revision_id = revision_id
+        self.target_binding = target_binding
+
+    def recover(self) -> None:
+        self.installer.recover_transactions()
+
+    def prepare(self) -> Dict[str, Any]:
+        return self.installer._prepare(
+            package=self.package,
+            artifact_id=self.artifact_id,
+            revision_id=self.revision_id,
+            target_binding=self.target_binding,
+        )
+
+    def no_change_result(
+        self, prepared: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        if prepared["decision"] != "no-change":
+            return None
+        return {
+            "status": "no-change",
+            "artifact_id": self.artifact_id,
+            "revision_id": self.revision_id,
+            "target_binding": self.target_binding,
+            "target_path": str(prepared["target_path"]),
+        }
+
+    def preview_result(self, prepared: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "status": "preview",
+            "artifact_id": self.artifact_id,
+            "revision_id": self.revision_id,
+            "target_binding": self.target_binding,
+            "target_path": str(prepared["target_path"]),
+            "decision": prepared["decision"],
+            "package_sha256": prepared["package_sha256"],
+            "previous_installed_sha256": prepared["previous_hash"],
+            "final_installed_sha256": prepared["logical_hash"],
+            "rehearsal": prepared["rehearsal"],
+        }
+
+    def apply_prepared(self, prepared: Dict[str, Any]) -> Dict[str, Any]:
+        return self.installer._apply(prepared)

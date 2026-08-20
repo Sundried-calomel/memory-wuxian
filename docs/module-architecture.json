@@ -223,6 +223,26 @@
       "scripts/install_auto_update.py"
     ]
   },
+  "python_environment_install_lifecycle_rules": {
+    "canonical_owner": "environment-plane",
+    "coordinator": "scripts/memory_environment_install_lifecycle.py:InstallLifecycleCoordinator",
+    "compatibility_facades": [
+      "scripts/memory_environment_rules.py:EnvironmentRuleInstaller",
+      "scripts/memory_environment_skills.py:EnvironmentSkillInstaller"
+    ],
+    "coordinator_forbidden_capabilities": [
+      "filesystem persistence",
+      "transaction serialization",
+      "receipt serialization",
+      "rollback serialization",
+      "package validation",
+      "managed-block policy"
+    ],
+    "independent_failure_domains": [
+      "Rule transaction directories and rollback.bin",
+      "Skill transaction JSON and staging/displaced/rollback directories"
+    ]
+  },
   "python_dependency_rules": {
     "enforce_module_allowlist": true,
     "forbidden_imports": {
