@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -20,6 +21,11 @@ from memory_cli import (
     project_evidence_cloud_transport,
 )
 from memory_cloud_transport import CloudFolderTransport
+from memory_cloud_streams import (
+    CloudApplicationService,
+    CloudStreamDefinition,
+    CloudStreamRegistry,
+)
 from memory_dashboard import make_handler
 from memory_federation import FederationManager
 from memory_project_attachments import ProjectAttachmentExchangeManager
@@ -93,6 +99,31 @@ class CloudApplicationContractTest(unittest.TestCase):
             values = [item[field] for item in observed]
             self.assertEqual(len(values), len(set(values)), field)
 
+    def test_registry_and_stream_definitions_are_immutable(self):
+        registry = CloudStreamRegistry()
+
+        with self.assertRaises(FrozenInstanceError):
+            registry.definitions = ()
+        with self.assertRaises(FrozenInstanceError):
+            registry.definitions[0].stream_id = "changed"
+        with self.assertRaises(TypeError):
+            registry._by_id["changed"] = registry.definitions[0]
+
+    def test_registry_rejects_duplicate_result_keys(self):
+        definitions = CloudStreamRegistry().definitions
+        duplicate = CloudStreamDefinition(
+            stream_id="duplicate-v1",
+            result_key=definitions[1].result_key,
+            manager_factory=definitions[1].manager_factory,
+            transport_namespace="duplicate-v1",
+            bootstrap_readiness="configured-status",
+        )
+
+        with self.assertRaisesRegex(
+            ValueError, "cloud stream result keys must be unique"
+        ):
+            CloudStreamRegistry(definitions + (duplicate,))
+
     def test_bootstrap_copies_archive_defaults_to_each_independent_config(self):
         exchange = self.base / "同步 cloud ¥ 日本語"
         exchange.mkdir()
@@ -118,6 +149,34 @@ class CloudApplicationContractTest(unittest.TestCase):
                 transport.config["identity_private_path"], str(identity.resolve())
             )
         self.assertEqual(len({item.config_path for item in transports}), 3)
+
+    def test_bootstrap_never_overwrites_existing_stream_configuration(self):
+        exchange = self.base / "cloud"
+        exchange.mkdir()
+        identity = self.base / "keys" / "identity.json"
+        archive = CloudFolderTransport(FederationManager(self.store))
+        archive.configure(exchange, identity, enabled=True)
+        factories = (
+            environment_cloud_transport,
+            project_evidence_cloud_transport,
+            project_attachment_cloud_transport,
+        )
+        expected = {}
+        for index, factory in enumerate(factories, start=1):
+            transport = factory(self.store, archive, bootstrap=True)
+            transport.config["merge_window_seconds"] = index
+            transport.save_config()
+            expected[transport.port.stream_id] = index
+
+        archive.config["merge_window_seconds"] = 999
+        archive.save_config()
+
+        for factory in factories:
+            transport = factory(self.store, archive, bootstrap=True)
+            self.assertEqual(
+                transport.config["merge_window_seconds"],
+                expected[transport.port.stream_id],
+            )
 
     def test_dashboard_attachment_inclusion_matches_frozen_contract(self):
         handler_type = make_handler(self.store)
@@ -167,19 +226,34 @@ class CloudApplicationContractTest(unittest.TestCase):
 
     def test_cli_sync_keeps_environment_incoming_as_explicit_post_sync_step(self):
         events = []
+        lifecycle = []
+
+        original_transport = CloudApplicationService.transport
+
+        def construct(service, stream_id, **kwargs):
+            lifecycle.append(f"construct:{stream_id}")
+            return original_transport(service, stream_id, **kwargs)
 
         def sync(transport, *, force=False):
             self.assertTrue(force)
             events.append(transport.port.stream_id)
+            lifecycle.append(f"sync:{transport.port.stream_id}")
             return {"status": "ok", "stream_id": transport.port.stream_id}
 
         def process(_processor, *, apply=False):
             self.assertTrue(apply)
             events.append("environment-incoming")
+            lifecycle.append("environment-incoming")
             return {"status": "processed"}
 
         output = io.StringIO()
         with (
+            patch.object(
+                CloudApplicationService,
+                "transport",
+                autospec=True,
+                side_effect=construct,
+            ),
             patch.object(CloudFolderTransport, "sync", autospec=True, side_effect=sync),
             patch(
                 "memory_cli.EnvironmentIncomingProcessor.process",
@@ -197,6 +271,20 @@ class CloudApplicationContractTest(unittest.TestCase):
         payload = json.loads(output.getvalue())
         self.assertEqual(status, 0)
         self.assertEqual(events, self.contract["cli"]["cloud_sync_order"])
+        self.assertEqual(
+            lifecycle,
+            [
+                "construct:archive-v1",
+                "sync:archive-v1",
+                "construct:environment-v1",
+                "sync:environment-v1",
+                "environment-incoming",
+                "construct:project-evidence-v1",
+                "sync:project-evidence-v1",
+                "construct:project-attachment-v1",
+                "sync:project-attachment-v1",
+            ],
+        )
         self.assertEqual(payload["environment"]["incoming"], {"status": "processed"})
 
 

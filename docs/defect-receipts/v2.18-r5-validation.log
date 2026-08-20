@@ -1,0 +1,28 @@
+Memory Wuxian v2.18 R5 targeted validation
+Date: 2026-08-20 Asia/Tokyo
+Runtime: C:\Users\56453\.codex\runtimes\memory-wuxian-e5-py312\Scripts\python.exe
+Working directory: C:\Users\56453\Documents\ChatGPT\memory无限\memory-wuxian-v218
+
+TARGETED TESTS
+Command: python -m unittest tests.test_memory_cloud_application_contract tests.test_cli_contract_snapshot tests.test_memory_cloud_transport tests.test_memory_dashboard_federation tests.test_memory_dashboard_environment tests.test_memory_dashboard_system -v
+Result: PASS, 69 tests in 45.501 seconds.
+Observed production effects: temporary Windows filesystems, UTF-8 and special-character paths, real local CLI/dashboard HTTP paths, and a real local Rust envelope round trip.
+Excluded effects: no OneDrive, network write, live archive, installation, scheduler activation, version change, publication, or release.
+
+ARCHITECTURE
+Command: python scripts/check_architecture_contract.py
+Result: PASS. Schema v2 ownership, dependency allowlists, and Rust capability boundaries are valid.
+
+PY_COMPILE
+Command: python -m py_compile scripts/memory_cloud_streams.py scripts/memory_cli.py scripts/memory_dashboard.py tests/test_memory_cloud_application_contract.py tests/test_memory_dashboard_federation.py
+Result: PASS.
+
+DIFF CHECK
+Command: git diff --check
+Result: PASS.
+
+SOURCE AUDIT
+Result: PASS. CLI and Dashboard contain no direct CloudFolderTransport construction or nonarchive cloud.json assembly. The canonical construction and bootstrap implementation is scripts/memory_cloud_streams.py.
+Result: PASS. The frozen fixture proves unique config, cursor, ledger, replica, lock, and ACK/failure-state paths for archive-v1, environment-v1, project-evidence-v1, and project-attachment-v1.
+Result: PASS. archive-v1 remains unnamespaced, existing per-stream config is not overwritten, project attachment dashboard inclusion remains conditional, and Environment incoming remains an explicit CLI post-sync action.
+Result: PASS. Stream IDs and public result keys are both unique, so registry-driven CLI loops cannot silently overwrite an earlier stream result.

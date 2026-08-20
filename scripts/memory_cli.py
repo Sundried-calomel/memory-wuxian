@@ -24,6 +24,7 @@ from platform_lock import exclusive_lock
 from platform_paths import active_root_pointer
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
 from memory_cloud_transport import CloudFolderTransport
+from memory_cloud_streams import CloudApplicationService
 import memory_configuration
 from memory_environment import EnvironmentRegistry
 from memory_environment_bindings import EnvironmentBindingRegistry
@@ -125,41 +126,11 @@ def environment_cloud_transport(
     *,
     bootstrap: bool,
 ) -> CloudFolderTransport:
-    manager = EnvironmentExchangeManager(store)
-    transport = CloudFolderTransport(
-        manager,
-        config_path=manager.metadata_root / "cloud.json",
-        stream_id="environment-v1",
+    return CloudApplicationService(store).transport(
+        "environment-v1",
+        archive_transport=archive_transport,
+        bootstrap=bootstrap,
     )
-    if (
-        bootstrap
-        and not transport.config_path.exists()
-        and archive_transport.status()["configured"]
-    ):
-        archive_config = archive_transport.config
-        transport.configure(
-            Path(str(archive_config["exchange_root"])),
-            Path(str(archive_config["identity_private_path"])),
-            (
-                Path(str(archive_config["envelope_binary"]))
-                if archive_config.get("envelope_binary")
-                else None
-            ),
-            enabled=bool(archive_config.get("enabled")),
-            merge_window_seconds=int(
-                archive_config.get("merge_window_seconds", 900)
-            ),
-            early_flush_bytes=int(
-                archive_config.get("early_flush_bytes", 1024 * 1024)
-            ),
-            maximum_pending_seconds=int(
-                archive_config.get("maximum_pending_seconds", 3600)
-            ),
-            cleanup_grace_seconds=int(
-                archive_config.get("cleanup_grace_seconds", 24 * 60 * 60)
-            ),
-        )
-    return transport
 
 
 def project_evidence_cloud_transport(
@@ -168,33 +139,11 @@ def project_evidence_cloud_transport(
     *,
     bootstrap: bool,
 ) -> CloudFolderTransport:
-    manager = ProjectEvidenceExchangeManager(store)
-    transport = CloudFolderTransport(
-        manager,
-        config_path=manager.metadata_root / "cloud.json",
-        stream_id="project-evidence-v1",
+    return CloudApplicationService(store).transport(
+        "project-evidence-v1",
+        archive_transport=archive_transport,
+        bootstrap=bootstrap,
     )
-    if (
-        bootstrap
-        and not transport.config_path.exists()
-        and archive_transport.status()["configured"]
-    ):
-        archive_config = archive_transport.config
-        transport.configure(
-            Path(str(archive_config["exchange_root"])),
-            Path(str(archive_config["identity_private_path"])),
-            (
-                Path(str(archive_config["envelope_binary"]))
-                if archive_config.get("envelope_binary")
-                else None
-            ),
-            enabled=bool(archive_config.get("enabled")),
-            merge_window_seconds=int(archive_config.get("merge_window_seconds", 900)),
-            early_flush_bytes=int(archive_config.get("early_flush_bytes", 1024 * 1024)),
-            maximum_pending_seconds=int(archive_config.get("maximum_pending_seconds", 3600)),
-            cleanup_grace_seconds=int(archive_config.get("cleanup_grace_seconds", 24 * 60 * 60)),
-        )
-    return transport
 
 
 def project_attachment_cloud_transport(
@@ -203,25 +152,11 @@ def project_attachment_cloud_transport(
     *,
     bootstrap: bool,
 ) -> CloudFolderTransport:
-    manager = ProjectAttachmentExchangeManager(store)
-    transport = CloudFolderTransport(
-        manager,
-        config_path=manager.metadata_root / "cloud.json",
-        stream_id="project-attachment-v1",
+    return CloudApplicationService(store).transport(
+        "project-attachment-v1",
+        archive_transport=archive_transport,
+        bootstrap=bootstrap,
     )
-    config = archive_transport.config
-    if bootstrap and not transport.config_path.exists() and isinstance(config, dict) and str(config.get("exchange_root", "")).strip():
-        transport.configure(
-            Path(str(config["exchange_root"])),
-            Path(str(config["identity_private_path"])),
-            Path(str(config["envelope_binary"])) if config.get("envelope_binary") else None,
-            enabled=bool(config.get("enabled")),
-            merge_window_seconds=int(config.get("merge_window_seconds", 900)),
-            early_flush_bytes=int(config.get("early_flush_bytes", 1024 * 1024)),
-            maximum_pending_seconds=int(config.get("maximum_pending_seconds", 3600)),
-            cleanup_grace_seconds=int(config.get("cleanup_grace_seconds", 24 * 60 * 60)),
-        )
-    return transport
 
 
 def environment_node_bindings(store: "MemoryStore") -> EnvironmentBindingRegistry:
@@ -5490,8 +5425,9 @@ def dispatch_command(
     elif args.command == "sync-peer":
         result = FederationManager(store).sync_peer(args.node_id)
     elif args.command == "cloud-configure":
-        manager = FederationManager(store)
-        transport = CloudFolderTransport(manager)
+        cloud_service = CloudApplicationService(store)
+        transport = cloud_service.transport("archive-v1")
+        manager = transport.manager
         node_id = manager.node()["node_id"]
         identity_path = (
             Path(args.identity_path).expanduser()
@@ -5526,16 +5462,12 @@ def dispatch_command(
             ),
         )
         result["identity"] = transport.initialize_identity()
-        environment_transport = environment_cloud_transport(
-            store, transport, bootstrap=True
-        )
-        result["environment"] = environment_transport.status()
-        result["project_evidence"] = project_evidence_cloud_transport(
-            store, transport, bootstrap=True
-        ).status()
-        result["project_attachments"] = project_attachment_cloud_transport(
-            store, transport, bootstrap=True
-        ).status()
+        for definition in cloud_service.registry.definitions[1:]:
+            result[definition.result_key] = cloud_service.transport(
+                definition.stream_id,
+                archive_transport=transport,
+                bootstrap=True,
+            ).status()
         result["scheduler_install_command"] = [
             sys.executable,
             str(SKILL_ROOT / "scripts" / "install_cloud_sync.py"),
@@ -5548,8 +5480,8 @@ def dispatch_command(
             "--load",
         ]
     elif args.command == "cloud-pair-export":
-        manager = FederationManager(store)
-        transport = CloudFolderTransport(manager)
+        transport = CloudApplicationService(store).transport("archive-v1")
+        manager = transport.manager
         node = manager.node()
         pairing = {
             "format": "memory-wuxian-cloud-pairing-v1",
@@ -5597,68 +5529,91 @@ def dispatch_command(
             fingerprint,
         )
     elif args.command == "cloud-sync":
-        archive_transport = CloudFolderTransport(FederationManager(store))
+        cloud_service = CloudApplicationService(store)
+        archive_transport = cloud_service.transport("archive-v1")
         result = archive_transport.sync(force=args.force)
-        result["environment"] = environment_cloud_transport(
-            store, archive_transport, bootstrap=True
-        ).sync(force=args.force)
+        environment_transport = cloud_service.transport(
+            "environment-v1",
+            archive_transport=archive_transport,
+            bootstrap=True,
+        )
+        result["environment"] = environment_transport.sync(force=args.force)
         result["environment"]["incoming"] = EnvironmentIncomingProcessor(
             store.root,
             platform=local_platform_name(),
             runtime_versions=local_runtime_versions([]),
         ).process(apply=True)
-        result["project_evidence"] = project_evidence_cloud_transport(
-            store, archive_transport, bootstrap=True
-        ).sync(force=args.force)
-        result["project_attachments"] = project_attachment_cloud_transport(
-            store, archive_transport, bootstrap=True
-        ).sync(force=args.force)
+        project_evidence_transport = cloud_service.transport(
+            "project-evidence-v1",
+            archive_transport=archive_transport,
+            bootstrap=True,
+        )
+        result["project_evidence"] = project_evidence_transport.sync(
+            force=args.force
+        )
+        project_attachment_transport = cloud_service.transport(
+            "project-attachment-v1",
+            archive_transport=archive_transport,
+            bootstrap=True,
+        )
+        result["project_attachments"] = project_attachment_transport.sync(
+            force=args.force
+        )
     elif args.command == "cloud-status":
-        archive_transport = CloudFolderTransport(FederationManager(store))
+        cloud_service = CloudApplicationService(store)
+        archive_transport = cloud_service.transport("archive-v1")
         result = archive_transport.status()
-        result["environment"] = environment_cloud_transport(
-            store, archive_transport, bootstrap=False
-        ).status()
+        environment_transport = cloud_service.transport(
+            "environment-v1",
+            archive_transport=archive_transport,
+            bootstrap=False,
+        )
+        result["environment"] = environment_transport.status()
         result["environment"]["incoming"] = EnvironmentIncomingProcessor(
             store.root,
             platform=local_platform_name(),
             runtime_versions=local_runtime_versions([]),
         ).status()
-        result["project_evidence"] = project_evidence_cloud_transport(
-            store, archive_transport, bootstrap=False
-        ).status()
-        result["project_attachments"] = project_attachment_cloud_transport(
-            store, archive_transport, bootstrap=False
-        ).status()
+        project_evidence_transport = cloud_service.transport(
+            "project-evidence-v1",
+            archive_transport=archive_transport,
+            bootstrap=False,
+        )
+        result["project_evidence"] = project_evidence_transport.status()
+        project_attachment_transport = cloud_service.transport(
+            "project-attachment-v1",
+            archive_transport=archive_transport,
+            bootstrap=False,
+        )
+        result["project_attachments"] = project_attachment_transport.status()
     elif args.command == "project-attachment-sync":
-        archive_transport = CloudFolderTransport(FederationManager(store))
-        result = project_attachment_cloud_transport(
-            store, archive_transport, bootstrap=True
+        cloud_service = CloudApplicationService(store)
+        archive_transport = cloud_service.transport("archive-v1")
+        result = cloud_service.transport(
+            "project-attachment-v1",
+            archive_transport=archive_transport,
+            bootstrap=True,
         ).sync(force=args.force)
     elif args.command == "cloud-enable":
-        archive_transport = CloudFolderTransport(FederationManager(store))
+        cloud_service = CloudApplicationService(store)
+        archive_transport = cloud_service.transport("archive-v1")
         result = archive_transport.set_enabled(True)
-        result["environment"] = environment_cloud_transport(
-            store, archive_transport, bootstrap=True
-        ).set_enabled(True)
-        result["project_evidence"] = project_evidence_cloud_transport(
-            store, archive_transport, bootstrap=True
-        ).set_enabled(True)
-        result["project_attachments"] = project_attachment_cloud_transport(
-            store, archive_transport, bootstrap=True
-        ).set_enabled(True)
+        for definition in cloud_service.registry.definitions[1:]:
+            result[definition.result_key] = cloud_service.transport(
+                definition.stream_id,
+                archive_transport=archive_transport,
+                bootstrap=True,
+            ).set_enabled(True)
     elif args.command == "cloud-disable":
-        archive_transport = CloudFolderTransport(FederationManager(store))
+        cloud_service = CloudApplicationService(store)
+        archive_transport = cloud_service.transport("archive-v1")
         result = archive_transport.set_enabled(False)
-        result["environment"] = environment_cloud_transport(
-            store, archive_transport, bootstrap=True
-        ).set_enabled(False)
-        result["project_evidence"] = project_evidence_cloud_transport(
-            store, archive_transport, bootstrap=True
-        ).set_enabled(False)
-        result["project_attachments"] = project_attachment_cloud_transport(
-            store, archive_transport, bootstrap=True
-        ).set_enabled(False)
+        for definition in cloud_service.registry.definitions[1:]:
+            result[definition.result_key] = cloud_service.transport(
+                definition.stream_id,
+                archive_transport=archive_transport,
+                bootstrap=True,
+            ).set_enabled(False)
     elif args.command == "project-evidence-build":
         result = ProjectEvidenceStore(store).build(
             read_json(Path(args.spec).expanduser().resolve()),

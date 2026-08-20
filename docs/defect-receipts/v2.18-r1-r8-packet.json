@@ -29,7 +29,7 @@
       "catalog_id": "windows-device-general-skill-defects",
       "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\defect-rule-catalog.json",
       "scope": "global",
-      "sha256": "2282f118719ba57b24b3dd069c2ce4bc62d90a51ba78ff2725679cef61ba9f57"
+      "sha256": "e1751b51de1d5ec26f0f81609fc394ffe99f4071c56faedda35b588e7bacee41"
     }
   ],
   "invalidation_conditions": [
@@ -178,7 +178,12 @@
       "rule_id": "G02",
       "score": 60,
       "severity": "high",
-      "source_incidents": [],
+      "source_incidents": [
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-011"
+        }
+      ],
       "title": "文件或进程存在不等于功能生效"
     },
     {
@@ -800,8 +805,8 @@
     }
   ],
   "no_match_reason": null,
-  "packet_id": "packet:0a5e6ad645d1ce5bbcf86cc8",
-  "packet_sha256": "23a86f7164335597e38cbe744057d6319d3fb9bac3802cc0a4a1ea80e2dc967e",
+  "packet_id": "packet:d6923f72cc855aebb18112e6",
+  "packet_sha256": "60c1d03b999edb60b719381402a0c94efe1075c97844603e551b91e5568677b9",
   "review_required_rule_ids": [],
   "schema_version": 1,
   "status": "ready",

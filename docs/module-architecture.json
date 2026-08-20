@@ -22,6 +22,7 @@
         "environment-plane",
         "project-evidence-plane",
         "exchange-plane",
+        "application-services",
         "product-quality"
       ],
       "forbidden_capabilities": ["control", "memory", "exchange", "environment", "project", "ui", "ai"],
@@ -53,7 +54,7 @@
       "architecture_owner": "Product Shell",
       "criticality": "P2",
       "failure_domain": "product-shell",
-      "allowed_dependencies": ["capture-core", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "platform-foundation"],
+      "allowed_dependencies": ["capture-core", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services", "platform-foundation"],
       "forbidden_dependencies": [],
       "patterns": [
         "dashboard/**",
@@ -159,12 +160,26 @@
       ]
     },
     {
+      "id": "application-services",
+      "architecture_owner": "Application Services",
+      "criticality": "P1",
+      "failure_domain": "application-services",
+      "allowed_dependencies": ["environment-plane", "project-evidence-plane", "exchange-plane"],
+      "forbidden_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "platform-foundation"],
+      "patterns": [
+        "scripts/memory_cloud_streams.py"
+      ],
+      "expected_patterns": [
+        "scripts/memory_cloud_streams.py"
+      ]
+    },
+    {
       "id": "platform-foundation",
       "architecture_owner": "Platform Foundation",
       "criticality": "P0",
       "failure_domain": "platform-foundation",
       "allowed_dependencies": [],
-      "forbidden_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane"],
+      "forbidden_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services"],
       "patterns": [
         "scripts/console_encoding.py",
         "scripts/collector_activation.py",
@@ -178,7 +193,7 @@
       "architecture_owner": "Release Evidence Contract",
       "criticality": "P2",
       "failure_domain": "product-quality",
-      "allowed_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "platform-foundation"],
+      "allowed_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services", "platform-foundation"],
       "forbidden_dependencies": [],
       "patterns": [
         "scripts/build_native_collector.ps1",
@@ -244,6 +259,28 @@
       "Skill transaction JSON and staging/displaced/rollback directories"
     ]
   },
+  "python_cloud_application_service_rules": {
+    "canonical_owner": "application-services",
+    "registry": "scripts/memory_cloud_streams.py:CloudStreamRegistry",
+    "service": "scripts/memory_cloud_streams.py:CloudApplicationService",
+    "shells": ["scripts/memory_cli.py", "scripts/memory_dashboard.py"],
+    "independent_streams": [
+      "archive-v1",
+      "environment-v1",
+      "project-evidence-v1",
+      "project-attachment-v1"
+    ],
+    "forbidden_shared_state": [
+      "cloud.json",
+      "cursor",
+      "ledger",
+      "replica",
+      "acknowledgement",
+      "lock",
+      "failure state"
+    ],
+    "explicit_post_sync_actions": ["environment incoming consumption"]
+  },
   "python_dependency_rules": {
     "enforce_module_allowlist": true,
     "forbidden_imports": {
@@ -265,6 +302,7 @@
       "memory-plane": ["memory_cli", "memory_dashboard"],
       "environment-plane": ["memory_cli", "memory_dashboard"],
       "exchange-plane": ["memory_cli", "memory_dashboard"],
+      "application-services": ["memory_cli", "memory_dashboard"],
       "platform-foundation": [
         "memory_cli",
         "memory_dashboard",
