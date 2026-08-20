@@ -259,6 +259,29 @@
       "Skill transaction JSON and staging/displaced/rollback directories"
     ]
   },
+  "python_environment_immutable_record_rules": {
+    "canonical_owner": "environment-plane",
+    "mechanics": "scripts/memory_environment_immutable_records.py:ImmutableRecordStore",
+    "validation": "scripts/memory_environment_immutable_records.py:validate_immutable_envelope",
+    "compatibility_facades": [
+      "scripts/memory_environment_governance.py:GovernanceProposalStore",
+      "scripts/memory_environment_evolution.py:ProductEvolutionStore"
+    ],
+    "shared_mechanics": [
+      "canonical content encoding and hashing",
+      "six-field envelope construction and validation",
+      "immutable create-if-absent persistence",
+      "local event enumeration",
+      "read-only replica enumeration"
+    ],
+    "facade_owned_semantics": [
+      "public method names and constants",
+      "identity patterns and size limits",
+      "preview and list safety fields",
+      "domain-specific error text",
+      "collection paths, locks, and source event prefixes"
+    ]
+  },
   "python_cloud_application_service_rules": {
     "canonical_owner": "application-services",
     "registry": "scripts/memory_cloud_streams.py:CloudStreamRegistry",

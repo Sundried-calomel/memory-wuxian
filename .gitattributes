@@ -10,3 +10,4 @@ tests/fixtures/exchange-contract-v218.json text eol=lf
 tests/fixtures/cloud-application-contract-v218.json text eol=lf
 docs/defect-receipts/v2.18-r4-* text eol=lf
 docs/defect-receipts/v2.18-r5-* text eol=lf
+docs/defect-receipts/v2.18-r6-* text eol=lf
