@@ -4031,9 +4031,13 @@ ai_summary:
 
     #[test]
     fn backs_off_after_idle_periods() {
-        assert_eq!(adaptive_fallback(Duration::from_secs(0)), ACTIVE_FALLBACK);
-        assert_eq!(adaptive_fallback(IDLE_AFTER), IDLE_FALLBACK);
-        assert_eq!(adaptive_fallback(DEEP_IDLE_AFTER), DEEP_IDLE_FALLBACK);
+        for (idle_for, expected) in [
+            (Duration::from_secs(0), ACTIVE_FALLBACK),
+            (IDLE_AFTER, IDLE_FALLBACK),
+            (DEEP_IDLE_AFTER, DEEP_IDLE_FALLBACK),
+        ] {
+            assert_eq!(adaptive_fallback(idle_for), expected);
+        }
     }
 
     #[test]

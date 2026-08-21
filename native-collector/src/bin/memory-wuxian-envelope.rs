@@ -680,6 +680,57 @@ mod tests {
                 "recipient",
             )
         }
+
+        fn assert_kind_round_trip(
+            &self,
+            kind: EnvelopeKind,
+            output_name: &str,
+            rejected_kinds: &[(EnvelopeKind, &str)],
+        ) -> Result<()> {
+            let sender = load_identity(&self.sender_identity)?;
+            let recipient = load_identity(&self.recipient_identity)?;
+            seal_file(
+                &self.sender_identity,
+                &[
+                    sender.encryption_public_key,
+                    recipient.encryption_public_key,
+                ],
+                &self.payload,
+                &self.envelope,
+                kind,
+                "sender",
+                "recipient",
+            )?;
+            let output = self.directory.path().join(output_name);
+            open_file(
+                &self.recipient_identity,
+                &sender.signing_public_key,
+                &self.envelope,
+                &output,
+                kind,
+                "sender",
+                "recipient",
+            )?;
+            assert_eq!(fs::read(&output)?, fs::read(&self.payload)?);
+
+            for &(rejected_kind, rejected_name) in rejected_kinds {
+                let rejected_output = self.directory.path().join(rejected_name);
+                assert!(
+                    open_file(
+                        &self.recipient_identity,
+                        &sender.signing_public_key,
+                        &self.envelope,
+                        &rejected_output,
+                        rejected_kind,
+                        "sender",
+                        "recipient",
+                    )
+                    .is_err()
+                );
+                assert!(!rejected_output.exists());
+            }
+            Ok(())
+        }
     }
 
     #[test]
@@ -699,173 +750,60 @@ mod tests {
         let encrypted = fs::read(&fixture.envelope)?;
         let sender = load_identity(&fixture.sender_identity)?;
         let recipient = load_identity(&fixture.recipient_identity)?;
-        let sender_output = fixture.directory.path().join("sender-opened.mwxb");
-        let recipient_output = fixture.directory.path().join("recipient-opened.mwxb");
-        fixture.open_with(&fixture.sender_identity, &sender_output)?;
-        fixture.open_with(&fixture.recipient_identity, &recipient_output)?;
-        assert_eq!(fs::read(sender_output)?, fs::read(&fixture.payload)?);
-        assert_eq!(fs::read(recipient_output)?, fs::read(&fixture.payload)?);
-        assert!(!decrypt(&encrypted, &sender.age_identity()?)?.is_empty());
-        assert!(!decrypt(&encrypted, &recipient.age_identity()?)?.is_empty());
+        for (identity_path, identity, output_name) in [
+            (&fixture.sender_identity, sender, "sender-opened.mwxb"),
+            (
+                &fixture.recipient_identity,
+                recipient,
+                "recipient-opened.mwxb",
+            ),
+        ] {
+            let output = fixture.directory.path().join(output_name);
+            fixture.open_with(identity_path, &output)?;
+            assert_eq!(fs::read(output)?, fs::read(&fixture.payload)?);
+            assert!(!decrypt(&encrypted, &identity.age_identity()?)?.is_empty());
+        }
         Ok(())
     }
 
     #[test]
     fn environment_kind_round_trips_and_cannot_open_as_archive() -> Result<()> {
         let fixture = Fixture::new()?;
-        let sender = load_identity(&fixture.sender_identity)?;
-        let recipient = load_identity(&fixture.recipient_identity)?;
-        seal_file(
-            &fixture.sender_identity,
-            &[
-                sender.encryption_public_key,
-                recipient.encryption_public_key,
-            ],
-            &fixture.payload,
-            &fixture.envelope,
+        fixture.assert_kind_round_trip(
             EnvelopeKind::EnvironmentV1Bundle,
-            "sender",
-            "recipient",
-        )?;
-        let output = fixture.directory.path().join("environment-opened.mwxb");
-        open_file(
-            &fixture.recipient_identity,
-            &sender.signing_public_key,
-            &fixture.envelope,
-            &output,
-            EnvelopeKind::EnvironmentV1Bundle,
-            "sender",
-            "recipient",
-        )?;
-        assert_eq!(fs::read(&output)?, fs::read(&fixture.payload)?);
-
-        let wrong_output = fixture.directory.path().join("archive-opened.mwxb");
-        assert!(
-            open_file(
-                &fixture.recipient_identity,
-                &sender.signing_public_key,
-                &fixture.envelope,
-                &wrong_output,
-                EnvelopeKind::Bundle,
-                "sender",
-                "recipient",
-            )
-            .is_err()
-        );
-        assert!(!wrong_output.exists());
-        Ok(())
+            "environment-opened.mwxb",
+            &[(EnvelopeKind::Bundle, "archive-opened.mwxb")],
+        )
     }
 
     #[test]
     fn project_evidence_kind_round_trips_and_is_stream_bound() -> Result<()> {
         let fixture = Fixture::new()?;
-        let sender = load_identity(&fixture.sender_identity)?;
-        let recipient = load_identity(&fixture.recipient_identity)?;
-        seal_file(
-            &fixture.sender_identity,
+        fixture.assert_kind_round_trip(
+            EnvelopeKind::ProjectEvidenceV1Bundle,
+            "project-evidence-opened.mwxb",
             &[
-                sender.encryption_public_key,
-                recipient.encryption_public_key,
+                (EnvelopeKind::Bundle, "archive-opened.mwxb"),
+                (EnvelopeKind::EnvironmentV1Bundle, "environment-opened.mwxb"),
             ],
-            &fixture.payload,
-            &fixture.envelope,
-            EnvelopeKind::ProjectEvidenceV1Bundle,
-            "sender",
-            "recipient",
-        )?;
-        let output = fixture
-            .directory
-            .path()
-            .join("project-evidence-opened.mwxb");
-        open_file(
-            &fixture.recipient_identity,
-            &sender.signing_public_key,
-            &fixture.envelope,
-            &output,
-            EnvelopeKind::ProjectEvidenceV1Bundle,
-            "sender",
-            "recipient",
-        )?;
-        assert_eq!(fs::read(&output)?, fs::read(&fixture.payload)?);
-
-        for (kind, name) in [
-            (EnvelopeKind::Bundle, "archive-opened.mwxb"),
-            (EnvelopeKind::EnvironmentV1Bundle, "environment-opened.mwxb"),
-        ] {
-            let wrong_output = fixture.directory.path().join(name);
-            assert!(
-                open_file(
-                    &fixture.recipient_identity,
-                    &sender.signing_public_key,
-                    &fixture.envelope,
-                    &wrong_output,
-                    kind,
-                    "sender",
-                    "recipient",
-                )
-                .is_err()
-            );
-            assert!(!wrong_output.exists());
-        }
-        Ok(())
+        )
     }
 
     #[test]
     fn project_attachment_kind_round_trips_and_is_stream_bound() -> Result<()> {
         let fixture = Fixture::new()?;
-        let sender = load_identity(&fixture.sender_identity)?;
-        let recipient = load_identity(&fixture.recipient_identity)?;
-        seal_file(
-            &fixture.sender_identity,
+        fixture.assert_kind_round_trip(
+            EnvelopeKind::ProjectAttachmentV1Bundle,
+            "project-attachment-opened.mwxb",
             &[
-                sender.encryption_public_key,
-                recipient.encryption_public_key,
+                (EnvelopeKind::Bundle, "archive-opened.mwxb"),
+                (EnvelopeKind::EnvironmentV1Bundle, "environment-opened.mwxb"),
+                (
+                    EnvelopeKind::ProjectEvidenceV1Bundle,
+                    "project-evidence-opened.mwxb",
+                ),
             ],
-            &fixture.payload,
-            &fixture.envelope,
-            EnvelopeKind::ProjectAttachmentV1Bundle,
-            "sender",
-            "recipient",
-        )?;
-        let output = fixture
-            .directory
-            .path()
-            .join("project-attachment-opened.mwxb");
-        open_file(
-            &fixture.recipient_identity,
-            &sender.signing_public_key,
-            &fixture.envelope,
-            &output,
-            EnvelopeKind::ProjectAttachmentV1Bundle,
-            "sender",
-            "recipient",
-        )?;
-        assert_eq!(fs::read(&output)?, fs::read(&fixture.payload)?);
-
-        for (kind, name) in [
-            (EnvelopeKind::Bundle, "archive-opened.mwxb"),
-            (EnvelopeKind::EnvironmentV1Bundle, "environment-opened.mwxb"),
-            (
-                EnvelopeKind::ProjectEvidenceV1Bundle,
-                "project-evidence-opened.mwxb",
-            ),
-        ] {
-            let wrong_output = fixture.directory.path().join(name);
-            assert!(
-                open_file(
-                    &fixture.recipient_identity,
-                    &sender.signing_public_key,
-                    &fixture.envelope,
-                    &wrong_output,
-                    kind,
-                    "sender",
-                    "recipient",
-                )
-                .is_err()
-            );
-            assert!(!wrong_output.exists());
-        }
-        Ok(())
+        )
     }
 
     #[test]
@@ -951,10 +889,14 @@ mod tests {
         let fixture = Fixture::new()?;
         let identity = load_identity(&fixture.sender_identity)?;
         let public_json = serde_json::to_string(&identity.public())?;
-        assert!(!public_json.contains(&identity.age_identity));
-        assert!(!public_json.contains(&identity.signing_private_key));
-        assert!(!public_json.contains("age_identity"));
-        assert!(!public_json.contains("signing_private_key"));
+        for private_value in [
+            identity.age_identity.as_str(),
+            identity.signing_private_key.as_str(),
+            "age_identity",
+            "signing_private_key",
+        ] {
+            assert!(!public_json.contains(private_value));
+        }
         Ok(())
     }
 
