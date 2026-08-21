@@ -24,7 +24,7 @@ from memory_environment_skills import (
     skill_package_contract_bytes,
 )
 from platform_lock import exclusive_lock
-from support.filesystem import make_directory_link
+from tests.support.filesystem import make_directory_link
 
 
 def sha256(value):

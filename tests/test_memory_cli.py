@@ -35,7 +35,7 @@ from semantic_worker import (
     unpack_source_summaries,
 )
 from semantic_backfill import ordered_pending_jobs, run_backfill
-from support.rollouts import event
+from tests.support.rollouts import event
 
 CLI = SKILL_ROOT / "scripts" / "memory_cli.py"
 INSTALLER = SKILL_ROOT / "scripts" / "install_codex_autosync.py"

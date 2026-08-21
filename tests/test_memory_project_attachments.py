@@ -20,7 +20,7 @@ from memory_project_attachments import (
     ProjectAttachmentExchangeManager,
     ProjectAttachmentStore,
 )
-from support.federation import authenticated_import
+from tests.support.federation import authenticated_import
 
 
 class ProjectAttachmentTests(unittest.TestCase):

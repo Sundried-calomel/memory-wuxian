@@ -15,7 +15,7 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 import memory_dashboard
 from memory_dashboard import make_handler
-from support.filesystem import file_hashes
+from tests.support.filesystem import file_hashes
 
 
 class MemoryDashboardSystemTest(unittest.TestCase):

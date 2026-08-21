@@ -12,7 +12,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from token_usage import persist_token_usage  # noqa: E402
-from support.rollouts import event
+from tests.support.rollouts import event
 
 
 def usage(total, *, cached=0, output=0, reasoning=0):

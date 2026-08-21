@@ -18,7 +18,7 @@ from memory_environment_rules import (
     RuleInstallationError,
 )
 from platform_lock import exclusive_lock
-from support.filesystem import make_directory_link
+from tests.support.filesystem import make_directory_link
 
 
 def digest(value: bytes) -> str:

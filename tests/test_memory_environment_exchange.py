@@ -27,7 +27,7 @@ from memory_environment_skills import (
     skill_package_contract_bytes,
 )
 from memory_federation import FederationManager, canonical_sha256
-from support.federation import verified_import
+from tests.support.federation import verified_import
 from tests.test_memory_cloud_transport import FakeCrypto
 
 

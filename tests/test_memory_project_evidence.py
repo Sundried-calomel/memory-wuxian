@@ -19,7 +19,7 @@ from memory_project_evidence import (
     ProjectEvidenceExchangeManager,
     ProjectEvidenceStore,
 )
-from support.federation import authenticated_import
+from tests.support.federation import authenticated_import
 
 
 class ProjectEvidenceTests(unittest.TestCase):

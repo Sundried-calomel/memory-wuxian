@@ -16,7 +16,7 @@ from memory_environment import (
     revision_id_for,
     sha256_bytes,
 )
-from support.filesystem import make_directory_link
+from tests.support.filesystem import make_directory_link
 
 
 def authority_hashes(root):

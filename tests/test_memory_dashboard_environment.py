@@ -22,7 +22,7 @@ from memory_environment import EnvironmentRegistry, revision_id_for
 from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_promotions import PromotionStore
 from memory_environment_profiles import EnvironmentProfileManager
-from support.filesystem import file_hashes
+from tests.support.filesystem import file_hashes
 
 
 def write_json(path: Path, value: dict) -> None:

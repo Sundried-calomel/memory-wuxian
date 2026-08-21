@@ -14,7 +14,7 @@ from memory_environment import EnvironmentRegistry, revision_id_for
 from memory_environment_bindings import EnvironmentBindingRegistry
 from memory_environment_rules import EnvironmentRuleInstaller
 from memory_environment_skills import EnvironmentSkillInstaller
-from support.filesystem import make_directory_link
+from tests.support.filesystem import make_directory_link
 
 
 def authority_hashes(root):

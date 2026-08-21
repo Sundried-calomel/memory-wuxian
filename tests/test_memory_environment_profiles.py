@@ -23,7 +23,7 @@ from memory_environment_exchange import EnvironmentExchangeManager
 from memory_environment_profiles import EnvironmentProfileManager
 from memory_environment_profiles import ID_RE, _safe_public_string
 from memory_federation import FederationManager, canonical_sha256
-from support.federation import verified_import
+from tests.support.federation import verified_import
 
 
 from memory_dashboard import make_handler
