@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from memory_cli import build_parser
+from memory_cli_contract import command_spec
 from memory_project_attachments import (
     CHUNK_BYTES,
     MAX_FILE_BYTES,
@@ -72,13 +73,19 @@ class V215ReleaseContractTests(unittest.TestCase):
         self.assertIn("verified_reconstructions", source)
 
     def test_attachment_sync_uses_the_federation_coordination_lock(self):
-        source = (ROOT / "scripts" / "memory_cli.py").read_text(encoding="utf-8")
-        self.assertIn(
-            'args.command.startswith("project-attachment-") and args.command != "project-attachment-sync"',
-            source,
+        self.assertEqual(
+            "federation", command_spec("project-attachment-sync").lock_policy
         )
-        federation_block = source[source.index('"init-node",'):source.index('with exclusive_lock(store.root / ".locks" / "archive.lock")')]
-        self.assertIn('"project-attachment-sync",', federation_block)
+        for command in (
+            "project-attachment-build",
+            "project-attachment-owner-register",
+            "project-attachment-owner-refresh",
+            "project-attachment-reconstruct",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(
+                    "project-attachment-command", command_spec(command).lock_policy
+                )
 
     def test_dashboard_names_each_attachment_lifecycle_stage(self):
         source = (ROOT / "dashboard" / "index.html").read_text(encoding="utf-8")

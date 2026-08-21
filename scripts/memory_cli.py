@@ -25,6 +25,7 @@ from platform_paths import active_root_pointer
 from conversation_titles import archive_conversation_title_aliases, resolve_conversation_title
 from memory_cloud_transport import CloudFolderTransport
 from memory_cloud_streams import CloudApplicationService
+from memory_cli_contract import command_lock_path, command_spec, validate_parser_commands
 import memory_configuration
 from memory_environment import EnvironmentRegistry
 from memory_environment_bindings import EnvironmentBindingRegistry
@@ -4974,6 +4975,12 @@ def build_parser() -> argparse.ArgumentParser:
         "environment-governance-ai-status",
         help="Show governance AI queue, coordinator, limits, and draft counters",
     )
+    subparser_action = next(
+        action
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+    validate_parser_commands(tuple(subparser_action.choices))
     return parser
 
 
@@ -6033,108 +6040,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return stateless_result
         config = resolve_config(Path(args.config))
         store = MemoryStore(resolve_root(args.root, config), config)
-        if args.command == "token-usage-backfill" and not args.apply:
+        lock_path = command_lock_path(command_spec(args.command), args, store.root)
+        if lock_path is None:
             return dispatch_command(args, parser, store)
-        if args.command in {
-            "retrieve",
-            "readonly-query",
-            "readonly-http",
-            "readonly-mcp",
-            "summary-budget-status",
-            "conversation-tail",
-            "context-refresh-status",
-            "context-capsule",
-            "ack-context-refresh",
-            "inspect-bundle",
-            "retrieve-global",
-            "federation-status",
-            "cloud-pair-export",
-            "cloud-status",
-            "project-evidence-list",
-            "project-evidence-query",
-            "project-evidence-status",
-            "project-evidence-owner-status",
-            "project-attachment-status",
-            "project-attachment-owner-status",
-            "migration-preview",
-            "as-of",
-            "decision-graph",
-            "semantic-retrieve",
-            "semantic-runtime-status",
-            "environment-scan",
-            "environment-status",
-            "environment-list",
-            "environment-projects",
-            "environment-show",
-            "environment-diff",
-            "environment-validate",
-            "environment-exchange-status",
-            "environment-incoming-status",
-            "environment-profile-status",
-            "environment-profile-current",
-            "environment-profile-compare",
-            "environment-convergence-plan",
-        }:
-            return dispatch_command(args, parser, store)
-        if args.command == "project-evidence-build" and not args.apply:
-            return dispatch_command(args, parser, store)
-        if args.command in {"project-evidence-owner-register", "project-evidence-owner-refresh"} and not args.apply:
-            return dispatch_command(args, parser, store)
-        if args.command == "project-evidence-reconstruct" and not args.apply:
-            return dispatch_command(args, parser, store)
-        if args.command.startswith("project-evidence-"):
-            with exclusive_lock(store.root / ".locks" / "project-evidence-command.lock"):
-                return dispatch_command(args, parser, store)
-        if args.command in {"project-attachment-build", "project-attachment-owner-register", "project-attachment-owner-refresh", "project-attachment-reconstruct"} and not args.apply:
-            return dispatch_command(args, parser, store)
-        if args.command.startswith("project-attachment-") and args.command != "project-attachment-sync":
-            with exclusive_lock(store.root / ".locks" / "project-attachment-command.lock"):
-                return dispatch_command(args, parser, store)
-        if args.command in {"environment-init", "environment-register"}:
-            return dispatch_command(args, parser, store)
-        if args.command in {
-            "environment-profile-capture",
-            "environment-profile-rebuild-current",
-        }:
-            return dispatch_command(args, parser, store)
-        if args.command.startswith("maintenance-"):
-            return dispatch_command(args, parser, store)
-        if args.command == "heartbeat":
-            return dispatch_command(args, parser, store)
-        if args.command == "content-shadow-status" or (
-            args.command in {"content-shadow-build", "content-shadow-reconstruct", "content-shadow-disable", "content-transfer"}
-            and not args.apply
-        ) or args.command == "content-shadow-verify":
-            return dispatch_command(args, parser, store)
-        if args.command.startswith("content-"):
-            with exclusive_lock(store.root / ".locks" / "content-store.lock"):
-                return dispatch_command(args, parser, store)
-        if args.command in {
-            "environment-export-delta",
-        }:
-            with exclusive_lock(
-                store.root / ".locks" / "environment-exchange.lock"
-            ):
-                return dispatch_command(args, parser, store)
-        if args.command.startswith("environment-"):
-            return dispatch_command(args, parser, store)
-        if args.command in {
-            "init-node",
-            "add-peer",
-            "revoke-peer",
-            "import-delta",
-            "rebuild-global-index",
-            "sync-peer",
-            "cloud-configure",
-            "cloud-pair-import",
-            "cloud-sync",
-            "project-attachment-sync",
-            "cloud-enable",
-            "cloud-disable",
-        }:
-            with exclusive_lock(store.root / ".locks" / "federation.lock"):
-                return dispatch_command(args, parser, store)
-        with exclusive_lock(store.root / ".locks" / "archive.lock"):
+        with exclusive_lock(lock_path):
             return dispatch_command(args, parser, store)
     except ReadRequestError as exc:
         print(json.dumps(error_payload(exc), ensure_ascii=False, sort_keys=True), file=sys.stderr)
