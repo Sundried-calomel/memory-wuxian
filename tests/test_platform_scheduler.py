@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import tempfile
 import unittest
 from dataclasses import FrozenInstanceError
 from pathlib import Path
@@ -14,12 +13,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import platform_scheduler as scheduler
+from tests.support.macos import temporary_root
 
 
 class PlatformSchedulerTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        self.temporary, self.root = temporary_root()
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
