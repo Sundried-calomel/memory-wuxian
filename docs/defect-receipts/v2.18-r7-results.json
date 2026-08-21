@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.18-r1-r8",
+  "packet_sha256": "60c1d03b999edb60b719381402a0c94efe1075c97844603e551b91e5568677b9",
+  "checks": [
+    {"check_id": "runtime-capability-probe", "status": "passed", "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r7-validation.log", "sha256": "9a660a6e059511ae556fbf20fd37885a70bdba9f14aa5dbc874b77df53d1996e"}], "note": "Python 3.12.13 executed the merged R7 CLI, lock, lifecycle, retrieval, archive, and native parity impact set."},
+    {"check_id": "unicode-path-fixtures", "status": "passed", "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r7-validation.log", "sha256": "9a660a6e059511ae556fbf20fd37885a70bdba9f14aa5dbc874b77df53d1996e"}], "note": "The frozen parser and retrieval paths round-tripped Chinese, Japanese, yen variants, emoji, spaces, leading hyphens, and long values."},
+    {"check_id": "target-platform-effect", "status": "passed", "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r7-validation.log", "sha256": "9a660a6e059511ae556fbf20fd37885a70bdba9f14aa5dbc874b77df53d1996e"}], "note": "Temporary Windows archives exercised real lock coordination, CLI entrypoints, persistence, read-only services, and native collector parity."}
+  ]
+}
