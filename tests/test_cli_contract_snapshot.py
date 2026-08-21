@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import hashlib
 import io
+import inspect
 import json
 import sys
 import unittest
@@ -18,6 +19,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import memory_cli  # noqa: E402
+import memory_cli_parser  # noqa: E402
 
 
 PROGRAM = "memory-wuxian"
@@ -165,6 +167,13 @@ def build_cli_contract_snapshot() -> dict:
 
 
 class CliContractSnapshotTests(unittest.TestCase):
+    def test_public_parser_facade_delegates_to_parser_owner(self):
+        facade_source = inspect.getsource(memory_cli.build_parser)
+        owner_source = inspect.getsource(memory_cli_parser.build_parser)
+        self.assertIn("build_cli_parser", facade_source)
+        self.assertNotIn("add_subparsers", facade_source)
+        self.assertIn("add_subparsers", owner_source)
+
     maxDiff = None
 
     def test_build_parser_matches_frozen_v218_contract(self):

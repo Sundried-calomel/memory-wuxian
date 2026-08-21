@@ -3,6 +3,7 @@ import dataclasses
 import inspect
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,6 +14,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import memory_cli
+import memory_cli_runtime
 from memory_cli_contract import (
     COMMAND_NAMES,
     COMMAND_REGISTRY,
@@ -173,14 +175,36 @@ class CliCommandRegistryTests(unittest.TestCase):
         self.assertEqual("binary-or-json", command_spec("export-delta").output_kind)
 
     def test_main_contains_no_embedded_lock_routing_table(self):
-        source = inspect.getsource(memory_cli.main)
+        facade_source = inspect.getsource(memory_cli.main)
+        self.assertIn("configure_unicode_stdio()", facade_source)
+        self.assertIn("run_cli(argv, cli_module=sys.modules[__name__])", facade_source)
+        source = inspect.getsource(memory_cli_runtime.run_cli)
         for literal in (
             "archive.lock", "federation.lock", "environment-exchange.lock",
             "project-evidence-command.lock", "project-attachment-command.lock",
             "content-store.lock",
         ):
             self.assertNotIn(literal, source)
-        self.assertIn("command_lock_path(command_spec(args.command), args, store.root)", source)
+        self.assertIn("cli_module.command_lock_path", source)
+        self.assertIn("cli_module.command_spec(args.command)", source)
+
+    def test_runtime_resolves_compatibility_dependencies_at_call_time(self):
+        parser = mock.Mock()
+        args = SimpleNamespace(command="append", config="config.yaml", root=None)
+        parser.parse_known_args.return_value = (args, [])
+        store = SimpleNamespace(root=Path("X:/archive"))
+        with (
+            mock.patch.object(memory_cli, "build_parser", return_value=parser),
+            mock.patch.object(memory_cli, "dispatch_stateless_read_only_command", return_value=None),
+            mock.patch.object(memory_cli, "resolve_config", return_value={"loaded": True}),
+            mock.patch.object(memory_cli, "resolve_root", return_value=store.root),
+            mock.patch.object(memory_cli, "MemoryStore", return_value=store) as store_factory,
+            mock.patch.object(memory_cli, "command_lock_path", return_value=None),
+            mock.patch.object(memory_cli, "dispatch_command", return_value=37) as dispatch,
+        ):
+            self.assertEqual(37, memory_cli_runtime.run_cli([], cli_module=memory_cli))
+        store_factory.assert_called_once_with(store.root, {"loaded": True})
+        dispatch.assert_called_once_with(args, parser, store)
 
 
 if __name__ == "__main__":

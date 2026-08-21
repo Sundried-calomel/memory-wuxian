@@ -67,6 +67,8 @@
         "scripts/migrate_config.py",
         "scripts/memory_cli.py",
         "scripts/memory_cli_contract.py",
+        "scripts/memory_cli_parser.py",
+        "scripts/memory_cli_runtime.py",
         "scripts/memory_dashboard.py",
         "scripts/memory_readonly_http.py",
         "scripts/memory_readonly_mcp.py",
