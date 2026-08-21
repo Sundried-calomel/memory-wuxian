@@ -7,13 +7,11 @@ import argparse
 import datetime as dt
 import hashlib
 import json
-import math
 import os
 import re
 import shutil
 import sys
 import tempfile
-import unicodedata
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -54,6 +52,8 @@ from memory_resumable_sync import ResumableTransfer
 from memory_readonly_http import create_server as create_readonly_server
 from memory_readonly_mcp import serve_lines as serve_readonly_mcp
 from memory_readonly_service import ReadOnlyMemoryService, ReadRequestError, error_payload
+import memory_retrieval_algorithms
+from memory_retrieval_algorithms import SEARCH_STOP_TERMS
 from memory_service_state import service_state
 from memory_summary_budget import evaluate_summary_budget
 from semantic_runtime_contract import (
@@ -77,15 +77,6 @@ from token_usage import (
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = SKILL_ROOT / "config.yaml"
 RAW_MARKER = "<!-- memory-wuxian-record -->"
-SEARCH_STOP_TERMS = {
-    "一个", "一样", "已经", "之前", "什么", "他们", "但是", "你们", "你应该",
-    "你的", "这个", "这些", "这样", "还是", "然后", "现在", "的话", "知道",
-    "我们", "我的", "意思", "怎么", "就是", "可以", "如果", "进行", "里面",
-    "对应", "时候", "一下", "因为", "所以", "the", "and", "for", "that", "this",
-    "with", "from", "into", "about",
-}
-
-
 def now_iso() -> str:
     return dt.datetime.now().astimezone().isoformat(timespec="seconds")
 
@@ -1661,33 +1652,19 @@ class MemoryStore:
 
     @staticmethod
     def deterministic_excerpt(text: str, limit: int = 240) -> str:
-        compact = " ".join(text.split())
-        return compact if len(compact) <= limit else compact[:limit]
+        return memory_retrieval_algorithms.deterministic_excerpt(text, limit)
 
     @staticmethod
     def normalize_search_text(text: str) -> str:
-        return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+        return memory_retrieval_algorithms.normalize_search_text(text)
 
     @classmethod
     def search_terms(cls, query: str, limit: int = 128) -> List[str]:
-        normalized = cls.normalize_search_text(query)
-        ascii_terms = {
-            token
-            for token in re.findall(r"[a-z0-9]+", normalized)
-            if len(token) >= 2 and token not in SEARCH_STOP_TERMS
-        }
-        cjk_terms = set()
-        for run in re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff]+", normalized):
-            if 2 <= len(run) <= 8 and run not in SEARCH_STOP_TERMS:
-                cjk_terms.add(run)
-            for width in (4, 3, 2):
-                for start in range(0, len(run) - width + 1):
-                    term = run[start:start + width]
-                    if term not in SEARCH_STOP_TERMS:
-                        cjk_terms.add(term)
-        ordered_ascii = sorted(ascii_terms, key=lambda term: (-len(term), term))
-        ordered_cjk = sorted(cjk_terms, key=lambda term: (-len(term), term))
-        return (ordered_ascii + ordered_cjk)[:limit]
+        return memory_retrieval_algorithms.search_terms(
+            query,
+            limit,
+            normalizer=cls.normalize_search_text,
+        )
 
     @classmethod
     def ranked_search(
@@ -1697,43 +1674,12 @@ class MemoryStore:
         terms: Sequence[str],
         text_getter,
     ) -> List[Dict[str, Any]]:
-        if not records:
-            return []
-        normalized_texts = [cls.normalize_search_text(text_getter(record)) for record in records]
-        document_frequencies = {
-            term: sum(1 for text in normalized_texts if term in text)
-            for term in terms
-        }
-        record_count = len(records)
-        ranked = []
-        for record, text in zip(records, normalized_texts):
-            matched = [term for term in terms if term in text]
-            exact_match = query_normalized in text
-            if not matched and not exact_match:
-                continue
-            score = sum(
-                (1.0 + min(len(term), 8) / 4.0)
-                * (1.0 + math.log((record_count + 1) / (document_frequencies[term] + 1)))
-                for term in matched
-            )
-            if exact_match:
-                score += 1000.0
-            ranked.append({
-                "record": record,
-                "score": score,
-                "matched_terms": matched,
-                "exact_match": exact_match,
-            })
-        return sorted(
-            ranked,
-            key=lambda item: (
-                -float(item["score"]),
-                -len(item["matched_terms"]),
-                int(item["record"].get(
-                    "sequence",
-                    item["record"].get("source_start_sequence", 0),
-                )),
-            ),
+        return memory_retrieval_algorithms.ranked_search(
+            records,
+            query_normalized,
+            terms,
+            text_getter,
+            normalizer=cls.normalize_search_text,
         )
 
     @staticmethod
@@ -1742,30 +1688,11 @@ class MemoryStore:
         term_count: int,
         limit: int,
     ) -> List[Dict[str, Any]]:
-        if not ranked:
-            return []
-        minimum_terms = 1 if term_count <= 2 else 2
-        top_score = float(ranked[0]["score"])
-        threshold = top_score * 0.55
-        selected = [
-            item for item in ranked
-            if (item["exact_match"] or len(item["matched_terms"]) >= minimum_terms)
-            and float(item["score"]) >= threshold
-        ]
-        return selected[:limit]
+        return memory_retrieval_algorithms.strongest_matches(ranked, term_count, limit)
 
     @staticmethod
     def unique_values(values: Iterable[str], limit: int) -> List[str]:
-        selected: List[str] = []
-        seen = set()
-        for value in values:
-            if not value or value in seen:
-                continue
-            seen.add(value)
-            selected.append(value)
-            if len(selected) >= limit:
-                break
-        return selected
+        return memory_retrieval_algorithms.unique_values(values, limit)
 
     def deterministic_level_one_record(
         self,

@@ -118,6 +118,7 @@
         "scripts/memory_indexing.py",
         "scripts/memory_content_store.py",
         "scripts/memory_guarded_features.py",
+        "scripts/memory_retrieval_algorithms.py",
         "scripts/token_usage.py"
       ]
     },
@@ -306,6 +307,35 @@
       "failure state"
     ],
     "explicit_post_sync_actions": ["environment incoming consumption"]
+  },
+  "python_memory_retrieval_algorithm_rules": {
+    "canonical_owner": "memory-plane",
+    "mechanics": "scripts/memory_retrieval_algorithms.py",
+    "compatibility_facade": "scripts/memory_cli.py:MemoryStore",
+    "pure_algorithms": [
+      "deterministic_excerpt",
+      "normalize_search_text",
+      "search_terms",
+      "ranked_search",
+      "strongest_matches",
+      "unique_values"
+    ],
+    "preserved_contracts": [
+      "SEARCH_STOP_TERMS",
+      "NFKC and casefold normalization",
+      "CJK n-gram widths and ordering",
+      "BM25-like score and result ordering",
+      "strongest-match threshold",
+      "empty-input and exception behavior"
+    ],
+    "forbidden_orchestration": [
+      "append and import",
+      "summary state machines",
+      "rebuild and audit",
+      "retrieve orchestration",
+      "context and heartbeat",
+      "path writers"
+    ]
   },
   "python_dependency_rules": {
     "enforce_module_allowlist": true,
