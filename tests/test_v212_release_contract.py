@@ -1,7 +1,11 @@
 import json
-import tomllib
 import unittest
 from pathlib import Path
+
+from tests.support.release_contracts import (
+    assert_minimum_project_version,
+    assert_readme_tokens,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,8 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class V212ReleaseContractTest(unittest.TestCase):
     def test_release_contract_and_capability_receipt_are_bound(self):
-        version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertGreaterEqual(tuple(map(int, version.split("."))), (2, 14, 4))
+        assert_minimum_project_version(self, ROOT, (2, 14, 4))
         contract = json.loads((ROOT / "docs/work-contracts/v2.12.0.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["validation_profile"], "full")
         self.assertIn("Raw messages", contract["invariants"][0])
@@ -39,16 +42,17 @@ class V212ReleaseContractTest(unittest.TestCase):
 
     def test_daily_metrics_are_derived_and_documented_in_all_locales(self):
         self.assertTrue((ROOT / "scripts/daily_metrics.py").is_file())
-        for readme in ("README.md", "README.zh-CN.md", "README.ja.md"):
-            text = (ROOT / readme).read_text(encoding="utf-8")
-            for token in (
+        assert_readme_tokens(
+            self,
+            ROOT,
+            (
                 "daily_metrics.py",
                 "trusted synchronized devices",
                 "Codex-reported",
                 "Asia/Tokyo",
                 "protocol v2",
-            ):
-                self.assertIn(token, text, f"{readme}: {token}")
+            ),
+        )
 
 
 if __name__ == "__main__":

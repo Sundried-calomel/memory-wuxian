@@ -1,7 +1,8 @@
 import json
-import tomllib
 import unittest
 from pathlib import Path
+
+from tests.support.release_contracts import assert_minimum_project_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,8 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class V217ReleaseContractTests(unittest.TestCase):
     def test_capture_core_paths_and_version_are_registered(self):
-        version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertGreaterEqual(tuple(map(int, version.split("."))), (2, 17, 0))
+        assert_minimum_project_version(self, ROOT, (2, 17, 0))
         contract = json.loads((ROOT / "docs/module-architecture.json").read_text(encoding="utf-8"))
         capture = next(item for item in contract["modules"] if item["id"] == "capture-core")
         self.assertEqual(capture["allowed_dependencies"], ["platform-foundation"])
