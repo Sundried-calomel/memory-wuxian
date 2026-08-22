@@ -39,6 +39,12 @@ class FixedDateTime(dt.datetime):
 
 
 class GoldenWindowsPath(PureWindowsPath):
+    def expanduser(self):
+        return self
+
+    def resolve(self, *args, **kwargs):
+        return self
+
     def exists(self) -> bool:
         return True
 
@@ -360,6 +366,7 @@ class SchedulerGoldenContractV218Test(unittest.TestCase):
         with (
             patch.object(governance.sys, "argv", argv),
             patch.object(governance.sys, "platform", "win32"),
+            patch.object(governance, "Path", GoldenWindowsPath),
             patch.object(governance, "executable_entry_path", return_value=self.win_python),
             patch.object(governance, "windows_user_id", return_value=FIXTURE["windows"]["user_id"]),
             patch.object(governance, "windows_system_executable", return_value=GoldenWindowsPath("C:/Windows/System32/schtasks.exe")),
