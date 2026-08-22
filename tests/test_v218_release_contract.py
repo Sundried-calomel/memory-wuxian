@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from tests.support.release_contracts import project_version
+from tests.support.release_contracts import assert_minimum_project_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class V218ReleaseContractTests(unittest.TestCase):
     def test_version_and_wal_contract_are_present(self):
-        self.assertEqual(project_version(ROOT), "2.18.0")
+        assert_minimum_project_version(self, ROOT, (2, 18, 0))
         wal = (ROOT / "native-collector/src/store/wal.rs").read_text(encoding="utf-8")
         for token in (
             "memory-wuxian-capture-wal-v1",

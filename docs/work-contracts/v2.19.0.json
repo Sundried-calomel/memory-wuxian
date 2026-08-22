@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.19.0-release-install",
+  "candidate_id": "v2.19.0-r1-r8-integrated-release",
+  "artifact_profile": "release",
+  "classification": "extension",
+  "owner_id": "release-engineering",
+  "target": "Finalize, package, publish, transactionally install, and verify the completed R1-R8 modularization without adding Summary V2 or changing persisted behavior.",
+  "primary_semantics": "2.19.0 is the first public integration release of the completed R1-R8 ownership refactor; the release must preserve all 2.15.0 user-visible and persisted contracts while installing the exact evaluated candidate.",
+  "validation_profile": "full",
+  "invariants": [
+    "Raw archives, completed summaries, indexes, cloud envelopes, cursors, device identities, and active archive content are not modified by release finalization or installation.",
+    "The active archive-root pointer is preserved byte-for-byte across a successful upgrade and restored after any failed upgrade.",
+    "Only one collector startup owner is active after installation, and its running binary belongs to the installed 2.19.0 generation.",
+    "The Windows dashboard shortcut targets the packaged native launcher, uses the packaged icon, contains no command-line arguments, and never retains an obsolete Python path.",
+    "Windows installer processes used by routine activation remain hidden and do not steal foreground focus.",
+    "Cloud configuration, peer trust, Environment state, summary backlog, and maintenance queues retain their pre-install meaning and are not reset or claimed complete.",
+    "R1-R8 canonical owners and independent failure domains remain intact.",
+    "A passing test, file, process, tag, or installer alone never proves active runtime success; the real entrypoint and promised state transition must be observed.",
+    "Any failed case is repaired at the narrowest existing canonical owner after checking the complete shared invariant set; no additive bypass may mask the failure.",
+    "A repair cannot regress an earlier passing case that shares the changed owner, persisted state, scheduler, installer, launcher, or release contract."
+  ],
+  "allowed_changes": [
+    "Change the declared product and native binary versions from 2.18.0 to 2.19.0.",
+    "Add the 2.19.0 release contract, release-contract tests, governance receipts, rehearsal evidence, independent evaluation, promotion review, and release notes.",
+    "Update all three README files and the documentation contract for the same release semantics.",
+    "Correct an existing canonical release or installation owner only when a frozen rehearsal exposes a confirmed blocker and the repair is smaller than adding a competing path."
+  ],
+  "prohibited_changes": [
+    "Add, integrate, alter, or claim Summary V2 rescue or atomic summary behavior.",
+    "Change archive, summary, index, Environment, attachment, evidence, federation, cloud, update-signature, or collector event formats.",
+    "Introduce a new installer, updater, scheduler, dashboard launcher, archive pointer, rollback journal, or background owner alongside the canonical implementation.",
+    "Add speculative fallback behavior, compatibility shims without a proven caller, duplicate wrappers, new dependencies, or broad abstractions solely to make a failed case pass.",
+    "Publish or install a candidate whose bytes differ from the independently evaluated artifact.",
+    "Delete or replace the previous installed generation before the new generation has passed the transactional installed-effect probe.",
+    "Claim macOS real-device installation from Windows or from package construction alone."
+  ],
+  "required_rehearsal_scenarios": [],
+  "before_after_checks": [
+    "Compare the complete public CLI and documentation contracts before and after the version-only release delta.",
+    "Compare the active archive-root pointer, configuration, device identity, cloud configuration, queue counts, and archive authority hashes before and after isolated and real installation.",
+    "Exercise clean Windows installation, 2.15.0-to-2.19.0 upgrade, interrupted upgrade rollback, collector generation handoff, shortcut recreation, and no-focus-steal behavior through production entrypoints.",
+    "Build and inspect Windows x64 and macOS universal installers from the exact candidate; verify packaged files, binary versions, hashes, and signed update metadata.",
+    "Run the full Python suite, all Rust targets, architecture contract, documentation contract, and complete release rehearsal against one frozen source-content hash.",
+    "After any repair, rerun the failed case plus all cases sharing the changed Owner or invariant, then freeze a new candidate hash before evaluation."
+  ],
+  "required_evidence": [
+    "defect-preflight-and-load",
+    "candidate-identity",
+    "version-consistency",
+    "documentation-contract",
+    "architecture-contract",
+    "complete-python-suite",
+    "complete-rust-suite",
+    "windows-installer-isolated-rehearsal",
+    "macos-package-native-ci",
+    "upgrade-and-rollback-rehearsal",
+    "foreground-focus-contract",
+    "release-workflow-package-hashes",
+    "independent-evaluation",
+    "pull-request-ci",
+    "published-release-asset-verification",
+    "windows-installation-receipt",
+    "windows-active-runtime-effect",
+    "defect-verification-and-completion",
+    "promotion-review"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "governance/v219-release-preflight.json",
+    "preflight_sha256": "bf45bc3ab93ddb9e2df171a452ff8f6e14a4ae21f667f0e57fa8e3d5734ede84",
+    "completion_receipt": "governance/v219-release-completion.json",
+    "completion_sha256": "b1af9986a847a875b96c830b41582eb94dc5bc30f505ed4f21cab8d9d06c31ba",
+    "applicable_families": ["G01", "G05", "G09", "G11"],
+    "project_workbook_updated": false,
+    "original_triggers": [
+      "The completed R1-R8 candidate had not yet been bound to one public release, installer, installed generation, and active-runtime receipt.",
+      "Prior Memory Wuxian incidents repeatedly distinguished packaged files, installed bytes, running effects, and foreground-safe Windows behavior."
+    ]
+  },
+  "failure_escalation": {
+    "first_failure": "Stop the failing stage, trace the shared canonical owner and all invariants it serves, and prefer correcting or deleting faulty internal logic over adding code.",
+    "repair_review": "Inspect the complete diff for additive bypasses, duplicated ownership, fallback branches, and seesaw risk before rerunning tests.",
+    "maximum_remediation_cycles": 1,
+    "after_limit": "Do not publish. Preserve evidence and return for a new user decision."
+  },
+  "exit_lifecycle": {
+    "accepted": "One frozen candidate passes full validation and independent evaluation.",
+    "published": "The exact accepted commit is tagged v2.19.0 with verified Windows, macOS, hash, and signed metadata assets.",
+    "installed": "The released Windows installer transaction commits on this device with the original archive root preserved.",
+    "verified": "The installed 2.19.0 collector, dashboard, shortcut, scheduler, and real capture effect are observed without foreground PowerShell or persisted-state regression.",
+    "closed": "Defect verification, workbook completion, promotion review, and precise platform status are recorded."
+  },
+  "lifecycle_state": "contracted"
+}

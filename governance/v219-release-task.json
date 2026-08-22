@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.19.0-release-install",
+  "objective": "Finalize the completed R1-R8 modularization as Memory Wuxian 2.19.0, publish one governed cross-platform release, transactionally upgrade this Windows device, and verify real installed effects without changing archive, summary, or exchange semantics.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "release",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian",
+  "owner_id": "release-engineering",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "powershell", "shell", "rust", "json", "toml", "markdown", "yaml"],
+  "path_globs": [
+    "pyproject.toml",
+    "native-collector/Cargo.toml",
+    "native-collector/Cargo.lock",
+    "README.md",
+    "README.zh-CN.md",
+    "README.ja.md",
+    "docs/documentation-contract.json",
+    "docs/work-contracts/v2.19.0.json",
+    "docs/rehearsals/v2.19.0*.json",
+    "governance/v219-*",
+    "tests/test_v219_release_contract.py",
+    "tests/**/*install*.py",
+    "tests/**/*release*.py",
+    "packaging/windows/**/*",
+    "packaging/macos/**/*",
+    ".github/workflows/test.yml",
+    ".github/workflows/release.yml"
+  ],
+  "entrypoints": [
+    "release-workflow",
+    "windows-installer",
+    "macos-installer",
+    "windows-upgrade-transaction",
+    "dashboard-shortcut",
+    "collector-runtime",
+    "release-update-metadata"
+  ],
+  "resources": [
+    "release-candidate",
+    "installer",
+    "persistent-state",
+    "scheduler",
+    "transaction",
+    "rollback",
+    "archive-root-pointer",
+    "collector-telemetry",
+    "desktop-shortcut",
+    "signed-update-metadata",
+    "test-evidence"
+  ],
+  "operations": [
+    "version",
+    "document",
+    "validate",
+    "package",
+    "install-preview",
+    "publish",
+    "install",
+    "activate",
+    "verify",
+    "recover"
+  ],
+  "data_formats": ["utf-8", "json", "jsonl", "toml", "yaml", "xml", "plist", "exe", "pkg", "sha256"],
+  "authorization_boundaries": [
+    "The user authorized the 2.19.0 finalization, GitHub publication, and transactional installation on this Windows device in the current task.",
+    "Do not modify, migrate, rewrite, delete, or repair raw archives, existing summaries, derived indexes, cloud envelopes, device identities, or exchange protocol state.",
+    "Summary V2 rescue and atomic summary work are explicitly excluded.",
+    "A failed rehearsal or evaluation must trigger whole-owner and invariant review before any repair; do not add a sidecar, fallback, wrapper, duplicate path, or broad new abstraction when the existing canonical owner can be corrected.",
+    "After any repair, rerun the affected case and every previously passing case that shares its owner or invariant to prevent seesaw regressions.",
+    "No candidate may be published after more than one remediation cycle without stopping for a new user decision."
+  ],
+  "implementation_units": [
+    {
+      "id": "release-contract-and-version",
+      "owner_id": "release-engineering",
+      "paths": ["pyproject.toml", "native-collector/Cargo.toml", "native-collector/Cargo.lock", "docs/work-contracts/v2.19.0.json", "tests/test_v219_release_contract.py"],
+      "entrypoints": ["release-workflow"],
+      "resources": ["release-candidate"],
+      "operations": ["version", "validate"],
+      "planned_check_ids": ["candidate-identity", "version-consistency", "cross-entrypoint-contract"]
+    },
+    {
+      "id": "release-documentation",
+      "owner_id": "documentation-contract",
+      "paths": ["README.md", "README.zh-CN.md", "README.ja.md", "docs/documentation-contract.json"],
+      "entrypoints": ["release-workflow"],
+      "resources": ["release-candidate"],
+      "operations": ["document", "validate"],
+      "planned_check_ids": ["documentation-contract", "unicode-path-fixtures"]
+    },
+    {
+      "id": "cross-platform-release-package",
+      "owner_id": "release-engineering",
+      "paths": [".github/workflows/test.yml", ".github/workflows/release.yml", "packaging/windows/**/*", "packaging/macos/**/*", "scripts/run_release_rehearsal.py", "tests/**/*install*.py", "tests/**/*release*.py"],
+      "entrypoints": ["release-workflow", "windows-installer", "macos-installer", "release-update-metadata"],
+      "resources": ["installer", "signed-update-metadata", "test-evidence"],
+      "operations": ["package", "install-preview", "validate", "publish"],
+      "planned_check_ids": ["runtime-capability-probe", "target-platform-effect", "rehearsal-matrix", "evidence-roundtrip"]
+    },
+    {
+      "id": "windows-transactional-activation",
+      "owner_id": "windows-install-lifecycle",
+      "paths": ["packaging/windows/install.ps1", "scripts/install_codex_autosync_windows.py", "scripts/install_dashboard_shortcut_windows.ps1", "scripts/bootstrap_windows.ps1", "tests/**/*install*.py"],
+      "entrypoints": ["windows-upgrade-transaction", "dashboard-shortcut", "collector-runtime"],
+      "resources": ["persistent-state", "scheduler", "transaction", "rollback", "archive-root-pointer", "collector-telemetry", "desktop-shortcut"],
+      "operations": ["install-preview", "install", "activate", "verify", "recover"],
+      "planned_check_ids": ["legacy-fixture-matrix", "migration-idempotence", "real-entrypoint-effect", "target-platform-effect", "unicode-path-fixtures"]
+    }
+  ],
+  "rule_exclusions": []
+}

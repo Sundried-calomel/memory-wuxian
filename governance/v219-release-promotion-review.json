@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v2.19.0",
+  "work_item_id": "memory-wuxian-v2.19.0-release-install",
+  "candidate_id": "v2.19.0-r1-r8-integrated-release",
+  "owner_id": "release-engineering",
+  "source_revision": "codex/v219-release",
+  "product_evolution_record_id": "memory-wuxian-v2.19.0-release-install",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The release applies existing G01, G05, G09, and G11 rules to the already completed R1-R8 modularization. It introduces no new cross-product defect family, governance capability, runtime owner, or Summary V2 behavior requiring promotion.",
+  "evidence_refs": [
+    "docs/work-contracts/v2.19.0.json",
+    "governance/v219-release-packet.json",
+    "outputs/v219/baseline/unittest-final.log",
+    "outputs/v219/rehearsal/windows-final/report.json"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-22T01:18:00Z"
+}

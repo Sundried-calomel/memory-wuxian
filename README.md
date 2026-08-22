@@ -1,5 +1,13 @@
 # Memory無限
 
+> **2.19.0:** Integrates the completed R1-R8 behavior-preserving modularization
+> behind canonical Platform, Environment, Exchange, application-service, CLI,
+> and test-support owners. It is the first public installer integration of the
+> approved 2.16-2.18 internal milestones, with exact-candidate CI,
+> transactional activation, rollback, package hashes, and signed update
+> metadata. Raw history, Summary V1/V2 behavior, indexes, and cloud protocols
+> remain unchanged.
+
 > **2.18.0:** Adds a bounded, content-free `capture-wal.jsonl` for idempotent
 > crash recovery, source-local failure isolation, non-fatal telemetry writes,
 > pure-read service health, and nonzero maintenance failure exits. Raw history,
