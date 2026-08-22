@@ -561,9 +561,11 @@ same verified source path for SSH and cloud deliveries. Use `cloud-disable` to
 stop exchange without deleting archives, keys, or encrypted cloud files.
 
 On macOS, OneDrive Files On-Demand envelopes may initially appear as directory
-entries without readable local bytes. Memory Wuxian probes them to trigger
-bounded hydration and treats temporary File Provider availability failures as
-retryable, not corrupt. For `environment-v1`, a wider retry that overlaps an
+entries without readable local bytes. When the initial probe encounters such a
+placeholder, Memory Wuxian uses OneDrive's supported `/pin` command, waits up
+to 120 seconds for readable bytes, and then applies `/clearpin` so the envelope
+does not remain permanently pinned. Temporary File Provider availability
+failures remain retryable, not corrupt. For `environment-v1`, a wider retry that overlaps an
 already verified prefix is accepted only when every persisted prefix event
 matches exactly; conflicting overlap remains quarantined.
 
