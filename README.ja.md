@@ -5,6 +5,8 @@
 > 正式に統合します。承認済み 2.16-2.18 内部 milestone を初めて公開 installer に
 > 組み込み、同一候補 CI、transactional activation、rollback、package hash、署名済み
 > update metadata を提供します。raw 履歴、Summary V1/V2、index、cloud 契約は不変です。
+> 公開 CLI の program identity は `memory-wuxian` に固定され、help と parse error が
+> host process の `argv[0]` を継承することはありません。
 
 > **2.18.0:** 会話内容を含まない限定サイズの `capture-wal.jsonl` により、
 > 冪等な crash recovery、source 単位の障害分離、非致命 telemetry、純読取 health、

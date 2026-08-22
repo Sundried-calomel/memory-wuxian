@@ -416,18 +416,22 @@
   回归必须使用显式不同的旧/新水位，不能依赖测试是否恰好在同一秒完成。
 - Families: `G05`, `G09`, `MW-R05`, `MW-R06`, `MW-R10`.
 
-### MW-REL-033：跨平台黄金夹具绑定宿主路径与时区
+### MW-REL-033：跨平台黄金夹具绑定宿主路径、时区与进程名
 
 - 证据：`GitHub PR #73 Ubuntu/Windows CI 与本机定向回归已核验`。同一 scheduler
   黄金测试在本机通过，却在 Ubuntu 因 `Path` 使用正斜杠、在 Windows Runner 因本地时区
   和 8.3 短路径差异失败；Environment 生命周期测试还把未解析输入路径与生产 Owner 返回的
-  canonical resolved path 直接比较。
+  canonical resolved path 直接比较。合并后的 macOS 主线测试进一步证明，CLI 解析器默认从
+  `sys.argv[0]` 推导程序名时会把 `python -m unittest` 写进精确帮助文本，而其他 Runner 可
+  因启动方式不同偶然保留 `memory-wuxian`。
 - 根因：R8 测试基础设施把合成 Windows 路径交给宿主 `Path` 解释，并让固定时间再次转换到
-  Runner 本地时区；期待值与生产值没有在同一 canonical path 边界构造。
+  Runner 本地时区；期待值与生产值没有在同一 canonical path 边界构造，公开 CLI 的程序名
+  也没有在解析器 Owner 内固定。
 - 永久门槛：合成 Windows 黄金夹具必须使用与宿主无关的 Windows lexical path；固定时区时间
   不得被无参数 `astimezone()` 改写；生命周期期待值必须使用与生产 Owner 相同的 resolved
-  canonical target。精确 XML、命令、收据和 SHA-256 断言不得放宽，并须在 Ubuntu 与 Windows
-  CI 同时运行。
+  canonical target；公开 CLI 解析器必须显式固定稳定程序名，不得继承测试运行器或宿主进程
+  的 `argv[0]`。精确 XML、命令、帮助文本、收据和 SHA-256 断言不得放宽，并须在 Ubuntu、
+  Windows 与 macOS CI 运行。
 - Families: `G05`, `G09`, `MW-R03`, `MW-R06`.
 
 ## 跨设备结论

@@ -67,15 +67,15 @@
   ],
   "defect_workbook": {
     "preflight_receipt": "governance/v219-release-preflight.json",
-    "preflight_sha256": "bf45bc3ab93ddb9e2df171a452ff8f6e14a4ae21f667f0e57fa8e3d5734ede84",
+    "preflight_sha256": "e4a49c05ca1dd1547d1f893ff26d49922fd4376b7c8189041a8b9adcd005423d",
     "completion_receipt": "governance/v219-release-completion.json",
-    "completion_sha256": "291da36a9093f84ccf44230df819f221dc178e7f7b50f314e5188d3973332427",
+    "completion_sha256": "090f09deaf34a7e35977fe89d79654fb8c041705c8342ddd801754beb076ad8e",
     "applicable_families": ["G01", "G05", "G09", "G11"],
     "project_workbook_updated": true,
     "original_triggers": [
       "The completed R1-R8 candidate had not yet been bound to one public release, installer, installed generation, and active-runtime receipt.",
       "Prior Memory Wuxian incidents repeatedly distinguished packaged files, installed bytes, running effects, and foreground-safe Windows behavior.",
-      "MW-REL-033: cross-platform golden fixtures must not bind host path syntax, local timezone, or Windows short-path aliases."
+      "MW-REL-033: cross-platform golden fixtures must not bind host path syntax, local timezone, Windows short-path aliases, or a host process argv[0]."
     ]
   },
   "failure_escalation": {
