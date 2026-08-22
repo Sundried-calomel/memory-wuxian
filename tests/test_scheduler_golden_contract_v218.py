@@ -8,7 +8,7 @@ import plistlib
 import subprocess
 import sys
 import unittest
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import SimpleNamespace
 from unittest.mock import patch
 from xml.etree import ElementTree as ET
@@ -33,6 +33,23 @@ class FixedDateTime(dt.datetime):
     def now(cls, tz=None):
         value = cls.fromisoformat(FIXTURE["fixed_start_boundary"])
         return value if tz is None else value.astimezone(tz)
+
+    def astimezone(self, tz=None):
+        return self if tz is None else super().astimezone(tz)
+
+
+class GoldenWindowsPath(PureWindowsPath):
+    def exists(self) -> bool:
+        return True
+
+    def is_file(self) -> bool:
+        return True
+
+    def mkdir(self, *args, **kwargs) -> None:
+        return None
+
+    def unlink(self, *args, **kwargs) -> None:
+        return None
 
 
 def sha256(payload: bytes) -> str:
@@ -69,9 +86,9 @@ class SchedulerGoldenContractV218Test(unittest.TestCase):
         cls.mac_skill = PurePosixPath(mac["skill"])
         cls.mac_archive = PurePosixPath(mac["archive"])
         windows = FIXTURE["windows"]
-        cls.win_python = Path(windows["python"])
-        cls.win_skill = Path(windows["skill"])
-        cls.win_archive = Path(windows["archive"])
+        cls.win_python = GoldenWindowsPath(windows["python"])
+        cls.win_skill = GoldenWindowsPath(windows["skill"])
+        cls.win_archive = GoldenWindowsPath(windows["archive"])
 
     def test_exact_command_arrays_and_policy_differences(self) -> None:
         commands = {
@@ -321,7 +338,7 @@ class SchedulerGoldenContractV218Test(unittest.TestCase):
     def test_governance_windows_runner_calls_are_exact_without_real_scheduler(self) -> None:
         calls: list[tuple[list[str], dict[str, object]]] = []
         writes: dict[str, bytes] = {}
-        temporary = Path("C:/MemoryWuxianGolden/governance.xml")
+        temporary = GoldenWindowsPath("C:/MemoryWuxianGolden/governance.xml")
 
         def runner(arguments, **kwargs):
             calls.append(([str(item) for item in arguments], kwargs))
@@ -345,7 +362,7 @@ class SchedulerGoldenContractV218Test(unittest.TestCase):
             patch.object(governance.sys, "platform", "win32"),
             patch.object(governance, "executable_entry_path", return_value=self.win_python),
             patch.object(governance, "windows_user_id", return_value=FIXTURE["windows"]["user_id"]),
-            patch.object(governance, "windows_system_executable", return_value=Path("C:/Windows/System32/schtasks.exe")),
+            patch.object(governance, "windows_system_executable", return_value=GoldenWindowsPath("C:/Windows/System32/schtasks.exe")),
             patch.object(governance, "dt", SimpleNamespace(datetime=FixedDateTime)),
             patch.object(platform_scheduler.tempfile, "mkstemp", side_effect=mkstemp),
             patch.object(governance, "atomic_write_bytes", side_effect=lambda path, data: writes.__setitem__(str(path), data)),
@@ -358,7 +375,7 @@ class SchedulerGoldenContractV218Test(unittest.TestCase):
         ):
             self.assertEqual(governance.main(), 0)
 
-        executable = "C:\\Windows\\System32\\schtasks.exe"
+        executable = str(GoldenWindowsPath("C:/Windows/System32/schtasks.exe"))
         self.assertEqual(
             calls,
             [
@@ -380,7 +397,7 @@ class SchedulerGoldenContractV218Test(unittest.TestCase):
             with self.subTest(name=name):
                 calls: list[tuple[list[str], dict[str, object]]] = []
                 writes: dict[str, bytes] = {}
-                temporary = Path(f"C:/MemoryWuxianGolden/{name}.xml")
+                temporary = GoldenWindowsPath(f"C:/MemoryWuxianGolden/{name}.xml")
 
                 def runner(arguments, **kwargs):
                     calls.append(([str(item) for item in arguments], kwargs))
@@ -401,7 +418,7 @@ class SchedulerGoldenContractV218Test(unittest.TestCase):
                     if name == "cloud":
                         with (
                             patch.object(cloud, "windows_user_id", return_value=FIXTURE["windows"]["user_id"]),
-                            patch.object(cloud, "windows_system_executable", return_value=Path("C:/Windows/System32/schtasks.exe")),
+                            patch.object(cloud, "windows_system_executable", return_value=GoldenWindowsPath("C:/Windows/System32/schtasks.exe")),
                             patch.object(cloud, "dt", SimpleNamespace(datetime=FixedDateTime)),
                         ):
                             installer(self.win_archive, self.win_skill, self.win_python, load=True, runner=runner)
@@ -415,7 +432,7 @@ class SchedulerGoldenContractV218Test(unittest.TestCase):
 
                 create = next(call for call in calls if "/Create" in call[0])
                 start = next(call for call in calls if "/Run" in call[0])
-                executable = "C:\\Windows\\System32\\schtasks.exe" if name == "cloud" else "schtasks.exe"
+                executable = str(GoldenWindowsPath("C:/Windows/System32/schtasks.exe")) if name == "cloud" else "schtasks.exe"
                 self.assertEqual(create[0], [executable, "/Create", "/TN", task_name, "/XML", str(temporary), "/F"])
                 self.assertEqual(start[0], [executable, "/Run", "/TN", task_name])
                 expected_kwargs = {"check": True}

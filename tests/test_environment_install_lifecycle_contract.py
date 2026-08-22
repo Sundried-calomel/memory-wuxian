@@ -352,6 +352,7 @@ class EnvironmentInstallLifecycleContractTests(unittest.TestCase):
         transaction_id = f"rule-{ids.issued[0].hex}"
         receipt_id = f"rule-{ids.issued[1].hex}"
         expected_rehearsal = self.expected_rule_rehearsal(case)
+        canonical_target = str(harness.target.resolve(strict=True))
         self.assertEqual(
             preview,
             {
@@ -359,7 +360,7 @@ class EnvironmentInstallLifecycleContractTests(unittest.TestCase):
                 "artifact_id": "global-rule:codex-agents",
                 "revision_id": case["remote_revision"]["revision_id"],
                 "target_binding": case["binding"]["binding_id"],
-                "target_path": str(harness.target),
+                "target_path": canonical_target,
                 "decision": "update",
                 "previous_installed_sha256": sha256(case["original"]),
                 "candidate_sha256": sha256(case["candidate"]),
@@ -373,7 +374,7 @@ class EnvironmentInstallLifecycleContractTests(unittest.TestCase):
             result,
             {
                 "status": "installed",
-                "target_path": str(harness.target),
+                "target_path": canonical_target,
                 "receipt": receipt,
             },
         )
