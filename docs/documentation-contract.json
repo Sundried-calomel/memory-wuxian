@@ -80,6 +80,10 @@
       "required_tokens": ["PYTHONIOENCODING", "UTF-8"]
     },
     {
+      "id": "stable-cli-program-identity",
+      "required_tokens": ["memory-wuxian", "argv[0]"]
+    },
+    {
       "id": "event-driven-dashboard",
       "required_tokens": ["/api/events", "project-filter", "source-filter", "device-filter", "collector-telemetry.json"]
     },

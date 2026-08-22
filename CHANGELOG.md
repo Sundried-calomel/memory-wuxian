@@ -14,6 +14,8 @@
   metadata.
 - Keep Summary V2 rescue, atomic-summary work, archive migration, summary
   formats, cloud protocols, and existing raw history explicitly unchanged.
+- Pin the public CLI program identity to `memory-wuxian` so help and parse
+  errors remain byte-stable instead of inheriting a host process `argv[0]`.
 
 ## 2.18.0 - 2026-08-18
 

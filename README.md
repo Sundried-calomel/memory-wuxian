@@ -6,7 +6,8 @@
 > approved 2.16-2.18 internal milestones, with exact-candidate CI,
 > transactional activation, rollback, package hashes, and signed update
 > metadata. Raw history, Summary V1/V2 behavior, indexes, and cloud protocols
-> remain unchanged.
+> remain unchanged. The public CLI also pins its program identity to
+> `memory-wuxian`; help and parse errors never inherit a host process `argv[0]`.
 
 > **2.18.0:** Adds a bounded, content-free `capture-wal.jsonl` for idempotent
 > crash recovery, source-local failure isolation, non-fatal telemetry writes,
