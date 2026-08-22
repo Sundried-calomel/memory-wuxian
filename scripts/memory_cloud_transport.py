@@ -11,16 +11,15 @@ import subprocess
 import tempfile
 import time
 import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Protocol
 
 from platform_process import no_window_kwargs
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
+from memory_exchange_contract import ExchangeStreamFacade, ExchangeStreamPort
 from memory_federation import (
     PROTOCOL_VERSION,
-    FederationManager,
     atomic_write_json,
     bytes_sha256,
     now_iso,
@@ -83,7 +82,7 @@ class AuthenticatedOpenResult(dict):
         super().__init__(value)
         self._consumed = False
 
-    def consume_environment_binding(self) -> tuple[str, str, str]:
+    def consume_stream_binding(self) -> tuple[str, str, str]:
         if self._consumed:
             raise ValueError("authenticated open result was already consumed")
         self._consumed = True
@@ -92,6 +91,10 @@ class AuthenticatedOpenResult(dict):
             safe_node_id(str(self["target_node_id"])),
             str(self["payload_sha256"]),
         )
+
+    def consume_environment_binding(self) -> tuple[str, str, str]:
+        """Compatibility alias for the original Environment-only API."""
+        return self.consume_stream_binding()
 
 
 class CryptoAdapter(Protocol):
@@ -275,14 +278,6 @@ def _validated_identity(value: Dict[str, Any], label: str) -> Dict[str, str]:
     return {key: str(value[key]).strip() for key in required}
 
 
-def _file_marker(path: Path) -> Dict[str, int]:
-    try:
-        stat = path.stat()
-    except (FileNotFoundError, OSError):
-        return {"size": 0, "mtime_ns": 0}
-    return {"size": int(stat.st_size), "mtime_ns": int(stat.st_mtime_ns)}
-
-
 def _empty_marker() -> Dict[str, Any]:
     empty = {"size": 0, "mtime_ns": 0}
     return {
@@ -328,15 +323,17 @@ class CloudFolderTransport:
 
     def __init__(
         self,
-        manager: FederationManager,
+        manager: ExchangeStreamFacade,
         crypto: Optional[CryptoAdapter] = None,
         config_path: Optional[Path] = None,
         clock: Optional[Any] = None,
         stream_id: Optional[str] = None,
     ):
+        if not isinstance(manager, ExchangeStreamFacade):
+            raise TypeError("cloud transport requires an ExchangeStreamFacade")
+        self.port: ExchangeStreamPort = manager.exchange_port()
         self.manager = manager
-        self.store = manager.store
-        self.archive_root = manager.root
+        self.archive_root = self.port.root
         self.stream_id = stream_id
         if stream_id is not None and not re.fullmatch(
             r"[a-z0-9][a-z0-9._-]{2,63}", stream_id
@@ -345,9 +342,9 @@ class CloudFolderTransport:
         self.config_path = (
             Path(config_path)
             if config_path is not None
-            else manager.metadata_root / "cloud.json"
+            else self.port.metadata_root / "cloud.json"
         )
-        self.quarantine_root = manager.metadata_root / "cloud-quarantine"
+        self.quarantine_root = self.port.metadata_root / "cloud-quarantine"
         self.clock = clock or time.time
         self.config = self._load_config()
         binary = self.config.get("envelope_binary") or self._default_binary()
@@ -398,7 +395,7 @@ class CloudFolderTransport:
             )
         resolved_identity_path = Path(identity_private_path).expanduser().resolve()
         archive_root = self.archive_root.resolve()
-        replica_root = self.manager.replica_root.resolve()
+        replica_root = self.port.replica_root.resolve()
         for protected_root, label in (
             (archive_root, "primary archive"),
             (replica_root, "federation replica cache"),
@@ -470,7 +467,7 @@ class CloudFolderTransport:
             and str(self.config.get("identity_private_path", "")).strip()
         )
         peers = []
-        for peer in self.manager.status().get("devices", []):
+        for peer in self.port.status().get("devices", []):
             identity = peer.get("cloud_identity")
             outbound = (self.config.get("outbound") or {}).get(
                 peer["node_id"], {}
@@ -596,11 +593,11 @@ class CloudFolderTransport:
         return Path(value).expanduser().resolve()
 
     def _local_node_id(self) -> str:
-        return safe_node_id(str(self.manager.node()["node_id"]))
+        return safe_node_id(str(self.port.node()["node_id"]))
 
     def _trusted_cloud_peers(self) -> Dict[str, Dict[str, Any]]:
         peers: Dict[str, Dict[str, Any]] = {}
-        for peer in self.manager.peers():
+        for peer in self.port.peers():
             node_id = safe_node_id(str(peer.get("node_id", "")))
             if not peer.get("trusted"):
                 continue
@@ -653,30 +650,7 @@ class CloudFolderTransport:
         return state
 
     def _observation(self, timestamp: float) -> Dict[str, Any]:
-        if hasattr(self.manager, "exchange_observation"):
-            return self.manager.exchange_observation(timestamp)
-        state = read_json(self.store.state_path, {})
-        completed = int(state.get("completed_rounds", 0)) + len(
-            state.get("completed_rounds_out_of_order") or []
-        )
-        try:
-            local = datetime.fromtimestamp(timestamp).astimezone()
-        except (OSError, OverflowError, ValueError):
-            local = datetime.now().astimezone()
-        raw_today = (
-            self.store.raw_dir
-            / f"{local.year:04d}"
-            / f"{local.month:02d}"
-            / f"{local.date().isoformat()}.md"
-        )
-        return {
-            "completed_rounds": completed,
-            "raw_today": _file_marker(raw_today),
-            "summary_registry": _file_marker(
-                self.store.summaries_dir / "registry.jsonl"
-            ),
-            "title_index": _file_marker(self.store.title_index_path),
-        }
+        return self.port.exchange_observation(timestamp)
 
     @staticmethod
     def _eligible_change(current: Dict[str, Any], published: Dict[str, Any]) -> bool:
@@ -890,19 +864,14 @@ class CloudFolderTransport:
             "reason": reason,
         }
         destination = self.quarantine_root / f"{artifact_type}-{digest}.json"
-        registry = getattr(self.manager, "registry", None)
-        if registry is not None:
-            destination = registry._resolve_relative(
-                destination.relative_to(registry.root).as_posix(),
-                "cloud quarantine record",
-                for_write=True,
-            )
+        if self.port.resolve_quarantine_path is not None:
+            destination = self.port.resolve_quarantine_path(destination)
         else:
             current = destination
             while True:
                 if current.exists() and is_link_like(current):
                     raise ValueError("cloud quarantine path contains a link or junction")
-                if current == self.manager.metadata_root:
+                if current == self.port.metadata_root:
                     break
                 current = current.parent
         atomic_write_json(destination, record)
@@ -1106,7 +1075,7 @@ class CloudFolderTransport:
                     {"peer": peer_id, "type": "bundle-scan", "reason": str(exc)}
                 )
                 continue
-            replica_state = self.manager.replica_state(peer_id)
+            replica_state = self.port.replica_state(peer_id)
             current_sequence = int(replica_state.get("last_event_sequence", 0))
             expected_sequence = current_sequence + 1
             candidates = []
@@ -1222,7 +1191,7 @@ class CloudFolderTransport:
                             raise ValueError(
                                 "Cloud envelope filename bundle SHA-256 mismatch"
                             )
-                        manifest = self.manager.read_bundle_manifest(bundle)
+                        manifest = self.port.read_bundle_manifest(bundle)
                         if manifest.get("bundle_id") != match.group("bundle_id"):
                             raise ValueError(
                                 "Cloud envelope filename bundle ID mismatch"
@@ -1231,28 +1200,12 @@ class CloudFolderTransport:
                             raise ValueError(
                                 "Cloud envelope filename sequence mismatch"
                             )
-                        exchange_lock = getattr(
-                            self.manager,
-                            "exchange_lock_path",
-                            self.archive_root / ".locks" / "archive.lock",
-                        )
-                        with exclusive_lock(exchange_lock):
-                            import_kwargs = {"expected_node_id": peer_id}
-                            if getattr(
-                                self.manager,
-                                "requires_authenticated_transport",
-                                False,
-                            ):
-                                imported = self.manager._import_authenticated_delta(
-                                    bundle,
-                                    expected_node_id=peer_id,
-                                    authenticated_open_result=open_result,
-                                )
-                            else:
-                                imported = self.manager.import_delta(
-                                    bundle,
-                                    **import_kwargs,
-                                )
+                        with exclusive_lock(self.port.exchange_lock_path):
+                            imported = self.port.import_bundle(
+                                bundle,
+                                expected_node_id=peer_id,
+                                authenticated_open_result=open_result,
+                            )
                         ack_path = self._write_ack(
                             peer_id,
                             peer["cloud_identity"],
@@ -1344,13 +1297,8 @@ class CloudFolderTransport:
         acknowledged = state["acknowledged"]
         with tempfile.TemporaryDirectory(prefix="memory-wuxian-cloud-export-") as temp:
             bundle = Path(temp) / "delta.mwxb"
-            exchange_lock = getattr(
-                self.manager,
-                "exchange_lock_path",
-                self.archive_root / ".locks" / "archive.lock",
-            )
-            with exclusive_lock(exchange_lock):
-                exported = self.manager.export_delta(
+            with exclusive_lock(self.port.exchange_lock_path):
+                exported = self.port.export_delta(
                     bundle,
                     after_event_sequence=int(acknowledged["last_event_sequence"]),
                     target_node_id=peer_id,
@@ -1543,7 +1491,7 @@ class CloudFolderTransport:
                 or quarantined_count > 0
             )
             if peer_activity:
-                self.manager.log_sync(
+                self.port.log_sync(
                     "cloud-folder-sync",
                     peer_id,
                     {

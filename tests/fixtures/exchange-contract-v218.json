@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "common_manifest_fields": [
+    "artifact_count",
+    "base_event_sequence",
+    "bundle_id",
+    "format",
+    "from_event_sequence",
+    "origin_node_id",
+    "payload_bytes",
+    "payload_path",
+    "payload_sha256",
+    "previous_bundle_sha256",
+    "protocol_version",
+    "target_node_id",
+    "to_event_sequence"
+  ],
+  "streams": {
+    "archive-v1": {
+      "manifest_only_fields": ["minimum_protocol_version"],
+      "payload_path": "payload/artifacts.jsonl",
+      "replay_status": "no-change",
+      "requires_authenticated_transport": false
+    },
+    "environment-v1": {
+      "manifest_only_fields": ["stream_id"],
+      "payload_path": "payload/environment.jsonl",
+      "replay_status": "no-change",
+      "requires_authenticated_transport": true
+    },
+    "project-attachment-v1": {
+      "manifest_only_fields": ["stream_id"],
+      "payload_path": "payload/project-attachments.jsonl",
+      "replay_status": "rejected",
+      "requires_authenticated_transport": true
+    },
+    "project-evidence-v1": {
+      "manifest_only_fields": ["stream_id"],
+      "payload_path": "payload/project-evidence.jsonl",
+      "replay_status": "rejected",
+      "requires_authenticated_transport": true
+    }
+  }
+}

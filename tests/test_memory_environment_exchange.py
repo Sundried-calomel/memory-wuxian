@@ -16,9 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from memory_cli import MemoryStore, load_simple_yaml
 from memory_cloud_transport import (
-    AuthenticatedOpenResult,
     CloudFolderTransport,
-    _AUTHENTICATED_OPEN_AUTHORITY,
     filesystem_native_path,
 )
 from memory_environment import revision_id_for
@@ -29,25 +27,8 @@ from memory_environment_skills import (
     skill_package_contract_bytes,
 )
 from memory_federation import FederationManager, canonical_sha256
+from tests.support.federation import verified_import
 from tests.test_memory_cloud_transport import FakeCrypto
-
-
-def verified_import(manager, bundle, expected_node_id=None):
-    manifest = manager.read_bundle_manifest(bundle)
-    origin = manifest["origin_node_id"]
-    target = manager.node()["node_id"]
-    return manager._import_authenticated_delta(
-        bundle,
-        expected_node_id=expected_node_id,
-        authenticated_open_result=AuthenticatedOpenResult(
-            _AUTHENTICATED_OPEN_AUTHORITY,
-            {
-                "origin_node_id": origin,
-                "target_node_id": target,
-                "payload_sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
-            },
-        ),
-    )
 
 
 class EnvironmentExchangeTests(unittest.TestCase):

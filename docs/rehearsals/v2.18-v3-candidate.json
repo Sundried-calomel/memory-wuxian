@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "rehearsal_id": "memory-wuxian-v218-v3-candidate",
+  "work_item_id": "memory-wuxian-v2.18-v3",
+  "candidate_id": "v2.18-v3-typed-batch-and-shared-event-cycle",
+  "owner_id": "capture-core",
+  "artifact_profile": "software-feature",
+  "validation_level": "L4",
+  "production_entrypoints": [
+    "Store::sync_batch",
+    "Store::sync_startup_batch",
+    "run_event_loop"
+  ],
+  "required_case_ids": [
+    "V3-POS-001",
+    "V3-NEG-001",
+    "V3-BND-001",
+    "V3-FAIL-001",
+    "V3-HIST-001",
+    "V3-REC-001",
+    "V3-ID-001",
+    "V3-MAC-001"
+  ],
+  "cases": [
+    {
+      "case_id": "V3-POS-001",
+      "title": "Normal rollout preserves exact public JSON bytes",
+      "category": "positive",
+      "stage": "candidate",
+      "requirement": "The V3 candidate emits the same compact JSON bytes as the frozen pre-V3 binary for a normal rollout.",
+      "runner": "tests/test_v218_v3_contract.py",
+      "production_entrypoint": "Store::sync_startup_batch",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "byte-identical stdout JSON",
+      "status": "pass",
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
+    },
+    {
+      "case_id": "V3-NEG-001",
+      "title": "Adjacent source failure preserves partial result shape",
+      "category": "negative",
+      "stage": "candidate",
+      "requirement": "A missing source remains isolated and produces the established partial-error JSON fields without blocking a valid rollout.",
+      "runner": "native-collector/src/lib.rs::typed_partial_result_preserves_source_error_shape",
+      "production_entrypoint": "Store::sync_startup_batch",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "partial result with one source error and one synchronized session",
+      "status": "pass",
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
+    },
+    {
+      "case_id": "V3-BND-001",
+      "title": "Bounded multi-chunk rollout preserves exact output",
+      "category": "boundary",
+      "stage": "candidate",
+      "requirement": "A 521-message rollout crossing the 512-line batch boundary merges counters and terminal fields exactly as before.",
+      "runner": "tests/test_v218_v3_contract.py",
+      "production_entrypoint": "Store::sync_startup_batch",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "byte-identical stdout JSON across multiple chunks",
+      "status": "pass",
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
+    },
+    {
+      "case_id": "V3-FAIL-001",
+      "title": "Failed synchronization cannot advance known stamps",
+      "category": "failure-injection",
+      "stage": "candidate",
+      "requirement": "A source failure in the shared cycle leaves the previous known-stamp state unchanged.",
+      "runner": "native-collector/src/lib.rs::shared_event_cycle_does_not_advance_stamps_after_sync_failure",
+      "production_entrypoint": "run_event_loop",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "sync failure and unchanged known stamps",
+      "status": "pass",
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
+    },
+    {
+      "case_id": "V3-HIST-001",
+      "title": "Refreshed watcher baseline cannot hide cursor debt",
+      "category": "historical-regression",
+      "stage": "candidate",
+      "requirement": "An unchanged metadata baseline cannot suppress a rollout whose cursor remains behind.",
+      "runner": "native-collector/src/lib.rs::refreshed_watcher_baseline_cannot_hide_cursor_debt",
+      "production_entrypoint": "run_event_loop",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "cursor debt remains discoverable",
+      "status": "pass",
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
+    },
+    {
+      "case_id": "V3-REC-001",
+      "title": "Durable transaction recovery remains idempotent",
+      "category": "recovery",
+      "stage": "recovery",
+      "requirement": "Restart recovery records one durable transaction, preserves raw bytes, and does not grow the WAL on replay.",
+      "runner": "native-collector/src/lib.rs::store_restart_recovers_a_durable_transaction_exactly_once",
+      "production_entrypoint": "Store::sync_batch",
+      "uses_production_path": true,
+      "side_effects": "isolated",
+      "expected": "exactly-once recovery with unchanged raw bytes",
+      "status": "pass",
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
+    },
+    {
+      "case_id": "V3-ID-001",
+      "title": "Candidate artifacts are hash-bound",
+      "category": "candidate-identity",
+      "stage": "candidate",
+      "requirement": "The tested baseline binary, candidate binary, source, contract test, and work contract match the recorded SHA-256 values.",
+      "runner": "governance/v218-v3-validation.json",
+      "production_entrypoint": "Store::sync_startup_batch",
+      "uses_production_path": true,
+      "side_effects": "none",
+      "expected": "exact artifact hash match",
+      "status": "pass",
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
+    },
+    {
+      "case_id": "V3-MAC-001",
+      "title": "macOS kqueue branch cross-compiles without replacing native evidence",
+      "category": "positive",
+      "stage": "candidate",
+      "requirement": "The aarch64-apple-darwin library branch compiles and retains kqueue-specific wait, debounce, and watcher refresh code.",
+      "runner": "cargo check --target aarch64-apple-darwin --lib",
+      "production_entrypoint": "run_event_loop",
+      "uses_production_path": true,
+      "side_effects": "none",
+      "expected": "cross-compile pass with explicit no-native-runtime limitation",
+      "status": "pass",
+      "evidence": {"reference": "../../governance/v218-v3-validation.json", "sha256": "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380", "accepted_by": null, "acceptance_evidence": null}
+    }
+  ],
+  "historical_failures": [
+    {
+      "failure_id": "watcher-baseline-cursor-debt",
+      "description": "A refreshed watcher baseline can match source metadata while the persisted cursor is still behind.",
+      "case_ids": ["V3-HIST-001"]
+    },
+    {
+      "failure_id": "failed-sync-stamp-advance",
+      "description": "Advancing known stamps after a failed sync can hide uncaptured source changes.",
+      "case_ids": ["V3-FAIL-001"]
+    }
+  ],
+  "stage_claims": ["candidate", "recovery"],
+  "completed_at": "2026-08-19T00:05:48.2909911+09:00"
+}

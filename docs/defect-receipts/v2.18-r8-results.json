@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.18-r1-r8",
+  "packet_sha256": "60c1d03b999edb60b719381402a0c94efe1075c97844603e551b91e5568677b9",
+  "checks": [
+    {
+      "check_id": "runtime-capability-probe",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r8-validation.log",
+          "sha256": "3efe3b1692ab3abf37abf8fa47cea49710315b29f520a56bf2db7dc7a0e4e24e"
+        }
+      ],
+      "note": "The R8 affected Python modules, historical release contracts, macOS contracts, and all Rust targets executed through their real test runners."
+    },
+    {
+      "check_id": "unicode-path-fixtures",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r8-validation.log",
+          "sha256": "3efe3b1692ab3abf37abf8fa47cea49710315b29f520a56bf2db7dc7a0e4e24e"
+        }
+      ],
+      "note": "Shared filesystem, federation, macOS, Environment, project package, and rollout fixtures retained Chinese, Japanese, yen, emoji, spaces, and long-path coverage."
+    },
+    {
+      "check_id": "target-platform-effect",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r8-validation.log",
+          "sha256": "3efe3b1692ab3abf37abf8fa47cea49710315b29f520a56bf2db7dc7a0e4e24e"
+        }
+      ],
+      "note": "Windows module and discovery entrypoints, platform scheduler behavior, portable macOS transaction contracts, and native Rust tests passed without changing production behavior."
+    }
+  ]
+}

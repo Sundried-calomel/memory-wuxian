@@ -17,11 +17,18 @@ import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import yaml
 
-from memory_environment import EnvironmentRegistry
+from memory_environment import (
+    EnvironmentRegistry,
+    _strict_keys,
+    canonical_bytes as _canonical,
+    sha256_bytes as _sha256,
+)
+from memory_environment_install_lifecycle import InstallLifecycleCoordinator
+from platform_atomic import ParentSync, atomic_replace_bytes, sync_directory
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
 
@@ -89,16 +96,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _sha256(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
-
-
-def _canonical(value: Any) -> bytes:
-    return json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-
-
 def skill_package_contract_bytes(manifest: Mapping[str, Any]) -> bytes:
     """Return the Registry-bound package contract without the circular revision ID."""
 
@@ -113,58 +110,14 @@ def skill_package_contract_bytes(manifest: Mapping[str, Any]) -> bytes:
 
 
 def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY
-    if hasattr(os, "O_DIRECTORY"):
-        flags |= os.O_DIRECTORY
-    try:
-        descriptor = os.open(path, flags)
-    except OSError:
-        return
-    try:
-        os.fsync(descriptor)
-    except OSError:
-        pass
-    finally:
-        os.close(descriptor)
+    sync_directory(path, policy=ParentSync.BEST_EFFORT)
 
 
 def _atomic_json(path: Path, value: Dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(
-                json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True).encode(
-                    "utf-8"
-                )
-                + b"\n"
-            )
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        _fsync_directory(path.parent)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
-
-
-def _strict_keys(
-    value: Mapping[str, Any],
-    allowed: Iterable[str],
-    required: Iterable[str],
-    label: str,
-) -> None:
-    allowed_set = set(allowed)
-    required_set = set(required)
-    unknown = set(value) - allowed_set
-    missing = required_set - set(value)
-    if unknown:
-        raise ValueError(f"{label}: unknown fields: {sorted(unknown)}")
-    if missing:
-        raise ValueError(f"{label}: missing fields: {sorted(missing)}")
+    payload = (
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    atomic_replace_bytes(path, payload, parent_sync=ParentSync.BEST_EFFORT)
 
 
 def _string(value: Any, label: str) -> str:
@@ -300,38 +253,18 @@ class EnvironmentSkillInstaller:
     ) -> Dict[str, Any]:
         """Validate and preview by default; mutate only with explicit apply."""
 
-        package = Path(package_path)
         with exclusive_lock(self.lock_path):
-            self.recover_transactions()
-            prepared = self._prepare(
-                package=package,
+            adapter = _SkillInstallLifecycleAdapter(
+                self,
+                package=Path(package_path),
                 artifact_id=artifact_id,
                 revision_id=revision_id,
                 target_binding=target_binding,
             )
-            if prepared["decision"] == "no-change":
-                return {
-                    "status": "no-change",
-                    "artifact_id": artifact_id,
-                    "revision_id": revision_id,
-                    "target_binding": target_binding,
-                    "target_path": str(prepared["target_path"]),
-                }
-            preview = {
-                "status": "preview",
-                "artifact_id": artifact_id,
-                "revision_id": revision_id,
-                "target_binding": target_binding,
-                "target_path": str(prepared["target_path"]),
-                "decision": prepared["decision"],
-                "package_sha256": prepared["package_sha256"],
-                "previous_installed_sha256": prepared["previous_hash"],
-                "final_installed_sha256": prepared["logical_hash"],
-                "rehearsal": prepared["rehearsal"],
-            }
-            if not apply:
-                return preview
-            return self._apply(prepared)
+            return InstallLifecycleCoordinator[Dict[str, Any], Dict[str, Any]]().run(
+                adapter,
+                apply=apply,
+            )
 
     def _prepare(
         self,
@@ -1689,3 +1622,63 @@ class EnvironmentSkillInstaller:
 
     def _after_rollback_saved(self, target: Path) -> None:
         """Test seam after durable rollback creation and before transaction mutation."""
+
+
+class _SkillInstallLifecycleAdapter:
+    """Map the Skill facade onto the shared non-persisting stage order."""
+
+    def __init__(
+        self,
+        installer: EnvironmentSkillInstaller,
+        *,
+        package: Path,
+        artifact_id: str,
+        revision_id: str,
+        target_binding: str,
+    ):
+        self.installer = installer
+        self.package = package
+        self.artifact_id = artifact_id
+        self.revision_id = revision_id
+        self.target_binding = target_binding
+
+    def recover(self) -> None:
+        self.installer.recover_transactions()
+
+    def prepare(self) -> Dict[str, Any]:
+        return self.installer._prepare(
+            package=self.package,
+            artifact_id=self.artifact_id,
+            revision_id=self.revision_id,
+            target_binding=self.target_binding,
+        )
+
+    def no_change_result(
+        self, prepared: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        if prepared["decision"] != "no-change":
+            return None
+        return {
+            "status": "no-change",
+            "artifact_id": self.artifact_id,
+            "revision_id": self.revision_id,
+            "target_binding": self.target_binding,
+            "target_path": str(prepared["target_path"]),
+        }
+
+    def preview_result(self, prepared: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "status": "preview",
+            "artifact_id": self.artifact_id,
+            "revision_id": self.revision_id,
+            "target_binding": self.target_binding,
+            "target_path": str(prepared["target_path"]),
+            "decision": prepared["decision"],
+            "package_sha256": prepared["package_sha256"],
+            "previous_installed_sha256": prepared["previous_hash"],
+            "final_installed_sha256": prepared["logical_hash"],
+            "rehearsal": prepared["rehearsal"],
+        }
+
+    def apply_prepared(self, prepared: Dict[str, Any]) -> Dict[str, Any]:
+        return self.installer._apply(prepared)

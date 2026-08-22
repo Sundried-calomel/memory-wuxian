@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import sys
@@ -16,14 +15,7 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 import memory_dashboard
 from memory_dashboard import make_handler
-
-
-def file_hashes(root: Path) -> dict[str, str]:
-    return {
-        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-    }
+from tests.support.filesystem import file_hashes
 
 
 class MemoryDashboardSystemTest(unittest.TestCase):

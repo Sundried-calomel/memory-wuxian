@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 import fnmatch
 import json
+import re
 from pathlib import Path
 
 
@@ -54,11 +55,12 @@ def production_files(contract: dict) -> list[str]:
     files: list[str] = []
     for source in contract["source_roots"]:
         root = ROOT / source["path"]
-        extensions = set(source["extensions"])
+        extensions = set(source.get("extensions", []))
+        all_files = source.get("all_files") is True
         files.extend(
             normalized(path)
             for path in root.rglob("*")
-            if path.is_file() and path.suffix in extensions
+            if path.is_file() and (all_files or path.suffix in extensions)
         )
     return sorted(files)
 
@@ -74,10 +76,50 @@ def imported_modules(path: Path) -> set[str]:
     return imports
 
 
+def imported_rust_symbols(path: Path) -> set[str]:
+    source = path.read_text(encoding="utf-8")
+    symbols: set[str] = set()
+    for use_path in re.findall(
+        r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?use\s+([^;]+);",
+        source,
+    ):
+        symbols.update(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", use_path))
+    symbols.update(
+        re.findall(
+            r"(?m)^\s*(?:pub\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;",
+            source,
+        )
+    )
+    symbols.update(
+        re.findall(
+            r"(?m)^\s*extern\s+crate\s+([A-Za-z_][A-Za-z0-9_]*)\s*;",
+            source,
+        )
+    )
+    return symbols
+
+
 def validate_schema(contract: dict) -> list[str]:
     errors: list[str] = []
     if contract.get("schema_version") != 2:
         errors.append("schema_version must be 2")
+
+    source_roots = contract.get("source_roots")
+    if not isinstance(source_roots, list):
+        errors.append("source_roots must be a list")
+    else:
+        for source in source_roots:
+            if not isinstance(source, dict) or not isinstance(source.get("path"), str):
+                errors.append("each source root must declare a path")
+                continue
+            extensions = source.get("extensions")
+            if source.get("all_files") is not True and not (
+                isinstance(extensions, list)
+                and all(isinstance(extension, str) for extension in extensions)
+            ):
+                errors.append(
+                    f"source root {source['path']} must declare extensions or all_files"
+                )
 
     modules = contract.get("modules")
     if not isinstance(modules, list):
@@ -150,6 +192,20 @@ def validate_schema(contract: dict) -> list[str]:
         REQUIRED_CAPTURE_FORBIDDEN_CAPABILITIES - forbidden_capabilities
     ):
         errors.append(f"capture-core must forbid capability: {capability}")
+
+    rust_symbols = contract.get("rust_capability_rules", {}).get("symbols", {})
+    if not isinstance(rust_symbols, dict):
+        errors.append("rust_capability_rules.symbols must be an object")
+    else:
+        for capability in sorted(forbidden_capabilities):
+            symbols = rust_symbols.get(capability)
+            if not isinstance(symbols, list) or not symbols or not all(
+                isinstance(symbol, str) and symbol for symbol in symbols
+            ):
+                errors.append(
+                    "capture-core forbidden capability lacks Rust symbols: "
+                    f"{capability}"
+                )
     return errors
 
 
@@ -192,6 +248,9 @@ def validate() -> list[str]:
     dependency_rules = contract.get("python_dependency_rules", {})
     forbidden_imports = dependency_rules.get("forbidden_imports", {})
     enforce_allowlist = dependency_rules.get("enforce_module_allowlist", False)
+    rust_capability_symbols = contract.get("rust_capability_rules", {}).get(
+        "symbols", {}
+    )
 
     for path, owner in owner_by_path.items():
         if not path.endswith(".py"):
@@ -220,6 +279,18 @@ def validate() -> list[str]:
                     f"{imported} ({target_owner})"
                 )
 
+    for path, owner in owner_by_path.items():
+        if not path.endswith(".rs") or owner not in module_by_id:
+            continue
+        imported = imported_rust_symbols(ROOT / path)
+        for capability in module_by_id[owner].get("forbidden_capabilities", []):
+            forbidden = set(rust_capability_symbols.get(capability, []))
+            for symbol in sorted(imported.intersection(forbidden)):
+                errors.append(
+                    f"forbidden Rust capability: {path} ({owner}) -> "
+                    f"{capability}:{symbol}"
+                )
+
     return errors
 
 
@@ -231,8 +302,8 @@ def main() -> int:
             print(f"- {error}")
         return 1
     print(
-        "Architecture contract passed: schema v2, source ownership, and "
-        "dependency allowlists are valid."
+        "Architecture contract passed: schema v2, source ownership, "
+        "dependency allowlists, and Rust capability boundaries are valid."
     )
     return 0
 

@@ -4,20 +4,21 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from memory_environment import (
     EnvironmentRegistry,
+    _strict_keys,
     atomic_write_json,
     canonical_bytes,
     now_iso,
     read_json,
+    sha256_bytes as _sha256,
 )
 from memory_environment_conflicts import EnvironmentConflictStore
 from memory_environment_exchange import EnvironmentExchangeManager
@@ -37,24 +38,6 @@ STAGE_FIELDS = {
     "package_attachment",
     "received_bundle_id",
 }
-
-
-def _sha256(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
-
-
-def _strict_keys(
-    value: Mapping[str, Any],
-    allowed: Iterable[str],
-    required: Iterable[str],
-    label: str,
-) -> None:
-    unknown = set(value) - set(allowed)
-    missing = set(required) - set(value)
-    if unknown:
-        raise ValueError(f"{label}: unknown fields: {sorted(unknown)}")
-    if missing:
-        raise ValueError(f"{label}: missing fields: {sorted(missing)}")
 
 
 class EnvironmentIncomingProcessor:

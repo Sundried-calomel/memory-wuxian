@@ -1,7 +1,5 @@
 import hashlib
 import json
-import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -11,21 +9,14 @@ from unittest.mock import patch
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
-from memory_environment import EnvironmentRegistry, revision_id_for
-
-
-def make_directory_link(link: Path, target: Path) -> None:
-    if os.name == "nt":
-        completed = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if completed.returncode:
-            raise OSError(completed.stderr or completed.stdout)
-    else:
-        link.symlink_to(target, target_is_directory=True)
+from memory_environment import (
+    EnvironmentRegistry,
+    _strict_keys,
+    canonical_bytes,
+    revision_id_for,
+    sha256_bytes,
+)
+from tests.support.filesystem import make_directory_link
 
 
 def authority_hashes(root):
@@ -62,6 +53,20 @@ class EnvironmentRegistryTest(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def test_canonical_bytes_hash_and_strict_error_order_are_exact(self):
+        payload = {"路径": "日本語 ￥ 😀", "flag": True}
+        expected = '{"flag":true,"路径":"日本語 ￥ 😀"}'.encode("utf-8")
+        self.assertEqual(canonical_bytes(payload), expected)
+        self.assertEqual(
+            sha256_bytes(expected),
+            "74de3bc3fe72f0caffbbac8afaa0ca44ccefee50397b9ca6532dab2e44a8738c",
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^fixture: unknown fields: \['extra'\]$",
+        ):
+            _strict_keys({"extra": 1}, {"required"}, {"required"}, "fixture")
 
     def test_read_registry_revalidates_authority_path(self):
         self.registry.init()

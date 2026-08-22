@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v218-v3",
+  "work_item_id": "memory-wuxian-v218-capture-structure-v3",
+  "candidate_id": "v218-v3-typed-batch-shared-event-cycle",
+  "owner_id": "capture-core",
+  "source_revision": "codex/v218-architecture-gate",
+  "product_evolution_record_id": "memory-wuxian-v218-capture-structure-v3",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The change applies existing exact-output, append-only, failure-ordering, Unicode-path, and platform-boundary rules. It introduces no newly confirmed reusable defect family or governance capability.",
+  "evidence_refs": [
+    "governance/v218-v3-validation.json",
+    "governance/v218-v3-verification.json",
+    "docs/rehearsals/v2.18-v3-candidate.json"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-18T15:10:00Z"
+}

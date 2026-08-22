@@ -2,7 +2,6 @@ import hashlib
 import json
 import os
 import stat
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -19,20 +18,7 @@ from memory_environment_rules import (
     RuleInstallationError,
 )
 from platform_lock import exclusive_lock
-
-
-def make_directory_link(link: Path, target: Path) -> None:
-    if os.name == "nt":
-        completed = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if completed.returncode:
-            raise OSError(completed.stderr or completed.stdout)
-    else:
-        link.symlink_to(target, target_is_directory=True)
+from tests.support.filesystem import make_directory_link
 
 
 def digest(value: bytes) -> str:

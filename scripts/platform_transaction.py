@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
-import tempfile
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from platform_atomic import ParentSync, atomic_replace_bytes
 
 
 INDEX_GENERATION_FORMAT = "memory-wuxian-index-generation-v1"
@@ -98,25 +98,12 @@ def atomic_write_canonical_json(
 
     path = Path(path)
     payload = canonical_json_bytes(value)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+    atomic_replace_bytes(
+        path,
+        payload,
+        parent_sync=ParentSync.NONE,
+        before_replace=before_replace,
     )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        if before_replace is not None:
-            before_replace(temporary, path)
-        os.replace(temporary, path)
-    except BaseException:
-        try:
-            temporary.unlink(missing_ok=True)
-        except OSError:
-            pass
-        raise
     return payload
 
 

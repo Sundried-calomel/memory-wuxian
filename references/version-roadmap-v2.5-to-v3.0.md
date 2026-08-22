@@ -86,11 +86,12 @@ For every versioned work item:
 | v2.12.7 | Released | v2.11.0 | Stable live capture, catch-up, repair, and cross-platform activation baseline. |
 | v2.13.0 | Candidate | v2.12.7 | Explicit immutable project evidence packages and independent encrypted exchange. |
 | v2.14.0 | Candidate | v2.13.0 | Device-local Project Evidence owners. |
-| v2.15.0 | Current baseline | v2.14.0 | Baseline for the approved Capture Core isolation sequence. |
+| v2.15.0 | Published baseline | v2.14.0 | Baseline for the approved Capture Core isolation sequence. |
 | v2.16.0 | Approved | v2.15.0 | Transactional collector lifecycle, readiness, activation, and rollback. |
 | v2.17.0 | Approved | v2.16.0 | Extract the P0 native Capture Core with watcher-first byte parity. |
 | v2.18.0 | Approved | v2.17.0 | Durable transaction recovery, failure isolation, telemetry, and release evidence. |
-| v3.0.0 | Conditional | v2.18.0 plus an accepted incompatibility decision | Cross-platform integration only when a real breaking public contract requires a major version. |
+| v2.19.0 | Release candidate | v2.18.0 | First public integration of the approved v2.16-v2.18 lifecycle, Capture Core, and R1-R8 ownership work. |
+| v3.0.0 | Conditional | v2.19.0 plus an accepted incompatibility decision | Cross-platform integration only when a real breaking public contract requires a major version. |
 
 ## v2.5.0: completed foundation
 
@@ -506,6 +507,32 @@ same-candidate Windows/macOS rehearsal all pass.
 - Do not change public CLI behavior, persisted record schemas, raw bytes,
   source selection, summary state, protocol state, or release version metadata
   as a side effect of module extraction.
+
+## v2.19.0: integrated modular release
+
+### Objective
+
+Publish the accepted v2.16-v2.18 lifecycle and Capture Core work together with
+the completed R1-R8 ownership refactor as one exact, transactionally installable
+candidate. This is a compatible 2.x integration release, not a new summary or
+storage generation.
+
+### Release contract
+
+1. Bind source, version declarations, three README files, changelog, package
+   assets, update metadata, tag, installed generation, and runtime evidence to
+   one candidate SHA.
+2. Run the full Python, Rust, architecture, documentation, release rehearsal,
+   installer, rollback, and independent-evaluation gates before publication.
+3. Preserve the active archive root, configuration, device identity, cloud
+   state, pending semantic work, and every authoritative record across upgrade.
+4. Correct failures inside the existing canonical Owner. Do not add a competing
+   path or fallback to mask an internal failure, and rerun all cases sharing the
+   changed invariant to prevent seesaw regressions.
+
+Release gate: the exact candidate passes cross-platform CI and independent
+evaluation, GitHub publishes both signed platform installers, and the released
+Windows asset completes a real transactional upgrade and active-effect check.
 
 ## v3.0.0: conditional major-version integration
 

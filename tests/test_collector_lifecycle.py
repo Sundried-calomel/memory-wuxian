@@ -20,6 +20,7 @@ from collector_lifecycle import (
     verify_collector_lifecycle,
     watermark_reached,
 )
+from platform_process import _unique_command_argument
 
 
 class CollectorLifecycleTests(unittest.TestCase):
@@ -105,6 +106,22 @@ class CollectorLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(effect["ok"])
         self.assertTrue(effect["watermarks_converged"])
+
+    def test_unique_command_argument_preserves_special_values_and_fails_closed(self) -> None:
+        value = "-前导/日本語/￥/emoji-😀/" + "长" * 260 + "/archive root"
+        command = ["collector executable", "--archive-root", value, "--flag"]
+        self.assertEqual(
+            _unique_command_argument(command, "--archive-root"),
+            value,
+        )
+        self.assertIsNone(
+            _unique_command_argument(
+                command + ["--archive-root", "other"], "--archive-root"
+            )
+        )
+        self.assertIsNone(
+            _unique_command_argument(["collector", "--archive-root"], "--archive-root")
+        )
 
     def test_owner_count_and_command_archive_root_fail_closed(self) -> None:
         duplicate = dict(self.manifest)

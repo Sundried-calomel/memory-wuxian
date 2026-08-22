@@ -1,0 +1,27 @@
+Memory Wuxian v2.18 R6 targeted validation
+Date: 2026-08-21 Asia/Tokyo
+Runtime: C:\Users\56453\.codex\runtimes\memory-wuxian-e5-py312\Scripts\python.exe
+Working directory: C:\Users\56453\Documents\ChatGPT\memory无限\memory-wuxian-v218
+
+TARGETED TESTS
+Command: python -m unittest -v tests.test_environment_immutable_store_contract tests.test_memory_environment_governance tests.test_memory_environment_evolution tests.test_memory_governance_ai
+Result: PASS, 25 tests in 1.971 seconds.
+Observed production effects: temporary Windows filesystems, canonical UTF-8 JSON bytes, immutable create-if-absent records, exact envelope/event/replica contracts, validation failures, idempotence, lock-bound race rejection, and Governance AI read-only consumption.
+Excluded effects: no active archive, OneDrive, network write, installation, scheduler activation, version change, publication, or release.
+
+ARCHITECTURE
+Command: python scripts/check_architecture_contract.py
+Result: PASS. Schema v2 ownership, dependency allowlists, and Rust capability boundaries are valid.
+
+PY_COMPILE
+Command: python -m py_compile scripts/memory_environment_immutable_records.py scripts/memory_environment_governance.py scripts/memory_environment_evolution.py
+Result: PASS.
+
+DIFF CHECK
+Command: git diff --check
+Result: PASS.
+
+SOURCE AUDIT
+Result: PASS. GovernanceProposalStore and ProductEvolutionStore retain their public class identities, constructors, methods, constants, paths, locks, safety flags, limits, error text, and module-level canonical_bytes export.
+Result: PASS. Only canonical encoding, six-field envelope validation, immutable persistence, local event enumeration, and read-only replica enumeration moved to the shared owner.
+Result: PASS. The two domains retain separate directories, locks, event prefixes, size limits, and acceptance/remediation semantics.

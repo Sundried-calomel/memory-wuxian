@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any, Callable, Iterable
+
+from platform_atomic import atomic_replace_bytes
 
 
 DEFAULT_PROMPT_CHARACTER_BUDGET = 900_000
@@ -319,18 +319,10 @@ def validate_plan(plan: dict, job: dict, prompt_contract_sha256: str) -> None:
 
 
 def atomic_write_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            json.dump(value, handle, ensure_ascii=False, sort_keys=True, indent=2)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    payload = (
+        json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    ).encode("utf-8")
+    atomic_replace_bytes(path, payload)
 
 
 def load_or_create_plan(

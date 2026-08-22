@@ -1,0 +1,38 @@
+{
+  "schema_version": 2,
+  "deterministic_verdict": "review_required",
+  "verdict": "review_required",
+  "mode": "new_composition",
+  "review_depth": "source_grounded",
+  "source": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-remediation-ledger-claim-ledger.md",
+  "output": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\refactoring\\v2.18-module-remediation-ledger.md",
+  "source_sha256": "37b3cc710203371776001e171f30eed4f8d8ca1c1c549d6ed66f3cdaeda576ee",
+  "output_sha256": "877a9871c52e76d07c61f226b58f422fcafba75df0a884360ba6a378295af66b",
+  "critical_count": 0,
+  "review_count": 1,
+  "findings": [
+    {
+      "rule": "semantic_candidate.corrective_or_negated_premise",
+      "severity": "review",
+      "message": "Candidate requires contextual semantic review; the pattern is not an automatic defect verdict.",
+      "evidence": [
+        {
+          "pattern": "不是.{0,120}(?:而是|只是|已经|用于|为了)?",
+          "excerpt": "不是“重构失败”，也不能写成“精简成功”。本轮的成功标准是所有权可执行、重复语义归一、行为不变和验证通过；行数只是辅助指标。",
+          "offset": 683
+        },
+        {
+          "pattern": "不是.{0,120}(?:而是|只是|已经|用于|为了)?",
+          "excerpt": "不是整套 V0-V4。V1/V2 已经有提交、验证收据和实测行数；V3/V4 仍是待实施工作。本台账以后作为该轮结构梳理的唯一进度入口，不能再用聊天中的零散结论代替。",
+          "offset": 5032
+        },
+        {
+          "pattern": "不能.{0,80}(?:理解为|视为|等同于|写成|认为)",
+          "excerpt": "不能写成",
+          "offset": 693
+        }
+      ]
+    }
+  ],
+  "limits": "Candidate detection and mechanical completeness only; absence of a hit is not proof of semantic correctness."
+}

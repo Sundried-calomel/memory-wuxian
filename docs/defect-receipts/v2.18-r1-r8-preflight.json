@@ -1,0 +1,49 @@
+{
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "created_at": "2026-08-20T23:43:25+00:00",
+  "receipt_sha256": "085272e6f875b1355a84e76e333d2c3933116ce7b70d48bc65a5c3d7751f8678",
+  "receipt_type": "defect-workbook-preflight",
+  "registry_path": "C:\\Users\\56453\\.codex\\defect-workbooks.json",
+  "registry_sha256": "12889b7c5c9a439ed7d544540a953e0a553f91196d42fc864b435f7b0088a89e",
+  "schema_version": 1,
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "workbooks": [
+    {
+      "catalogs": [
+        {
+          "catalog_id": "windows-device-general-skill-defects",
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\defect-rule-catalog.json",
+          "rule_count": 11,
+          "sha256": "e1751b51de1d5ec26f0f81609fc394ffe99f4071c56faedda35b588e7bacee41"
+        }
+      ],
+      "files": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\general-error-families.md",
+          "sha256": "f22ee81eb4b08347356c68417cf9c1ccc144939538d955b75ff2775f9b7d1a3d"
+        },
+        {
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\windows-device-skill-defects.md",
+          "sha256": "ea7034c0b4175acd1c4a9b8764e0a2c4f2bc27705846f01e0eab40e2f9c31bba"
+        }
+      ],
+      "id": "windows-device-skill-lessons",
+      "known_families": [
+        "G01",
+        "G02",
+        "G03",
+        "G04",
+        "G05",
+        "G06",
+        "G07",
+        "G08",
+        "G09",
+        "G10",
+        "G11"
+      ],
+      "require_change_on_repair": false,
+      "scope": "global"
+    }
+  ]
+}

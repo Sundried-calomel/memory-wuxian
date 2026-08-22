@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v218-r1-r8",
+  "work_item_id": "memory-wuxian-v2.18-r1-r8",
+  "candidate_id": "v2.18-r1-r8-behavior-preserving-modularization",
+  "owner_id": "product-architecture",
+  "source_revision": "e693fa36f72b59f8ddbc7ffdac37172c8fdf29f2",
+  "product_evolution_record_id": "memory-wuxian-v2.18-r1-r8",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The completed modularization applies existing G01, G04, G05, exact-byte, failure-domain, Unicode-path, and staged-validation rules. It produced no newly confirmed cross-product defect family or governance capability requiring promotion.",
+  "evidence_refs": [
+    "docs/work-contracts/v2.18-r1-r8.json",
+    "docs/refactoring/v2.18-module-remediation-ledger.md",
+    "outputs/rehearsal/v2.18-r1-r8-candidate/report.json",
+    "governance/v218-r1-r8-independent-evaluation.json"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-21T01:08:00Z"
+}

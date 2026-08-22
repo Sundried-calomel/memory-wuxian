@@ -1,0 +1,28 @@
+Memory Wuxian v2.18 R7 targeted validation
+Date: 2026-08-21 Asia/Tokyo
+Runtime: C:\Users\56453\.codex\runtimes\memory-wuxian-e5-py312\Scripts\python.exe
+Working directory: C:\Users\56453\Documents\ChatGPT\memory无限\memory-wuxian-v218
+
+MERGED R7 IMPACT TESTS
+Command: python -m unittest -v tests.test_cli_contract_snapshot tests.test_cli_command_registry tests.test_memory_retrieval_algorithms tests.test_memory_v25_cli tests.test_v215_release_contract tests.test_readonly_interfaces tests.test_environment_cli tests.test_memory_cli
+Result: PASS, 119 tests in 122.398 seconds; one existing Python 3.14-conditional Windows bootstrap test skipped.
+Observed production effects: frozen 133-command argparse contract, 266 apply-state lock routes, stateless-before-store behavior, structured read-only errors, HTTP/MCP lifecycle, Environment lock isolation, archive lock waiting, Unicode/yen/emoji/long values, deterministic retrieval algorithms, temporary archive persistence, and native collector parity.
+Excluded effects: no active archive, OneDrive, network write, installation, scheduler activation, version change, publication, or release.
+
+ARCHITECTURE
+Command: python scripts/check_architecture_contract.py
+Result: PASS. Schema v2 ownership, dependency allowlists, and Rust capability boundaries are valid.
+
+PY_COMPILE
+Command: python -m py_compile scripts/memory_cli.py scripts/memory_cli_contract.py scripts/memory_cli_parser.py scripts/memory_cli_runtime.py scripts/memory_retrieval_algorithms.py
+Result: PASS.
+
+DIFF CHECK
+Command: git diff --check
+Result: PASS.
+
+SOURCE AUDIT
+Result: PASS. memory_cli retains the public MemoryStore, build_parser, main, dispatch_command, helper exports, and cloud compatibility factories.
+Result: PASS. Parser order and argument metadata remain byte-for-byte equal to the v2.18 CLI fixture; old source-string lock assertions now inspect the canonical registry instead of inert comments.
+Result: PASS. Runtime lock routing is registry-owned and preserves all prior conditional and domain locks; parser and runtime owners resolve compatibility dependencies without changing monkeypatch surfaces.
+Result: PASS. Only six pure retrieval leaf algorithms moved; append/import/summary/rebuild/audit/retrieve orchestration/context/heartbeat remain in the existing facade pending stronger golden contracts.

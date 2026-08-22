@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
 try:
-    from platform_process import no_window_kwargs
+    from platform_process import _unique_command_argument, no_window_kwargs
     from collector_activation import resolve_activation_since
     from collector_lifecycle import (
         create_installed_effect_probe,
@@ -27,8 +27,9 @@ try:
         remove_installed_effect_probe,
         watermark_reached,
     )
+    from platform_paths import active_root_pointer
 except ModuleNotFoundError:
-    from scripts.platform_process import no_window_kwargs
+    from scripts.platform_process import _unique_command_argument, no_window_kwargs
     from scripts.collector_activation import resolve_activation_since
     from scripts.collector_lifecycle import (
         create_installed_effect_probe,
@@ -36,6 +37,7 @@ except ModuleNotFoundError:
         remove_installed_effect_probe,
         watermark_reached,
     )
+    from scripts.platform_paths import active_root_pointer
 
 
 DEFAULT_TASK_NAME = "MemoryWuxianCodexSync"
@@ -44,11 +46,6 @@ RUN_VALUE = "MemoryWuxianCodexSync"
 JOURNAL_FORMAT = "memory-wuxian-windows-install-journal-v1"
 TASK_NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 Runner = Callable[..., subprocess.CompletedProcess[Any]]
-
-
-def active_root_pointer() -> Path:
-    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
-    return codex_home / "memory-wuxian-active-root.txt"
 
 
 def default_codex_cli() -> str:
@@ -412,10 +409,10 @@ def wait_for_watermark_progress(
 
 
 def _command_value(command: Sequence[str], option: str) -> str:
-    matches = [index for index, value in enumerate(command) if value == option]
-    if len(matches) != 1 or matches[0] + 1 >= len(command):
+    value = _unique_command_argument(command, option)
+    if value is None:
         raise RuntimeError(f"restored collector command has no unique {option} value")
-    return command[matches[0] + 1]
+    return value
 
 
 def _restore_and_verify_previous(

@@ -1,0 +1,53 @@
+{
+  "evidence": [
+    {
+      "check_id": "entrypoint-inventory",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-validation.log",
+      "sha256": "8d60ffbf48459d77680ce79a8f4877e9354cedce4c96e648262dc2d86c70a335"
+    },
+    {
+      "check_id": "cross-entrypoint-contract",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-validation.log",
+      "sha256": "8d60ffbf48459d77680ce79a8f4877e9354cedce4c96e648262dc2d86c70a335"
+    },
+    {
+      "check_id": "targeted-regressions",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-validation.log",
+      "sha256": "8d60ffbf48459d77680ce79a8f4877e9354cedce4c96e648262dc2d86c70a335"
+    },
+    {
+      "check_id": "architecture-contract",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-validation.log",
+      "sha256": "8d60ffbf48459d77680ce79a8f4877e9354cedce4c96e648262dc2d86c70a335"
+    },
+    {
+      "check_id": "powershell-parse",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-validation.log",
+      "sha256": "8d60ffbf48459d77680ce79a8f4877e9354cedce4c96e648262dc2d86c70a335"
+    }
+  ],
+  "load_receipt_internal_sha256": "4165d465af2f668b58fc06daeea2c7fe52bfd6b4d406aad9b4a9501372320360",
+  "load_receipt_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-load.json",
+  "load_receipt_sha256": "0938eeaaac17900d50c0a3d49e51fbfb312518e7b347b4746e84eed7ec4775ac",
+  "packet_file_sha256": "cdda8329a840cc4a7677e476e4a427aa20810d8c775caec87be93815a92430e2",
+  "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-packet.json",
+  "packet_sha256": "7ac57a90601ad8aed135079c353c7636691d05d523111b6d32aad4063e6d9716",
+  "passed_check_ids": [
+    "architecture-contract",
+    "cross-entrypoint-contract",
+    "entrypoint-inventory",
+    "powershell-parse",
+    "targeted-regressions"
+  ],
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-preflight.json",
+  "preflight_sha256": "39c203efc9f86938d10c104a5ce77e3cee935ed7c51b633efc922e0f653aa647",
+  "receipt_sha256": "0224f42832e8e2292ab87264ac9bc91dc9eb42b62c9724c8b681621a2c7cf9fa",
+  "receipt_type": "defect-prevention-verification",
+  "required_check_ids": [],
+  "results_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-dead-code-results.json",
+  "results_sha256": "9c0f2a8b6f40d74c09ccd933bc436a8d5eb118a5b4b65a8d1c529a70a563eed0",
+  "schema_version": 1,
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "verified_at": "2026-08-19T13:12:36.568933+00:00"
+}

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "fixed_start_boundary": "2026-08-19T12:34:56+09:00",
+  "macos": {
+    "python": "/Users/研究 者/Runtime ¥ 🧠/python3",
+    "skill": "/Users/研究 者/.codex/skills/memory 无限",
+    "archive": "/Users/研究 者/Documents/記憶 Archive",
+    "plist_sha256": {
+      "cloud": "eb2879564dbf2dc90ccc23c07edbc80a944fdbb1a0f7253d9532b671f7542195",
+      "governance": "d16587d141cd959ea8aff526500dea976ca2c46259686e98287fbf5ecabf9052",
+      "maintenance": "465fefd90ec3f4b08b73718c0a045158e1cfe126ad8f35eb4b93f6e34955f936"
+    }
+  },
+  "windows": {
+    "python": "C:\\Users\\研究 者\\Runtime ¥ 🧠\\python.exe",
+    "skill": "C:\\Users\\研究 者\\.codex\\skills\\memory 无限",
+    "archive": "C:\\Users\\研究 者\\Documents\\記憶 Archive",
+    "user_id": "研究室\\研究 者",
+    "xml_sha256": {
+      "cloud": "7515f9bb9b13dde18200dd95dff250bbd93d84bf64ee7dd011818f18a994a6ca",
+      "governance": "40aa189bbc80e44b6bbe25a8422172a6cbfc0436008dfa5da0d5b8dd027fbbde",
+      "maintenance": "5d9f13fae9fd4ae85fe491767bd350e218a8c2d67190d78d8f7a01a41d6eeb3d"
+    },
+    "cloud_wrapper_sha256": "13e52a6ec24d941f08a733a440628f3095be7017870121f2aa6495b664c36b02"
+  },
+  "policy": {
+    "cloud": {
+      "command_tail": ["cloud-sync"],
+      "execution_limit": "PT10M",
+      "priority": "7",
+      "run_at_load": true,
+      "keep_alive": false,
+      "stdout": "federation/cloud-sync.stdout.log",
+      "stderr": "federation/cloud-sync.stderr.log"
+    },
+    "governance": {
+      "command_tail": ["environment-governance-ai-tick", "--run-ai", "--maximum-batches", "1"],
+      "execution_limit": "PT20M",
+      "priority": null,
+      "run_at_load": true,
+      "keep_alive": false,
+      "stdout": "environment/governance-ai/scheduler.stdout.log",
+      "stderr": "environment/governance-ai/scheduler.stderr.log"
+    },
+    "maintenance": {
+      "command_tail": ["--max-semantic-jobs", "8", "--once"],
+      "execution_limit": "PT130M",
+      "priority": "7",
+      "run_at_load": true,
+      "keep_alive": false,
+      "stdout": "maintenance/scheduler.stdout.log",
+      "stderr": "maintenance/scheduler.stderr.log"
+    }
+  },
+  "windows_common": {
+    "interval": "PT5M",
+    "multiple_instances": "IgnoreNew",
+    "disallow_start_on_batteries": "false",
+    "stop_on_batteries": "false",
+    "start_when_available": "true",
+    "network_required": "false",
+    "hidden": "true",
+    "logon_type": "InteractiveToken",
+    "run_level": "LeastPrivilege"
+  }
+}

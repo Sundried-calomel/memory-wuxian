@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -46,6 +47,75 @@ class ProductArchitectureContractTest(unittest.TestCase):
             "unowned production file: scripts/new_unowned_feature.py", errors
         )
 
+    def test_all_packaging_artifacts_are_owned(self):
+        contract = json.loads(
+            (ROOT / "docs/module-architecture.json").read_text(encoding="utf-8")
+        )
+        packaging = {
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "packaging").rglob("*")
+            if path.is_file()
+        }
+        production = set(check_architecture_contract.production_files(contract))
+        self.assertEqual(packaging, production.intersection(packaging))
+
+        modules = contract["modules"]
+        for path in packaging:
+            owners = [
+                module["id"]
+                for module in modules
+                if any(
+                    check_architecture_contract.matches(path, pattern)
+                    for pattern in module["patterns"]
+                )
+            ]
+            self.assertEqual(len(owners), 1, (path, owners))
+
+    def test_extensionless_packaging_artifact_cannot_escape_ownership(self):
+        actual = check_architecture_contract.production_files
+
+        def with_unowned(contract):
+            return actual(contract) + ["packaging/macos/scripts/new-hook"]
+
+        with patch.object(
+            check_architecture_contract, "production_files", side_effect=with_unowned
+        ):
+            errors = check_architecture_contract.validate()
+        self.assertIn(
+            "unowned production file: packaging/macos/scripts/new-hook", errors
+        )
+
+    def test_overlapping_packaging_owners_fail_closed(self):
+        contract = json.loads(
+            (ROOT / "docs/module-architecture.json").read_text(encoding="utf-8")
+        )
+        product_shell = next(
+            module for module in contract["modules"] if module["id"] == "product-shell"
+        )
+        product_quality = next(
+            module for module in contract["modules"] if module["id"] == "product-quality"
+        )
+        product_shell["patterns"].append("packaging/windows/MemoryWuxian.iss")
+        with tempfile.TemporaryDirectory() as temporary:
+            contract_path = Path(temporary) / "module-architecture.json"
+            contract_path.write_text(
+                json.dumps(contract, ensure_ascii=False), encoding="utf-8"
+            )
+            with (
+                patch.object(check_architecture_contract, "MANIFEST", contract_path),
+                patch.object(
+                    check_architecture_contract,
+                    "production_files",
+                    return_value=["packaging/windows/MemoryWuxian.iss"],
+                ),
+            ):
+                errors = check_architecture_contract.validate()
+        self.assertIn(
+            "multiple owners for packaging/windows/MemoryWuxian.iss: "
+            "product-shell, product-quality",
+            errors,
+        )
+
     def test_domain_to_dashboard_dependency_fails_closed(self):
         with (
             patch.object(
@@ -64,6 +134,62 @@ class ProductArchitectureContractTest(unittest.TestCase):
             "forbidden dependency: scripts/token_usage.py "
             "(memory-plane) -> memory_dashboard",
             errors,
+        )
+
+    def test_capture_core_forbidden_rust_capability_fails_closed(self):
+        with (
+            patch.object(
+                check_architecture_contract,
+                "production_files",
+                return_value=["native-collector/src/lib.rs"],
+            ),
+            patch.object(
+                check_architecture_contract,
+                "imported_rust_symbols",
+                return_value={"openai"},
+            ),
+        ):
+            errors = check_architecture_contract.validate()
+        self.assertIn(
+            "forbidden Rust capability: native-collector/src/lib.rs "
+            "(capture-core) -> ai:openai",
+            errors,
+        )
+
+    def test_rust_declaration_parser_handles_supported_forms(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "sample.rs"
+            source.write_text(
+                "use openai::Client;\n"
+                "pub(crate) use crate::{runtime, store};\n"
+                "pub mod telemetry;\n"
+                "extern crate ssh2;\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                check_architecture_contract.imported_rust_symbols(source),
+                {
+                    "Client",
+                    "crate",
+                    "openai",
+                    "runtime",
+                    "ssh2",
+                    "store",
+                    "telemetry",
+                },
+            )
+
+    def test_every_capture_forbidden_capability_has_rust_symbols(self):
+        contract = json.loads(
+            (ROOT / "docs/module-architecture.json").read_text(encoding="utf-8")
+        )
+        capture = next(
+            module for module in contract["modules"] if module["id"] == "capture-core"
+        )
+        rules = contract["rust_capability_rules"]["symbols"]
+        self.assertEqual(
+            set(capture["forbidden_capabilities"]),
+            set(rules),
         )
 
     def test_canonical_contract_and_agent_route_exist(self):

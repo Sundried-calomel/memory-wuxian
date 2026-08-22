@@ -1,7 +1,11 @@
 import json
-import tomllib
 import unittest
 from pathlib import Path
+
+from tests.support.release_contracts import (
+    assert_minimum_project_version,
+    assert_source_tokens,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,29 +13,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class V2141ReleaseContractTest(unittest.TestCase):
     def test_offline_macos_runtime_contract(self):
-        version = tomllib.loads(
-            (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        )["project"]["version"]
-        self.assertGreaterEqual(tuple(map(int, version.split("."))), (2, 14, 4))
+        assert_minimum_project_version(self, ROOT, (2, 14, 4))
         contract = json.loads(
             (ROOT / "docs/work-contracts/v2.14.1.json").read_text(encoding="utf-8")
         )
         self.assertEqual(contract["owner_id"], "release-installation-plane")
         self.assertEqual(contract["validation_profile"], "targeted-patch")
-        postinstall = (ROOT / "packaging/macos/scripts/postinstall").read_text(
-            encoding="utf-8"
+        assert_source_tokens(
+            self,
+            ROOT,
+            "packaging/macos/build_pkg.sh",
+            present=("vendor/yaml",),
         )
-        builder = (ROOT / "packaging/macos/build_pkg.sh").read_text(
-            encoding="utf-8"
+        assert_source_tokens(
+            self,
+            ROOT,
+            "packaging/macos/scripts/postinstall",
+            present=("--without-pip",),
+            absent=("pip install", "--break-system-packages"),
         )
-        workflow = (ROOT / ".github/workflows/release.yml").read_text(
-            encoding="utf-8"
+        assert_source_tokens(
+            self,
+            ROOT,
+            ".github/workflows/release.yml",
+            present=("Prepare offline PKG dependency source",),
         )
-        self.assertIn("vendor/yaml", builder)
-        self.assertIn("--without-pip", postinstall)
-        self.assertIn("Prepare offline PKG dependency source", workflow)
-        self.assertNotIn("pip install", postinstall)
-        self.assertNotIn("--break-system-packages", postinstall)
 
 
 if __name__ == "__main__":

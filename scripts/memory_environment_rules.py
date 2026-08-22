@@ -12,9 +12,11 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, Mapping, NoReturn, Optional, Tuple
 
 from memory_environment import EnvironmentRegistry
+from memory_environment_install_lifecycle import InstallLifecycleCoordinator
+from platform_atomic import ParentSync, atomic_replace_bytes, sync_directory
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
 
@@ -39,47 +41,16 @@ def _atomic_json(path: Path, value: Dict[str, Any]) -> None:
     payload = (
         json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
     ).encode("utf-8")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        _fsync_directory(path.parent)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
+    atomic_replace_bytes(path, payload, parent_sync=ParentSync.BEST_EFFORT)
 
 
 def _atomic_bytes(path: Path, value: bytes, mode: int = 0o600) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    atomic_replace_bytes(
+        path,
+        value,
+        mode=mode,
+        parent_sync=ParentSync.BEST_EFFORT,
     )
-    temporary = Path(temporary_name)
-    try:
-        if hasattr(os, "fchmod"):
-            os.fchmod(descriptor, mode)
-        handle = os.fdopen(descriptor, "wb")
-        descriptor = -1
-        with handle:
-            handle.write(value)
-            handle.flush()
-            os.fsync(handle.fileno())
-        if not hasattr(os, "fchmod"):
-            os.chmod(temporary, mode)
-        os.replace(temporary, path)
-        _fsync_directory(path.parent)
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
-        if temporary.exists():
-            temporary.unlink()
 
 
 def _canonical_json(value: Dict[str, Any]) -> bytes:
@@ -89,20 +60,7 @@ def _canonical_json(value: Dict[str, Any]) -> bytes:
 
 
 def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY
-    if hasattr(os, "O_DIRECTORY"):
-        flags |= os.O_DIRECTORY
-    try:
-        descriptor = os.open(path, flags)
-    except OSError:
-        return
-    try:
-        os.fsync(descriptor)
-    except OSError:
-        # Directory fsync is unavailable on some Windows filesystems.
-        pass
-    finally:
-        os.close(descriptor)
+    sync_directory(path, policy=ParentSync.BEST_EFFORT)
 
 
 class RuleInstallationError(RuntimeError):
@@ -194,191 +152,19 @@ class EnvironmentRuleInstaller:
         """Preview by default; mutate only when ``apply=True`` is explicit."""
 
         with exclusive_lock(self.lock_path):
-            context: Dict[str, Any] = {
-                "artifact_id": artifact_id,
-                "revision_id": revision_id,
-                "target_binding": target_binding,
-                "previous_installed_sha256": None,
-                "content_sha256": "0" * 64,
-                "rehearsal": {},
-            }
-            replacement_started = False
-            original_bytes: Optional[bytes] = None
-            target_path: Optional[Path] = None
-            original_mode: Optional[int] = None
-            transaction_dir: Optional[Path] = None
-            installed_receipt_persisted = False
+            adapter = _RuleInstallLifecycleAdapter(
+                self,
+                artifact_id=artifact_id,
+                revision_id=revision_id,
+                target_binding=target_binding,
+            )
             try:
-                resolved = self._prepare(
-                    artifact_id=artifact_id,
-                    revision_id=revision_id,
-                    target_binding=target_binding,
+                return InstallLifecycleCoordinator[Dict[str, Any], Dict[str, Any]]().run(
+                    adapter,
+                    apply=apply,
                 )
-                context.update(resolved)
-                if resolved["decision"] == "no-change":
-                    return {
-                        "status": "no-change",
-                        "artifact_id": artifact_id,
-                        "revision_id": revision_id,
-                        "target_binding": target_binding,
-                        "reason": resolved["reason"],
-                    }
-                preview = {
-                    "status": "preview",
-                    "artifact_id": artifact_id,
-                    "revision_id": revision_id,
-                    "target_binding": target_binding,
-                    "target_path": str(resolved["target_path"]),
-                    "decision": resolved["decision"],
-                    "previous_installed_sha256": resolved[
-                        "previous_installed_sha256"
-                    ],
-                    "candidate_sha256": resolved["candidate_sha256"],
-                    "rehearsal": resolved["rehearsal"],
-                }
-                if not apply:
-                    return preview
-
-                target_path = resolved["target_path"]
-                original_bytes = resolved["local_bytes"]
-                original_mode = resolved["original_mode"]
-                transaction_dir = self._create_transaction(
-                    resolved=resolved,
-                    artifact_id=artifact_id,
-                    revision_id=revision_id,
-                    target_binding=target_binding,
-                )
-                transaction = self._load_transaction(transaction_dir)
-                context["rehearsal"] = {
-                    **context["rehearsal"],
-                    "transaction_id": transaction["transaction_id"],
-                }
-                candidate_path = self._write_candidate(
-                    target_path,
-                    resolved["candidate_bytes"],
-                    original_mode,
-                )
-                try:
-                    self._validate_candidate(
-                        candidate_path,
-                        expected_bytes=resolved["candidate_bytes"],
-                        expected_mode=original_mode,
-                        strategy=resolved["strategy"],
-                        block_id=resolved.get("block_id"),
-                    )
-                    self._before_replace(target_path)
-                    os.replace(candidate_path, target_path)
-                    replacement_started = True
-                    _fsync_directory(target_path.parent)
-                    self._set_transaction_status(transaction_dir, "replaced")
-                    self._after_replace(target_path)
-                    final_bytes = self._read_regular_file(target_path)
-                    final_hash = _sha256(final_bytes)
-                    if final_hash != resolved["candidate_sha256"]:
-                        raise ValueError("final target hash does not match candidate")
-                    if stat.S_IMODE(target_path.stat().st_mode) != original_mode:
-                        raise ValueError("target mode changed during installation")
-                    if resolved["strategy"] == "managed-block":
-                        self._assert_outside_unchanged(
-                            original_bytes,
-                            final_bytes,
-                            resolved["block_id"],
-                        )
-                    receipt = self._receipt(
-                        context,
-                        result="installed",
-                        final_installed_sha256=final_hash,
-                        rollback={"attempted": False, "succeeded": False},
-                    )
-                    self._persist_receipt(receipt)
-                    installed_receipt_persisted = True
-                    self._complete_transaction(
-                        transaction_dir, status="installed", receipt=receipt
-                    )
-                    self._delete_rollback_object(transaction_dir)
-                    return {
-                        "status": "installed",
-                        "target_path": str(target_path),
-                        "receipt": receipt,
-                    }
-                finally:
-                    if candidate_path.exists():
-                        candidate_path.unlink()
             except Exception as error:
-                if isinstance(error, RuleInstallationError) and error.receipt is not None:
-                    raise
-                if not apply:
-                    if isinstance(error, RuleConflictError):
-                        raise
-                    raise RuleInstallationError(str(error)) from error
-                if installed_receipt_persisted:
-                    raise RuleInstallationError(
-                        "installed receipt is durable; transaction recovery is required",
-                        receipt=receipt,
-                    ) from error
-                rolled_back = False
-                rollback_error = None
-                transaction = None
-                if transaction_dir is not None:
-                    try:
-                        transaction = self._load_transaction(transaction_dir)
-                        current_hash = (
-                            _sha256(self._read_regular_file(target_path))
-                            if target_path is not None
-                            else None
-                        )
-                        if (
-                            transaction["status"] == "replaced"
-                            or current_hash == transaction["candidate_sha256"]
-                        ):
-                            self._restore_from_transaction(
-                                transaction_dir, transaction, target_path
-                            )
-                            rolled_back = True
-                    except Exception as rollback_failure:  # pragma: no cover - rare OS fault
-                        rollback_error = str(rollback_failure)
-                result = "rolled-back" if rolled_back else "failed"
-                final_hash = None
-                if target_path is not None and target_path.exists() and not is_link_like(target_path):
-                    try:
-                        final_hash = _sha256(self._read_regular_file(target_path))
-                    except Exception:
-                        final_hash = None
-                receipt = self._receipt(
-                    context,
-                    result=result,
-                    final_installed_sha256=final_hash,
-                    rollback={
-                        "attempted": replacement_started,
-                        "succeeded": rolled_back,
-                        "error": rollback_error,
-                    },
-                    error=str(error),
-                )
-                self._persist_receipt(receipt)
-                if transaction_dir is not None:
-                    if rolled_back:
-                        self._complete_transaction(
-                            transaction_dir, status="rolled-back", receipt=receipt
-                        )
-                        self._delete_rollback_object(transaction_dir)
-                    elif replacement_started:
-                        current_transaction = self._load_transaction(transaction_dir)
-                        if current_transaction["status"] == "prepared":
-                            self._set_transaction_status(
-                                transaction_dir, "replaced"
-                            )
-                    else:
-                        self._complete_transaction(
-                            transaction_dir, status="aborted", receipt=receipt
-                        )
-                        self._delete_rollback_object(transaction_dir)
-                exception_class = (
-                    RuleConflictError
-                    if isinstance(error, RuleConflictError)
-                    else RuleInstallationError
-                )
-                raise exception_class(str(error), receipt=receipt) from error
+                adapter.raise_install_error(error, apply=apply)
 
     def recover_pending(self) -> Dict[str, Any]:
         """Recover durable prepared/replaced transactions under the installer lock."""
@@ -1445,3 +1231,229 @@ class EnvironmentRuleInstaller:
 
     def _before_replace(self, target_path: Path) -> None:
         """Test hook called after durable prepare and before target replacement."""
+
+
+class _RuleInstallLifecycleAdapter:
+    """Map the Rule facade onto the shared non-persisting stage order."""
+
+    def __init__(
+        self,
+        installer: EnvironmentRuleInstaller,
+        *,
+        artifact_id: str,
+        revision_id: str,
+        target_binding: str,
+    ):
+        self.installer = installer
+        self.artifact_id = artifact_id
+        self.revision_id = revision_id
+        self.target_binding = target_binding
+        self.context: Dict[str, Any] = {
+            "artifact_id": artifact_id,
+            "revision_id": revision_id,
+            "target_binding": target_binding,
+            "previous_installed_sha256": None,
+            "content_sha256": "0" * 64,
+            "rehearsal": {},
+        }
+        self.replacement_started = False
+        self.target_path: Optional[Path] = None
+        self.transaction_dir: Optional[Path] = None
+        self.installed_receipt_persisted = False
+        self.receipt: Optional[Dict[str, Any]] = None
+
+    def recover(self) -> None:
+        # Rule installation has never performed implicit startup recovery.
+        return None
+
+    def prepare(self) -> Dict[str, Any]:
+        resolved = self.installer._prepare(
+            artifact_id=self.artifact_id,
+            revision_id=self.revision_id,
+            target_binding=self.target_binding,
+        )
+        self.context.update(resolved)
+        return resolved
+
+    def no_change_result(
+        self, resolved: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        if resolved["decision"] != "no-change":
+            return None
+        return {
+            "status": "no-change",
+            "artifact_id": self.artifact_id,
+            "revision_id": self.revision_id,
+            "target_binding": self.target_binding,
+            "reason": resolved["reason"],
+        }
+
+    def preview_result(self, resolved: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "status": "preview",
+            "artifact_id": self.artifact_id,
+            "revision_id": self.revision_id,
+            "target_binding": self.target_binding,
+            "target_path": str(resolved["target_path"]),
+            "decision": resolved["decision"],
+            "previous_installed_sha256": resolved["previous_installed_sha256"],
+            "candidate_sha256": resolved["candidate_sha256"],
+            "rehearsal": resolved["rehearsal"],
+        }
+
+    def apply_prepared(self, resolved: Dict[str, Any]) -> Dict[str, Any]:
+        installer = self.installer
+        self.target_path = resolved["target_path"]
+        original_bytes = resolved["local_bytes"]
+        original_mode = resolved["original_mode"]
+        self.transaction_dir = installer._create_transaction(
+            resolved=resolved,
+            artifact_id=self.artifact_id,
+            revision_id=self.revision_id,
+            target_binding=self.target_binding,
+        )
+        transaction = installer._load_transaction(self.transaction_dir)
+        self.context["rehearsal"] = {
+            **self.context["rehearsal"],
+            "transaction_id": transaction["transaction_id"],
+        }
+        candidate_path = installer._write_candidate(
+            self.target_path,
+            resolved["candidate_bytes"],
+            original_mode,
+        )
+        try:
+            installer._validate_candidate(
+                candidate_path,
+                expected_bytes=resolved["candidate_bytes"],
+                expected_mode=original_mode,
+                strategy=resolved["strategy"],
+                block_id=resolved.get("block_id"),
+            )
+            installer._before_replace(self.target_path)
+            os.replace(candidate_path, self.target_path)
+            self.replacement_started = True
+            _fsync_directory(self.target_path.parent)
+            installer._set_transaction_status(self.transaction_dir, "replaced")
+            installer._after_replace(self.target_path)
+            final_bytes = installer._read_regular_file(self.target_path)
+            final_hash = _sha256(final_bytes)
+            if final_hash != resolved["candidate_sha256"]:
+                raise ValueError("final target hash does not match candidate")
+            if stat.S_IMODE(self.target_path.stat().st_mode) != original_mode:
+                raise ValueError("target mode changed during installation")
+            if resolved["strategy"] == "managed-block":
+                installer._assert_outside_unchanged(
+                    original_bytes,
+                    final_bytes,
+                    resolved["block_id"],
+                )
+            self.receipt = installer._receipt(
+                self.context,
+                result="installed",
+                final_installed_sha256=final_hash,
+                rollback={"attempted": False, "succeeded": False},
+            )
+            installer._persist_receipt(self.receipt)
+            self.installed_receipt_persisted = True
+            installer._complete_transaction(
+                self.transaction_dir,
+                status="installed",
+                receipt=self.receipt,
+            )
+            installer._delete_rollback_object(self.transaction_dir)
+            return {
+                "status": "installed",
+                "target_path": str(self.target_path),
+                "receipt": self.receipt,
+            }
+        finally:
+            if candidate_path.exists():
+                candidate_path.unlink()
+
+    def raise_install_error(self, error: Exception, *, apply: bool) -> NoReturn:
+        installer = self.installer
+        if isinstance(error, RuleInstallationError) and error.receipt is not None:
+            raise error
+        if not apply:
+            if isinstance(error, RuleConflictError):
+                raise error
+            raise RuleInstallationError(str(error)) from error
+        if self.installed_receipt_persisted:
+            raise RuleInstallationError(
+                "installed receipt is durable; transaction recovery is required",
+                receipt=self.receipt,
+            ) from error
+        rolled_back = False
+        rollback_error = None
+        if self.transaction_dir is not None:
+            try:
+                transaction = installer._load_transaction(self.transaction_dir)
+                current_hash = (
+                    _sha256(installer._read_regular_file(self.target_path))
+                    if self.target_path is not None
+                    else None
+                )
+                if (
+                    transaction["status"] == "replaced"
+                    or current_hash == transaction["candidate_sha256"]
+                ):
+                    installer._restore_from_transaction(
+                        self.transaction_dir,
+                        transaction,
+                        self.target_path,
+                    )
+                    rolled_back = True
+            except Exception as rollback_failure:  # pragma: no cover - rare OS fault
+                rollback_error = str(rollback_failure)
+        result = "rolled-back" if rolled_back else "failed"
+        final_hash = None
+        if (
+            self.target_path is not None
+            and self.target_path.exists()
+            and not is_link_like(self.target_path)
+        ):
+            try:
+                final_hash = _sha256(installer._read_regular_file(self.target_path))
+            except Exception:
+                final_hash = None
+        receipt = installer._receipt(
+            self.context,
+            result=result,
+            final_installed_sha256=final_hash,
+            rollback={
+                "attempted": self.replacement_started,
+                "succeeded": rolled_back,
+                "error": rollback_error,
+            },
+            error=str(error),
+        )
+        installer._persist_receipt(receipt)
+        if self.transaction_dir is not None:
+            if rolled_back:
+                installer._complete_transaction(
+                    self.transaction_dir,
+                    status="rolled-back",
+                    receipt=receipt,
+                )
+                installer._delete_rollback_object(self.transaction_dir)
+            elif self.replacement_started:
+                current_transaction = installer._load_transaction(self.transaction_dir)
+                if current_transaction["status"] == "prepared":
+                    installer._set_transaction_status(
+                        self.transaction_dir,
+                        "replaced",
+                    )
+            else:
+                installer._complete_transaction(
+                    self.transaction_dir,
+                    status="aborted",
+                    receipt=receipt,
+                )
+                installer._delete_rollback_object(self.transaction_dir)
+        exception_class = (
+            RuleConflictError
+            if isinstance(error, RuleConflictError)
+            else RuleInstallationError
+        )
+        raise exception_class(str(error), receipt=receipt) from error

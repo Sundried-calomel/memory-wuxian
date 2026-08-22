@@ -18,6 +18,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from platform_atomic import atomic_replace_bytes
 from semantic_runtime_contract import CONTRACT_PATH, load_contract
 
 
@@ -96,18 +97,10 @@ def sha256_file(path: Path) -> str:
 
 
 def atomic_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            json.dump(value, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    payload = (
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    atomic_replace_bytes(path, payload)
 
 
 def archive_manifest(root: Path) -> Dict[str, Any]:

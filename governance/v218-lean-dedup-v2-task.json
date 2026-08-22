@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-lean-dedup-v2",
+  "objective": "Remove only semantics-identical duplicate helpers in lifecycle, active-root, WAL append, and Environment validation paths while preserving public behavior and persisted bytes.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "modify",
+  "project_id": "memory-wuxian",
+  "owner_id": "platform-foundation",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "rust"],
+  "path_globs": [
+    "scripts/collector_lifecycle.py",
+    "scripts/install_macos_transaction.py",
+    "scripts/install_codex_autosync_windows.py",
+    "scripts/memory_cli.py",
+    "scripts/platform_paths.py",
+    "scripts/memory_environment*.py",
+    "native-collector/src/store/*.rs",
+    "tests/**"
+  ],
+  "entrypoints": [
+    "collector-install-rollback",
+    "active-archive-root-resolution",
+    "capture-wal-append",
+    "environment-schema-validation"
+  ],
+  "resources": [
+    "collector-command-line",
+    "active-root-pointer",
+    "capture-wal",
+    "environment-json-contracts"
+  ],
+  "operations": ["parse", "resolve", "validate", "hash", "append"],
+  "data_formats": ["json", "jsonl", "text", "rust"],
+  "authorization_boundaries": [
+    "Do not change persisted bytes, hashes, error messages, permissions, fsync behavior, lock behavior, command-line behavior, or public interfaces.",
+    "Do not modify summary generation, deterministic indexes, historical backfill, cloud or federation protocols, live archives, installed components, or running processes.",
+    "Reject a consolidation when two implementations differ in newline, allow_nan, duplicate-key, permission, directory-fsync, or rollback semantics."
+  ],
+  "implementation_units": [
+    {
+      "id": "command-option-parser-reuse",
+      "owner_id": "platform-foundation",
+      "paths": [
+        "scripts/collector_lifecycle.py",
+        "scripts/install_macos_transaction.py",
+        "scripts/install_codex_autosync_windows.py",
+        "tests/**"
+      ],
+      "entrypoints": ["collector-install-rollback"],
+      "resources": ["collector-command-line"],
+      "operations": ["parse", "validate"],
+      "planned_check_ids": ["command-option-parity"]
+    },
+    {
+      "id": "active-root-path-reuse",
+      "owner_id": "platform-foundation",
+      "paths": [
+        "scripts/memory_cli.py",
+        "scripts/install_codex_autosync_windows.py",
+        "scripts/platform_paths.py",
+        "tests/**"
+      ],
+      "entrypoints": ["active-archive-root-resolution"],
+      "resources": ["active-root-pointer"],
+      "operations": ["resolve"],
+      "planned_check_ids": ["active-root-parity"]
+    },
+    {
+      "id": "wal-append-reuse",
+      "owner_id": "capture-core",
+      "paths": ["native-collector/src/store/transaction.rs", "native-collector/src/store/wal.rs"],
+      "entrypoints": ["capture-wal-append"],
+      "resources": ["capture-wal"],
+      "operations": ["append"],
+      "planned_check_ids": ["wal-byte-and-recovery-parity"]
+    },
+    {
+      "id": "environment-helper-reuse",
+      "owner_id": "environment-plane",
+      "paths": ["scripts/memory_environment*.py", "tests/**"],
+      "entrypoints": ["environment-schema-validation"],
+      "resources": ["environment-json-contracts"],
+      "operations": ["validate", "hash"],
+      "planned_check_ids": ["environment-golden-byte-and-error-parity"]
+    }
+  ],
+  "rule_exclusions": []
+}

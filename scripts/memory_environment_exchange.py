@@ -13,6 +13,18 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from memory_environment import EnvironmentRegistry, canonical_bytes, read_json
+from memory_exchange_contract import (
+    ExchangeStreamFacade,
+    ExchangeStreamPort,
+    build_bundle_manifest,
+    classify_replica_window,
+    select_jsonl_page,
+    validate_authenticated_binding,
+    validate_export_cursor,
+    validate_strict_replica_continuity,
+    verify_bundle_identity,
+    verify_payload,
+)
 from memory_environment_evolution import ProductEvolutionStore
 from memory_environment_governance import GovernanceProposalStore
 from memory_environment_skills import (
@@ -62,7 +74,7 @@ def _file_marker(path: Path) -> Dict[str, int]:
         return {"size": 0, "mtime_ns": 0}
 
 
-class EnvironmentExchangeManager:
+class EnvironmentExchangeManager(ExchangeStreamFacade):
     """Stage authenticated peer Environment revisions without auto-installing them."""
 
     requires_authenticated_transport = True
@@ -126,6 +138,33 @@ class EnvironmentExchangeManager:
             atomic_write_bytes(self.export_ledger_path, b"")
         if not self.sync_log_path.exists():
             atomic_write_bytes(self.sync_log_path, b"")
+
+    def _resolve_cloud_quarantine_path(self, path: Path) -> Path:
+        return self.registry._resolve_relative(
+            path.relative_to(self.registry.root).as_posix(),
+            "cloud quarantine record",
+            for_write=True,
+        )
+
+    def exchange_port(self) -> ExchangeStreamPort:
+        return ExchangeStreamPort(
+            stream_id="environment-v1",
+            root=self.root,
+            metadata_root=self.metadata_root,
+            replica_root=self.replica_root,
+            exchange_lock_path=self.exchange_lock_path,
+            requires_authenticated_transport=True,
+            node=self.node,
+            peers=self.peers,
+            status=self.status,
+            exchange_observation=self.exchange_observation,
+            replica_state=self.replica_state,
+            read_bundle_manifest=self.read_bundle_manifest,
+            export_delta=self.export_delta,
+            import_delta=self._import_authenticated_delta,
+            log_sync=self.log_sync,
+            resolve_quarantine_path=self._resolve_cloud_quarantine_path,
+        )
 
     def node(self) -> Dict[str, Any]:
         return self.federation.node()
@@ -455,15 +494,17 @@ class EnvironmentExchangeManager:
         ledger = self.refresh_export_ledger()
         after = int(after_event_sequence)
         latest = max((int(item["event_sequence"]) for item in ledger), default=0)
-        if after < 0 or after > latest:
-            raise ValueError("environment export cursor is invalid")
-        if after and not (
-            isinstance(previous_bundle_sha256, str)
-            and re.fullmatch(r"[0-9a-f]{64}", previous_bundle_sha256)
-        ):
-            raise ValueError("noninitial environment export requires predecessor hash")
-        if not after and previous_bundle_sha256 is not None:
-            raise ValueError("initial environment export cannot name a predecessor")
+        validate_export_cursor(
+            after,
+            latest,
+            previous_bundle_sha256,
+            cursor_error=lambda _after, _latest: "environment export cursor is invalid",
+            predecessor_error="noninitial environment export requires predecessor hash",
+            initial_predecessor_error="initial environment export cannot name a predecessor",
+            predecessor_is_valid=lambda value: isinstance(value, str)
+            and bool(re.fullmatch(r"[0-9a-f]{64}", value)),
+            initial_predecessor_is_declared=lambda value: value is not None,
+        )
         pending = [item for item in ledger if int(item["event_sequence"]) > after]
         if not pending:
             return {
@@ -471,17 +512,13 @@ class EnvironmentExchangeManager:
                 "origin_node_id": node["node_id"],
                 "after_event_sequence": after,
             }
-        selected = []
-        size = 0
-        for item in pending:
-            encoded = canonical_bytes(item) + b"\n"
-            if len(encoded) > MAX_PAYLOAD_BYTES:
-                raise ValueError("environment artifact exceeds bundle limit")
-            if len(selected) >= MAX_ARTIFACTS or size + len(encoded) > MAX_PAYLOAD_BYTES:
-                break
-            selected.append(item)
-            size += len(encoded)
-        payload = b"".join(canonical_bytes(item) + b"\n" for item in selected)
+        selected, payload = select_jsonl_page(
+            pending,
+            encode=lambda item: canonical_bytes(item) + b"\n",
+            maximum_items=MAX_ARTIFACTS,
+            maximum_bytes=MAX_PAYLOAD_BYTES,
+            oversized_item_error=lambda _item: "environment artifact exceeds bundle limit",
+        )
         manifest_base = {
             "format": ENVIRONMENT_BUNDLE_FORMAT,
             "protocol_version": ENVIRONMENT_PROTOCOL_VERSION,
@@ -499,10 +536,9 @@ class EnvironmentExchangeManager:
             "payload_bytes": len(payload),
             "payload_sha256": bytes_sha256(payload),
         }
-        manifest = {
-            **manifest_base,
-            "bundle_id": f"mwb-{canonical_sha256(manifest_base)[:32]}",
-        }
+        manifest = build_bundle_manifest(
+            manifest_base, canonical_sha256=canonical_sha256
+        )
         output.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary_name = tempfile.mkstemp(
             prefix=f".{output.name}.", suffix=".part", dir=output.parent
@@ -578,17 +614,19 @@ class EnvironmentExchangeManager:
             raise ValueError("environment bundle stream mismatch")
         if int(manifest.get("protocol_version", 0)) != ENVIRONMENT_PROTOCOL_VERSION:
             raise ValueError("unsupported environment protocol")
-        if int(manifest.get("payload_bytes", -1)) != len(payload):
-            raise ValueError("environment payload size mismatch")
-        if manifest.get("payload_sha256") != bytes_sha256(payload):
-            raise ValueError("environment payload hash mismatch")
-        base_manifest = {
-            key: value for key, value in manifest.items() if key != "bundle_id"
-        }
-        if manifest.get("bundle_id") != (
-            f"mwb-{canonical_sha256(base_manifest)[:32]}"
-        ):
-            raise ValueError("environment bundle ID mismatch")
+        verify_payload(
+            manifest,
+            payload,
+            bytes_sha256=bytes_sha256,
+            size_error="environment payload size mismatch",
+            hash_error="environment payload hash mismatch",
+            coerce_size=True,
+        )
+        verify_bundle_identity(
+            manifest,
+            canonical_sha256=canonical_sha256,
+            error="environment bundle ID mismatch",
+        )
         artifact_count = manifest.get("artifact_count")
         if type(artifact_count) is not int or not 0 <= artifact_count <= MAX_ARTIFACTS:
             raise ValueError("environment artifact count exceeds limit")
@@ -1049,15 +1087,13 @@ class EnvironmentExchangeManager:
 
         if not isinstance(authenticated_open_result, AuthenticatedOpenResult):
             raise TypeError("authenticated environment import requires crypto-open evidence")
-        verified_origin_node_id, verified_target_node_id, verified_bundle_sha256 = (
-            authenticated_open_result.consume_environment_binding()
+        validate_authenticated_binding(
+            authenticated_open_result.consume_stream_binding(),
+            expected_origin=origin,
+            expected_target=local_node["node_id"],
+            expected_payload_sha256=bundle_hash,
+            identity_error="authenticated environment transport binding mismatch",
         )
-        if (
-            safe_node_id(verified_origin_node_id) != origin
-            or safe_node_id(verified_target_node_id) != local_node["node_id"]
-            or verified_bundle_sha256 != bundle_hash
-        ):
-            raise ValueError("authenticated environment transport binding mismatch")
         peer_root = self.registry._resolve_relative(
             f"replicas/peers/{origin}",
             "environment peer replica root",
@@ -1120,21 +1156,26 @@ class EnvironmentExchangeManager:
                 }
         state = self.replica_state(origin)
         current_sequence = int(state["last_event_sequence"])
-        expected_sequence = current_sequence + 1
-        from_sequence = int(manifest["from_event_sequence"])
-        to_sequence = int(manifest["to_event_sequence"])
-        if from_sequence > expected_sequence:
-            raise ValueError("environment replica sequence gap")
-        overlap_recovery = from_sequence < expected_sequence <= to_sequence
-        if to_sequence < expected_sequence:
-            raise ValueError("environment bundle is older than replica cursor")
+        window = classify_replica_window(
+            manifest,
+            state,
+            gap_error="environment replica sequence gap",
+            stale_error="environment bundle is older than replica cursor",
+        )
+        expected_sequence = window.expected_sequence
+        overlap_recovery = window.overlap_recovery
         if overlap_recovery:
             self._verify_overlap_records(origin, records, current_sequence)
-        elif current_sequence:
-            if manifest["previous_bundle_sha256"] != state["last_bundle_sha256"]:
-                raise ValueError("environment predecessor bundle mismatch")
-        elif manifest["previous_bundle_sha256"] is not None:
-            raise ValueError("initial environment import names a predecessor")
+        else:
+            validate_strict_replica_continuity(
+                manifest,
+                state,
+                manifest_sequence_field="from_event_sequence",
+                state_offset=1,
+                sequence_error=lambda _expected, _actual: "environment replica sequence gap",
+                predecessor_error="environment predecessor bundle mismatch",
+                initial_predecessor_error="initial environment import names a predecessor",
+            )
         prior_outputs: List[Dict[str, str]] = []
         if current_sequence:
             prior_receipt_path = self.registry._resolve_relative(

@@ -5,31 +5,31 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import getpass
-import os
-import plistlib
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
-from xml.etree import ElementTree as ET
 
-from install_cloud_sync import (
-    TASK_XML_NAMESPACE,
-    atomic_write_bytes,
-    launchctl_domain,
-    powershell_quote,
-    windows_system_executable,
-)
 try:
+    from platform_atomic import atomic_replace_bytes
     from platform_runtime import executable_entry_path
+    import platform_scheduler as scheduler
 except ModuleNotFoundError:
+    from scripts.platform_atomic import atomic_replace_bytes
     from scripts.platform_runtime import executable_entry_path
+    from scripts import platform_scheduler as scheduler
 
 
 MACOS_LABEL = "com.openai.codex.memory-wuxian-governance-ai"
 WINDOWS_TASK_NAME = "MemoryWuxianGovernanceAI"
 INTERVAL_SECONDS = 300
+TASK_XML_NAMESPACE = scheduler.TASK_XML_NAMESPACE
+launchctl_domain = scheduler.launchctl_domain
+windows_system_executable = scheduler.windows_system_executable
+windows_user_id = scheduler.windows_user_id
+
+
+def atomic_write_bytes(path: Path, payload: bytes) -> None:
+    atomic_replace_bytes(path, payload)
 
 
 def scheduler_command(python: Path, skill: Path, archive: Path) -> list[str]:
@@ -47,70 +47,58 @@ def scheduler_command(python: Path, skill: Path, archive: Path) -> list[str]:
     ]
 
 
-def macos_plist(python: Path, skill: Path, archive: Path) -> dict:
+def macos_job_spec(python: Path, skill: Path, archive: Path) -> scheduler.MacOSJobSpec:
     logs = archive / "environment" / "governance-ai"
-    return {
-        "Label": MACOS_LABEL,
-        "ProgramArguments": scheduler_command(python, skill, archive),
-        "RunAtLoad": True,
-        "StartInterval": INTERVAL_SECONDS,
-        "KeepAlive": False,
-        "ProcessType": "Background",
-        "StandardOutPath": str(logs / "scheduler.stdout.log"),
-        "StandardErrorPath": str(logs / "scheduler.stderr.log"),
-    }
-
-
-def windows_user_id() -> str:
-    domain = os.environ.get("USERDOMAIN", "").strip()
-    user = os.environ.get("USERNAME", "").strip() or getpass.getuser()
-    return f"{domain}\\{user}" if domain else user
-
-
-def windows_xml(python: Path, skill: Path, archive: Path) -> bytes:
-    ET.register_namespace("", TASK_XML_NAMESPACE)
-    task = ET.Element(f"{{{TASK_XML_NAMESPACE}}}Task", {"version": "1.4"})
-    info = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}RegistrationInfo")
-    ET.SubElement(info, f"{{{TASK_XML_NAMESPACE}}}Description").text = (
-        "Check the MemoryWuxian governance queue every five minutes and invoke "
-        "one ephemeral AI worker only for a due batch."
+    return scheduler.MacOSJobSpec(
+        label=MACOS_LABEL,
+        command=tuple(scheduler_command(python, skill, archive)),
+        interval_seconds=INTERVAL_SECONDS,
+        run_at_load=True,
+        keep_alive=False,
+        process_type="Background",
+        stdout_path=logs / "scheduler.stdout.log",
+        stderr_path=logs / "scheduler.stderr.log",
     )
-    triggers = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Triggers")
-    trigger = ET.SubElement(triggers, f"{{{TASK_XML_NAMESPACE}}}TimeTrigger")
-    repetition = ET.SubElement(trigger, f"{{{TASK_XML_NAMESPACE}}}Repetition")
-    ET.SubElement(repetition, f"{{{TASK_XML_NAMESPACE}}}Interval").text = "PT5M"
-    ET.SubElement(repetition, f"{{{TASK_XML_NAMESPACE}}}StopAtDurationEnd").text = "false"
-    ET.SubElement(trigger, f"{{{TASK_XML_NAMESPACE}}}StartBoundary").text = (
-        dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
-    )
-    ET.SubElement(trigger, f"{{{TASK_XML_NAMESPACE}}}Enabled").text = "true"
-    principals = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Principals")
-    principal = ET.SubElement(principals, f"{{{TASK_XML_NAMESPACE}}}Principal", {"id": "Author"})
-    ET.SubElement(principal, f"{{{TASK_XML_NAMESPACE}}}UserId").text = windows_user_id()
-    ET.SubElement(principal, f"{{{TASK_XML_NAMESPACE}}}LogonType").text = "InteractiveToken"
-    ET.SubElement(principal, f"{{{TASK_XML_NAMESPACE}}}RunLevel").text = "LeastPrivilege"
-    settings = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Settings")
-    for name, value in (
-        ("MultipleInstancesPolicy", "IgnoreNew"),
-        ("DisallowStartIfOnBatteries", "false"),
-        ("StopIfGoingOnBatteries", "false"),
-        ("StartWhenAvailable", "true"),
-        ("RunOnlyIfNetworkAvailable", "false"),
-        ("Enabled", "true"),
-        ("Hidden", "true"),
-        ("ExecutionTimeLimit", "PT20M"),
-    ):
-        ET.SubElement(settings, f"{{{TASK_XML_NAMESPACE}}}{name}").text = value
-    actions = ET.SubElement(task, f"{{{TASK_XML_NAMESPACE}}}Actions", {"Context": "Author"})
-    action = ET.SubElement(actions, f"{{{TASK_XML_NAMESPACE}}}Exec")
+
+
+def macos_plist(python: Path, skill: Path, archive: Path) -> dict[str, object]:
+    return scheduler.render_macos_plist(macos_job_spec(python, skill, archive))
+
+
+def windows_task_spec(python: Path, skill: Path, archive: Path) -> scheduler.WindowsTaskSpec:
     executable = python.with_name("pythonw.exe")
     if not executable.is_file():
         executable = python
-    ET.SubElement(action, f"{{{TASK_XML_NAMESPACE}}}Command").text = str(executable)
-    ET.SubElement(action, f"{{{TASK_XML_NAMESPACE}}}Arguments").text = subprocess.list2cmdline(
-        scheduler_command(python, skill, archive)[1:]
+    return scheduler.WindowsTaskSpec(
+        task_name=WINDOWS_TASK_NAME,
+        description=(
+            "Check the MemoryWuxian governance queue every five minutes and invoke "
+            "one ephemeral AI worker only for a due batch."
+        ),
+        command=executable,
+        arguments=tuple(scheduler_command(python, skill, archive)[1:]),
+        interval="PT5M",
+        execution_limit="PT20M",
+        priority=None,
+        allow_hard_terminate=None,
+        multiple_instances="IgnoreNew",
+        disallow_start_on_batteries=False,
+        stop_on_batteries=False,
+        start_when_available=True,
+        network_required=False,
+        hidden=True,
+        logon_type="InteractiveToken",
+        run_level="LeastPrivilege",
     )
-    return ET.tostring(task, encoding="utf-16", xml_declaration=True)
+
+
+def windows_xml(python: Path, skill: Path, archive: Path) -> bytes:
+    boundary = dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
+    return scheduler.render_windows_task_xml(
+        windows_task_spec(python, skill, archive),
+        user_id=windows_user_id(),
+        start_boundary=boundary,
+    )
 
 
 def main() -> int:
@@ -126,17 +114,21 @@ def main() -> int:
     python = executable_entry_path(args.python_executable)
     if args.uninstall:
         if sys.platform == "darwin":
-            output = Path.home() / "Library/LaunchAgents" / f"{MACOS_LABEL}.plist"
-            subprocess.run(
-                ["/bin/launchctl", "bootout", launchctl_domain(), str(output)],
-                check=False,
+            output = scheduler.uninstall_macos_job(
+                MACOS_LABEL,
+                runner=subprocess.run,
+                domain=launchctl_domain(),
             )
-            output.unlink(missing_ok=True)
             print(output)
             return 0
         if sys.platform == "win32":
             schtasks = windows_system_executable(r"System32\schtasks.exe")
-            subprocess.run([str(schtasks), "/Delete", "/TN", WINDOWS_TASK_NAME, "/F"], check=False)
+            scheduler.uninstall_windows_task(
+                WINDOWS_TASK_NAME,
+                schtasks=schtasks,
+                runner=subprocess.run,
+                end_first=False,
+            )
             print(WINDOWS_TASK_NAME)
             return 0
         raise SystemExit("governance AI scheduling supports macOS and Windows")
@@ -146,36 +138,28 @@ def main() -> int:
     logs = archive / "environment" / "governance-ai"
     logs.mkdir(parents=True, exist_ok=True)
     if sys.platform == "darwin":
-        output = Path.home() / "Library/LaunchAgents" / f"{MACOS_LABEL}.plist"
-        atomic_write_bytes(output, plistlib.dumps(macos_plist(python, skill, archive), sort_keys=True))
-        if args.load:
-            subprocess.run(
-                ["/bin/launchctl", "bootout", launchctl_domain(), str(output)],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            subprocess.run(
-                ["/bin/launchctl", "bootstrap", launchctl_domain(), str(output)],
-                check=True,
-            )
+        output = scheduler.install_macos_job(
+            macos_job_spec(python, skill, archive),
+            load=args.load,
+            runner=subprocess.run,
+            write_bytes=atomic_write_bytes,
+            domain=launchctl_domain() if args.load else None,
+            bootout_kwargs={"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL},
+        )
         print(output)
         return 0
     if sys.platform == "win32":
         schtasks = windows_system_executable(r"System32\schtasks.exe")
-        fd, temporary = tempfile.mkstemp(prefix=".memory-wuxian-governance-ai.", suffix=".xml")
-        os.close(fd)
-        temporary_path = Path(temporary)
-        try:
-            atomic_write_bytes(temporary_path, windows_xml(python, skill, archive))
-            subprocess.run(
-                [str(schtasks), "/Create", "/TN", WINDOWS_TASK_NAME, "/XML", str(temporary_path), "/F"],
-                check=True,
-            )
-        finally:
-            temporary_path.unlink(missing_ok=True)
-        if args.load:
-            subprocess.run([str(schtasks), "/Run", "/TN", WINDOWS_TASK_NAME], check=True)
+        spec = windows_task_spec(python, skill, archive)
+        scheduler.install_windows_task(
+            spec,
+            windows_xml(python, skill, archive),
+            temporary_prefix=".memory-wuxian-governance-ai.",
+            schtasks=schtasks,
+            load=args.load,
+            runner=subprocess.run,
+            write_bytes=atomic_write_bytes,
+        )
         print(WINDOWS_TASK_NAME)
         return 0
     raise SystemExit("governance AI scheduling supports macOS and Windows")

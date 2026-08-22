@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.18-v3",
+  "candidate_id": "v2.18-v3-typed-batch-and-shared-event-cycle",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "capture-core",
+  "validation_profile": "L4-candidate",
+  "trigger": "The accepted v2.18 remediation ledger schedules typed batch results and one shared cross-platform rollout-cycle transition as V3.",
+  "scope": "Internal native collector batch aggregation and event-loop state transition only.",
+  "owner": "Capture Core owns implementation; Product Quality owns architecture, rehearsal, and independent-evaluation evidence.",
+  "parameters_defaults": "Existing batch limits, debounce, adaptive fallback intervals, watcher implementations, and startup isolation defaults remain unchanged.",
+  "required_actions": [
+    "Represent batch, session, and source-error aggregation with typed Rust structures until the final JSON boundary.",
+    "Share rollout discovery, candidate completion, sync, coverage, telemetry, and known-stamp transition logic between platform loops.",
+    "Keep macOS kqueue and non-macOS notify event acquisition and watcher-refresh behavior platform-specific."
+  ],
+  "evidence_validation": [
+    "Golden semantic and compact-JSON parity for synced and partial batch results.",
+    "Positive, negative, failure-injection, recovery, historical-regression, and candidate-identity rehearsal cases.",
+    "Rust formatting and tests, Python contract tests, architecture checks, and independent evaluator verdict bound to the final candidate hash."
+  ],
+  "failure_escalation": "Any field, counter, error, ordering, coverage, telemetry, platform watcher, or candidate-hash drift blocks completion and returns the finding to the producer; no install or release follows automatically.",
+  "exit_lifecycle": "Commit a source-only V3 candidate after all producer checks pass, freeze its hashes, run one independent evaluation, and stop before installation, publication, or release.",
+  "invariants": [
+    "Raw archive records, cursors, WAL bytes, and public JSON are authoritative and behaviorally unchanged.",
+    "Optional summary, index, backup, coverage, or telemetry failures retain their existing propagation or isolation behavior.",
+    "A failed sync does not advance known rollout stamps."
+  ],
+  "allowed_changes": [
+    "Add internal typed result and event-cycle structures and their tests.",
+    "Replace duplicate common event-loop state transitions with a shared function."
+  ],
+  "prohibited_changes": [
+    "Change persistence formats, summary or index semantics, cloud exchange, installation, runtime activation, packaging, or version numbers.",
+    "Use a Windows simulation as evidence that macOS kqueue executed successfully."
+  ],
+  "required_evidence": [
+    "batch-json-byte-parity",
+    "partial-source-error-parity",
+    "batch-counter-and-session-merge-parity",
+    "event-cycle-positive",
+    "event-cycle-sync-failure",
+    "cross-platform-watcher-contract",
+    "candidate-identity",
+    "architecture-contract",
+    "independent-evaluation"
+  ],
+  "lifecycle_state": "candidate"
+}

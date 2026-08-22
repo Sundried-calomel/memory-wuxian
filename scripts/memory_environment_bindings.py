@@ -8,12 +8,17 @@ import json
 import os
 import re
 import sys
-import tempfile
 import uuid
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
-from memory_environment import EnvironmentRegistry
+from memory_environment import (
+    EnvironmentRegistry,
+    _strict_keys,
+    canonical_bytes as _canonical_bytes,
+    sha256_bytes as _sha256_bytes,
+)
+from platform_atomic import ParentSync, atomic_replace_bytes, sync_directory
 from platform_lock import exclusive_lock
 from platform_paths import is_link_like
 
@@ -41,75 +46,23 @@ def _current_platform() -> str:
     return "linux"
 
 
-def _canonical_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-
-
-def _sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
-
-
 def _record_hash(value: Mapping[str, Any]) -> str:
     return _sha256_bytes(_canonical_bytes(value))
 
 
 def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY
-    if hasattr(os, "O_DIRECTORY"):
-        flags |= os.O_DIRECTORY
-    try:
-        descriptor = os.open(path, flags)
-    except OSError:
-        return
-    try:
-        os.fsync(descriptor)
-    except OSError:
-        pass
-    finally:
-        os.close(descriptor)
+    sync_directory(path, policy=ParentSync.BEST_EFFORT)
 
 
 def _atomic_write_json(path: Path, value: Any) -> None:
     payload = (
         json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
     ).encode("utf-8")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        _fsync_directory(path.parent)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
+    atomic_replace_bytes(path, payload, parent_sync=ParentSync.BEST_EFFORT)
 
 
 def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _strict_keys(
-    value: Mapping[str, Any],
-    allowed: Iterable[str],
-    required: Iterable[str],
-    label: str,
-) -> None:
-    allowed_set = set(allowed)
-    required_set = set(required)
-    unknown = set(value) - allowed_set
-    missing = required_set - set(value)
-    if unknown:
-        raise ValueError(f"{label}: unknown fields: {sorted(unknown)}")
-    if missing:
-        raise ValueError(f"{label}: missing fields: {sorted(missing)}")
 
 
 def _required_string(value: Any, label: str, pattern: Optional[re.Pattern] = None) -> str:

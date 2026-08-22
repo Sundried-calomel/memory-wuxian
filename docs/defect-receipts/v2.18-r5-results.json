@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.18-r1-r8",
+  "packet_sha256": "60c1d03b999edb60b719381402a0c94efe1075c97844603e551b91e5568677b9",
+  "checks": [
+    {
+      "check_id": "runtime-capability-probe",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r5-validation.log",
+          "sha256": "4e99d097557a224265e495a556df42e71465770d4a718882d3eec2b53ca81434"
+        }
+      ],
+      "note": "Python 3.12.13 executed the R5 application service, CLI snapshot, cloud transport, and dashboard contracts in the repository working directory."
+    },
+    {
+      "check_id": "unicode-path-fixtures",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r5-validation.log",
+          "sha256": "4e99d097557a224265e495a556df42e71465770d4a718882d3eec2b53ca81434"
+        }
+      ],
+      "note": "The production assembly round-tripped Chinese, Japanese, yen signs, emoji, spaces, and leading-hyphen values through temporary stream configurations and the frozen CLI parser."
+    },
+    {
+      "check_id": "target-platform-effect",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r5-validation.log",
+          "sha256": "4e99d097557a224265e495a556df42e71465770d4a718882d3eec2b53ca81434"
+        }
+      ],
+      "note": "Temporary Windows filesystems, real CLI and dashboard HTTP entrypoints, and the built Rust envelope helper exercised the production path without live cloud or archive mutation."
+    }
+  ]
+}

@@ -36,6 +36,47 @@ class MemoryDashboardFederationTest(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def cloud_application_service(
+        self,
+        manager,
+        archive_transport,
+        environment_transport,
+        project_evidence_transport,
+    ):
+        archive_transport.manager = manager
+        evidence_manager = Mock()
+        evidence_manager.status.return_value = {
+            "status": "ok",
+            "local_packages": 0,
+            "local_event_sequence": 0,
+        }
+        evidence_manager.evidence.owner_status.return_value = {}
+        project_evidence_transport.manager = evidence_manager
+        project_attachment_transport = Mock()
+        project_attachment_transport.status.return_value = {
+            "configured": False,
+            "enabled": False,
+            "peers": [],
+        }
+        attachment_manager = Mock()
+        attachment_manager.status.return_value = {
+            "local_manifests": 0,
+            "local_event_sequence": 0,
+        }
+        project_attachment_transport.manager = attachment_manager
+        service = Mock()
+        transports = {
+            "archive-v1": archive_transport,
+            "environment-v1": environment_transport,
+            "project-evidence-v1": project_evidence_transport,
+            "project-attachment-v1": project_attachment_transport,
+        }
+        service.transport.side_effect = lambda stream_id, **_kwargs: transports[
+            stream_id
+        ]
+        service.transports.return_value = transports
+        return service, evidence_manager
+
     def test_project_attachment_lifecycle_keeps_all_four_stages_distinct(self):
         lifecycle = project_attachment_lifecycle(
             {
@@ -401,23 +442,17 @@ class MemoryDashboardFederationTest(unittest.TestCase):
         }
         project_evidence_transport = Mock()
         project_evidence_transport.status.return_value = project_evidence_status
+        service, evidence_manager = self.cloud_application_service(
+            manager,
+            cloud_transport,
+            environment_cloud_transport,
+            project_evidence_transport,
+        )
         with (
-            patch("memory_dashboard.FederationManager", return_value=manager),
             patch(
-                "memory_dashboard.CloudFolderTransport",
-                return_value=cloud_transport,
-            ) as cloud_factory,
-            patch(
-                "memory_dashboard.environment_cloud_transport",
-                return_value=environment_cloud_transport,
-            ),
-            patch(
-                "memory_dashboard.project_evidence_cloud_transport",
-                return_value=project_evidence_transport,
-            ),
-            patch(
-                "memory_dashboard.ProjectEvidenceExchangeManager"
-            ) as evidence_manager,
+                "memory_dashboard.CloudApplicationService",
+                return_value=service,
+            ) as service_factory,
             patch(
                 "memory_dashboard.cloud_scheduler_status",
                 return_value={
@@ -431,11 +466,6 @@ class MemoryDashboardFederationTest(unittest.TestCase):
                 side_effect=AssertionError("devices API must not build the archive snapshot"),
             ),
         ):
-            evidence_manager.return_value.status.return_value = {
-                "status": "ok",
-                "local_packages": 0,
-                "local_event_sequence": 0,
-            }
             server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.store))
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
@@ -475,9 +505,18 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             },
         )
         manager.status.assert_called_once_with()
-        cloud_factory.assert_called_once_with(manager)
+        service_factory.assert_called_once_with(self.store)
+        self.assertEqual(
+            [item.args[0] for item in service.transport.call_args_list],
+            [
+                "archive-v1",
+                "environment-v1",
+                "project-evidence-v1",
+                "project-attachment-v1",
+            ],
+        )
         cloud_transport.status.assert_called_once_with()
-        evidence_manager.return_value.status.assert_called_once_with()
+        evidence_manager.status.assert_called_once_with()
 
     def test_devices_api_does_not_create_federation_cloud_or_snapshot_files(self):
         root = self.store.root
@@ -527,24 +566,21 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "enabled": True,
             "stream_id": "project-evidence-v1",
         }
+        service, _ = self.cloud_application_service(
+            manager,
+            transport,
+            environment_transport,
+            project_evidence_transport,
+        )
         scheduler = {
             "platform": "macos",
             "installed": True,
             "running": True,
         }
         with (
-            patch("memory_dashboard.FederationManager", return_value=manager),
             patch(
-                "memory_dashboard.CloudFolderTransport",
-                return_value=transport,
-            ),
-            patch(
-                "memory_dashboard.environment_cloud_transport",
-                return_value=environment_transport,
-            ),
-            patch(
-                "memory_dashboard.project_evidence_cloud_transport",
-                return_value=project_evidence_transport,
+                "memory_dashboard.CloudApplicationService",
+                return_value=service,
             ),
             patch("memory_dashboard.set_cloud_scheduler", return_value=scheduler),
             patch("memory_dashboard.cloud_scheduler_status", return_value=scheduler),
@@ -613,19 +649,16 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "stream_id": "project-evidence-v1",
         }
         project_evidence_transport.sync.return_value = {"status": "ok"}
+        service, _ = self.cloud_application_service(
+            manager,
+            transport,
+            environment_transport,
+            project_evidence_transport,
+        )
         with (
-            patch("memory_dashboard.FederationManager", return_value=manager),
             patch(
-                "memory_dashboard.CloudFolderTransport",
-                return_value=transport,
-            ),
-            patch(
-                "memory_dashboard.environment_cloud_transport",
-                return_value=environment_transport,
-            ),
-            patch(
-                "memory_dashboard.project_evidence_cloud_transport",
-                return_value=project_evidence_transport,
+                "memory_dashboard.CloudApplicationService",
+                return_value=service,
             ),
             patch(
                 "memory_dashboard.cloud_scheduler_status",
@@ -705,19 +738,16 @@ class MemoryDashboardFederationTest(unittest.TestCase):
             "stream_id": "project-evidence-v1",
         }
         project_evidence_transport.sync.return_value = {"status": "ok"}
+        service, _ = self.cloud_application_service(
+            manager,
+            transport,
+            environment_transport,
+            project_evidence_transport,
+        )
         with (
-            patch("memory_dashboard.FederationManager", return_value=manager),
             patch(
-                "memory_dashboard.CloudFolderTransport",
-                return_value=transport,
-            ),
-            patch(
-                "memory_dashboard.environment_cloud_transport",
-                return_value=environment_transport,
-            ),
-            patch(
-                "memory_dashboard.project_evidence_cloud_transport",
-                return_value=project_evidence_transport,
+                "memory_dashboard.CloudApplicationService",
+                return_value=service,
             ),
             patch(
                 "memory_dashboard.cloud_scheduler_status",

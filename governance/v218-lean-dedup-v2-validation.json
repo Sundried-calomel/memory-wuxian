@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-lean-dedup-v2",
+  "base_commit": "c4ae78dabae8c0f2618288d6e6a5957af07cf6a7",
+  "validated_at": "2026-08-18T13:19:27Z",
+  "checks": [
+    {
+      "id": "python-impact-tests",
+      "status": "passed",
+      "tests_run": 286,
+      "skipped": 16,
+      "note": "Lifecycle, Windows and macOS transaction, CLI, platform path, and complete Environment module impact set."
+    },
+    {
+      "id": "rust-native-tests",
+      "status": "passed",
+      "tests_run": 33,
+      "note": "Complete native collector and envelope unit tests, including exact WAL bytes and parent-boundary behavior."
+    },
+    {
+      "id": "architecture-and-adjacent-contracts",
+      "status": "passed",
+      "tests_run": 55,
+      "note": "Architecture, v2.17/v2.18, release workflow, dashboard shortcut, and macOS packaging contracts."
+    },
+    {
+      "id": "static-checks",
+      "status": "passed",
+      "note": "Rust formatting, Python compilation, architecture checker, and git diff whitespace check passed."
+    },
+    {
+      "id": "unicode-path-fixtures",
+      "status": "passed",
+      "note": "Production boundaries round-tripped Chinese, Japanese, yen signs, emoji, spaces, a leading hyphen, and long values."
+    }
+  ],
+  "validated_files": {
+    "native-collector/src/store/transaction.rs": "86ef3fe7ebc33b3fd4f3a92c450a7049792476b68a14f470e980384ad0c39aca",
+    "native-collector/src/store/wal.rs": "3c593186ed2ea3774eccdf775830af7f270995e93752749637ba1e62c63490a7",
+    "scripts/collector_lifecycle.py": "2bd15687b2bff399b5691f8c06e7eded40df3953f2d78cc06502d8f2a1742875",
+    "scripts/install_codex_autosync_windows.py": "facc80d3879a6843029d01b1e0a9d26785c0255aee83499f322eb602f35733f2",
+    "scripts/install_macos_transaction.py": "870c031a1219202e568fcc4a6d754832c33c147dc628990658a1339ee1000c91",
+    "scripts/memory_cli.py": "0ff5863462bea83dc4688637383e0ab99d69ec9e70ee33ff0555179476400db2",
+    "scripts/memory_environment.py": "2ec9e2d7de322f388d3fe0589f2d13acb8fad9fdef69c7ebad5c986b8544c52f",
+    "scripts/memory_environment_bindings.py": "5c7cdfe19f31e495202915defbbff1a33fdb9d90de7d1dd2864956da942a4394",
+    "scripts/memory_environment_conflicts.py": "47b54ae435610dd9687c05f139abd6afccef9fa12ce14be34a7e09fa68f242fd",
+    "scripts/memory_environment_incoming.py": "f81ddcab770485f063c9caf9fc91856f9155bc1c577e3cac83ff5c2a64077140",
+    "scripts/memory_environment_promotions.py": "6392b22946f54389cd6112ef0306f27e6c0e97ba64feccc89a50d3e5dc8d96af",
+    "scripts/memory_environment_skills.py": "eb5e60ca4f3f3d0bef6962baf5ed95f40789cf21ff1ec3db4e6d00a882125e16",
+    "scripts/platform_paths.py": "6f000f0bbe16a462f474c3df0f08bf384566dc4def39e274ecf35c96bab310d2",
+    "scripts/platform_process.py": "9a40f4d73bb5ac3bede2cdaf5940eb9535c6afc972a339c1c1d2963659b1a3bb",
+    "tests/test_collector_lifecycle.py": "06014e4aeb534c06b36cebb28e42c6471ebf05aac2eabc71f1420aaf8a3c9db1",
+    "tests/test_memory_environment.py": "3b14d306d03415e23c1dcfa4a59efb136fbe2885f9a359ab7888eba2510a7ac7",
+    "tests/test_platform_paths.py": "ecfa8e7a427b878da56268bac9fa872275d717876661ea7b081dd431a3cce3ff"
+  },
+  "excluded": [
+    "summary and deterministic-index behavior",
+    "historical backfill",
+    "cloud and federation protocols",
+    "live archives and installed runtime",
+    "release and publication"
+  ]
+}

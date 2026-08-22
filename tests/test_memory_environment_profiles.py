@@ -20,29 +20,10 @@ from memory_cli import MemoryStore, load_simple_yaml
 from memory_environment import revision_id_for
 from memory_environment_bindings import EnvironmentBindingRegistry
 from memory_environment_exchange import EnvironmentExchangeManager
-from memory_cloud_transport import (
-    AuthenticatedOpenResult,
-    _AUTHENTICATED_OPEN_AUTHORITY,
-)
 from memory_environment_profiles import EnvironmentProfileManager
 from memory_environment_profiles import ID_RE, _safe_public_string
 from memory_federation import FederationManager, canonical_sha256
-
-
-def verified_import(manager, bundle, expected_node_id=None):
-    manifest = manager.read_bundle_manifest(bundle)
-    return manager._import_authenticated_delta(
-        bundle,
-        expected_node_id=expected_node_id,
-        authenticated_open_result=AuthenticatedOpenResult(
-            _AUTHENTICATED_OPEN_AUTHORITY,
-            {
-                "origin_node_id": manifest["origin_node_id"],
-                "target_node_id": manager.node()["node_id"],
-                "payload_sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
-            },
-        ),
-    )
+from tests.support.federation import verified_import
 
 
 from memory_dashboard import make_handler

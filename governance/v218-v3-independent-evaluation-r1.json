@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "memory-wuxian-v218-v3-independent-r1",
+  "artifact": {
+    "paths": [
+      "native-collector/src/lib.rs",
+      "tests/test_v218_v3_contract.py",
+      "docs/work-contracts/v2.18-v3.json"
+    ],
+    "sha256": [
+      "805594305d3f745ed612507907f84cf25a0debfc295b169d7603717e893052ec",
+      "cd35d6f08789c45c5b655c86f2c76e40dbe93c1a6a4189016343fedea9799062",
+      "400438c0003777af970b158ac9b8483bb1fb4b01da9737554b9128bbcf85e49c"
+    ],
+    "producer_identity": "codex-main-producer"
+  },
+  "evaluator": {
+    "identity": "independent-agent-nash-01a0156c",
+    "independent": true
+  },
+  "contract": {
+    "source": "docs/work-contracts/v2.18-v3.json",
+    "pass_threshold": 90
+  },
+  "dimensions": [
+    {
+      "id": "public-output-equivalence",
+      "weight": 0.3,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{"claim": "Baseline and candidate outputs match", "source": "independent Rust, Python, and binary parity runs", "method": "deterministic_test"}]
+    },
+    {
+      "id": "ordering-and-no-loss",
+      "weight": 0.3,
+      "score": 98,
+      "mandatory": true,
+      "evidence": [{"claim": "Failed sync does not advance stamps and ordering is preserved", "source": "source trace and production-path tests", "method": "source_trace"}]
+    },
+    {
+      "id": "platform-boundaries",
+      "weight": 0.2,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{"claim": "Watcher ownership remains platform-specific and macOS target compiles", "source": "source trace and aarch64-apple-darwin cargo check", "method": "deterministic_test"}]
+    },
+    {
+      "id": "evidence-traceability",
+      "weight": 0.15,
+      "score": 40,
+      "mandatory": true,
+      "evidence": [{"claim": "Windows checkout bytes did not match the unstated LF hash convention", "source": "independent checkout hash comparison", "method": "schema_validation"}]
+    },
+    {
+      "id": "scope-and-maintainability",
+      "weight": 0.05,
+      "score": 95,
+      "mandatory": false,
+      "evidence": [{"claim": "No summary, cloud, install, release, or live archive scope creep", "source": "0765f02..11253f8 diff", "method": "source_trace"}]
+    }
+  ],
+  "deterministic_checks": [
+    {"id": "rust-tests", "status": "pass", "evidence": "38 passed"},
+    {"id": "python-tests", "status": "pass", "evidence": "701 passed, 18 skipped"},
+    {"id": "binary-parity", "status": "pass", "evidence": "2-message, 521-message, and two-rollout fixtures"},
+    {"id": "evidence-hash-portability", "status": "fail", "evidence": "Windows CRLF checkout hashes differed from unstated LF hashes"}
+  ],
+  "overall_score": 90.15,
+  "verdict": "fail",
+  "blocking_findings": [
+    "Hash-bound evidence did not define or enforce a cross-platform line-ending convention."
+  ],
+  "limitations": [
+    "No macOS-native watcher execution was performed.",
+    "Partial-source-error equivalence used production-path Rust tests and source comparison rather than a separate baseline CLI fixture."
+  ],
+  "iteration": {
+    "current": 1,
+    "maximum": 2
+  }
+}

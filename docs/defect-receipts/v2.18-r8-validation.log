@@ -1,0 +1,48 @@
+Memory Wuxian v2.18 R8 targeted validation
+Date: 2026-08-21 Asia/Tokyo
+Runtime: C:\Users\56453\.codex\runtimes\memory-wuxian-e5-py312\Scripts\python.exe
+Working directory: C:\Users\56453\Documents\ChatGPT\memory无限\memory-wuxian-v218
+
+SHARED TEST SUPPORT
+Command: python -m unittest -v <R8.1-R8.3 affected modules>
+Result: PASS, 241 tests in 148.380 seconds; three existing platform-conditional tests skipped.
+Identity comparison: PASS, before and after test ID sets were both 241 with zero additions, removals, or renames.
+Import compatibility repair: shared helpers use tests.support.* so both python -m unittest tests.test_* and unittest discover -s tests remain valid.
+
+RELEASE CONTRACT SUPPORT
+Command: python -m unittest -v tests.test_v211_release_contract ... tests.test_v218_release_contract
+Result: PASS, 38 tests in 0.050 seconds.
+Identity comparison: PASS, before and after test ID sets were both 38 with zero differences.
+
+MACOS TEST SUPPORT
+Command: python -m unittest -v tests.test_macos_transaction tests.test_macos_transaction_v216 tests.test_platform_scheduler tests.test_macos_packaging
+Result: PASS, 33 tests; 20 passed and 13 existing native-macOS tests skipped on Windows.
+Identity comparison: PASS, before and after test ID sets were both 33 with zero differences.
+
+RUST TEST TABLES
+Command: cargo test --all-targets
+Result: PASS, 38 tests; 26 library tests and 12 envelope tests.
+Command: cargo fmt --all -- --check
+Result: PASS.
+Identity comparison: PASS, before and after Rust test name sets were both 38 with zero differences.
+Scope audit: only #[cfg(test)] regions changed; production Rust behavior and capability boundaries are unchanged.
+Non-fatal existing warning: cargo could not canonicalize C:\Users\56453, but compilation and all targets completed successfully.
+
+DISCOVERY MODE
+Command: python -m unittest discover -s tests -p test_memory_dashboard_system.py -v
+Result: PASS, 5 tests in 0.017 seconds.
+
+ARCHITECTURE
+Command: python scripts/check_architecture_contract.py
+Result: PASS. Schema v2 ownership, dependency allowlists, and Rust capability boundaries are valid.
+
+PY_COMPILE
+Command: python -m py_compile tests/support/__init__.py tests/support/filesystem.py tests/support/federation.py tests/support/rollouts.py tests/support/release_contracts.py tests/support/macos.py
+Result: PASS.
+
+DIFF CHECK
+Command: git diff --check
+Result: PASS.
+
+EXCLUDED EFFECTS
+No product version, installation, scheduler, desktop shortcut, active archive, OneDrive, network, publication, release, persistent format, protocol, default, or security policy changed.

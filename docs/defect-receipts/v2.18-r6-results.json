@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.18-r1-r8",
+  "packet_sha256": "60c1d03b999edb60b719381402a0c94efe1075c97844603e551b91e5568677b9",
+  "checks": [
+    {
+      "check_id": "runtime-capability-probe",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r6-validation.log", "sha256": "7f4b9f1ff0789beb831a5f931d42357b21f0598a54efa75259c5a885d41eb1bb"}],
+      "note": "Python 3.12.13 executed the R6 immutable-record contract, domain facade, and Governance AI tests in the repository working directory."
+    },
+    {
+      "check_id": "unicode-path-fixtures",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r6-validation.log", "sha256": "7f4b9f1ff0789beb831a5f931d42357b21f0598a54efa75259c5a885d41eb1bb"}],
+      "note": "Frozen canonical payloads round-tripped Chinese, Japanese, yen, euro, emoji, spaces, and path-like values through the production facades."
+    },
+    {
+      "check_id": "target-platform-effect",
+      "status": "passed",
+      "evidence": [{"path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r6-validation.log", "sha256": "7f4b9f1ff0789beb831a5f931d42357b21f0598a54efa75259c5a885d41eb1bb"}],
+      "note": "Temporary Windows filesystems exercised real immutable writes, lock-bound race rejection, exact persisted bytes, and read-only replica enumeration."
+    }
+  ]
+}

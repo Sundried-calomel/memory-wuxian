@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.18-r1-r8",
+  "packet_sha256": "23a86f7164335597e38cbe744057d6319d3fb9bac3802cc0a4a1ea80e2dc967e",
+  "checks": [
+    {
+      "check_id": "runtime-capability-probe",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r3-validation.log",
+          "sha256": "e1985d0334c4d64d6a8148d8a7249a315532467781c44e303a53eccbce7ffcd7"
+        }
+      ],
+      "note": "Python 3.12.13 executed the production Rule and Skill installers from the repository working directory; 51 targeted cases passed and one Windows chmod-subset case was explicitly skipped."
+    },
+    {
+      "check_id": "unicode-path-fixtures",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r3-validation.log",
+          "sha256": "e1985d0334c4d64d6a8148d8a7249a315532467781c44e303a53eccbce7ffcd7"
+        }
+      ],
+      "note": "Golden production-path fixtures preserved Chinese, Japanese, yen signs, emoji, spaces, CRLF/LF mixtures, exact receipt bytes, and exact transaction bytes."
+    },
+    {
+      "check_id": "target-platform-effect",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.18-r3-validation.log",
+          "sha256": "e1985d0334c4d64d6a8148d8a7249a315532467781c44e303a53eccbce7ffcd7"
+        }
+      ],
+      "note": "The real Windows filesystem transaction paths wrote, switched, crashed, recovered, and byte-verified isolated Rule files and Skill trees without touching a live installation."
+    }
+  ]
+}

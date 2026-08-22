@@ -3,6 +3,7 @@
   "source_roots": [
     {"path": "scripts", "extensions": [".py", ".ps1", ".sh"]},
     {"path": "native-collector/src", "extensions": [".rs"]},
+    {"path": "packaging", "all_files": true},
     {"path": "dashboard", "extensions": [".html", ".css", ".js"]},
     {"path": "schemas", "extensions": [".json"]},
     {"path": "contracts", "extensions": [".json"]}
@@ -21,6 +22,7 @@
         "environment-plane",
         "project-evidence-plane",
         "exchange-plane",
+        "application-services",
         "product-quality"
       ],
       "forbidden_capabilities": ["control", "memory", "exchange", "environment", "project", "ui", "ai"],
@@ -52,7 +54,7 @@
       "architecture_owner": "Product Shell",
       "criticality": "P2",
       "failure_domain": "product-shell",
-      "allowed_dependencies": ["capture-core", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "platform-foundation"],
+      "allowed_dependencies": ["capture-core", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services", "platform-foundation"],
       "forbidden_dependencies": [],
       "patterns": [
         "dashboard/**",
@@ -64,10 +66,17 @@
         "scripts/install_maintenance_supervisor.py",
         "scripts/migrate_config.py",
         "scripts/memory_cli.py",
+        "scripts/memory_cli_contract.py",
+        "scripts/memory_cli_parser.py",
+        "scripts/memory_cli_runtime.py",
         "scripts/memory_dashboard.py",
         "scripts/memory_readonly_http.py",
         "scripts/memory_readonly_mcp.py",
         "scripts/memory_update_governance.py",
+        "packaging/macos/MemoryDashboard.swift",
+        "packaging/macos/scripts/postinstall",
+        "packaging/windows/install.ps1",
+        "packaging/windows/uninstall.ps1",
         "native-collector/src/bin/memory-wuxian-dashboard-launcher.rs"
       ]
     },
@@ -109,6 +118,7 @@
         "scripts/memory_indexing.py",
         "scripts/memory_content_store.py",
         "scripts/memory_guarded_features.py",
+        "scripts/memory_retrieval_algorithms.py",
         "scripts/token_usage.py"
       ]
     },
@@ -146,10 +156,25 @@
       "allowed_dependencies": ["control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "platform-foundation"],
       "forbidden_dependencies": ["capture-core", "product-shell"],
       "patterns": [
+        "scripts/memory_exchange_contract.py",
         "scripts/memory_cloud_transport.py",
         "scripts/memory_federation.py",
         "scripts/memory_resumable_sync.py",
         "native-collector/src/bin/memory-wuxian-envelope.rs"
+      ]
+    },
+    {
+      "id": "application-services",
+      "architecture_owner": "Application Services",
+      "criticality": "P1",
+      "failure_domain": "application-services",
+      "allowed_dependencies": ["environment-plane", "project-evidence-plane", "exchange-plane"],
+      "forbidden_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "platform-foundation"],
+      "patterns": [
+        "scripts/memory_cloud_streams.py"
+      ],
+      "expected_patterns": [
+        "scripts/memory_cloud_streams.py"
       ]
     },
     {
@@ -158,7 +183,7 @@
       "criticality": "P0",
       "failure_domain": "platform-foundation",
       "allowed_dependencies": [],
-      "forbidden_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane"],
+      "forbidden_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services"],
       "patterns": [
         "scripts/console_encoding.py",
         "scripts/collector_activation.py",
@@ -172,7 +197,7 @@
       "architecture_owner": "Release Evidence Contract",
       "criticality": "P2",
       "failure_domain": "product-quality",
-      "allowed_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "platform-foundation"],
+      "allowed_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services", "platform-foundation"],
       "forbidden_dependencies": [],
       "patterns": [
         "scripts/build_native_collector.ps1",
@@ -180,11 +205,138 @@
         "scripts/check_architecture_contract.py",
         "scripts/check_documentation_changes.py",
         "scripts/check_documentation_contract.py",
-        "scripts/run_release_rehearsal.py",
-        "scripts/run_unittest_shard.py"
+        "packaging/macos/build_dashboard_app.sh",
+        "packaging/macos/build_pkg.sh",
+        "packaging/windows/MemoryWuxian.iss",
+        "scripts/run_release_rehearsal.py"
       ]
     }
   ],
+  "python_atomic_storage_rules": {
+    "canonical_owner": "platform-foundation",
+    "exact_byte_primitive": "scripts/platform_atomic.py:atomic_replace_bytes",
+    "forbidden_call_set": ["tempfile.mkstemp", "os.fsync", "os.replace"],
+    "approved_specialized_writers": [
+      {"path": "scripts/install_codex_autosync.py", "symbol": "atomic_write_plist", "reason": "collector scheduler lifecycle remains outside R1"},
+      {"path": "scripts/install_codex_autosync.py", "symbol": "atomic_write_text", "reason": "collector scheduler lifecycle remains outside R1"},
+      {"path": "scripts/install_codex_autosync_windows.py", "symbol": "atomic_write_bytes", "reason": "Windows collector launcher bytes remain outside R1"},
+      {"path": "scripts/install_dashboard_app_macos.py", "symbol": "atomic_json", "reason": "launcher JSON preserves insertion order"},
+      {"path": "scripts/install_dashboard_app_macos.py", "symbol": "atomic_bytes", "reason": "dashboard application rollback owns this write"},
+      {"path": "scripts/memory_content_store.py", "symbol": "_write_object", "reason": "content-addressed create-if-absent collision contract"},
+      {"path": "scripts/memory_environment_incoming.py", "symbol": "_write_immutable_package", "reason": "immutable create-if-absent package contract"},
+      {"path": "scripts/memory_environment_profiles.py", "symbol": "_atomic_pointer", "reason": "profile pointer canonical JSON plus one LF remains frozen"},
+      {"path": "scripts/memory_environment_skills.py", "symbol": "_cache_verified_package", "reason": "verified package cache create-if-absent contract"},
+      {"path": "scripts/memory_federation.py", "symbol": "export_delta", "reason": "temporary ZIP bundle publication is not a state-file replacement"}
+    ]
+  },
+  "python_scheduler_rules": {
+    "canonical_owner": "platform-foundation",
+    "mechanics": "scripts/platform_scheduler.py",
+    "domain_policy_owners": [
+      "scripts/install_cloud_sync.py",
+      "scripts/install_governance_ai.py",
+      "scripts/install_maintenance_supervisor.py"
+    ],
+    "intentionally_separate": [
+      "scripts/install_codex_autosync.py",
+      "scripts/install_codex_autosync_windows.py",
+      "scripts/install_auto_update.py"
+    ]
+  },
+  "python_environment_install_lifecycle_rules": {
+    "canonical_owner": "environment-plane",
+    "coordinator": "scripts/memory_environment_install_lifecycle.py:InstallLifecycleCoordinator",
+    "compatibility_facades": [
+      "scripts/memory_environment_rules.py:EnvironmentRuleInstaller",
+      "scripts/memory_environment_skills.py:EnvironmentSkillInstaller"
+    ],
+    "coordinator_forbidden_capabilities": [
+      "filesystem persistence",
+      "transaction serialization",
+      "receipt serialization",
+      "rollback serialization",
+      "package validation",
+      "managed-block policy"
+    ],
+    "independent_failure_domains": [
+      "Rule transaction directories and rollback.bin",
+      "Skill transaction JSON and staging/displaced/rollback directories"
+    ]
+  },
+  "python_environment_immutable_record_rules": {
+    "canonical_owner": "environment-plane",
+    "mechanics": "scripts/memory_environment_immutable_records.py:ImmutableRecordStore",
+    "validation": "scripts/memory_environment_immutable_records.py:validate_immutable_envelope",
+    "compatibility_facades": [
+      "scripts/memory_environment_governance.py:GovernanceProposalStore",
+      "scripts/memory_environment_evolution.py:ProductEvolutionStore"
+    ],
+    "shared_mechanics": [
+      "canonical content encoding and hashing",
+      "six-field envelope construction and validation",
+      "immutable create-if-absent persistence",
+      "local event enumeration",
+      "read-only replica enumeration"
+    ],
+    "facade_owned_semantics": [
+      "public method names and constants",
+      "identity patterns and size limits",
+      "preview and list safety fields",
+      "domain-specific error text",
+      "collection paths, locks, and source event prefixes"
+    ]
+  },
+  "python_cloud_application_service_rules": {
+    "canonical_owner": "application-services",
+    "registry": "scripts/memory_cloud_streams.py:CloudStreamRegistry",
+    "service": "scripts/memory_cloud_streams.py:CloudApplicationService",
+    "shells": ["scripts/memory_cli.py", "scripts/memory_dashboard.py"],
+    "independent_streams": [
+      "archive-v1",
+      "environment-v1",
+      "project-evidence-v1",
+      "project-attachment-v1"
+    ],
+    "forbidden_shared_state": [
+      "cloud.json",
+      "cursor",
+      "ledger",
+      "replica",
+      "acknowledgement",
+      "lock",
+      "failure state"
+    ],
+    "explicit_post_sync_actions": ["environment incoming consumption"]
+  },
+  "python_memory_retrieval_algorithm_rules": {
+    "canonical_owner": "memory-plane",
+    "mechanics": "scripts/memory_retrieval_algorithms.py",
+    "compatibility_facade": "scripts/memory_cli.py:MemoryStore",
+    "pure_algorithms": [
+      "deterministic_excerpt",
+      "normalize_search_text",
+      "search_terms",
+      "ranked_search",
+      "strongest_matches",
+      "unique_values"
+    ],
+    "preserved_contracts": [
+      "SEARCH_STOP_TERMS",
+      "NFKC and casefold normalization",
+      "CJK n-gram widths and ordering",
+      "BM25-like score and result ordering",
+      "strongest-match threshold",
+      "empty-input and exception behavior"
+    ],
+    "forbidden_orchestration": [
+      "append and import",
+      "summary state machines",
+      "rebuild and audit",
+      "retrieve orchestration",
+      "context and heartbeat",
+      "path writers"
+    ]
+  },
   "python_dependency_rules": {
     "enforce_module_allowlist": true,
     "forbidden_imports": {
@@ -206,6 +358,7 @@
       "memory-plane": ["memory_cli", "memory_dashboard"],
       "environment-plane": ["memory_cli", "memory_dashboard"],
       "exchange-plane": ["memory_cli", "memory_dashboard"],
+      "application-services": ["memory_cli", "memory_dashboard"],
       "platform-foundation": [
         "memory_cli",
         "memory_dashboard",
@@ -213,6 +366,17 @@
         "memory_federation",
         "memory_cloud_transport"
       ]
+    }
+  },
+  "rust_capability_rules": {
+    "symbols": {
+      "ai": ["anthropic", "async_openai", "openai"],
+      "control": ["governance", "maintenance", "scheduler"],
+      "environment": ["environment"],
+      "exchange": ["cloud", "envelope", "federation", "reqwest", "ssh2"],
+      "memory": ["indexing", "retrieval", "semantic_dispatch", "semantic_worker", "summary", "summaries"],
+      "project": ["project"],
+      "ui": ["egui", "iced", "tao", "webview2", "wry"]
     }
   }
 }

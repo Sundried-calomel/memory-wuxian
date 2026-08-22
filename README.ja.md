@@ -1,5 +1,11 @@
 # Memory無限
 
+> **2.19.0:** 完了した R1-R8 の挙動互換モジュール化を、唯一の Platform、
+> Environment、Exchange、application service、CLI、test support Owner の下へ
+> 正式に統合します。承認済み 2.16-2.18 内部 milestone を初めて公開 installer に
+> 組み込み、同一候補 CI、transactional activation、rollback、package hash、署名済み
+> update metadata を提供します。raw 履歴、Summary V1/V2、index、cloud 契約は不変です。
+
 > **2.18.0:** 会話内容を含まない限定サイズの `capture-wal.jsonl` により、
 > 冪等な crash recovery、source 単位の障害分離、非致命 telemetry、純読取 health、
 > maintenance 失敗時の非ゼロ終了を追加します。原文、summary、backfill、cloud 契約は不変です。

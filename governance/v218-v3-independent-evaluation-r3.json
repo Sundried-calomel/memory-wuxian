@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "memory-wuxian-v218-v3-independent-r3",
+  "artifact": {
+    "paths": [
+      ".gitattributes",
+      "native-collector/src/lib.rs",
+      "tests/test_v218_v3_contract.py",
+      "docs/work-contracts/v2.18-v3.json",
+      "docs/rehearsals/v2.18-v3-candidate.json",
+      "governance/v218-v3-validation.json",
+      "governance/v218-v3-results.json",
+      "governance/v218-v3-independent-evaluation-r1.json",
+      "governance/v218-v3-independent-evaluation-r2.json"
+    ],
+    "sha256": [
+      "e7c5ae56b2f3a52d46e6ec84bd302e155f46810c9036340fa41ae6135b8b5072",
+      "805594305d3f745ed612507907f84cf25a0debfc295b169d7603717e893052ec",
+      "cd35d6f08789c45c5b655c86f2c76e40dbe93c1a6a4189016343fedea9799062",
+      "400438c0003777af970b158ac9b8483bb1fb4b01da9737554b9128bbcf85e49c",
+      "beef7af01cab129673cb9752a6d4b49b8cf697522693ae30e8f584b474d94f7e",
+      "46366d8fbeea96d07e657abf081bfffdd7b0151205affe5da1ff44324fd8b380",
+      "1dfccd8cadea3efeebc8a079361f0e06a275d5f58b859f254f53559eb4a8dc6b",
+      "d94bcaa1bb31ad6efa4853ea07de081301888c930ac65a7ec14285240a6b33ca",
+      "71586cdd40e0340dd3f14a0022789ec7fc6471c2827e6eb0eae50aa11f238e1f"
+    ],
+    "producer_identity": "codex-main-producer"
+  },
+  "evaluator": {
+    "identity": "independent-agent-nash-01a0156c",
+    "independent": true
+  },
+  "contract": {
+    "source": "docs/work-contracts/v2.18-v3.json",
+    "pass_threshold": 90
+  },
+  "dimensions": [
+    {"id": "public-output-equivalence", "weight": 0.3, "score": 100, "mandatory": true, "evidence": [{"claim": "Behavior-audited production blobs are unchanged", "source": "28cb2e5..91a7cb3 blob comparison", "method": "deterministic_test"}]},
+    {"id": "ordering-and-no-loss", "weight": 0.3, "score": 98, "mandatory": true, "evidence": [{"claim": "Ordering and failure behavior remain bound to unchanged production bytes", "source": "R1 and R2 evidence plus blob identity", "method": "source_trace"}]},
+    {"id": "platform-boundaries", "weight": 0.2, "score": 100, "mandatory": true, "evidence": [{"claim": "Platform-specific watcher code is unchanged", "source": "production blob identity", "method": "source_trace"}]},
+    {"id": "tests-rehearsal-hash-traceability", "weight": 0.15, "score": 100, "mandatory": true, "evidence": [{"claim": "Fresh-checkout hashes, eight rehearsal references, and governance receipts agree", "source": "fresh Windows checkout", "method": "deterministic_test"}]},
+    {"id": "scope-and-maintainability", "weight": 0.05, "score": 95, "mandatory": false, "evidence": [{"claim": "Final delta contains only declared evidence remediation", "source": "28cb2e5..91a7cb3 diff", "method": "source_trace"}]}
+  ],
+  "deterministic_checks": [
+    {"id": "production-behavior-blob-identity", "status": "pass", "evidence": "lib.rs, V3 test, and work contract are byte-identical"},
+    {"id": "gitattributes-fresh-checkout", "status": "pass", "evidence": "LF checkout SHA-256 equals validation"},
+    {"id": "validation-evidence-chain", "status": "pass", "evidence": "validation SHA equals all eight rehearsal references and results evidence"},
+    {"id": "rehearsal-validator", "status": "pass", "evidence": "required_cases=8, errors=[]"},
+    {"id": "governance-receipts", "status": "pass", "evidence": "verification and completion integrity revalidated"},
+    {"id": "prior-evaluation-reports", "status": "pass", "evidence": "R1 and R2 reports validate against the fresh checkout"},
+    {"id": "worktree-and-scope", "status": "pass", "evidence": "fresh and producer worktrees clean"}
+  ],
+  "overall_score": 99.15,
+  "verdict": "pass",
+  "blocking_findings": [],
+  "limitations": [
+    "Round 3 reused behavior evidence through exact production-blob identity.",
+    "No macOS-native watcher execution was added beyond the accepted cross-compile limitation."
+  ],
+  "iteration": {
+    "current": 3,
+    "maximum": 3
+  }
+}

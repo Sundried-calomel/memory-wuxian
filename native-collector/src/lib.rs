@@ -501,6 +501,144 @@ struct FileSyncResult {
     caught_up: bool,
 }
 
+impl FileSyncResult {
+    fn merge(&mut self, newer: Self) {
+        self.visible_events += newer.visible_events;
+        self.imported_messages += newer.imported_messages;
+        self.duplicate_messages += newer.duplicate_messages;
+        self.repaired_transcripts += newer.repaired_transcripts;
+        self.token_usage_changed_events += newer.token_usage_changed_events;
+        self.last_line = newer.last_line;
+        self.reported_total_tokens = newer.reported_total_tokens;
+        self.token_usage_ledger = newer.token_usage_ledger;
+        self.excluded_reason = newer.excluded_reason;
+        self.committed_byte_offset = newer.committed_byte_offset;
+        self.observed_source_size = newer.observed_source_size;
+        self.complete = newer.complete;
+        self.caught_up = newer.caught_up;
+    }
+
+    fn into_value(self) -> Value {
+        json!({
+            "session_id": self.session_id,
+            "source_path": portable_path(&self.source_path),
+            "last_line": self.last_line,
+            "visible_events": self.visible_events,
+            "imported_messages": self.imported_messages,
+            "duplicate_messages": self.duplicate_messages,
+            "repaired_transcripts": self.repaired_transcripts,
+            "token_usage_changed_events": self.token_usage_changed_events,
+            "reported_total_tokens": self.reported_total_tokens,
+            "token_usage_ledger": self
+                .token_usage_ledger
+                .as_ref()
+                .map(|path| portable_path(path)),
+            "excluded_reason": self.excluded_reason,
+            "committed_byte_offset": self.committed_byte_offset,
+            "observed_source_size": self.observed_source_size,
+            "complete": self.complete,
+            "caught_up": self.caught_up,
+        })
+    }
+}
+
+#[derive(Debug, Default)]
+struct BatchChunkResult {
+    sessions: Vec<FileSyncResult>,
+    imported_messages: u64,
+    duplicate_messages: u64,
+    repaired_transcripts: u64,
+    token_usage_changed_events: u64,
+    backup_debt: Option<String>,
+}
+
+#[derive(Debug)]
+struct SourceSyncError {
+    source_path: String,
+    error: String,
+}
+
+#[derive(Debug)]
+struct BatchSyncResult {
+    sessions: Vec<FileSyncResult>,
+    session_count: usize,
+    imported_messages: u64,
+    duplicate_messages: u64,
+    repaired_transcripts: u64,
+    token_usage_changed_events: u64,
+    created_summary_job: Option<String>,
+    deterministic_indexes: Option<Value>,
+    backup_debt: Option<String>,
+    source_errors: Vec<SourceSyncError>,
+}
+
+impl BatchSyncResult {
+    fn new(session_count: usize) -> Self {
+        Self {
+            sessions: Vec::new(),
+            session_count,
+            imported_messages: 0,
+            duplicate_messages: 0,
+            repaired_transcripts: 0,
+            token_usage_changed_events: 0,
+            created_summary_job: None,
+            deterministic_indexes: None,
+            backup_debt: None,
+            source_errors: Vec::new(),
+        }
+    }
+
+    fn absorb_chunk(&mut self, chunk: &BatchChunkResult) {
+        self.imported_messages += chunk.imported_messages;
+        self.duplicate_messages += chunk.duplicate_messages;
+        self.repaired_transcripts += chunk.repaired_transcripts;
+        self.token_usage_changed_events += chunk.token_usage_changed_events;
+        if chunk.backup_debt.is_some() {
+            self.backup_debt.clone_from(&chunk.backup_debt);
+        }
+    }
+
+    fn into_value(self) -> Value {
+        let status = if self.source_errors.is_empty() {
+            "synced"
+        } else {
+            "partial"
+        };
+        let mut value = json!({
+            "status": status,
+            "sessions": self
+                .sessions
+                .into_iter()
+                .map(FileSyncResult::into_value)
+                .collect::<Vec<_>>(),
+            "session_count": self.session_count,
+            "imported_messages": self.imported_messages,
+            "duplicate_messages": self.duplicate_messages,
+            "repaired_transcripts": self.repaired_transcripts,
+            "token_usage_changed_events": self.token_usage_changed_events,
+            "created_summary_job": self.created_summary_job,
+            "deterministic_indexes": self.deterministic_indexes,
+            "backup": Value::Null,
+            "backup_debt": self.backup_debt,
+        });
+        if !self.source_errors.is_empty() {
+            value["source_error_count"] = json!(self.source_errors.len());
+            value["source_errors"] = Value::Array(
+                self.source_errors
+                    .into_iter()
+                    .map(|error| {
+                        json!({
+                            "source_path": error.source_path,
+                            "error": error.error,
+                        })
+                    })
+                    .collect(),
+            );
+        }
+        value
+    }
+}
+
 #[derive(Debug)]
 struct RolloutLine {
     number: u64,
@@ -2615,88 +2753,25 @@ impl Store {
         let completed_before = self.lock("archive.lock", || {
             Ok(completed_round_total(&self.load_state()?))
         })?;
-        let mut result = json!({
-            "status": "synced",
-            "sessions": [],
-            "session_count": 0,
-            "imported_messages": 0,
-            "duplicate_messages": 0,
-            "repaired_transcripts": 0,
-            "token_usage_changed_events": 0,
-            "created_summary_job": null,
-            "deterministic_indexes": null,
-            "backup": null,
-            "backup_debt": null,
-        });
-        let mut source_errors = Vec::new();
+        let mut result = BatchSyncResult::new(path_count);
         for path in paths {
-            let synced = (|| -> Result<Option<Value>> {
-                let mut accumulated_session: Option<Value> = None;
+            let synced = (|| -> Result<FileSyncResult> {
+                let mut accumulated_session: Option<FileSyncResult> = None;
                 loop {
                     let prepared = self.prepare_sync_file(&path)?;
-                    let chunk =
+                    let mut chunk =
                         self.lock("archive.lock", || self.sync_batch_unlocked(vec![prepared]))?;
-                    for field in [
-                        "imported_messages",
-                        "duplicate_messages",
-                        "repaired_transcripts",
-                        "token_usage_changed_events",
-                    ] {
-                        result[field] = json!(
-                            result.get(field).and_then(Value::as_u64).unwrap_or(0)
-                                + chunk.get(field).and_then(Value::as_u64).unwrap_or(0)
-                        );
+                    result.absorb_chunk(&chunk);
+                    let session = chunk
+                        .sessions
+                        .pop()
+                        .expect("one prepared rollout produces one session result");
+                    let caught_up = session.caught_up;
+                    if let Some(accumulated) = accumulated_session.as_mut() {
+                        accumulated.merge(session);
+                    } else {
+                        accumulated_session = Some(session);
                     }
-                    if let Some(session) = chunk
-                        .get("sessions")
-                        .and_then(Value::as_array)
-                        .and_then(|sessions| sessions.first())
-                    {
-                        if let Some(accumulated) = accumulated_session.as_mut() {
-                            for field in [
-                                "visible_events",
-                                "imported_messages",
-                                "duplicate_messages",
-                                "repaired_transcripts",
-                                "token_usage_changed_events",
-                            ] {
-                                accumulated[field] = json!(
-                                    accumulated.get(field).and_then(Value::as_u64).unwrap_or(0)
-                                        + session.get(field).and_then(Value::as_u64).unwrap_or(0)
-                                );
-                            }
-                            for field in [
-                                "last_line",
-                                "reported_total_tokens",
-                                "token_usage_ledger",
-                                "excluded_reason",
-                                "committed_byte_offset",
-                                "observed_source_size",
-                                "complete",
-                                "caught_up",
-                            ] {
-                                accumulated[field] = session[field].clone();
-                            }
-                        } else {
-                            accumulated_session = Some(session.clone());
-                        }
-                    }
-                    for field in [
-                        "created_summary_job",
-                        "deterministic_indexes",
-                        "backup_debt",
-                    ] {
-                        if chunk.get(field).is_some_and(|value| !value.is_null()) {
-                            result[field] = chunk[field].clone();
-                        }
-                    }
-                    let caught_up = chunk
-                        .get("sessions")
-                        .and_then(Value::as_array)
-                        .and_then(|sessions| sessions.first())
-                        .and_then(|session| session.get("caught_up"))
-                        .and_then(Value::as_bool)
-                        .unwrap_or(true);
                     if caught_up {
                         break;
                     }
@@ -2704,20 +2779,16 @@ impl Store {
                     // the shared archive lock during sustained history catch-up.
                     std::thread::sleep(RECOVERY_LOCK_YIELD);
                 }
-                Ok(accumulated_session)
+                Ok(accumulated_session.expect("a synchronized rollout produces a session result"))
             })();
             match synced {
-                Ok(Some(session)) => result["sessions"]
-                    .as_array_mut()
-                    .expect("sessions is an array")
-                    .push(session),
-                Ok(None) => {}
+                Ok(session) => result.sessions.push(session),
                 Err(error) if isolate_source_errors => {
                     eprintln!("source sync error ({}): {error:#}", path.display());
-                    source_errors.push(json!({
-                        "source_path": portable_path(&path),
-                        "error": error.to_string(),
-                    }));
+                    result.source_errors.push(SourceSyncError {
+                        source_path: portable_path(&path),
+                        error: error.to_string(),
+                    });
                     if self.root.join("pending/native-recovery-debt.json").exists() {
                         self.repair_native_recovery_debt().context(
                             "repair partial source mutation before continuing startup capture",
@@ -2728,16 +2799,7 @@ impl Store {
                 Err(error) => return Err(error),
             }
         }
-        result["session_count"] = json!(path_count);
-        if !source_errors.is_empty() {
-            result["status"] = json!("partial");
-            result["source_error_count"] = json!(source_errors.len());
-            result["source_errors"] = Value::Array(source_errors);
-        }
-        let imported = result
-            .get("imported_messages")
-            .and_then(Value::as_u64)
-            .unwrap_or(0);
+        let imported = result.imported_messages;
         let finalized = self.lock("archive.lock", || {
             let deterministic_indexes = if imported > 0 {
                 Some(self.refresh_deterministic_indexes()?)
@@ -2753,29 +2815,25 @@ impl Store {
             } else {
                 None
             };
-            Ok(json!({
-                "created_summary_job": created_job.map(|path| path.to_string_lossy().into_owned()),
-                "deterministic_indexes": deterministic_indexes,
-            }))
+            Ok((
+                created_job.map(|path| path.to_string_lossy().into_owned()),
+                deterministic_indexes,
+            ))
         })?;
-        for field in ["created_summary_job", "deterministic_indexes"] {
-            result[field] = finalized[field].clone();
-        }
+        result.created_summary_job = finalized.0;
+        result.deterministic_indexes = finalized.1;
         append_jsonl(
             &self.root.join("dashboard/events.jsonl"),
             &json!({
                 "event_id": chrono::Utc::now().timestamp_millis(),
                 "created_at": now_iso(),
                 "kind": "archive-updated",
-                "imported_messages": result.get("imported_messages").cloned().unwrap_or(json!(0)),
-                "duplicate_messages": result.get("duplicate_messages").cloned().unwrap_or(json!(0)),
-                "token_usage_changed_events": result
-                    .get("token_usage_changed_events")
-                    .cloned()
-                    .unwrap_or(json!(0)),
+                "imported_messages": result.imported_messages,
+                "duplicate_messages": result.duplicate_messages,
+                "token_usage_changed_events": result.token_usage_changed_events,
             }),
         )?;
-        Ok(result)
+        Ok(result.into_value())
     }
 
     fn sync_startup_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
@@ -2860,7 +2918,7 @@ impl Store {
         Ok(())
     }
 
-    fn sync_batch_unlocked(&self, prepared_files: Vec<PreparedSync>) -> Result<Value> {
+    fn sync_batch_unlocked(&self, prepared_files: Vec<PreparedSync>) -> Result<BatchChunkResult> {
         let mut files = Vec::new();
         let mut imported = 0;
         let mut duplicates = 0;
@@ -2920,26 +2978,7 @@ impl Store {
             duplicates += result.duplicate_messages;
             repaired += result.repaired_transcripts;
             token_usage_changed_events += result.token_usage_changed_events;
-            files.push(json!({
-                "session_id": result.session_id,
-                "source_path": portable_path(&result.source_path),
-                "last_line": result.last_line,
-                "visible_events": result.visible_events,
-                "imported_messages": result.imported_messages,
-                "duplicate_messages": result.duplicate_messages,
-                "repaired_transcripts": result.repaired_transcripts,
-                "token_usage_changed_events": result.token_usage_changed_events,
-                "reported_total_tokens": result.reported_total_tokens,
-                "token_usage_ledger": result
-                    .token_usage_ledger
-                    .as_ref()
-                    .map(|path| portable_path(path)),
-                "excluded_reason": result.excluded_reason,
-                "committed_byte_offset": result.committed_byte_offset,
-                "observed_source_size": result.observed_source_size,
-                "complete": result.complete,
-                "caught_up": result.caught_up,
-            }));
+            files.push(result);
         }
         let backup_debt = if imported > 0 || repaired > 0 || token_usage_changed_events > 0 {
             self.record_backup_debt(
@@ -2956,16 +2995,14 @@ impl Store {
         } else {
             None
         };
-        Ok(json!({
-            "status": "synced", "sessions": files, "session_count": files.len(),
-            "imported_messages": imported, "duplicate_messages": duplicates,
-            "repaired_transcripts": repaired,
-            "token_usage_changed_events": token_usage_changed_events,
-            "created_summary_job": Value::Null,
-            "deterministic_indexes": Value::Null,
-            "backup": Value::Null,
-            "backup_debt": backup_debt.map(|path| path.to_string_lossy().into_owned()),
-        }))
+        Ok(BatchChunkResult {
+            sessions: files,
+            imported_messages: imported,
+            duplicate_messages: duplicates,
+            repaired_transcripts: repaired,
+            token_usage_changed_events,
+            backup_debt: backup_debt.map(|path| path.to_string_lossy().into_owned()),
+        })
     }
 }
 
@@ -3408,6 +3445,103 @@ fn rollouts_requiring_sync(store: &Store, current_paths: &[PathBuf]) -> Result<V
     store.changed_rollouts(current_paths.to_vec())
 }
 
+struct EventLoopState {
+    known_stamps: HashMap<PathBuf, (u64, SystemTime)>,
+    last_activity: std::time::Instant,
+    telemetry: CollectorTelemetry,
+}
+
+impl EventLoopState {
+    fn interval(&mut self, store: &Store) -> Duration {
+        let interval = adaptive_fallback(self.last_activity.elapsed());
+        if CollectorTelemetry::mode(interval) != self.telemetry.last_mode {
+            write_collector_telemetry(&mut self.telemetry, store, interval);
+        }
+        interval
+    }
+}
+
+struct RolloutCycle {
+    current_stamps: HashMap<PathBuf, (u64, SystemTime)>,
+    sync_succeeded: bool,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    source_set_changed: bool,
+}
+
+fn initialize_event_loop_state(
+    store: &Store,
+    sessions_root: &Path,
+    since: Option<DateTime<FixedOffset>>,
+    mut telemetry: CollectorTelemetry,
+) -> Result<EventLoopState> {
+    let initial_paths = recent_rollouts(sessions_root, since, &store.root)?;
+    let known_stamps = rollout_stamps(&initial_paths)?;
+    let initial_watermark = newest_source_watermark(&known_stamps);
+    telemetry.record_source_watermark(initial_watermark.clone());
+    telemetry.record_archive(initial_watermark);
+    telemetry.mark_ready();
+    write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
+    Ok(EventLoopState {
+        known_stamps,
+        last_activity: std::time::Instant::now(),
+        telemetry,
+    })
+}
+
+fn process_rollout_cycle(
+    store: &Store,
+    sessions_root: &Path,
+    since: Option<DateTime<FixedOffset>>,
+    state: &mut EventLoopState,
+    mut candidates: BTreeSet<PathBuf>,
+    include_stamp_changes: bool,
+    received_event: bool,
+) -> Result<RolloutCycle> {
+    let current_paths = recent_rollouts(sessions_root, since, &store.root)?;
+    let current_stamps = rollout_stamps(&current_paths)?;
+    let source_watermark = newest_source_watermark(&current_stamps);
+    state
+        .telemetry
+        .record_source_watermark(source_watermark.clone());
+    if include_stamp_changes {
+        candidates.extend(
+            current_paths
+                .iter()
+                .filter(|path| state.known_stamps.get(*path) != current_stamps.get(*path))
+                .cloned(),
+        );
+    }
+    candidates.extend(rollouts_requiring_sync(store, &current_paths)?);
+    let had_pending_rollouts = !candidates.is_empty();
+    let sync_succeeded =
+        candidates.is_empty() || sync_and_emit(store, candidates.into_iter().collect());
+    store.write_coverage_status(&current_paths)?;
+    if sync_succeeded && (had_pending_rollouts || state.known_stamps != current_stamps) {
+        state.telemetry.record_archive(source_watermark);
+    }
+    if received_event || had_pending_rollouts || state.known_stamps != current_stamps {
+        state.last_activity = std::time::Instant::now();
+        write_collector_telemetry(&mut state.telemetry, store, ACTIVE_FALLBACK);
+    }
+    Ok(RolloutCycle {
+        source_set_changed: state.known_stamps.len() != current_stamps.len(),
+        current_stamps,
+        sync_succeeded,
+    })
+}
+
+fn finish_rollout_cycle(
+    store: &Store,
+    state: &mut EventLoopState,
+    cycle: RolloutCycle,
+    interval: Duration,
+) {
+    if cycle.sync_succeeded {
+        state.known_stamps = cycle.current_stamps;
+    }
+    write_collector_telemetry(&mut state.telemetry, store, interval);
+}
+
 #[cfg(target_os = "macos")]
 fn run_event_loop(
     store: &Store,
@@ -3415,52 +3549,33 @@ fn run_event_loop(
     since: Option<DateTime<FixedOffset>>,
     debounce_ms: u64,
     mut watcher: KqueueWatcher,
-    mut telemetry: CollectorTelemetry,
+    telemetry: CollectorTelemetry,
 ) -> Result<()> {
-    let initial_paths = recent_rollouts(sessions_root, since, &store.root)?;
-    let mut known_stamps = rollout_stamps(&initial_paths)?;
-    let mut last_activity = std::time::Instant::now();
-    let initial_watermark = newest_source_watermark(&known_stamps);
-    telemetry.record_source_watermark(initial_watermark.clone());
-    telemetry.record_archive(initial_watermark);
-    telemetry.mark_ready();
-    write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
+    let mut state = initialize_event_loop_state(store, sessions_root, since, telemetry)?;
     eprintln!(
         "memory-wuxian-collector ready (kqueue with adaptive 5s/30s/5m metadata fallback): {}",
         sessions_root.display()
     );
     loop {
-        let interval = adaptive_fallback(last_activity.elapsed());
-        if CollectorTelemetry::mode(interval) != telemetry.last_mode {
-            write_collector_telemetry(&mut telemetry, store, interval);
-        }
+        let interval = state.interval(store);
         let received_event = watcher.wait(interval)?;
         if received_event {
-            telemetry.record_event();
+            state.telemetry.record_event();
             std::thread::sleep(Duration::from_millis(debounce_ms));
         }
-        let current_paths = recent_rollouts(sessions_root, since, &store.root)?;
-        let current_stamps = rollout_stamps(&current_paths)?;
-        let source_watermark = newest_source_watermark(&current_stamps);
-        telemetry.record_source_watermark(source_watermark.clone());
-        let changed_paths = rollouts_requiring_sync(store, &current_paths)?;
-        let had_pending_rollouts = !changed_paths.is_empty();
-        let sync_succeeded = changed_paths.is_empty() || sync_and_emit(store, changed_paths);
-        store.write_coverage_status(&current_paths)?;
-        if sync_succeeded && (had_pending_rollouts || known_stamps != current_stamps) {
-            telemetry.record_archive(source_watermark);
-        }
-        if received_event || had_pending_rollouts || known_stamps != current_stamps {
-            last_activity = std::time::Instant::now();
-            write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
-        }
-        if received_event || known_stamps.len() != current_stamps.len() {
+        let cycle = process_rollout_cycle(
+            store,
+            sessions_root,
+            since,
+            &mut state,
+            BTreeSet::new(),
+            false,
+            received_event,
+        )?;
+        if received_event || cycle.source_set_changed {
             watcher = KqueueWatcher::new(sessions_root, since)?;
         }
-        if sync_succeeded {
-            known_stamps = current_stamps;
-        }
-        write_collector_telemetry(&mut telemetry, store, interval);
+        finish_rollout_cycle(store, &mut state, cycle, interval);
     }
 }
 
@@ -3471,26 +3586,16 @@ fn run_event_loop(
     since: Option<DateTime<FixedOffset>>,
     debounce_ms: u64,
     watcher: PreparedWatcher,
-    mut telemetry: CollectorTelemetry,
+    telemetry: CollectorTelemetry,
 ) -> Result<()> {
     let PreparedWatcher { _watcher, receiver } = watcher;
-    let initial_paths = recent_rollouts(sessions_root, since, &store.root)?;
-    let mut known_stamps = rollout_stamps(&initial_paths)?;
-    let mut last_activity = std::time::Instant::now();
-    let initial_watermark = newest_source_watermark(&known_stamps);
-    telemetry.record_source_watermark(initial_watermark.clone());
-    telemetry.record_archive(initial_watermark);
-    telemetry.mark_ready();
-    write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
+    let mut state = initialize_event_loop_state(store, sessions_root, since, telemetry)?;
     eprintln!(
         "memory-wuxian-collector ready (native watcher with adaptive 5s/30s/5m metadata fallback): {}",
         sessions_root.display()
     );
     loop {
-        let interval = adaptive_fallback(last_activity.elapsed());
-        if CollectorTelemetry::mode(interval) != telemetry.last_mode {
-            write_collector_telemetry(&mut telemetry, store, interval);
-        }
+        let interval = state.interval(store);
         let first = match receiver.recv_timeout(interval) {
             Ok(value) => Some(value),
             Err(RecvTimeoutError::Timeout) => None,
@@ -3498,7 +3603,7 @@ fn run_event_loop(
         };
         let received_event = first.is_some();
         if received_event {
-            telemetry.record_event();
+            state.telemetry.record_event();
         }
         let mut candidates = BTreeSet::new();
         if let Some(first) = first {
@@ -3520,32 +3625,152 @@ fn run_event_loop(
             }
         }
 
-        let current_paths = recent_rollouts(sessions_root, since, &store.root)?;
-        let current_stamps = rollout_stamps(&current_paths)?;
-        let source_watermark = newest_source_watermark(&current_stamps);
-        telemetry.record_source_watermark(source_watermark.clone());
-        candidates.extend(
-            current_paths
-                .iter()
-                .filter(|path| known_stamps.get(*path) != current_stamps.get(*path))
-                .cloned(),
+        let cycle = process_rollout_cycle(
+            store,
+            sessions_root,
+            since,
+            &mut state,
+            candidates,
+            true,
+            received_event,
+        )?;
+        finish_rollout_cycle(store, &mut state, cycle, interval);
+    }
+}
+
+#[cfg(test)]
+mod typed_batch_result_tests {
+    use super::*;
+
+    fn session(caught_up: bool) -> FileSyncResult {
+        FileSyncResult {
+            session_id: "session-中文-円¥-🙂".to_owned(),
+            source_path: PathBuf::from("C:/sessions/会話 円¥ 🙂.jsonl"),
+            last_line: 4,
+            visible_events: 3,
+            imported_messages: 2,
+            duplicate_messages: 1,
+            repaired_transcripts: 1,
+            token_usage_changed_events: 2,
+            reported_total_tokens: Some(321),
+            token_usage_ledger: Some(PathBuf::from("C:/archive/使用量 円¥ 🙂.json")),
+            excluded_reason: None,
+            committed_byte_offset: 512,
+            observed_source_size: 640,
+            complete: false,
+            caught_up,
+        }
+    }
+
+    #[test]
+    fn typed_batch_result_preserves_legacy_compact_json() -> Result<()> {
+        let session = session(true);
+        let expected_session = json!({
+            "session_id": session.session_id.clone(),
+            "source_path": portable_path(&session.source_path),
+            "last_line": session.last_line,
+            "visible_events": session.visible_events,
+            "imported_messages": session.imported_messages,
+            "duplicate_messages": session.duplicate_messages,
+            "repaired_transcripts": session.repaired_transcripts,
+            "token_usage_changed_events": session.token_usage_changed_events,
+            "reported_total_tokens": session.reported_total_tokens,
+            "token_usage_ledger": session
+                .token_usage_ledger
+                .as_ref()
+                .map(|path| portable_path(path)),
+            "excluded_reason": session.excluded_reason.clone(),
+            "committed_byte_offset": session.committed_byte_offset,
+            "observed_source_size": session.observed_source_size,
+            "complete": session.complete,
+            "caught_up": session.caught_up,
+        });
+        let expected = json!({
+            "status": "synced",
+            "sessions": [expected_session],
+            "session_count": 1,
+            "imported_messages": 2,
+            "duplicate_messages": 1,
+            "repaired_transcripts": 1,
+            "token_usage_changed_events": 2,
+            "created_summary_job": "pending/jobs/job-1.json",
+            "deterministic_indexes": {"message_count": 2},
+            "backup": Value::Null,
+            "backup_debt": "pending/backup-debt.json",
+        });
+        let actual = BatchSyncResult {
+            sessions: vec![session],
+            session_count: 1,
+            imported_messages: 2,
+            duplicate_messages: 1,
+            repaired_transcripts: 1,
+            token_usage_changed_events: 2,
+            created_summary_job: Some("pending/jobs/job-1.json".to_owned()),
+            deterministic_indexes: Some(json!({"message_count": 2})),
+            backup_debt: Some("pending/backup-debt.json".to_owned()),
+            source_errors: Vec::new(),
+        }
+        .into_value();
+        assert_eq!(actual, expected);
+        assert_eq!(compact_json(&actual)?, compact_json(&expected)?);
+        Ok(())
+    }
+
+    #[test]
+    fn typed_partial_result_preserves_source_error_shape() {
+        let actual = BatchSyncResult {
+            sessions: vec![session(true)],
+            session_count: 2,
+            imported_messages: 2,
+            duplicate_messages: 1,
+            repaired_transcripts: 1,
+            token_usage_changed_events: 2,
+            created_summary_job: None,
+            deterministic_indexes: None,
+            backup_debt: None,
+            source_errors: vec![SourceSyncError {
+                source_path: "C:/missing/不存在 円¥ 🙂.jsonl".to_owned(),
+                error: "The system cannot find the file specified".to_owned(),
+            }],
+        }
+        .into_value();
+        assert_eq!(actual["status"], "partial");
+        assert_eq!(actual["source_error_count"], 1);
+        assert_eq!(
+            actual["source_errors"],
+            json!([{
+                "source_path": "C:/missing/不存在 円¥ 🙂.jsonl",
+                "error": "The system cannot find the file specified",
+            }])
         );
-        candidates.extend(rollouts_requiring_sync(store, &current_paths)?);
-        let had_pending_rollouts = !candidates.is_empty();
-        let sync_succeeded =
-            candidates.is_empty() || sync_and_emit(store, candidates.into_iter().collect());
-        store.write_coverage_status(&current_paths)?;
-        if sync_succeeded && (had_pending_rollouts || known_stamps != current_stamps) {
-            telemetry.record_archive(source_watermark);
-        }
-        if received_event || had_pending_rollouts || known_stamps != current_stamps {
-            last_activity = std::time::Instant::now();
-            write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
-        }
-        if sync_succeeded {
-            known_stamps = current_stamps;
-        }
-        write_collector_telemetry(&mut telemetry, store, interval);
+        assert_eq!(actual["session_count"], 2);
+    }
+
+    #[test]
+    fn typed_session_merge_matches_legacy_accumulation() {
+        let mut accumulated = session(false);
+        let mut newer = session(true);
+        newer.last_line = 9;
+        newer.visible_events = 4;
+        newer.imported_messages = 3;
+        newer.duplicate_messages = 2;
+        newer.repaired_transcripts = 0;
+        newer.token_usage_changed_events = 1;
+        newer.reported_total_tokens = Some(654);
+        newer.committed_byte_offset = 1024;
+        newer.observed_source_size = 1024;
+        newer.complete = true;
+        accumulated.merge(newer);
+        assert_eq!(accumulated.last_line, 9);
+        assert_eq!(accumulated.visible_events, 7);
+        assert_eq!(accumulated.imported_messages, 5);
+        assert_eq!(accumulated.duplicate_messages, 3);
+        assert_eq!(accumulated.repaired_transcripts, 1);
+        assert_eq!(accumulated.token_usage_changed_events, 3);
+        assert_eq!(accumulated.reported_total_tokens, Some(654));
+        assert_eq!(accumulated.committed_byte_offset, 1024);
+        assert!(accumulated.complete);
+        assert!(accumulated.caught_up);
     }
 }
 
@@ -3554,6 +3779,125 @@ mod adaptive_fallback_tests {
     use super::*;
     use crate::runtime::{DEEP_IDLE_AFTER, DEEP_IDLE_FALLBACK, IDLE_AFTER, IDLE_FALLBACK};
     use std::io::Write;
+
+    fn initialized_store(root: &Path) -> Result<Store> {
+        let config = root.join("config.yaml");
+        fs::write(&config, "{}\n")?;
+        atomic_write_json(
+            &root.join("state.json"),
+            &json!({
+                "format_version": 1,
+                "total_messages": 0,
+                "completed_rounds": 0,
+                "last_summarized_round": 0,
+                "last_summarized_rounds": {},
+                "last_raw_message_id": null,
+                "pending_round": null,
+                "pending_rounds": {},
+                "next_round_number": 1,
+                "completed_rounds_out_of_order": [],
+                "next_job_id": 1,
+                "next_summary_ids": {"1": 1, "2": 1, "3": 1, "4": 1},
+                "last_successful_memory_update": null,
+            }),
+        )?;
+        Store::new(root.to_path_buf(), &config, None, None)
+    }
+
+    fn event_loop_rollout(path: &Path) -> Result<()> {
+        fs::write(
+            path,
+            format!(
+                "{}\n{}\n",
+                json!({
+                    "timestamp": "2026-08-18T00:00:00Z",
+                    "type": "session_meta",
+                    "payload": {
+                        "id": "019fb8f2-9a67-7b03-9474-6f92cd6b21a7",
+                        "source": "user",
+                    }
+                }),
+                json!({
+                    "timestamp": "2026-08-18T00:00:01Z",
+                    "type": "event_msg",
+                    "payload": {"type": "user_message", "message": "会話 円¥ 🙂"}
+                }),
+            ),
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn shared_event_cycle_advances_stamps_only_after_successful_finish() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let rollout = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        event_loop_rollout(&rollout)?;
+        let mut state =
+            initialize_event_loop_state(&store, sessions.path(), None, CollectorTelemetry::new())?;
+        let mut file = fs::OpenOptions::new().append(true).open(&rollout)?;
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "timestamp": "2026-08-18T00:00:02Z",
+                "type": "event_msg",
+                "payload": {"type": "agent_message", "phase": "final_answer", "message": "done"}
+            })
+        )?;
+        let cycle = process_rollout_cycle(
+            &store,
+            sessions.path(),
+            None,
+            &mut state,
+            BTreeSet::new(),
+            true,
+            true,
+        )?;
+        assert!(cycle.sync_succeeded);
+        assert_ne!(state.known_stamps, cycle.current_stamps);
+        finish_rollout_cycle(&store, &mut state, cycle, ACTIVE_FALLBACK);
+        assert_eq!(
+            state.known_stamps,
+            rollout_stamps(&[rollout.canonicalize()?])?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn shared_event_cycle_does_not_advance_stamps_after_sync_failure() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let sentinel = sessions.path().join("sentinel.jsonl");
+        let mut state = EventLoopState {
+            known_stamps: HashMap::from([(
+                sentinel.clone(),
+                (7, SystemTime::UNIX_EPOCH + Duration::from_secs(7)),
+            )]),
+            last_activity: std::time::Instant::now(),
+            telemetry: CollectorTelemetry::new(),
+        };
+        let missing = sessions.path().join("missing-rollout.jsonl");
+        let cycle = process_rollout_cycle(
+            &store,
+            sessions.path(),
+            None,
+            &mut state,
+            BTreeSet::from([missing]),
+            false,
+            true,
+        )?;
+        assert!(!cycle.sync_succeeded);
+        assert!(cycle.source_set_changed);
+        finish_rollout_cycle(&store, &mut state, cycle, ACTIVE_FALLBACK);
+        assert_eq!(state.known_stamps.len(), 1);
+        assert!(state.known_stamps.contains_key(&sentinel));
+        Ok(())
+    }
 
     #[test]
     fn collector_has_no_semantic_ai_execution_path() {
@@ -3588,7 +3932,7 @@ mod adaptive_fallback_tests {
             );
         }
         assert!(production.contains("self.maybe_create_level_one_job()?"));
-        assert!(production.contains("\"created_summary_job\": created_job.map"));
+        assert!(production.contains("result.created_summary_job = finalized.0"));
     }
 
     #[test]
@@ -3687,9 +4031,13 @@ ai_summary:
 
     #[test]
     fn backs_off_after_idle_periods() {
-        assert_eq!(adaptive_fallback(Duration::from_secs(0)), ACTIVE_FALLBACK);
-        assert_eq!(adaptive_fallback(IDLE_AFTER), IDLE_FALLBACK);
-        assert_eq!(adaptive_fallback(DEEP_IDLE_AFTER), DEEP_IDLE_FALLBACK);
+        for (idle_for, expected) in [
+            (Duration::from_secs(0), ACTIVE_FALLBACK),
+            (IDLE_AFTER, IDLE_FALLBACK),
+            (DEEP_IDLE_AFTER, DEEP_IDLE_FALLBACK),
+        ] {
+            assert_eq!(adaptive_fallback(idle_for), expected);
+        }
     }
 
     #[test]

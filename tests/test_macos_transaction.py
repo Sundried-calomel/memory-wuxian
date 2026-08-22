@@ -18,9 +18,14 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 import install_macos_transaction as transaction
+from tests.support.macos import (
+    RecordingRunner,
+    temporary_root,
+    write_launch_agent_plist,
+)
 
 
-class FakeRunner:
+class FakeRunner(RecordingRunner):
     def __init__(
         self,
         fail_dashboard=False,
@@ -28,7 +33,7 @@ class FakeRunner:
         autosync_probe=None,
         maintenance_probe=None,
     ):
-        self.calls = []
+        super().__init__()
         self.fail_dashboard = fail_dashboard
         self.stop_sticks = stop_sticks
         self.autosync_probe = autosync_probe
@@ -37,21 +42,18 @@ class FakeRunner:
         self.current_pid = 41
 
     def __call__(self, arguments, **kwargs):
-        command = [str(item) for item in arguments]
-        self.calls.append(command)
+        command = self.record(arguments)
         if command[:2] == ["/bin/launchctl", "print"]:
             if self.collector_running:
-                return subprocess.CompletedProcess(
-                    command, 0, f"pid = {self.current_pid}\n", ""
-                )
-            return subprocess.CompletedProcess(command, 1, "", "not found")
+                return self.completed(command, stdout=f"pid = {self.current_pid}\n")
+            return self.completed(command, returncode=1, stderr="not found")
         if command[:2] == ["/bin/launchctl", "bootout"]:
             if command[-1].endswith(f"{transaction.COLLECTOR_LABEL}.plist") and not self.stop_sticks:
                 self.collector_running = False
-            return subprocess.CompletedProcess(command, 0, "", "")
+            return self.completed(command)
         if command[:2] == ["/bin/launchctl", "bootstrap"]:
             self.collector_running = True
-            return subprocess.CompletedProcess(command, 0, "", "")
+            return self.completed(command)
         if self.fail_dashboard and command and command[1].endswith(
             "install_dashboard_app_macos.py"
         ):
@@ -75,39 +77,36 @@ class FakeRunner:
             activation = archive / "imports" / "codex" / "collector-activation.json"
             activation.parent.mkdir(parents=True, exist_ok=True)
             activation.write_text(json.dumps({"since": since}), encoding="utf-8")
-            plist = Path.home() / "Library" / "LaunchAgents" / (
-                f"{transaction.COLLECTOR_LABEL}.plist"
-            )
-            plist.write_bytes(
-                plistlib.dumps(
-                    {
-                        "Label": transaction.COLLECTOR_LABEL,
-                        "ProgramArguments": [
-                            str(skill / "bin" / "memory-wuxian-collector"),
-                            "--archive-root",
-                            str(archive),
-                            "--config",
-                            str(skill / "config.yaml"),
-                            "--sessions-root",
-                            str(sessions),
-                            "--since",
-                            since,
-                            "--debounce-ms",
-                            "400",
-                        ],
-                        "StandardOutPath": str(
-                            archive / "imports/codex/launch-agent.stdout.log"
-                        ),
-                        "StandardErrorPath": str(
-                            archive / "imports/codex/launch-agent.stderr.log"
-                        ),
-                        "EnvironmentVariables": {
-                            "RUST_BACKTRACE": "1",
-                            "MEMORY_WUXIAN_PYTHON": values["--python-executable"],
-                            "MEMORY_WUXIAN_CODEX": values["--codex-cli"],
-                        },
-                    }
-                )
+            write_launch_agent_plist(
+                Path.home(),
+                transaction.COLLECTOR_LABEL,
+                {
+                    "Label": transaction.COLLECTOR_LABEL,
+                    "ProgramArguments": [
+                        str(skill / "bin" / "memory-wuxian-collector"),
+                        "--archive-root",
+                        str(archive),
+                        "--config",
+                        str(skill / "config.yaml"),
+                        "--sessions-root",
+                        str(sessions),
+                        "--since",
+                        since,
+                        "--debounce-ms",
+                        "400",
+                    ],
+                    "StandardOutPath": str(
+                        archive / "imports/codex/launch-agent.stdout.log"
+                    ),
+                    "StandardErrorPath": str(
+                        archive / "imports/codex/launch-agent.stderr.log"
+                    ),
+                    "EnvironmentVariables": {
+                        "RUST_BACKTRACE": "1",
+                        "MEMORY_WUXIAN_PYTHON": values["--python-executable"],
+                        "MEMORY_WUXIAN_CODEX": values["--codex-cli"],
+                    },
+                },
             )
             pointer = skill.parent.parent / "memory-wuxian-active-root.txt"
             pointer.write_text(f"{archive}\n", encoding="utf-8")
@@ -120,14 +119,13 @@ class FakeRunner:
         ):
             if self.maintenance_probe is not None:
                 self.maintenance_probe()
-        return subprocess.CompletedProcess(command, 0, "", "")
+        return self.completed(command)
 
 
 @unittest.skipUnless(sys.platform == "darwin", "macOS transaction contract")
 class MacosTransactionTest(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
-        self.home = Path(self.temporary.name)
+        self.temporary, self.home = temporary_root()
         self.source = self.home / "source"
         self.skill = self.home / ".codex" / "skills" / "memory-wuxian"
         self.archive = self.home / "archive"
@@ -155,11 +153,11 @@ class MacosTransactionTest(unittest.TestCase):
             path = self.source / excluded
             path.mkdir()
             (path / "excluded").write_text("not installed", encoding="utf-8")
-        self.plist = self.home / "Library" / "LaunchAgents" / (
-            f"{transaction.COLLECTOR_LABEL}.plist"
+        self.plist = write_launch_agent_plist(
+            self.home,
+            transaction.COLLECTOR_LABEL,
+            {"Label": transaction.COLLECTOR_LABEL},
         )
-        self.plist.parent.mkdir(parents=True)
-        self.plist.write_bytes(plistlib.dumps({"Label": transaction.COLLECTOR_LABEL}))
         self.legacy_plist = self.home / "Library" / "LaunchAgents" / (
             "com.memorywuxian.semantic-backfill.plist"
         )

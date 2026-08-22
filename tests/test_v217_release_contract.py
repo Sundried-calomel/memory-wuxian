@@ -1,7 +1,8 @@
 import json
-import tomllib
 import unittest
 from pathlib import Path
+
+from tests.support.release_contracts import assert_minimum_project_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,8 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class V217ReleaseContractTests(unittest.TestCase):
     def test_capture_core_paths_and_version_are_registered(self):
-        version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        self.assertGreaterEqual(tuple(map(int, version.split("."))), (2, 17, 0))
+        assert_minimum_project_version(self, ROOT, (2, 17, 0))
         contract = json.loads((ROOT / "docs/module-architecture.json").read_text(encoding="utf-8"))
         capture = next(item for item in contract["modules"] if item["id"] == "capture-core")
         self.assertEqual(capture["allowed_dependencies"], ["platform-foundation"])
@@ -30,6 +30,7 @@ class V217ReleaseContractTests(unittest.TestCase):
         launcher = (ROOT / "native-collector/src/main.rs").read_text(encoding="utf-8")
         core_launcher = (ROOT / "native-collector/src/bin/memory-wuxian-core-launcher.rs").read_text(encoding="utf-8")
         implementation = (ROOT / "native-collector/src/lib.rs").read_text(encoding="utf-8")
+        production = implementation.split("#[cfg(test)]", 1)[0]
         self.assertLess(len(launcher.splitlines()), 10)
         self.assertIn("run_in_thread", launcher)
         self.assertIn("run_in_thread", core_launcher)
@@ -38,8 +39,10 @@ class V217ReleaseContractTests(unittest.TestCase):
         self.assertLess(run_block.index("mark_watcher_ready"), run_block.index("sync_startup_batch"))
         self.assertEqual(
             implementation.count("rollouts_requiring_sync(store, &current_paths)?"),
-            2,
+            1,
         )
+        self.assertEqual(production.count("fn process_rollout_cycle("), 1)
+        self.assertEqual(production.count("process_rollout_cycle("), 3)
         self.assertIn("refreshed_watcher_baseline_cannot_hide_cursor_debt", implementation)
 
 

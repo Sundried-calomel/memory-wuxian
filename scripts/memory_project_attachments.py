@@ -13,6 +13,17 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 
 from memory_environment import EnvironmentRegistry, canonical_bytes
+from memory_exchange_contract import (
+    ExchangeStreamFacade,
+    ExchangeStreamPort,
+    build_bundle_manifest,
+    select_jsonl_page,
+    validate_authenticated_binding,
+    validate_export_cursor,
+    validate_strict_replica_continuity,
+    verify_bundle_identity,
+    verify_payload,
+)
 from memory_federation import (
     FederationManager,
     atomic_write_bytes,
@@ -490,7 +501,7 @@ class ProjectAttachmentStore:
         return {"status": "completed" if apply else "preview", "applied": apply, "writes": writes, "conflicts": [], "missing_chunks": []}
 
 
-class ProjectAttachmentExchangeManager:
+class ProjectAttachmentExchangeManager(ExchangeStreamFacade):
     """Independent project-attachment-v1 stream; old clients safely ignore it."""
 
     requires_authenticated_transport = True
@@ -516,6 +527,25 @@ class ProjectAttachmentExchangeManager:
             atomic_write_json(self.export_state_path, {"format_version": 1, "next_event_sequence": 1, "source_events": {}})
         if not self.sync_log_path.exists():
             atomic_write_bytes(self.sync_log_path, b"")
+
+    def exchange_port(self) -> ExchangeStreamPort:
+        return ExchangeStreamPort(
+            stream_id=STREAM_ID,
+            root=self.root,
+            metadata_root=self.metadata_root,
+            replica_root=self.replica_root,
+            exchange_lock_path=self.exchange_lock_path,
+            requires_authenticated_transport=True,
+            node=self.node,
+            peers=self.peers,
+            status=self.status,
+            exchange_observation=self.exchange_observation,
+            replica_state=self.replica_state,
+            read_bundle_manifest=self.read_bundle_manifest,
+            export_delta=self.export_delta,
+            import_delta=self._import_authenticated_delta,
+            log_sync=self.log_sync,
+        )
 
     def node(self) -> Dict[str, Any]: return self.federation.node()
     def peers(self) -> List[Dict[str, Any]]: return self.federation.peers()
@@ -547,20 +577,26 @@ class ProjectAttachmentExchangeManager:
     def export_delta(self, output: Path, after_event_sequence: int = 0, target_node_id: Optional[str] = None, previous_bundle_sha256: Optional[str] = None) -> Dict[str, Any]:
         ledger = self.refresh_export_ledger()
         latest = max((int(item["event_sequence"]) for item in ledger), default=0)
-        if after_event_sequence < 0 or after_event_sequence > latest: raise ValueError("project attachment export cursor is invalid")
-        if after_event_sequence and not SHA256_RE.fullmatch(str(previous_bundle_sha256 or "")): raise ValueError("project attachment predecessor hash is required")
-        if not after_event_sequence and previous_bundle_sha256 is not None: raise ValueError("initial project attachment export cannot name a predecessor")
-        pending = []
-        payload_bytes = 0
-        for item in (entry for entry in ledger if int(entry["event_sequence"]) > after_event_sequence):
-            encoded = canonical_bytes(item) + b"\n"
-            if pending and (len(pending) >= MAX_EVENTS_PER_BUNDLE or payload_bytes + len(encoded) > MAX_BUNDLE_BYTES): break
-            if len(encoded) > MAX_BUNDLE_BYTES: raise ValueError("project attachment event exceeds the bundle limit")
-            pending.append(item); payload_bytes += len(encoded)
+        validate_export_cursor(
+            after_event_sequence,
+            latest,
+            previous_bundle_sha256,
+            cursor_error=lambda _after, _latest: "project attachment export cursor is invalid",
+            predecessor_error="project attachment predecessor hash is required",
+            initial_predecessor_error="initial project attachment export cannot name a predecessor",
+            predecessor_is_valid=lambda value: bool(SHA256_RE.fullmatch(str(value or ""))),
+            initial_predecessor_is_declared=lambda value: value is not None,
+        )
+        pending, payload = select_jsonl_page(
+            (entry for entry in ledger if int(entry["event_sequence"]) > after_event_sequence),
+            encode=lambda item: canonical_bytes(item) + b"\n",
+            maximum_items=MAX_EVENTS_PER_BUNDLE,
+            maximum_bytes=MAX_BUNDLE_BYTES,
+            oversized_item_error=lambda _item: "project attachment event exceeds the bundle limit",
+        )
         if not pending: return {"status": "no-change", "after_event_sequence": after_event_sequence}
-        payload = b"".join(canonical_bytes(item) + b"\n" for item in pending)
         base = {"format": BUNDLE_FORMAT, "protocol_version": PROTOCOL_VERSION, "stream_id": STREAM_ID, "origin_node_id": self.node()["node_id"], "target_node_id": safe_node_id(target_node_id) if target_node_id else None, "base_event_sequence": after_event_sequence, "previous_bundle_sha256": previous_bundle_sha256, "from_event_sequence": int(pending[0]["event_sequence"]), "to_event_sequence": int(pending[-1]["event_sequence"]), "artifact_count": len(pending), "payload_path": "payload/project-attachments.jsonl", "payload_bytes": len(payload), "payload_sha256": bytes_sha256(payload)}
-        manifest = {**base, "bundle_id": "mwb-" + canonical_sha256(base)[:32]}
+        manifest = build_bundle_manifest(base, canonical_sha256=canonical_sha256)
         output.parent.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("manifest.json", canonical_bytes(manifest) + b"\n"); archive.writestr(manifest["payload_path"], payload)
@@ -577,8 +613,11 @@ class ProjectAttachmentExchangeManager:
         predecessor = manifest["previous_bundle_sha256"]
         if (base == 0 and predecessor is not None) or (base > 0 and not SHA256_RE.fullmatch(str(predecessor or ""))): raise ValueError("project attachment bundle predecessor is invalid")
         if manifest["payload_path"] != "payload/project-attachments.jsonl" or not 0 < int(manifest["payload_bytes"]) <= MAX_BUNDLE_BYTES or not SHA256_RE.fullmatch(str(manifest["payload_sha256"])): raise ValueError("project attachment bundle payload metadata is invalid")
-        identity = {key: value for key, value in manifest.items() if key != "bundle_id"}
-        if manifest["bundle_id"] != "mwb-" + canonical_sha256(identity)[:32]: raise ValueError("project attachment bundle identity mismatch")
+        verify_bundle_identity(
+            manifest,
+            canonical_sha256=canonical_sha256,
+            error="project attachment bundle identity mismatch",
+        )
         return manifest
 
     def replica_state(self, node_id: str) -> Dict[str, Any]:
@@ -588,15 +627,32 @@ class ProjectAttachmentExchangeManager:
     def import_delta(self, *_args: Any, **_kwargs: Any) -> Dict[str, Any]: raise TypeError("project attachment import requires authenticated transport")
 
     def _import_authenticated_delta(self, bundle: Path, *, expected_node_id: str, authenticated_open_result: Any) -> Dict[str, Any]:
-        origin, target, payload_sha256 = authenticated_open_result.consume_environment_binding()
-        if origin != safe_node_id(expected_node_id) or target != safe_node_id(self.node()["node_id"]) or payload_sha256 != bytes_sha256(bundle.read_bytes()): raise ValueError("project attachment authenticated transport binding mismatch")
+        origin, target, payload_sha256 = validate_authenticated_binding(
+            authenticated_open_result.consume_stream_binding(),
+            expected_origin=safe_node_id(expected_node_id),
+            expected_target=safe_node_id(self.node()["node_id"]),
+            expected_payload_sha256=bytes_sha256(bundle.read_bytes()),
+            identity_error="project attachment authenticated transport binding mismatch",
+        )
         manifest = self.read_bundle_manifest(bundle)
         if safe_node_id(manifest["origin_node_id"]) != origin or safe_node_id(manifest["target_node_id"]) != target: raise ValueError("project attachment bundle target binding mismatch")
         state = self.replica_state(origin)
-        if int(manifest["from_event_sequence"]) != int(state["last_event_sequence"]) + 1: raise ValueError("project attachment bundle sequence is not contiguous")
-        if int(state["last_event_sequence"]) and manifest["previous_bundle_sha256"] != state["last_bundle_sha256"]: raise ValueError("project attachment bundle predecessor hash mismatch")
+        validate_strict_replica_continuity(
+            manifest,
+            state,
+            manifest_sequence_field="from_event_sequence",
+            state_offset=1,
+            sequence_error=lambda _expected, _actual: "project attachment bundle sequence is not contiguous",
+            predecessor_error="project attachment bundle predecessor hash mismatch",
+        )
         with zipfile.ZipFile(bundle, "r") as archive: payload = archive.read(manifest["payload_path"])
-        if len(payload) != manifest["payload_bytes"] or bytes_sha256(payload) != manifest["payload_sha256"]: raise ValueError("project attachment bundle payload integrity failed")
+        verify_payload(
+            manifest,
+            payload,
+            bytes_sha256=bytes_sha256,
+            size_error="project attachment bundle payload integrity failed",
+            hash_error="project attachment bundle payload integrity failed",
+        )
         records = [json.loads(line) for line in payload.splitlines() if line.strip()]
         expected_sequences = list(range(int(manifest["from_event_sequence"]), int(manifest["to_event_sequence"]) + 1))
         if [int(item.get("event_sequence", -1)) for item in records] != expected_sequences: raise ValueError("project attachment event range is invalid")

@@ -14,6 +14,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+try:
+    from platform_process import _unique_command_argument
+except ModuleNotFoundError:
+    from scripts.platform_process import _unique_command_argument
+
 
 LIFECYCLE_FORMAT = "memory-wuxian-collector-lifecycle-v1"
 MAX_COMMAND_ARGS = 64
@@ -123,13 +128,6 @@ def _command(value: Any) -> list[str] | None:
     return list(value)
 
 
-def _archive_root_argument(command: Sequence[str]) -> str | None:
-    matches = [index for index, arg in enumerate(command) if arg == "--archive-root"]
-    if len(matches) != 1 or matches[0] + 1 >= len(command):
-        return None
-    return command[matches[0] + 1]
-
-
 def inspect_startup_owner(manifest: Mapping[str, Any]) -> dict[str, Any]:
     """Validate one configured startup owner and its immutable identity."""
     reasons: list[dict[str, Any]] = []
@@ -148,7 +146,7 @@ def inspect_startup_owner(manifest: Mapping[str, Any]) -> dict[str, Any]:
     if expected_command is None:
         reasons.append(_reason("collector-command-invalid"))
     elif isinstance(archive_root, str) and archive_root:
-        command_root = _archive_root_argument(expected_command)
+        command_root = _unique_command_argument(expected_command, "--archive-root")
         if command_root is None or not _same_path(command_root, archive_root):
             reasons.append(_reason("collector-command-archive-root-mismatch"))
 

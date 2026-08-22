@@ -17,6 +17,17 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from memory_exchange_contract import (
+    ExchangeStreamFacade,
+    ExchangeStreamPort,
+    build_bundle_manifest,
+    select_jsonl_page,
+    validate_export_cursor,
+    validate_strict_replica_continuity,
+    verify_bundle_identity,
+    verify_payload,
+)
+from platform_atomic import atomic_replace_bytes
 from platform_process import no_window_kwargs
 
 PROTOCOL_VERSION = 2
@@ -87,17 +98,7 @@ def read_jsonl(path: Path) -> List[Dict[str, Any]]:
 
 
 def atomic_write_bytes(path: Path, payload: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    atomic_replace_bytes(path, payload)
 
 
 def atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
@@ -136,7 +137,7 @@ def safe_relative_path(value: str) -> Path:
     return candidate
 
 
-class FederationManager:
+class FederationManager(ExchangeStreamFacade):
     """Manage one local node and read-only replicas from other nodes."""
 
     def __init__(self, store: Any):
@@ -169,6 +170,58 @@ class FederationManager:
                 "Federation replica_directory must be separate from the primary archive"
             )
         self.global_index_dir = self.replica_root / "global-index"
+        self.exchange_lock_path = self.root / ".locks" / "archive.lock"
+
+    @staticmethod
+    def _file_marker(path: Path) -> Dict[str, int]:
+        try:
+            stat = path.stat()
+            return {"size": int(stat.st_size), "mtime_ns": int(stat.st_mtime_ns)}
+        except OSError:
+            return {"size": 0, "mtime_ns": 0}
+
+    def exchange_observation(self, timestamp: float) -> Dict[str, Any]:
+        state = read_json(self.store.state_path, {})
+        completed = int(state.get("completed_rounds", 0)) + len(
+            state.get("completed_rounds_out_of_order") or []
+        )
+        try:
+            local = datetime.fromtimestamp(timestamp).astimezone()
+        except (OSError, OverflowError, ValueError):
+            local = datetime.now().astimezone()
+        raw_today = (
+            self.store.raw_dir
+            / f"{local.year:04d}"
+            / f"{local.month:02d}"
+            / f"{local.date().isoformat()}.md"
+        )
+        return {
+            "completed_rounds": completed,
+            "raw_today": self._file_marker(raw_today),
+            "summary_registry": self._file_marker(
+                self.store.summaries_dir / "registry.jsonl"
+            ),
+            "title_index": self._file_marker(self.store.title_index_path),
+        }
+
+    def exchange_port(self) -> ExchangeStreamPort:
+        return ExchangeStreamPort(
+            stream_id="archive-v1",
+            root=self.root,
+            metadata_root=self.metadata_root,
+            replica_root=self.replica_root,
+            exchange_lock_path=self.exchange_lock_path,
+            requires_authenticated_transport=False,
+            node=self.node,
+            peers=self.peers,
+            status=self.status,
+            exchange_observation=self.exchange_observation,
+            replica_state=self.replica_state,
+            read_bundle_manifest=self.read_bundle_manifest,
+            export_delta=self.export_delta,
+            import_delta=self.import_delta,
+            log_sync=self.log_sync,
+        )
 
     def init_layout(self) -> None:
         for directory in (
@@ -521,8 +574,7 @@ class FederationManager:
     ) -> Dict[str, Any]:
         node = self.node()
         artifacts = self.refresh_export_ledger()
-        if int(after_event_sequence) < 0:
-            raise ValueError("after_event_sequence must not be negative")
+        after = int(after_event_sequence)
         latest_event_sequence = max(
             (
                 int(event["event_sequence"])
@@ -530,57 +582,57 @@ class FederationManager:
             ),
             default=0,
         )
-        if int(after_event_sequence) > latest_event_sequence:
-            raise ValueError(
-                f"Export cursor {after_event_sequence} is ahead of local event "
-                f"sequence {latest_event_sequence}"
-            )
-        if int(after_event_sequence) > 0:
-            if not previous_bundle_sha256 or not re.fullmatch(
-                r"[0-9a-f]{64}", previous_bundle_sha256
-            ):
-                raise ValueError(
-                    "A 64-character --previous-bundle-sha256 is required for "
-                    "noninitial delta exports"
-                )
-        elif previous_bundle_sha256:
-            raise ValueError(
+        validate_export_cursor(
+            after,
+            latest_event_sequence,
+            previous_bundle_sha256,
+            cursor_error=lambda value, latest: (
+                "after_event_sequence must not be negative"
+                if value < 0
+                else f"Export cursor {value} is ahead of local event sequence {latest}"
+            ),
+            predecessor_error=(
+                "A 64-character --previous-bundle-sha256 is required for "
+                "noninitial delta exports"
+            ),
+            initial_predecessor_error=(
                 "An initial delta export must not declare a previous bundle"
-            )
+            ),
+            predecessor_is_valid=lambda value: bool(value)
+            and bool(re.fullmatch(r"[0-9a-f]{64}", value)),
+            initial_predecessor_is_declared=bool,
+        )
         pending_ledger = [
             event
             for event in read_jsonl(self.export_ledger_path)
-            if int(event["event_sequence"]) > int(after_event_sequence)
+            if int(event["event_sequence"]) > after
         ]
         if not pending_ledger:
             return {
                 "status": "no-change",
                 "origin_node_id": node["node_id"],
-                "after_event_sequence": int(after_event_sequence),
+                "after_event_sequence": after,
             }
-        payload_records = []
-        payload_size = 0
-        for event in pending_ledger:
-            artifact = artifacts.get(str(event["artifact_id"]))
-            if artifact is None:
-                raise ValueError(
-                    f"Export artifact disappeared after ledger assignment: {event['artifact_id']}"
-                )
-            payload_record = {**event, "payload": artifact["payload"]}
-            encoded = canonical_bytes(payload_record) + b"\n"
-            if len(encoded) > MAX_EXPORT_PAYLOAD_BYTES:
-                raise ValueError(
-                    f"Artifact exceeds the federation bundle size limit: "
-                    f"{event['artifact_id']}"
-                )
-            if (
-                len(payload_records) >= MAX_ARTIFACTS
-                or payload_size + len(encoded) > MAX_EXPORT_PAYLOAD_BYTES
-            ):
-                break
-            payload_records.append(payload_record)
-            payload_size += len(encoded)
-        payload_bytes = b"".join(canonical_bytes(item) + b"\n" for item in payload_records)
+        def payload_candidates() -> Iterable[Dict[str, Any]]:
+            for event in pending_ledger:
+                artifact = artifacts.get(str(event["artifact_id"]))
+                if artifact is None:
+                    raise ValueError(
+                        "Export artifact disappeared after ledger assignment: "
+                        f"{event['artifact_id']}"
+                    )
+                yield {**event, "payload": artifact["payload"]}
+
+        payload_records, payload_bytes = select_jsonl_page(
+            payload_candidates(),
+            encode=lambda item: canonical_bytes(item) + b"\n",
+            maximum_items=MAX_ARTIFACTS,
+            maximum_bytes=MAX_EXPORT_PAYLOAD_BYTES,
+            oversized_item_error=lambda item: (
+                "Artifact exceeds the federation bundle size limit: "
+                f"{item['artifact_id']}"
+            ),
+        )
         ledger = pending_ledger[:len(payload_records)]
         manifest_base = {
             "format": BUNDLE_FORMAT,
@@ -588,7 +640,7 @@ class FederationManager:
             "minimum_protocol_version": MINIMUM_PROTOCOL_VERSION,
             "origin_node_id": node["node_id"],
             "target_node_id": safe_node_id(target_node_id) if target_node_id else None,
-            "base_event_sequence": int(after_event_sequence),
+            "base_event_sequence": after,
             "previous_bundle_sha256": previous_bundle_sha256,
             "from_event_sequence": int(ledger[0]["event_sequence"]),
             "to_event_sequence": int(ledger[-1]["event_sequence"]),
@@ -597,10 +649,9 @@ class FederationManager:
             "payload_bytes": len(payload_bytes),
             "payload_sha256": bytes_sha256(payload_bytes),
         }
-        manifest = {
-            **manifest_base,
-            "bundle_id": f"mwb-{canonical_sha256(manifest_base)[:32]}",
-        }
+        manifest = build_bundle_manifest(
+            manifest_base, canonical_sha256=canonical_sha256
+        )
         output.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary_name = tempfile.mkstemp(
             prefix=f".{output.name}.",
@@ -690,16 +741,19 @@ class FederationManager:
         target_node_id = manifest.get("target_node_id")
         if target_node_id:
             safe_node_id(str(target_node_id))
-        if int(manifest.get("payload_bytes", -1)) != len(payload_bytes):
-            raise ValueError("Bundle payload size mismatch")
-        if manifest.get("payload_sha256") != bytes_sha256(payload_bytes):
-            raise ValueError("Bundle payload SHA-256 mismatch")
-        manifest_base = {
-            key: value for key, value in manifest.items() if key != "bundle_id"
-        }
-        expected_bundle_id = f"mwb-{canonical_sha256(manifest_base)[:32]}"
-        if manifest.get("bundle_id") != expected_bundle_id:
-            raise ValueError("Bundle ID does not match its manifest")
+        verify_payload(
+            manifest,
+            payload_bytes,
+            bytes_sha256=bytes_sha256,
+            size_error="Bundle payload size mismatch",
+            hash_error="Bundle payload SHA-256 mismatch",
+            coerce_size=True,
+        )
+        verify_bundle_identity(
+            manifest,
+            canonical_sha256=canonical_sha256,
+            error="Bundle ID does not match its manifest",
+        )
         records = []
         for line_number, line in enumerate(payload_bytes.splitlines(), 1):
             if not line:
@@ -895,25 +949,22 @@ class FederationManager:
                 "bundle_id": manifest["bundle_id"],
                 "origin_node_id": origin_node_id,
             }
-        last_sequence = int(state.get("last_event_sequence", 0))
-        if int(manifest["base_event_sequence"]) != last_sequence:
-            relation = (
-                "overlap"
-                if int(manifest["base_event_sequence"]) < last_sequence
-                else "gap"
-            )
-            raise ValueError(
-                f"Bundle sequence {relation}: expected base {last_sequence}, "
-                f"received {manifest['base_event_sequence']}"
-            )
-        previous_bundle_sha256 = manifest.get("previous_bundle_sha256")
-        if last_sequence == 0:
-            if previous_bundle_sha256 is not None:
-                raise ValueError("Initial bundle unexpectedly declares a predecessor")
-        elif previous_bundle_sha256 != state.get("last_bundle_sha256"):
-            raise ValueError(
+        validate_strict_replica_continuity(
+            manifest,
+            state,
+            manifest_sequence_field="base_event_sequence",
+            state_offset=0,
+            sequence_error=lambda expected, actual: (
+                f"Bundle sequence {'overlap' if actual < expected else 'gap'}: "
+                f"expected base {expected}, received {actual}"
+            ),
+            predecessor_error=(
                 "Bundle predecessor SHA-256 does not match the imported chain"
-            )
+            ),
+            initial_predecessor_error=(
+                "Initial bundle unexpectedly declares a predecessor"
+            ),
+        )
         raw_path = peer_root / "raw-records.jsonl"
         titles_path = peer_root / "conversation-titles.jsonl"
         existing_raw = read_jsonl(raw_path)

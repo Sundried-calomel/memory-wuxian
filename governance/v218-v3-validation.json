@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-capture-structure-v3",
+  "producer_candidate": "v2.18-v3-typed-batch-and-shared-event-cycle",
+  "validated_at": "2026-08-19T00:05:48.2909911+09:00",
+  "artifact_hash_contract": {
+    "algorithm": "sha256",
+    "byte_source": "checked-out file bytes",
+    "line_endings": "LF enforced by .gitattributes on every hash-bound V3 artifact",
+    "gitattributes_sha256": "e7c5ae56b2f3a52d46e6ec84bd302e155f46810c9036340fa41ae6135b8b5072"
+  },
+  "artifact_hashes": {
+    "baseline_windows_debug_exe": "96d907fe2e87988cdae3ed232c6b231366e498bb8ccaa74744e47d0134f4e44f",
+    "candidate_windows_debug_exe": "e079a690914fd62c309fa402e65e9838a5a3d57653b5b87f0428a212cc638237",
+    "native_collector_lib_rs": "805594305d3f745ed612507907f84cf25a0debfc295b169d7603717e893052ec",
+    "v3_contract_test": "cd35d6f08789c45c5b655c86f2c76e40dbe93c1a6a4189016343fedea9799062",
+    "work_contract": "400438c0003777af970b158ac9b8483bb1fb4b01da9737554b9128bbcf85e49c"
+  },
+  "checks": [
+    {
+      "check_id": "batch-json-byte-parity",
+      "status": "passed",
+      "evidence": "The frozen pre-V3 Windows binary and V3 candidate emitted byte-identical compact stdout JSON for a normal two-message rollout and a 521-message rollout crossing the 512-line batch boundary."
+    },
+    {
+      "check_id": "partial-source-error-parity",
+      "status": "passed",
+      "evidence": "Rust golden test preserved partial status, source_error_count, source_errors, session_count, nullability, and error text fields; the existing adjacent-source-failure production test also passed."
+    },
+    {
+      "check_id": "batch-counter-and-session-merge-parity",
+      "status": "passed",
+      "evidence": "Typed full-result, partial-result, and multi-chunk session-merge tests passed, including Unicode and portable paths."
+    },
+    {
+      "check_id": "event-cycle-positive",
+      "status": "passed",
+      "evidence": "The shared production cycle synchronized an appended rollout and advanced known stamps only in finish_rollout_cycle after success."
+    },
+    {
+      "check_id": "event-cycle-sync-failure",
+      "status": "passed",
+      "evidence": "A missing rollout injected through the shared production cycle returned sync_succeeded=false and retained the previous known-stamp state."
+    },
+    {
+      "check_id": "cross-platform-watcher-contract",
+      "status": "passed-with-platform-limit",
+      "evidence": "Windows tests and source contracts preserve notify event draining; cargo check for aarch64-apple-darwin passed and preserves kqueue wait, debounce, and refresh branches. No Mac-native runtime execution is claimed."
+    },
+    {
+      "check_id": "unicode-path-fixtures",
+      "status": "passed",
+      "evidence": "The production binary parity fixture round-tripped Chinese, Japanese currency symbols, yen signs, emoji, spaces, and long multi-batch text."
+    },
+    {
+      "check_id": "cross-platform-hash-bytes",
+      "status": "passed",
+      "evidence": "The repository now enforces LF checkout bytes for .gitattributes itself and every V3 source, contract, test, rehearsal, and governance file that participates in SHA-256 binding."
+    },
+    {
+      "check_id": "rust-suite",
+      "status": "passed",
+      "evidence": "cargo test --all-targets passed 38 tests: 26 collector library tests and 12 envelope tests."
+    },
+    {
+      "check_id": "python-suite",
+      "status": "passed",
+      "evidence": "Full unittest discovery passed 701 tests with 18 platform or environment skips."
+    },
+    {
+      "check_id": "architecture-contract",
+      "status": "passed",
+      "evidence": "Schema v2 ownership, dependency allowlists, packaging ownership, and Rust forbidden-capability checks passed."
+    },
+    {
+      "check_id": "clippy-new-warning-gate",
+      "status": "passed-with-baseline-exclusions",
+      "evidence": "Clippy passed with warnings denied after allowing four pre-existing findings outside the V3 diff: suspicious_open_options, derivable_impls, the existing append_message argument count, and unnecessary_map_or."
+    },
+    {
+      "check_id": "scope-boundary",
+      "status": "passed",
+      "evidence": "No live archive, running process, installed component, summary or index semantics, cloud protocol, package, version, publication, or release state was modified."
+    }
+  ],
+  "verdict": "producer-checks-passed-awaiting-independent-evaluation"
+}

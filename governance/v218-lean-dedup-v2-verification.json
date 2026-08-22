@@ -1,0 +1,31 @@
+{
+  "evidence": [
+    {
+      "check_id": "unicode-path-fixtures",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-lean-dedup-v2-validation.json",
+      "sha256": "acdc7c67fed0d3fe299926b74f56c01eba6c032a42c347467caa7d59fe0c9347"
+    }
+  ],
+  "load_receipt_internal_sha256": "6c552adc1f19b8a535dced80de0b4e9ee8047d088ba5041442379f4d8cde1dbc",
+  "load_receipt_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-lean-dedup-v2-load.json",
+  "load_receipt_sha256": "32ba098cfd8c784dfc90bf0b8f0f4aeef8f2f979bb438f975ba4e6f15aa688e1",
+  "packet_file_sha256": "ce6aa8bda53226c56de8ef8a83fcda89d14271a5c23b626aef67d02033b8bd9d",
+  "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-lean-dedup-v2-packet.json",
+  "packet_sha256": "283aa1fdb30649353e68860d6ccdd5c866a8ca34433507755025427514f3010a",
+  "passed_check_ids": [
+    "unicode-path-fixtures"
+  ],
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-lean-dedup-v2-preflight.json",
+  "preflight_sha256": "69ebd0e0ac3219cce01115d208c6ee1486d672208b63e89ae4914a49c21eaa26",
+  "receipt_sha256": "80e28032245e6f7d43e41561fec584bc4ed6a4ac6be62194b0381f43f9829925",
+  "receipt_type": "defect-prevention-verification",
+  "required_check_ids": [
+    "unicode-path-fixtures"
+  ],
+  "results_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v218-lean-dedup-v2-results.json",
+  "results_sha256": "256cb3a725be6686d5b0580053bde26199c1047d1c38f5c039217a965ca7b467",
+  "schema_version": 1,
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "verified_at": "2026-08-18T13:21:05.908375+00:00"
+}

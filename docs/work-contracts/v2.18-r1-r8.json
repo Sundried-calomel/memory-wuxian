@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.18-r1-r8",
+  "candidate_id": "v2.18-r1-r8-behavior-preserving-modularization",
+  "artifact_profile": "software-feature",
+  "classification": "extension",
+  "owner_id": "product-architecture",
+  "target": "Internal atomic storage, scheduler mechanics, Environment install coordination, exchange mechanics, cloud application assembly, immutable Environment stores, CLI ownership, and test infrastructure.",
+  "primary_semantics": "Complete R1 through R8 as behavior-preserving modularization: move each mechanism to one canonical Owner while preserving every public and persisted contract.",
+  "invariants": [
+    "Raw archives and all authoritative persisted records remain byte-for-byte unchanged by the refactor.",
+    "No storage migration, protocol revision, feature, default, security policy, permission expansion, or model behavior change is part of this work.",
+    "Capture Core remains independent and no R1-R8 work may add AI, Exchange, Environment, UI, or Control behavior to it.",
+    "Rule and Skill installation retain separate recovery and rollback failure domains.",
+    "Archive, Environment, Evidence, and Attachment streams retain separate state and failure domains.",
+    "CLI and dashboard observable behavior remains compatible."
+  ],
+  "allowed_changes": [
+    "Add internal Platform Foundation, Application Service, Environment, Exchange, domain-owner, and test-support modules.",
+    "Move or delegate existing behavior behind compatibility facades.",
+    "Delete duplicate implementations only after all callers use the canonical owner and parity tests pass."
+  ],
+  "prohibited_changes": [
+    "Change version numbers, release metadata, installation state, running schedulers, desktop shortcuts, or published artifacts.",
+    "Change archive, summary, index, Environment, project package, cloud envelope, or cursor formats.",
+    "Combine independent ledgers, cursors, acknowledgements, rollback stores, recovery engines, or security validators.",
+    "Claim a stage passed from mocks or file existence alone when its contract requires exact bytes or state transition evidence."
+  ],
+  "before_after_checks": [
+    "Compare exact atomic-write bytes, modes, failure order, and destination state before and after R1.",
+    "Compare exact plist/XML/wrapper bytes and scheduler runner calls before and after R2.",
+    "Compare complete Rule and Skill journal, receipt, rollback, mode, recovery, and error results before and after R3.",
+    "Compare all four stream manifests, payloads, cursors, predecessor chains, authentication results, and failure isolation before and after R4.",
+    "Compare CLI and dashboard cloud status, configure, enable, disable, and sync responses before and after R5.",
+    "Compare Governance and Evolution envelope, event, replica, and validation bytes before and after R6.",
+    "Compare all CLI commands, help, arguments, defaults, lock policy, exit codes, stdout, and stderr before and after R7.",
+    "Compare test discovery IDs and required rehearsal scenario coverage before and after R8."
+  ],
+  "required_evidence": [
+    "r1-atomic-byte-and-failure-parity",
+    "r2-scheduler-render-and-call-parity",
+    "r3-rule-skill-lifecycle-parity",
+    "r4-four-stream-isolation-and-byte-parity",
+    "r5-cli-dashboard-cloud-service-parity",
+    "r6-immutable-store-envelope-parity",
+    "r7-cli-contract-and-owner-parity",
+    "r8-test-case-coverage-preservation",
+    "architecture-contract",
+    "complete-python-suite",
+    "complete-rust-suite",
+    "candidate-rehearsal",
+    "independent-evaluation",
+    "targeted-tests",
+    "invariant-check",
+    "source-audit",
+    "integration-rehearsal",
+    "rehearsal-matrix",
+    "promotion-review"
+  ],
+  "lifecycle_state": "contracted"
+}

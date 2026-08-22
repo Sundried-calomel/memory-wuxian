@@ -44,6 +44,10 @@ pub(crate) fn append_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
+    append_bytes_prepared(path, bytes)
+}
+
+pub(super) fn append_bytes_prepared(path: &Path, bytes: &[u8]) -> Result<()> {
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
     file.write_all(bytes)?;
     file.sync_data()?;
@@ -54,4 +58,21 @@ pub(crate) fn append_jsonl(path: &Path, value: &Value) -> Result<()> {
     let mut bytes = serde_json::to_vec(value)?;
     bytes.push(b'\n');
     append_bytes(path, &bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prepared_append_preserves_parent_creation_boundary() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let path = temporary.path().join("missing").join("records.jsonl");
+        assert!(append_bytes_prepared(&path, b"record\n").is_err());
+        assert!(!path.parent().expect("path has parent").exists());
+
+        append_bytes(&path, b"record\n")?;
+        assert_eq!(fs::read(&path)?, b"record\n");
+        Ok(())
+    }
 }

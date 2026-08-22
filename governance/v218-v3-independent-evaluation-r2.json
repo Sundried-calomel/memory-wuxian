@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "memory-wuxian-v218-v3-independent-r2",
+  "artifact": {
+    "paths": [
+      "native-collector/src/lib.rs",
+      "tests/test_v218_v3_contract.py",
+      "docs/work-contracts/v2.18-v3.json"
+    ],
+    "sha256": [
+      "805594305d3f745ed612507907f84cf25a0debfc295b169d7603717e893052ec",
+      "cd35d6f08789c45c5b655c86f2c76e40dbe93c1a6a4189016343fedea9799062",
+      "400438c0003777af970b158ac9b8483bb1fb4b01da9737554b9128bbcf85e49c"
+    ],
+    "producer_identity": "codex-main-producer"
+  },
+  "evaluator": {
+    "identity": "independent-agent-nash-01a0156c",
+    "independent": true
+  },
+  "contract": {
+    "source": "docs/work-contracts/v2.18-v3.json",
+    "pass_threshold": 90
+  },
+  "dimensions": [
+    {"id": "public-output-equivalence", "weight": 0.3, "score": 100, "mandatory": true, "evidence": [{"claim": "Prior behavior evidence binds unchanged production blobs", "source": "production-tree identity", "method": "deterministic_test"}]},
+    {"id": "ordering-and-no-loss", "weight": 0.3, "score": 98, "mandatory": true, "evidence": [{"claim": "Ordering and no-loss production bytes are unchanged", "source": "production-tree identity", "method": "source_trace"}]},
+    {"id": "platform-boundaries", "weight": 0.2, "score": 100, "mandatory": true, "evidence": [{"claim": "Platform-specific production bytes are unchanged", "source": "production-tree identity", "method": "source_trace"}]},
+    {"id": "evidence-traceability", "weight": 0.15, "score": 85, "mandatory": true, "evidence": [{"claim": ".gitattributes did not govern its own checkout bytes", "source": "fresh Windows checkout hash", "method": "deterministic_test"}]},
+    {"id": "scope-and-maintainability", "weight": 0.05, "score": 95, "mandatory": false, "evidence": [{"claim": "No production logic changed in the evidence repair", "source": "11253f8..28cb2e5 diff", "method": "source_trace"}]}
+  ],
+  "deterministic_checks": [
+    {"id": "production-tree-identity", "status": "pass", "evidence": "lib.rs blob identical in both candidates"},
+    {"id": "primary-validation-bindings", "status": "pass", "evidence": "source, tests, contract, validation, and rehearsal bindings matched"},
+    {"id": "rehearsal-and-governance-validators", "status": "pass", "evidence": "all bounded validators passed"},
+    {"id": "gitattributes-self-binding", "status": "fail", "evidence": "fresh Windows checkout converted .gitattributes itself to CRLF"}
+  ],
+  "overall_score": 96.9,
+  "verdict": "fail",
+  "blocking_findings": [
+    "The LF policy file did not govern its own checkout bytes while its SHA-256 was recorded as evidence."
+  ],
+  "limitations": [
+    "No macOS-native watcher execution was performed.",
+    "Round 2 reused behavior evidence through exact production-blob identity rather than rerunning unchanged suites."
+  ],
+  "iteration": {
+    "current": 2,
+    "maximum": 2
+  }
+}

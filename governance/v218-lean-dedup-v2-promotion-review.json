@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "review_id": "promotion-review-memory-wuxian-v218-lean-dedup-v2",
+  "work_item_id": "memory-wuxian-v218-lean-dedup-v2",
+  "candidate_id": "v218-semantics-identical-helper-dedup",
+  "owner_id": "platform-foundation",
+  "source_revision": "codex/v218-architecture-gate",
+  "product_evolution_record_id": "memory-wuxian-v218-lean-dedup-v2",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The change applies existing ownership, Unicode safety, exact-byte, and behavior-preservation rules. It produced no new confirmed defect family or portable governance capability.",
+  "evidence_refs": [
+    "governance/v218-lean-dedup-v2-validation.json",
+    "governance/v218-lean-dedup-v2-verification.json"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": true,
+  "reviewed_at": "2026-08-18T13:19:27Z"
+}

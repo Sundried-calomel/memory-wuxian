@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import plistlib
 import subprocess
-import tempfile
 import unittest
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -12,21 +11,25 @@ from unittest.mock import patch
 
 from scripts import install_macos_transaction as transaction
 from scripts.collector_lifecycle import inspect_startup_owner
+from tests.support.macos import (
+    RecordingRunner,
+    temporary_root,
+    write_launch_agent_plist,
+)
 
 
-class FakeRunner:
+class FakeRunner(RecordingRunner):
     def __init__(self, *, fail_dashboard: bool = False) -> None:
+        super().__init__()
         self.fail_dashboard = fail_dashboard
-        self.calls: list[list[str]] = []
 
     def __call__(self, command, **kwargs):
-        command = [str(part) for part in command]
-        self.calls.append(command)
+        command = self.record(command)
         if command[:2] == ["/bin/launchctl", "print"]:
-            return subprocess.CompletedProcess(command, 0, "pid = 42\n", "")
+            return self.completed(command, stdout="pid = 42\n")
         if self.fail_dashboard and "install_dashboard_app_macos.py" in " ".join(command):
             raise subprocess.CalledProcessError(1, command, stderr="dashboard failed")
-        return subprocess.CompletedProcess(command, 0, "", "")
+        return self.completed(command)
 
 
 @contextmanager
@@ -36,8 +39,10 @@ def quiesced(*args, **kwargs):
 
 class MacosTransactionV216Test(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
-        root = Path(self.temporary.name) / ("用户 目录 " + "很长" * 4)
+        self.temporary, temporary_root_path = temporary_root(
+            ignore_cleanup_errors=True
+        )
+        root = temporary_root_path / ("用户 目录 " + "很长" * 4)
         self.home = root / "home"
         self.source = root / "候选 包"
         self.skill = self.home / ".codex" / "skills" / "memory-wuxian"
@@ -171,9 +176,7 @@ class MacosTransactionV216Test(unittest.TestCase):
             }],
         }) + "\n").encode("utf-8")
         lifecycle_path.write_bytes(old_lifecycle)
-        plist = self.home / "Library" / "LaunchAgents" / f"{transaction.COLLECTOR_LABEL}.plist"
-        plist.parent.mkdir(parents=True, exist_ok=True)
-        plist.write_bytes(plistlib.dumps({
+        plist = write_launch_agent_plist(self.home, transaction.COLLECTOR_LABEL, {
             "Label": transaction.COLLECTOR_LABEL,
             "ProgramArguments": old_command,
             "EnvironmentVariables": {
@@ -181,7 +184,7 @@ class MacosTransactionV216Test(unittest.TestCase):
                 "MEMORY_WUXIAN_PYTHON": str(self.python),
                 "MEMORY_WUXIAN_CODEX": str(self.codex),
             },
-        }))
+        })
         with self.assertRaisesRegex(RuntimeError, "dashboard failed"):
             self.invoke(FakeRunner(fail_dashboard=True))
         self.assertEqual((self.skill / "marker").read_bytes(), b"prior-generation")

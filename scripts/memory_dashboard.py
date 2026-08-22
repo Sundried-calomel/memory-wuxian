@@ -32,15 +32,12 @@ from daily_metrics import build_federated_daily_metrics
 from memory_cli import (
     MemoryStore,
     atomic_write_json,
-    environment_cloud_transport,
-    project_attachment_cloud_transport,
-    project_evidence_cloud_transport,
     load_simple_yaml,
     local_platform_name,
     local_runtime_versions,
     read_jsonl,
 )
-from memory_cloud_transport import CloudFolderTransport
+from memory_cloud_streams import CloudApplicationService
 from memory_configuration import compile_configuration, explain_configuration
 from memory_environment import EnvironmentRegistry
 from memory_environment_capabilities import local_device_capability_offer
@@ -49,10 +46,8 @@ from memory_environment_incoming import EnvironmentIncomingProcessor
 from platform_paths import is_link_like
 from memory_environment_promotions import PromotionStore
 from memory_environment_profiles import EnvironmentProfileManager
-from memory_federation import FederationManager
 from memory_governance_ai import GovernanceAIQueue
-from memory_project_evidence import ProjectEvidenceExchangeManager, ProjectEvidenceStore
-from memory_project_attachments import ProjectAttachmentExchangeManager
+from memory_project_evidence import ProjectEvidenceStore
 from memory_readonly_service import ReadOnlyMemoryService
 from platform_lock import exclusive_lock
 from platform_process import no_window_kwargs
@@ -130,15 +125,6 @@ def project_attachment_lifecycle(
             "state": "verified" if int(inventory.get("verified_reconstructions") or 0) else "none",
             "receipts": int(inventory.get("verified_reconstructions") or 0),
         },
-    }
-
-
-def background_subprocess_kwargs() -> dict[str, Any]:
-    """Compatibility wrapper for the shared no-console process policy."""
-    if sys.platform != "win32":
-        return {}
-    return {
-        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
     }
 
 
@@ -281,7 +267,7 @@ def set_governance_ai_scheduler(store: MemoryStore, enabled: bool) -> dict[str, 
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        **background_subprocess_kwargs(),
+        **no_window_kwargs(),
     )
     return governance_ai_scheduler_status()
 
@@ -303,7 +289,7 @@ def set_cloud_scheduler(store: MemoryStore, enabled: bool) -> dict[str, Any]:
         check=True,
         capture_output=True,
         text=True,
-        **background_subprocess_kwargs(),
+        **no_window_kwargs(),
     )
     return {
         "command": "installed" if enabled else "uninstalled",
@@ -1771,29 +1757,37 @@ def make_handler(
                 self.rfile.read(length)
 
         def cloud_payload(self) -> dict[str, Any]:
-            federation_manager = FederationManager(store)
-            devices = federation_manager.status()
-            archive_transport = CloudFolderTransport(federation_manager)
+            cloud_service = CloudApplicationService(store)
+            archive_transport = cloud_service.transport("archive-v1")
+            devices = archive_transport.manager.status()
             cloud = dict(archive_transport.status())
             archive_stream = {"stream_id": "archive-v1", **cloud}
-            environment_transport = environment_cloud_transport(
-                store, archive_transport, bootstrap=False
+            environment_transport = cloud_service.transport(
+                "environment-v1",
+                archive_transport=archive_transport,
+                bootstrap=False,
             )
-            project_evidence_transport = project_evidence_cloud_transport(
-                store, archive_transport, bootstrap=False
+            project_evidence_transport = cloud_service.transport(
+                "project-evidence-v1",
+                archive_transport=archive_transport,
+                bootstrap=False,
             )
             project_evidence_status = project_evidence_transport.status()
-            project_evidence_status["inventory"] = ProjectEvidenceExchangeManager(
-                store
-            ).status()
-            project_evidence_status["owners"] = ProjectEvidenceStore(store).owner_status()
-            project_attachment_transport = project_attachment_cloud_transport(
-                store, archive_transport, bootstrap=False
+            project_evidence_status["inventory"] = (
+                project_evidence_transport.manager.status()
+            )
+            project_evidence_status["owners"] = (
+                project_evidence_transport.manager.evidence.owner_status()
+            )
+            project_attachment_transport = cloud_service.transport(
+                "project-attachment-v1",
+                archive_transport=archive_transport,
+                bootstrap=False,
             )
             project_attachment_status = project_attachment_transport.status()
-            project_attachment_status["inventory"] = ProjectAttachmentExchangeManager(
-                store
-            ).status()
+            project_attachment_status["inventory"] = (
+                project_attachment_transport.manager.status()
+            )
             project_attachment_status["lifecycle"] = project_attachment_lifecycle(
                 project_attachment_status,
                 project_attachment_status["inventory"],
@@ -2042,17 +2036,11 @@ def make_handler(
                         },
                     )
                     return
-                manager = FederationManager(store)
-                transport = CloudFolderTransport(manager)
-                environment_transport = environment_cloud_transport(
-                    store, transport, bootstrap=True
-                )
-                project_evidence_transport = project_evidence_cloud_transport(
-                    store, transport, bootstrap=True
-                )
-                project_attachment_transport = project_attachment_cloud_transport(
-                    store, transport, bootstrap=True
-                )
+                transports = CloudApplicationService(store).transports(bootstrap=True)
+                transport = transports["archive-v1"]
+                environment_transport = transports["environment-v1"]
+                project_evidence_transport = transports["project-evidence-v1"]
+                project_attachment_transport = transports["project-attachment-v1"]
                 if action == "enable":
                     if not transport.status().get("configured"):
                         raise ValueError("cloud transport is not configured")

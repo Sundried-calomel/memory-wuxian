@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v218-remediation-ledger",
+  "objective": "Deliver the previously promised module remediation ledger with verified current locations, measured V0-to-current line counts, completed outcomes, pending strategies, risks, and validation boundaries.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "create",
+  "project_id": "memory-wuxian",
+  "owner_id": "product-quality",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["markdown", "json"],
+  "path_globs": ["docs/refactoring/**", "governance/v218-remediation-ledger-*"],
+  "entrypoints": ["v218-module-remediation-ledger"],
+  "resources": ["git-history", "module-architecture", "v0-audit-findings", "v1-v2-validation-receipts"],
+  "operations": ["measure", "classify", "document", "verify"],
+  "data_formats": ["markdown", "json"],
+  "authorization_boundaries": [
+    "Do not modify production code, tests, runtime state, archives, summaries, cloud state, or installed components.",
+    "Label measured facts, implementation results, estimates, and deferred work separately; do not invent exact future line counts.",
+    "Use current source locations and immutable commit IDs as evidence."
+  ],
+  "implementation_units": [
+    {
+      "id": "module-remediation-ledger",
+      "owner_id": "product-quality",
+      "paths": ["docs/refactoring/v2.18-module-remediation-ledger.md", "governance/v218-remediation-ledger-*"],
+      "entrypoints": ["v218-module-remediation-ledger"],
+      "resources": ["git-history", "module-architecture", "v0-audit-findings", "v1-v2-validation-receipts"],
+      "operations": ["measure", "classify", "document", "verify"],
+      "planned_check_ids": ["source-grounded-claims", "line-count-reproduction", "status-separation"]
+    }
+  ],
+  "rule_exclusions": []
+}

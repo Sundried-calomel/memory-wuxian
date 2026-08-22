@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.19.0 - 2026-08-22
+
+- Integrate the completed R1-R8 behavior-preserving modularization behind
+  canonical Platform, Environment, Exchange, application-service, CLI, and
+  test-support owners without changing persisted or public contracts.
+- Preserve independent archive, Environment, Evidence, Attachment, scheduler,
+  rollback, and recovery failure domains while enforcing ownership and
+  dependency boundaries mechanically.
+- Ship the first public installer integration of the approved 2.16-2.18
+  internal lifecycle and Capture Core milestones, with exact-candidate CI,
+  transactional activation, rollback, package hashes, and signed update
+  metadata.
+- Keep Summary V2 rescue, atomic-summary work, archive migration, summary
+  formats, cloud protocols, and existing raw history explicitly unchanged.
+
 ## 2.18.0 - 2026-08-18
 
 - Add a bounded, fsynced, content-free Capture Core WAL with deterministic
