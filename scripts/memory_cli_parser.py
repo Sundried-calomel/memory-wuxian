@@ -15,7 +15,10 @@ def build_parser(
     maintenance_job_kinds: Sequence[str],
     semantic_runtime_artifact_id: str,
 ) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Memory無限 persistent conversation memory CLI")
+    parser = argparse.ArgumentParser(
+        prog="memory-wuxian",
+        description="Memory無限 persistent conversation memory CLI",
+    )
     parser.add_argument("--root", help="Memory archive root; defaults to config.yaml")
     parser.add_argument("--config", default=str(default_config), help="Configuration YAML path")
     subparsers = parser.add_subparsers(dest="command", required=True)

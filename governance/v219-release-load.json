@@ -6,13 +6,13 @@
     "G11"
   ],
   "brief_sha256": "2c39b03c124e8dd05908bbf0d2d88bd9c61aec36d03108188417b4e866ce8ab9",
-  "loaded_at": "2026-08-22T00:49:18.203769+00:00",
+  "loaded_at": "2026-08-22T02:42:10.429404+00:00",
   "packet_file_sha256": "e52f373cfb35e63cc94298bde4fc061ff087fc72d57d3db7f07aafb299ed41e2",
   "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v219-release-packet.json",
   "packet_sha256": "665694119d8256480189950da2f6c4b1dc42db82a7bec5b84237a0d60a695de2",
   "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\governance\\v219-release-preflight.json",
-  "preflight_sha256": "dab9d155ab8d2838a83c74cf2516ae62d7eada68e6fc74dc0a64725f3f76255b",
-  "receipt_sha256": "cb70603311c81453be897a8ef138babfa27f8abd60f53e85d04282ef194cfea5",
+  "preflight_sha256": "133d1ac73b632d9275e734e608f3ea31ea6ff6ae71d2f10be7d0488180b994e0",
+  "receipt_sha256": "ba3ed8db71457324d1e239ffea8c6f5b34f94b1d3b99b762c2771c758f493665",
   "receipt_type": "defect-prevention-load",
   "schema_version": 1,
   "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218"

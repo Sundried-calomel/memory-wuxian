@@ -1,8 +1,8 @@
 {
   "artifact_profile": "software-feature",
-  "change_kind": "modify",
-  "created_at": "2026-08-22T00:49:05+00:00",
-  "receipt_sha256": "7d7be03e90814eca722517943316c6400e74d5dee0d053019bc33c9a1b162a91",
+  "change_kind": "repair",
+  "created_at": "2026-08-22T02:41:55+00:00",
+  "receipt_sha256": "c1fd84d1579f037a0cd53723d1e6e608fb1165c7f0488ef36f7de68034c196e0",
   "receipt_type": "defect-workbook-preflight",
   "registry_path": "C:\\Users\\56453\\.codex\\defect-workbooks.json",
   "registry_sha256": "12889b7c5c9a439ed7d544540a953e0a553f91196d42fc864b435f7b0088a89e",
