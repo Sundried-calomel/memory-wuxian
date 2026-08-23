@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-s06-rehearsal-namespace",
+  "objective": "Preserve the official Windows installer resource names while enabling a test-only namespaced real-Windows rehearsal and binding the collector child installer to the outer manifest archive pointer.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "windows-installer-transaction-controller",
+  "platforms": ["windows"],
+  "languages": ["python", "json", "markdown"],
+  "path_globs": [
+    "scripts/install_windows_transaction.py",
+    "scripts/install_codex_autosync_windows.py",
+    "scripts/install_dashboard_shortcut_windows.ps1",
+    "scripts/run_windows_installer_rehearsal.py",
+    "tests/test_windows_installer*.py",
+    "tests/test_windows_lifecycle_transaction.py",
+    "tests/test_dashboard_shortcut.py",
+    "docs/install-transaction/**",
+    "docs/rehearsals/**"
+  ],
+  "entrypoints": ["transaction-controller", "collector-child-installer", "windows-rehearsal"],
+  "resources": ["scheduled-tasks", "registry-values", "archive-pointer", "desktop-shortcut", "transaction-journal"],
+  "operations": ["repair", "namespace", "rehearse", "validate"],
+  "data_formats": ["utf-8", "canonical-json", "windows-argv"],
+  "authorization_boundaries": [
+    "The official installer manifest and entrypoints retain fixed production resource names.",
+    "Only the programmatic rehearsal adapter may inject namespaced task, registry, desktop, and pointer resources.",
+    "The rehearsal must not read, replace, stop, or delete production-named tasks, registry values, shortcuts, or archive pointers.",
+    "Raw archive records and summaries remain outside every installer mutation owner."
+  ],
+  "implementation_units": [
+    {
+      "id": "collector-pointer-contract",
+      "owner_id": "collector-generation-mutation",
+      "paths": ["scripts/install_windows_transaction.py", "scripts/install_codex_autosync_windows.py", "tests/test_windows_installer_composition.py", "tests/test_windows_lifecycle_transaction.py"],
+      "entrypoints": ["collector-child-installer"],
+      "resources": ["archive-pointer", "collector-task", "collector-run-value"],
+      "operations": ["repair", "validate"],
+      "planned_check_ids": ["manifest-pointer-propagation", "production-default-names", "rollback-boundary"]
+    },
+    {
+      "id": "real-windows-rehearsal-namespace",
+      "owner_id": "windows-installer-rehearsal-runner",
+      "paths": ["scripts/install_windows_transaction.py", "scripts/install_dashboard_shortcut_windows.ps1", "scripts/run_windows_installer_rehearsal.py", "tests/test_windows_installer_composition.py", "tests/test_dashboard_shortcut.py", "docs/rehearsals/**"],
+      "entrypoints": ["windows-rehearsal"],
+      "resources": ["namespaced-tasks", "namespaced-registry-values", "isolated-desktop", "isolated-skill-root"],
+      "operations": ["namespace", "rehearse", "validate"],
+      "planned_check_ids": ["clean-install", "repeat-install", "failure-rollback", "production-resource-noninterference", "namespace-cleanup-completeness"]
+    }
+  ],
+  "rule_exclusions": []
+}

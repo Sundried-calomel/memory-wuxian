@@ -43,6 +43,9 @@ class DashboardShortcutTest(unittest.TestCase):
         )
         self.assertIn("[char]0x65E0", script)
         self.assertIn("[char]0x72B6", script)
+        self.assertIn('[string]$ShortcutName = ""', script)
+        self.assertIn("ShortcutName must be a .lnk leaf name", script)
+        self.assertIn("Join-Path $Desktop $ShortcutName", script)
         self.assertIn("memory-wuxian-dashboard-launcher.exe", script)
         self.assertIn('$shortcut.Arguments = ""', script)
         self.assertIn("memory-wuxian-dashboard-launcher.json", script)
@@ -71,9 +74,15 @@ class DashboardShortcutTest(unittest.TestCase):
 
     def test_installer_preserves_active_root_and_rebuilds_shortcut(self):
         install = (SKILL_ROOT / "packaging/windows/install.ps1").read_text(encoding="utf-8")
+        transaction = (SKILL_ROOT / "scripts/install_windows_transaction.py").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("memory-wuxian-active-root.txt", install)
-        self.assertIn("install_dashboard_shortcut_windows.ps1", install)
-        self.assertIn("-ArchiveRoot $archiveRoot", install)
+        self.assertNotIn("install_dashboard_shortcut_windows.ps1", install)
+        self.assertIn("install_dashboard_shortcut_windows.ps1", transaction)
+        self.assertIn('"-ShortcutName", self.shortcut_name', transaction)
+        self.assertIn("--archive-root $archiveRoot", install)
+        self.assertIn('str(self.manifest.archive_root)', transaction)
         self.assertIn("$installedUserProfile = Split-Path -Parent $codexHome", install)
         self.assertIn("ProfileList\\$currentSid", install)
         self.assertIn("$SkillRoot = $expectedSkillRoot", install)
@@ -81,13 +90,13 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertNotIn('Join-Path $env:USERPROFILE ".codex\\memory-wuxian-active-root.txt"', install)
 
     def test_native_launcher_is_packaged_for_windows(self):
-        workflow = (SKILL_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        workflow = (SKILL_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
         build = (SKILL_ROOT / "scripts/build_native_collector.ps1").read_text(encoding="utf-8")
         source = (
             SKILL_ROOT
             / "native-collector/src/bin/memory-wuxian-dashboard-launcher.rs"
         ).read_text(encoding="utf-8")
-        self.assertIn("memory-wuxian-dashboard-launcher.exe", workflow)
+        self.assertIn("./scripts/build_native_collector.ps1", workflow)
         self.assertIn("memory-wuxian-dashboard-launcher.exe", build)
         self.assertIn('windows_subsystem = "windows"', source)
         self.assertIn("Command::new(python)", source)

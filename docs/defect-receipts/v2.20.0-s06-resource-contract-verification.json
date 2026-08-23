@@ -1,0 +1,21 @@
+{
+  "evidence": [],
+  "load_receipt_internal_sha256": "1a3441192ae138cd15efc4583dd3fb513b7ce31985d94b8d9c8c1362ed196839",
+  "load_receipt_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s06-resource-contract-load.json",
+  "load_receipt_sha256": "40b06f2cb922658cbf5431cbda8d164e36add2984f9f55f066f5b83761ba4122",
+  "packet_file_sha256": "092c0cea3e932a36e997f95829787dbbd0a8b4bba715b99a9f34a0d2c68b31d1",
+  "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s06-resource-contract-packet.json",
+  "packet_sha256": "f53413239eba8724e122d20b29d6b533f70bfeea417b5db9f3ace3f12e07997b",
+  "passed_check_ids": [],
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s06-resource-contract-preflight.json",
+  "preflight_sha256": "d6e67868610826a538bbb2c5683794d682ea9b080dda066c40768adbd84c2506",
+  "receipt_sha256": "b4e674414ef9f53b79c97bcc694453da597662068a0af977822d2b2b82317dd6",
+  "receipt_type": "defect-prevention-verification",
+  "required_check_ids": [],
+  "results_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s06-resource-contract-results.json",
+  "results_sha256": "13afa565380ea0b84c971351c7077a598054cb4687385603ed916431e72223e3",
+  "schema_version": 1,
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "verified_at": "2026-08-23T05:04:52.987884+00:00"
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-22T21:48:25+09:00",
+  "reason": "S11 preflight proved that the S06 composed mutation violated the frozen bounded-resource adapter architecture and that S08 migration planning was not connected to production execution; preserve reusable S06-S10 artifacts under a hash-bound reuse map.",
+  "approval": "User explicitly authorized from S06 formal replan, preserving S01-S05 and continuing automatically through S15.",
+  "resume_step": "S06",
+  "previous_state_sha256": "ff5932a2cb8b51c5174913dec9b26c81eb6f75855022964f664919211811aca3",
+  "old_contract_sha256": "424a25c7b7d46e78aa9a1b8a032a7857873852913667eebfcbee5579a27a9817",
+  "new_contract_sha256": "424a25c7b7d46e78aa9a1b8a032a7857873852913667eebfcbee5579a27a9817",
+  "baseline_sha256": "3e18d29d2fb5121ac1db6edd44ce634575a0d039cd60c88634c0e58222400719"
+}

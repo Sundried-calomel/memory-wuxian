@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-s04-task-principal",
+  "objective": "Centralize Windows task-definition equivalence so every scheduler owner accepts only the intended current account name or its resolved SID while rejecting unrelated principals and all other task drift.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "platform-scheduler",
+  "platforms": ["windows"],
+  "languages": ["python", "json"],
+  "path_globs": [
+    "scripts/platform_scheduler.py",
+    "scripts/install_codex_autosync_windows.py",
+    "scripts/install_windows_transaction.py",
+    "tests/test_platform_scheduler.py",
+    "tests/test_windows_lifecycle_transaction.py",
+    "tests/test_windows_installer_transaction.py",
+    "docs/install-transaction/**",
+    "docs/rehearsals/**"
+  ],
+  "entrypoints": ["windows-task-query", "collector-task-verification", "maintenance-task-verification", "windows-rehearsal"],
+  "resources": ["task-xml", "windows-principal", "transaction-journal"],
+  "operations": ["repair", "inspect", "normalize", "validate", "rollback"],
+  "data_formats": ["utf-8", "windows-task-xml", "sid"],
+  "authorization_boundaries": [
+    "Only the intended current Windows account name and its resolved SID are equivalent.",
+    "An unrelated account name or SID remains a verification failure.",
+    "No production task name, registry name, archive, cloud, summary, or environment authority changes.",
+    "Real rehearsal continues to use namespaced tasks and rollback cleanup."
+  ],
+  "implementation_units": [
+    {
+      "id": "windows-task-principal-normalization",
+      "owner_id": "platform-scheduler",
+      "paths": [
+        "scripts/platform_scheduler.py",
+        "scripts/install_codex_autosync_windows.py",
+        "scripts/install_windows_transaction.py",
+        "tests/test_platform_scheduler.py",
+        "tests/test_windows_lifecycle_transaction.py",
+        "tests/test_windows_installer_transaction.py"
+      ],
+      "entrypoints": ["windows-task-query", "collector-task-verification", "maintenance-task-verification"],
+      "resources": ["task-xml", "windows-principal"],
+      "operations": ["repair", "normalize", "validate"],
+      "planned_check_ids": [
+        "current-user-sid-probe",
+        "account-name-to-sid-equivalence",
+        "unrelated-sid-rejection",
+        "real-windows-rehearsal"
+      ]
+    }
+  ],
+  "rule_exclusions": []
+}

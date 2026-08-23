@@ -126,6 +126,104 @@ class PlatformSchedulerTest(unittest.TestCase):
         self.assertIsNone(root.find(".//t:Priority", namespaces=namespace))
         self.assertIsNone(root.find(".//t:AllowHardTerminate", namespaces=namespace))
 
+    def test_windows_logon_trigger_and_restart_policy_round_trip(self) -> None:
+        spec = self.windows_spec()
+        spec = scheduler.WindowsTaskSpec(
+            **{
+                **spec.__dict__,
+                "trigger_kind": "logon",
+                "restart_interval": "PT1M",
+                "restart_count": 5,
+            }
+        )
+        payload = scheduler.render_windows_task_xml(spec, user_id="DOMAIN\\user")
+        root = ET.fromstring(payload)
+        namespace = {"t": scheduler.TASK_XML_NAMESPACE}
+        self.assertIsNotNone(root.find(".//t:LogonTrigger", namespaces=namespace))
+        self.assertIsNone(root.find(".//t:TimeTrigger", namespaces=namespace))
+        inspected = scheduler.inspect_windows_task_xml(payload)
+        self.assertEqual(inspected["restart_interval"], "PT1M")
+        self.assertEqual(inspected["restart_count"], "5")
+
+    def test_windows_query_preserves_utf16_xml_and_decodes_local_error(self) -> None:
+        payload = scheduler.render_windows_task_xml(
+            self.windows_spec(),
+            user_id="DOMAIN\\user",
+            start_boundary="2026-08-19T12:34:56+09:00",
+        )
+
+        def runner(_arguments, **_kwargs):
+            return subprocess.CompletedProcess([], 0, payload, b"")
+
+        self.assertEqual(
+            scheduler.query_windows_task_xml(
+                "MemoryWuxianTest", schtasks="schtasks.exe", runner=runner
+            ),
+            payload,
+        )
+        with patch.object(scheduler.locale, "getencoding", return_value="cp936"):
+            self.assertEqual(
+                scheduler.decode_windows_output("错误: 拒绝访问".encode("cp936")),
+                "错误: 拒绝访问",
+            )
+
+    def test_windows_inspection_normalizes_schtasks_console_xml_declaration(self) -> None:
+        payload = scheduler.render_windows_task_xml(
+            self.windows_spec(),
+            user_id="DOMAIN\\研究者",
+            start_boundary="2026-08-19T12:34:56+09:00",
+        )
+        console_bytes = payload.decode("utf-16").encode("utf-8")
+        self.assertRegex(console_bytes, rb"encoding=['\"]utf-16['\"]")
+
+        inspected = scheduler.inspect_windows_task_xml(console_bytes)
+
+        self.assertEqual(inspected["user_id"], "DOMAIN\\研究者")
+        self.assertEqual(inspected["command"], str(self.windows_spec().command))
+
+    def test_windows_user_sid_parses_structured_whoami_output(self) -> None:
+        sid = "S-1-5-21-4264115984-4109001030-2440231340-1001"
+
+        def runner(arguments, **kwargs):
+            self.assertEqual(arguments, ["whoami.exe", "/user", "/fo", "csv", "/nh"])
+            self.assertEqual(kwargs, {"check": False, "capture_output": True})
+            return subprocess.CompletedProcess(arguments, 0, f'"马焱一的惠普\\56453","{sid}"\r\n'.encode(), b"")
+
+        self.assertEqual(scheduler.windows_user_sid(runner), sid)
+
+    def test_windows_user_sid_rejects_malformed_output(self) -> None:
+        def runner(arguments, **kwargs):
+            return subprocess.CompletedProcess(arguments, 0, b'"account","not-a-sid"\r\n', b"")
+
+        with self.assertRaisesRegex(RuntimeError, "invalid SID"):
+            scheduler.windows_user_sid(runner)
+
+    def test_windows_task_equivalence_accepts_only_current_account_sid(self) -> None:
+        sid = "S-1-5-21-4264115984-4109001030-2440231340-1001"
+        expected = scheduler.render_windows_task_xml(
+            self.windows_spec(),
+            user_id="DOMAIN\\user",
+            start_boundary="2026-08-19T12:34:56+09:00",
+        )
+        observed = expected.decode("utf-16").replace("DOMAIN\\user", sid).encode("utf-16")
+
+        def runner(arguments, **_kwargs):
+            return subprocess.CompletedProcess(arguments, 0, f'"DOMAIN\\user","{sid}"\r\n'.encode(), b"")
+
+        with patch.dict(scheduler.os.environ, {"USERDOMAIN": "DOMAIN", "USERNAME": "user"}):
+            self.assertTrue(scheduler.windows_task_xml_equivalent(observed, expected, runner=runner))
+            unrelated = observed.decode("utf-16").replace(sid, "S-1-5-21-1-2-3-9999").encode("utf-16")
+            self.assertFalse(scheduler.windows_task_xml_equivalent(unrelated, expected, runner=runner))
+
+        drifted = observed.decode("utf-16").replace("pythonw.exe", "other.exe").encode("utf-16")
+        self.assertFalse(
+            scheduler.windows_task_xml_equivalent(
+                drifted,
+                expected,
+                runner=lambda *_args, **_kwargs: self.fail("SID lookup must be skipped for other drift"),
+            )
+        )
+
     def test_macos_install_and_uninstall_preserve_runner_calls(self) -> None:
         calls: list[tuple[list[str], dict[str, object]]] = []
         writes: dict[str, bytes] = {}

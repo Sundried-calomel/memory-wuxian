@@ -16,6 +16,10 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
 from console_encoding import configure_unicode_stdio
 from platform_atomic import atomic_replace_bytes
 from platform_lock import exclusive_lock

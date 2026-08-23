@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-22T23:05:21+09:00",
+  "reason": "Real Windows runtime assembly disproved exact reuse of the dependency lock; classify and verify the normalized-order correction, then rerun every affected installer gate",
+  "approval": "User authorized formal replan from S06, retention of S01-S05, correction of production composition, and automatic promotion through S15",
+  "resume_step": "S06",
+  "previous_state_sha256": "36f385984237da6f9980d8ac1e123c41ac85ee6c6d13bc2e8f9493e75d017252",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "94ccb25e6203b46fc93cb34e5160eded938dcfc0af3c0612ce1a804a4c5f0263"
+}

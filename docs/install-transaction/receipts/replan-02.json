@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-22T20:51:31+09:00",
+  "reason": "Correct actual Windows packaging paths and bind capability admission to controller plus contract identity.",
+  "approval": "User approved machine-contract repairs and continuous execution through S15 on 2026-08-22.",
+  "resume_step": "S05",
+  "previous_state_sha256": "edbf104418c5cca207662c07dfa2335abff91aef1c857c320a5e0bad8055aa98",
+  "old_contract_sha256": "6f7229fd804e456c0427e4ac51447ce91d5bbe02da82ddd83707205941e4cdbc",
+  "new_contract_sha256": "424a25c7b7d46e78aa9a1b8a032a7857873852913667eebfcbee5579a27a9817",
+  "baseline_sha256": "404420aa82c50ab75dd1e74a27ecc2ed7b69224b55eaa3211209d2179c2b3081"
+}

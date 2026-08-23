@@ -7,19 +7,22 @@ from contextlib import redirect_stderr
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import install_codex_autosync_windows as windows
+import platform_scheduler as scheduler
 
 
 class FakeRunner:
-    def __init__(self, old_xml=None, fail_run=False, fail_probe=False, run_key=None):
+    def __init__(self, old_xml=None, fail_run=False, fail_probe=False, fail_create=False, run_key=None):
         self.task_xml = old_xml
         self.fail_run = fail_run
         self.fail_probe = fail_probe
+        self.fail_create = fail_create
         self.run_key = run_key
         self.calls = []
 
@@ -36,7 +39,8 @@ class FakeRunner:
         if command[:2] == ["reg.exe", "QUERY"]:
             if self.run_key is None:
                 return subprocess.CompletedProcess(command, 1, b"", b"missing")
-            payload = f"    {windows.RUN_VALUE}    REG_SZ    {self.run_key}\r\n".encode("utf-8")
+            value_name = command[command.index("/V") + 1]
+            payload = f"    {value_name}    REG_SZ    {self.run_key}\r\n".encode("utf-8")
             return subprocess.CompletedProcess(command, 0, payload, b"")
         if command[:2] == ["reg.exe", "DELETE"]:
             self.run_key = None
@@ -49,6 +53,13 @@ class FakeRunner:
                 return subprocess.CompletedProcess(command, 1, b"", b"missing")
             return subprocess.CompletedProcess(command, 0, self.task_xml, b"")
         if command[:2] == ["schtasks.exe", "/Create"]:
+            if self.fail_create:
+                return subprocess.CompletedProcess(
+                    command,
+                    1,
+                    b"",
+                    "错误: 任务 XML 格式不正确。".encode("cp936"),
+                )
             definition = Path(command[command.index("/XML") + 1])
             self.task_xml = definition.read_bytes()
             return subprocess.CompletedProcess(command, 0, b"", b"")
@@ -60,6 +71,27 @@ class FakeRunner:
                 raise subprocess.CalledProcessError(1, command)
             return subprocess.CompletedProcess(command, 1, b"", b"failed")
         return subprocess.CompletedProcess(command, 0, b"", b"")
+
+
+class ActivePointerContractTests(unittest.TestCase):
+    def test_existing_matching_pointer_bytes_are_preserved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "档案 ¥ space"
+            pointer = root / "active-root.txt"
+            original = (str(archive) + "\r\n\r\n").encode("utf-8")
+            pointer.write_bytes(original)
+            windows._ensure_active_pointer(pointer, archive, original)
+            self.assertEqual(pointer.read_bytes(), original)
+
+    def test_mismatched_existing_pointer_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pointer = root / "active-root.txt"
+            previous = str(root / "other").encode("utf-8")
+            pointer.write_bytes(previous)
+            with self.assertRaisesRegex(RuntimeError, "does not match"):
+                windows._ensure_active_pointer(pointer, root / "archive", previous)
 
 
 class WindowsLifecycleTransactionTests(unittest.TestCase):
@@ -121,13 +153,40 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
         long_command[long_command.index("--archive-root") + 1] = str(long_archive)
         payload = windows.task_xml(long_command)
         definition = windows.verify_task_definition(payload, long_command)
+        self.assertEqual(definition["user_id"], windows.windows_user_id())
         self.assertEqual(definition["command"], str(self.collector))
         self.assertIn(str(long_archive), definition["arguments"])
         self.assertTrue(definition["hidden"])
         self.assertEqual(definition["multiple_instances"], "IgnoreNew")
-        self.assertEqual(definition["restart_interval"], "PT30S")
+        self.assertEqual(definition["restart_interval"], "PT1M")
         self.assertEqual(definition["restart_count"], "5")
         self.assertNotIn("powershell", definition["command"].lower())
+
+    def test_registered_task_accepts_only_the_current_accounts_normalized_sid(self):
+        sid = "S-1-5-21-4264115984-4109001030-2440231340-1001"
+        payload = windows.task_xml(self.command)
+        registered = payload.decode("utf-16").replace(windows.windows_user_id(), sid).encode("utf-16")
+
+        with patch.object(scheduler, "windows_user_sid", return_value=sid):
+            definition = windows.verify_task_definition(registered, self.command)
+        self.assertEqual(definition["user_id"], sid)
+
+        unrelated = registered.decode("utf-16").replace(sid, "S-1-5-21-1-2-3-9999").encode("utf-16")
+        with patch.object(scheduler, "windows_user_sid", return_value=sid):
+            with self.assertRaisesRegex(RuntimeError, "scheduled task does not match"):
+                windows.verify_task_definition(unrelated, self.command)
+
+    def test_task_registration_failure_preserves_native_diagnostic(self):
+        runner = FakeRunner(fail_create=True)
+        with patch.object(scheduler.locale, "getencoding", return_value="cp936"):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "scheduled task registration failed with exit code 1: 错误: 任务 XML 格式不正确",
+            ):
+                self.invoke(runner)
+        journal = json.loads(self.journal.read_text(encoding="utf-8"))
+        self.assertEqual(journal["phase"], "rollback")
+        self.assertIn("任务 XML 格式不正确", journal["history"][-1]["error"])
 
     def test_old_task_survives_until_candidate_verification_then_commits(self):
         old_command = [str(self.base / "old collector.exe"), "--archive-root", "old"]
@@ -156,7 +215,7 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
         old_command = [str(self.base / "old collector.exe"), "--archive-root", "old"]
         old_xml = windows.task_xml(old_command)
         old_manifest = b'{"old":true}\n'
-        old_pointer = "C:\\旧 archive\r\n".encode("utf-8")
+        old_pointer = (str(self.archive) + "\r\n").encode("utf-8")
         self.manifest.parent.mkdir(parents=True)
         self.manifest.write_bytes(old_manifest)
         self.pointer.write_bytes(old_pointer)
@@ -174,6 +233,25 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
             [item["phase"] for item in journal["history"]],
             ["prepare", "verify", "rollback"],
         )
+
+    def test_namespaced_run_value_is_bound_into_journal_and_registry_calls(self):
+        runner = FakeRunner(run_key="legacy-rehearsal-value")
+        run_value = "MemoryWuxianRehearsal-collector"
+        result = windows.install_transaction(
+            task_name="MemoryWuxianRehearsal-collector",
+            command=self.command,
+            archive_root=self.archive,
+            command_manifest=self.manifest,
+            pointer=self.pointer,
+            journal_path=self.journal,
+            run_value=run_value,
+            runner=runner,
+            readiness_probe=self.ready_probe,
+        )
+        self.assertEqual(result["run_value_name"], run_value)
+        registry_calls = [call for call in runner.calls if call[:2] == ["reg.exe", "QUERY"]]
+        self.assertTrue(registry_calls)
+        self.assertEqual(registry_calls[0][registry_calls[0].index("/V") + 1], run_value)
 
     def test_verified_previous_task_must_pass_effect_probe_after_rollback(self):
         old_command = list(self.command)
@@ -328,6 +406,40 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
         committed = windows.commit_transaction(journal_path, runner=runner)
         self.assertEqual(committed["phase"], "commit")
         self.assertTrue(any(call[:2] == ["reg.exe", "DELETE"] for call in runner.calls))
+
+    def test_generation_transaction_uses_exact_outer_journal_path(self):
+        skill_root = self.base / "installed-skill"
+        candidate = self.base / "candidate-exact-journal"
+        for root, marker in ((skill_root, b"old"), (candidate, b"new")):
+            (root / "bin").mkdir(parents=True)
+            (root / "SKILL.md").write_bytes(marker)
+            (root / "config.yaml").write_bytes(marker)
+            (root / "bin" / "memory-wuxian-collector.exe").write_bytes(marker)
+        command = list(self.command)
+        command[0] = str(skill_root / "bin/memory-wuxian-collector.exe")
+        command[command.index("--config") + 1] = str(skill_root / "config.yaml")
+        candidate_command = list(command)
+        candidate_command[0] = str(candidate / "bin/memory-wuxian-collector.exe")
+        candidate_command[candidate_command.index("--config") + 1] = str(candidate / "config.yaml")
+        exact = self.base / "outer-resources/collector/install-journal.json"
+        _journal, observed = windows.install_generation_transaction(
+            candidate_root=candidate,
+            skill_root=skill_root,
+            runtime_directory=self.base / "unused-runtime",
+            task_name=windows.DEFAULT_TASK_NAME,
+            command=command,
+            candidate_command=candidate_command,
+            archive_root=self.archive,
+            command_manifest=self.manifest,
+            pointer=self.pointer,
+            runner=FakeRunner(windows.task_xml(command)),
+            readiness_probe=self.ready_probe,
+            defer_commit=True,
+            journal_path=exact,
+        )
+        self.assertEqual(observed, exact.resolve())
+        self.assertTrue(exact.is_file())
+        self.assertFalse((self.base / "unused-runtime/transactions").exists())
 
     def test_generation_rollback_restores_old_tree(self):
         candidate = self.base / "package candidate"
@@ -495,8 +607,14 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
         )
         self.assertIn('DestDir: "{tmp}\\MemoryWuxian\\candidate"', installer)
         self.assertNotIn('Source: "{#SourceRoot}\\*"; DestDir: "{app}"', installer)
-        for token in ("--candidate-root", "--defer-commit", "--commit-journal", "--rollback-journal"):
+        for token in (
+            "install_windows_transaction.py", "windows_installer_broker.py",
+            "--prepare-only", "--source-entrypoint", "--candidate-root",
+            "--launch-manifest", "--request-output", "--nonce-root",
+        ):
             self.assertIn(token, script.lower())
+        for legacy_token in ("--defer-commit", "--commit-journal", "--rollback-journal"):
+            self.assertNotIn(legacy_token, script.lower())
         self.assertNotIn("reg.exe add", script.lower())
 
 

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.20.0-unified-installer-transaction",
+  "artifact_profile": "software-feature",
+  "classification": "refactor",
+  "owner_id": "windows-installer-transaction-controller",
+  "target": "Replace distributed Windows installation behavior with one hash-bound, resumable, cross-version transaction without changing archive, summary, capture, cloud, or environment semantics.",
+  "validation_profile": "staged-full",
+  "invariants": ["Raw archives and active archive pointers are never rewritten by installer governance.", "Only one installer transaction controller may mutate installation state.", "A released installer is byte-identical to the CI artifact installed successfully on the target device.", "A second failed integrated remediation requires replanning instead of another patch."],
+  "prohibited_changes": ["Modify Summary V2 or semantic maintenance behavior.", "Install a global development hook.", "Publish or install a candidate before its ordered gates complete."],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.20.0-install-governance-preflight.json",
+    "preflight_sha256": "7d6f6622853071a59f3b7795de2f9aa7fabe3588f650a59dd03e5845bf618d77",
+    "completion_receipt": "docs/defect-receipts/v2.20.0-install-governance-completion.json",
+    "completion_sha256": "ff136248f8e17b430455e1d9c9a8a5518716017efdbb9101fffdefe131cacaad",
+    "applicable_families": ["G03", "G05", "G09", "G11", "MW-R06", "MW-R10"]
+  },
+  "workflow_contract": "docs/install-transaction/contract.json",
+  "lifecycle_state": "s01-governance-established"
+}

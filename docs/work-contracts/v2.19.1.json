@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.19.1-windows-task-principal-repair",
+  "candidate_id": "v2.19.1-windows-task-principal-hotfix",
+  "artifact_profile": "release",
+  "classification": "extension",
+  "owner_id": "windows-collector-installation",
+  "target": "Repair the blocked Windows 2.19.0 collector installation without changing archive, summary, cloud, or capture semantics.",
+  "primary_semantics": "Every InteractiveToken collector task binds an explicit current Windows UserId from the shared Platform identity owner, and registration failures retain their native diagnostic in the rollback journal.",
+  "validation_profile": "targeted-patch",
+  "invariants": [
+    "Raw archives, summaries, indexes, cloud state, configuration, cursors, and the active archive-root pointer are not rewritten by this repair.",
+    "The collector remains a direct hidden native Task Scheduler action with LeastPrivilege and exactly one startup owner.",
+    "A failed installation restores the previous generation and preserves the native task-registration diagnostic.",
+    "The installed generation is accepted only after a real Windows task query, process identity check, and archive-watermark advance.",
+    "The existing canonical owner remains authoritative; this repair introduces no additive bypass and cannot regress an earlier passing case that shares the scheduler or installer boundary."
+  ],
+  "allowed_changes": [
+    "Use the shared Platform Windows identity owner when rendering the existing collector task principal.",
+    "Capture native schtasks output in the existing transactional rollback error.",
+    "Update patch-version metadata, documentation, regression tests, receipts, package evidence, and release assets."
+  ],
+  "prohibited_changes": [
+    "Add a Run-key fallback, second scheduler, wrapper process, alternate installer, or competing startup owner.",
+    "Change Summary V2 rescue, archive formats, capture selection, cloud protocols, dashboard behavior, or maintenance policy.",
+    "Treat mock tests, package construction, installer exit zero, or process existence alone as installed-effect proof."
+  ],
+  "required_rehearsal_scenarios": [
+    "windows-task-principal-contract",
+    "windows-install-rollback-diagnostic",
+    "windows-real-upgrade-effect",
+    "architecture-contract",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "before_after_checks": [
+    "Verify generated and queried task XML contain the same nonempty UserId, direct native command, hidden setting, and LeastPrivilege policy.",
+    "Verify a registration failure records native stderr and rolls back without changing the active archive-root pointer.",
+    "Upgrade the existing 2.15.0 installation through the packaged installer and verify one task, one installed collector generation, fresh telemetry, shortcut identity, and archive-watermark progress.",
+    "Verify Python, Rust, documentation, and packaged binary versions all report 2.19.1."
+  ],
+  "required_evidence": [
+    "defect-preflight-and-load",
+    "focused-python-tests",
+    "windows-package-build",
+    "windows-real-upgrade-effect",
+    "cross-platform-ci",
+    "independent-evaluation",
+    "published-release-asset-verification",
+    "defect-verification-and-completion"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "docs/defect-receipts/v2.19.1-preflight.json",
+    "preflight_sha256": "753f87a76e7adfb375376a94db8b7296f41dda43c846dbb815a4591210f8a037",
+    "completion_receipt": "docs/defect-receipts/v2.19.1-completion.json",
+    "completion_sha256": "PENDING",
+    "applicable_families": ["G03", "G05", "G09", "G11", "MW-R06", "MW-R10"],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "The released 2.19.0 installer returned an outer exit code of zero while its hidden install transaction rolled back after schtasks rejected the collector task XML.",
+      "The collector installer duplicated Principal XML and omitted UserId even though the shared Platform scheduler already owned correct Windows identity rendering.",
+      "FakeRunner accepted malformed platform XML, so package and mock evidence escaped without a real Windows Task Scheduler effect check."
+    ]
+  },
+  "rollback_version": "2.19.0",
+  "lifecycle_state": "candidate-validation"
+}

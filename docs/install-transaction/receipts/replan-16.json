@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T18:17:33+09:00",
+  "reason": "Full-suite adjacent-entry evidence proved the six-resource architecture omitted the legacy federation node initialization contract; preserve S01-S02, revise the architecture to a seventh independently rollbackable resource, then replay implementation and release gates",
+  "approval": "User authorized reuse-repair-redo execution through installed completion and explicitly included UAC",
+  "resume_step": "S03",
+  "previous_state_sha256": "0ff925e6c78aa1ec1432c456122e7f98801e4540216c617e43fd4bcfa6f95926",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "57120e8b78938c07de2b4aa776a7cf6f1fc994e002e79af04f1528b67694ccae"
+}

@@ -1,5 +1,18 @@
 # Memory無限
 
+> **2.20.0:** Unifies every supported Windows install and update entrypoint
+> behind `windows_installer_transaction.py`. Five bounded mutations, beginning
+> with `CollectorGenerationMutation`, persist compensation before apply, record
+> `commit-intent`, and require `rollback-verified` after failure. Raw archive
+> records and the active archive pointer remain immutable; memory, summary,
+> index, cloud, and semantic-processing contracts are unchanged.
+
+> **2.19.1:** Repairs Windows collector installation by binding the scheduled
+> task principal to the interactive Windows user through the shared Platform
+> identity owner. Failed task registration now preserves the native diagnostic
+> in the rollback journal. Archive, summary, index, cloud, and collector event
+> semantics remain unchanged.
+
 > **2.19.0:** Integrates the completed R1-R8 behavior-preserving modularization
 > behind canonical Platform, Environment, Exchange, application-service, CLI,
 > and test-support owners. It is the first public installer integration of the

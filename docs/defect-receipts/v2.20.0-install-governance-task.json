@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-install-governance",
+  "objective": "Establish the hash-bound S01-S15 unified installer workflow before any further Windows installer implementation.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "create",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "windows-installer-transaction-controller",
+  "platforms": ["windows"],
+  "languages": ["python", "shell", "json", "markdown"],
+  "path_globs": ["docs/install-transaction/**", "scripts/install_transaction_*.py", "tests/test_install_transaction_*.py", ".githooks/pre-commit", "AGENTS.md"],
+  "entrypoints": ["developer-cli", "git-pre-commit"],
+  "resources": ["persistent-state", "transaction", "rollback", "test-evidence", "release-artifact"],
+  "operations": ["govern", "validate", "freeze", "resume", "promote"],
+  "data_formats": ["utf-8", "json", "markdown"],
+  "authorization_boundaries": ["No installer mutation, live installation, scheduler activation, network write, publication, release, archive mutation, summary change, cloud change, or global hook installation."],
+  "implementation_units": [
+    {
+      "id": "workflow-controller",
+      "owner_id": "windows-installer-transaction-controller",
+      "paths": ["docs/install-transaction/**", "scripts/install_transaction_workflow.py", "tests/test_install_transaction_workflow.py"],
+      "entrypoints": ["developer-cli"],
+      "resources": ["persistent-state", "transaction", "test-evidence"],
+      "operations": ["govern", "validate", "freeze", "resume"],
+      "planned_check_ids": ["entrypoint-inventory", "evidence-roundtrip", "migration-idempotence"]
+    },
+    {
+      "id": "project-hook",
+      "owner_id": "windows-installer-transaction-controller",
+      "paths": [".githooks/pre-commit", "AGENTS.md"],
+      "entrypoints": ["git-pre-commit"],
+      "resources": ["test-evidence"],
+      "operations": ["validate"],
+      "planned_check_ids": ["cross-entrypoint-contract", "target-platform-effect"]
+    }
+  ],
+  "rule_exclusions": []
+}

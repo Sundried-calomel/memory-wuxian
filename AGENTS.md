@@ -230,6 +230,12 @@ Use Memory無限 to preserve conversation history outside the active context win
     schema-v2 `docs/module-architecture.json` and keep the architecture checker
     passing. For v2.16-v2.18, Summary V1/V2, atomic summaries, historical
     backfill, and all cloud protocols remain explicit non-goals.
+79. While `docs/install-transaction/runtime-state.json` is active, every edit
+    to a path protected by `docs/install-transaction/contract.json` must pass
+    the project-local `scripts/install_transaction_workflow.py hook pre-edit`
+    and `hook post-edit` gates. Advance only through `verify`, `complete`, and
+    `next`; never edit the state by hand, skip S01-S15, install a global hook,
+    or continue after the workflow enters `needs_replan`.
 
 ## Authority order
 

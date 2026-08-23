@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-22T20:22:21+09:00",
+  "reason": "Promote each completed verified worktree as the next step baseline and add a hash-bound recovery transition.",
+  "approval": "User approved bounded replan and continuous execution through S15 on 2026-08-22.",
+  "resume_step": "S02",
+  "previous_state_sha256": "24d5b21205c30aa8af23843c4ca722e1bd5f45f3df4b00f8073873f8302db7b0",
+  "old_contract_sha256": "6485dfbb8cf18ca26e69c72936386d2dcb4309006dc61dcf820b104c9a769071",
+  "new_contract_sha256": "6f7229fd804e456c0427e4ac51447ce91d5bbe02da82ddd83707205941e4cdbc",
+  "baseline_sha256": "f1b17f433c08afabdb6aaa64a9c7a322bb4caccd05514397b451d6d1324b18b1"
+}

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "scope": "isolated-real-windows-install",
+  "source_rehearsal_receipt": {
+    "path": "docs/rehearsals/v2.20.0-s11-windows-rehearsal.json",
+    "sha256": "97b01b68b7d0db0b644eff80aa493d113a94d198bb22be3261cdf61def5e127e"
+  },
+  "task": {
+    "verified_at_install": true,
+    "hidden": true,
+    "multiple_instances": "IgnoreNew",
+    "restart_interval": "PT1M",
+    "restart_count": "5",
+    "command_is_native_collector": true,
+    "powershell_in_command": false
+  },
+  "process": {
+    "verified_live_at_install": true,
+    "pid": 31684,
+    "source_journal_sha256": "f01a74615f68065291bf7e0f769484e275f8bad8a0d8901ad5f54d1cfb923db4"
+  },
+  "telemetry": {
+    "ready": true,
+    "phase": "ready",
+    "source_watermark": "2026-08-23T14:28:32Z",
+    "archive_watermark": "2026-08-23T14:28:32Z",
+    "watermarks_converged": true
+  },
+  "effect_probe": {
+    "probe_id": "memory-wuxian-install-effect-eab6b4ca56ee4faeab66efe3453aba67",
+    "watermark": "2026-08-23T14:28:32Z",
+    "payload_sha256": "94da7b83013b0c5fb4a2844aa79336063f901d74e03fe0ae127fa830fa3fd6c7",
+    "contains_visible_messages": false
+  },
+  "shortcut": {
+    "verified_at_install": true,
+    "arguments_empty": true,
+    "target_exists_at_verification": true,
+    "launcher_sha256": "114ed38d3480847eb95fe7c5adee8ad2a588b292e80e6c2f59e81c877082947a"
+  },
+  "focus_behavior": {
+    "launcher_pe_magic": "0x020b",
+    "launcher_pe_subsystem": 2,
+    "windows_gui_subsystem": true,
+    "transient_powershell_console_in_launch_path": false
+  },
+  "archive_pointer": {
+    "repeat_install_before_sha256": "6cc9628aa6b4990885698b40d54c7c6624d72cb9af61ecb53bf2ada53d9702f6",
+    "repeat_install_after_sha256": "6cc9628aa6b4990885698b40d54c7c6624d72cb9af61ecb53bf2ada53d9702f6",
+    "byte_equal": true,
+    "raw_archive_targeted": false
+  },
+  "post_rehearsal_cleanup": {
+    "tasks_absent": true,
+    "run_values_absent": true,
+    "shortcut_absent": true,
+    "production_resources_unchanged": true
+  }
+}

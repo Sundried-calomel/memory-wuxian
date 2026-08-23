@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "review_id": "memory-wuxian-v2.20.0-s03-architecture",
+  "work_item_id": "memory-wuxian-v2.20.0-unified-installer-transaction",
+  "candidate_id": "s03-architecture-freeze",
+  "producer_identity": "codex-primary-producer",
+  "evaluator_identity": "codex-independent-architecture-reviewer",
+  "verdict": "pass",
+  "review_round": 2,
+  "resolved_blocker": "Caller-composed protocol adapters remove the forbidden controller dependency while retaining controller-owned ordering, journal, commit, and rollback.",
+  "blocking_findings": [],
+  "artifact_sha256": {
+    "docs/install-transaction/entrypoint-inventory.md": "304fd842904a9ba771dd3d818d3092f5e2591f70a66fa625836a9d462683c563",
+    "docs/install-transaction/architecture-freeze.md": "99c331ecc9ea0d3e83fa19645694872f65b9a52b9ac40bc336708d1a1b33cdb0",
+    "docs/install-transaction/contract.json": "6f7229fd804e456c0427e4ac51447ce91d5bbe02da82ddd83707205941e4cdbc",
+    "docs/module-architecture.json": "9a49b825bdd1145be35868a2d46fa11ee0363c34d1ed2388a87e34f3781b8902"
+  },
+  "deterministic_evidence": ["scripts/check_architecture_contract.py passed"],
+  "scope_limitation": "This verdict freezes S03 architecture only; it does not accept S04-S15 implementation or runtime effects."
+}

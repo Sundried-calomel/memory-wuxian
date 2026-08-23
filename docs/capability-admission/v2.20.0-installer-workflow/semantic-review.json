@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "candidate_id": "installer-transaction-workflow",
+  "candidate_revision": "2.20.0-governance-11",
+  "candidate_manifest_sha256": "dacf9669697e6758de0a9b727fc4771e33976b307ecadf50f108d065d129d182",
+  "registry_sha256": "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89",
+  "reviewer_identity": "codex-independent-capability-reviewer-v220-g11",
+  "classification": "extension",
+  "owner_id": "windows-installer-transaction-controller",
+  "decision": "allow",
+  "evidence": [
+    "Evaluator identity differs from producer identity codex-primary-producer.",
+    "Deterministic admission inspection reported no errors, cycles, trigger conflicts, or resource conflicts.",
+    "Governance-11 changes only the reuse-map mutation list by adding the independently frozen local-federation-node Owner.",
+    "Governance-11 retains the same owner, triggers, calls, permissions, resources, actions, authorization gates, and external-authority boundary.",
+    "The governance-11 aggregate artifact SHA-256 recomputes exactly to 62ba767fc76adf8cebd9e0f551a331f6dc2001f1239aca384bf6638065991c56.",
+    "The S06 reuse-map validator passed and listed all seven bounded mutations without conflicts.",
+    "FederationNodeInitializationMutation declares apply, verify, commit, rollback, and rollback_verify; the focused S06 matrix passed 111 of 111 tests.",
+    "The independent evaluator scored all four mandatory dimensions 100/100 with no blocking findings."
+  ],
+  "trigger_resolutions": []
+}

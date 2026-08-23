@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "projectName": "Memory Wuxian unified installer transaction",
+  "requiredDocuments": [
+    {
+      "role": "rules",
+      "path": "docs/install-transaction/rules.md"
+    },
+    {
+      "role": "history",
+      "path": "docs/retrospectives/install-transaction-workflow.md"
+    },
+    {
+      "role": "optimized",
+      "path": "docs/install-transaction/optimized-procedure.md"
+    }
+  ],
+  "stateFile": "docs/install-transaction/governance-state.json",
+  "changeLog": "docs/install-transaction/change-log.md",
+  "pendingDirectory": "docs/install-transaction/pending",
+  "completedDirectory": "docs/install-transaction/completed"
+}

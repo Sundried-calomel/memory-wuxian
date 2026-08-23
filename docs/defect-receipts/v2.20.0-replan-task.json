@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-baseline-replan",
+  "objective": "Repair verified-step baseline promotion and add a hash-bound replan transition so S01-S15 can advance without inheriting prior-step deltas.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "windows-installer-transaction-controller",
+  "platforms": ["windows"],
+  "languages": ["python", "json", "markdown"],
+  "path_globs": ["scripts/install_transaction_workflow.py", "tests/test_install_transaction_workflow.py", "docs/install-transaction/**", "docs/capability-admission/v2.20.0-installer-workflow/**"],
+  "entrypoints": ["developer-cli", "git-pre-commit"],
+  "resources": ["persistent-state", "transaction", "test-evidence"],
+  "operations": ["repair", "validate", "resume"],
+  "data_formats": ["utf-8", "json"],
+  "authorization_boundaries": ["User approved only the bounded contract replan and continuous execution; no release, installation, archive, summary, cloud, or global-hook action is added by this repair."],
+  "implementation_units": [
+    {
+      "id": "baseline-promotion",
+      "owner_id": "windows-installer-transaction-controller",
+      "paths": ["scripts/install_transaction_workflow.py", "tests/test_install_transaction_workflow.py"],
+      "entrypoints": ["developer-cli"],
+      "resources": ["persistent-state", "transaction", "test-evidence"],
+      "operations": ["repair", "validate", "resume"],
+      "planned_check_ids": ["migration-idempotence", "evidence-roundtrip", "cross-entrypoint-contract"]
+    }
+  ],
+  "rule_exclusions": []
+}

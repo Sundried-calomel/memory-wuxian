@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T23:22:11+09:00",
+  "reason": "Both real UAC failures share one root cause: transaction-private resources inherit an unbounded manifest directory path. Move production and rehearsal resource staging to a canonical short durable Windows root while preserving journal and target boundaries.",
+  "approval": "User authorized repair, redo, UAC, and continuous execution through installation; this second replan replaces the shared root cause rather than adding another resource-specific patch.",
+  "resume_step": "S06",
+  "previous_state_sha256": "8b0046b6088a4dc05fff936fa47f7fb99c153abfe4ce620525bc586e6f65b728",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "24f2e970b121415fd508423c5e1687e0d2db2d1677f5ac8b2476d26a93644df4"
+}

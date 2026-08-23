@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T18:16:16+09:00",
+  "reason": "S13 full gate proved the candidate needs one bounded correction in release-profile handling and stale release tests before candidate freeze; preserve S01-S05 and retain the already-correct exact-artifact workflow changes as the new baseline",
+  "approval": "User authorized reuse-repair-redo execution through installed completion and explicitly included UAC",
+  "resume_step": "S06",
+  "previous_state_sha256": "4be1f5c6da84a4846f7c9ef1f279977b0aab35cd790c57453cd1290bbda14793",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "57120e8b78938c07de2b4aa776a7cf6f1fc994e002e79af04f1528b67694ccae"
+}

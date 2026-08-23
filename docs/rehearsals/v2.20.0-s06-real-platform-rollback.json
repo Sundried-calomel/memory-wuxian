@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "scenario_id": "S06-WIN-NEG-01",
+  "checked_at": "2026-08-23T17:04:30+09:00",
+  "platform": "windows",
+  "source_entrypoint": "manual",
+  "namespace": "MemoryWuxianRehearsal-6131defcd9a5",
+  "candidate": {
+    "version": "2.20.0",
+    "package_sha256": "d66d77d98e18a8b6f0859559b4164e4c7996661622dea6473b05057055823b3a",
+    "manifest_sha256": "5cb2f75ae85a5a46caf24c90f38b02e4881741af289ae7ffcaddc0b889f027e5"
+  },
+  "runtime": {
+    "bundle_id": "5089dd5d4f3c79182b90bc03850e8d06f405625ce4b1428105e23802c7240149",
+    "python_sha256": "4942b86a6597e5aee0128daa00050ed79bc21f6e709a78eb19cbfeb0c2f39ac9",
+    "probe": "Python 3.14.7; sys.dont_write_bytecode=true"
+  },
+  "projection": {
+    "sha256": "763fc5e2cd12d617f7fdaf3cca698f58c266fc30c57c04e5e9a793321c6c96fb",
+    "excluded_top_level": ["runtime"]
+  },
+  "observed_effect": {
+    "real_schtasks_registration_reached": true,
+    "registration_result": "access-denied",
+    "outer_transaction_phase": "rolled-back",
+    "archive_resource_status": "rollback-verified",
+    "collector_resource_status": "rollback-verified",
+    "collector_rollback_status": "rolled-back",
+    "collector_rollback_verification": "verified"
+  },
+  "source_journal": {
+    "path": "C:\\Users\\56453\\AppData\\Local\\Temp\\mw-s11-a99d3a37\\rehearsal\\transactions\\clean-install\\journal.json",
+    "sha256": "23169498200F29B3C3D3D512CFDE101988694056F553779E6747223BF630F8D0"
+  },
+  "claims": {
+    "target_platform_negative_path": "passed",
+    "rollback_effect": "passed",
+    "successful_elevated_install": "not_run",
+    "s11_rehearsal": "not_satisfied"
+  }
+}

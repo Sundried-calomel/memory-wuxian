@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T12:39:44+09:00",
+  "reason": "Real embeddable-Python rehearsal proved the composition entrypoint lacked an explicit isolated import root; add the minimal local bootstrap and a python -I empty-PATH regression test",
+  "approval": "User authorized the S06 formal replan, production composition correction, and automatic promotion through S15",
+  "resume_step": "S07",
+  "previous_state_sha256": "06bf262aa46ecd78054d2c732ef8763338b8d68bb1aa345d93e586fbe262f67e",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "fc7be551fae522a4ec1748d2a5a2dd1ca15f9cc3c015c1284deb412f205805e5"
+}

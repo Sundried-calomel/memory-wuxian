@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "step": "S02",
+  "verified_at": "2026-08-22T20:28:31+09:00",
+  "contract_sha256": "6f7229fd804e456c0427e4ac51447ce91d5bbe02da82ddd83707205941e4cdbc",
+  "git_head": "6c60a539b4d7fc45b6fe12945b0393335ebb8b86",
+  "worktree_sha256": "00721fd0ca984c704af89292d5acd68db0ebebf2cfd236b02411b792eef40fd4",
+  "delta_paths": [
+    "docs/install-transaction/entrypoint-inventory.md"
+  ],
+  "evidence": [
+    "entrypoint-inventory",
+    "single-owner-decision"
+  ]
+}

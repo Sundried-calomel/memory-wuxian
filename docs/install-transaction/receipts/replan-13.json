@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T17:22:17+09:00",
+  "reason": "Preserve S01-S03 and normalize current Windows account name versus its registered SID in the shared S04 scheduler boundary; then replay downstream evidence.",
+  "approval": "行，那你按照你这个可复用代码啊，什么，该修的修，能复用的复用，要重新做的重新做",
+  "resume_step": "S04",
+  "previous_state_sha256": "64fbd3f8f45be93e53af5c818ed8324b8f57a94aaccd7943db0e320a42918efe",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "a91d9b5bb9575a0da1d4c0ec6a9d0f6204f9bcac5e97593eb890959a574ba3d3"
+}

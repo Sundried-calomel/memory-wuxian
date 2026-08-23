@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "installed_version": "2.15.0",
+  "target_version": "2.19.1",
+  "active_archive_pointer": "D:\\MemoryWuxianArchive",
+  "config": {
+    "archive": {"backup_keep": 7},
+    "cloud": {"enabled": true},
+    "user_label": "preserve-me"
+  },
+  "defaults": {
+    "archive": {"backup_keep": 3, "incremental": true},
+    "cloud": {"enabled": false, "interval_seconds": 300},
+    "dashboard": {"language": "zh-CN"}
+  },
+  "raw_records": [
+    "{\"role\":\"user\",\"content\":\"original-1\"}",
+    "{\"role\":\"assistant\",\"content\":\"original-2\"}"
+  ]
+}

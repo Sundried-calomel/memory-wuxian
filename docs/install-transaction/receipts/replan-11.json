@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T16:05:14+09:00",
+  "reason": "S11 safety review rejected live takeover of production-named tasks and shortcut; preserve S01-S05, add a test-only resource namespace and bind the collector child installer to the manifest archive pointer before rerunning S06-S15",
+  "approval": "User instructed reuse proven code, repair what needs repair, and redo invalidated work; prior workflow approval explicitly covers formal replan and automatic promotion through S15.",
+  "resume_step": "S06",
+  "previous_state_sha256": "076534a1bf74c5d3e25a9861a47dd23ef426e1d03c3c8ef6f5a14dbe6e6d39c4",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "14124d525ba9083f950eef78b72cfb637419647eb82428124a28e9d574bfe3b3"
+}

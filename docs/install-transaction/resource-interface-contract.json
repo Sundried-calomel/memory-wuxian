@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "step": "S06",
+  "status": "frozen-for-implementation",
+  "transaction_owner": "scripts/windows_installer_transaction.py:WindowsInstallerTransaction",
+  "composition_owner": "scripts/install_windows_transaction.py:ProductInstallAdapter",
+  "outer_entrypoints": [
+    {"id": "inno", "chain": ["packaging/windows/MemoryWuxian.iss", "packaging/windows/install.ps1", "scripts/windows_installer_broker.py", "scripts/install_windows_transaction.py"]},
+    {"id": "manual", "chain": ["packaging/windows/install.ps1", "scripts/windows_installer_broker.py", "scripts/install_windows_transaction.py"]},
+    {"id": "auto-update", "chain": ["scripts/auto_update.py", "packaging/windows/MemoryWuxian.iss", "packaging/windows/install.ps1", "scripts/windows_installer_broker.py", "scripts/install_windows_transaction.py"]}
+  ],
+  "bootstrap_resources": [
+    {"id": "package-candidate", "owner": "packaging/windows/MemoryWuxian.iss", "lifecycle": "temporary-input", "rollback": "Inno temporary-directory cleanup", "product_state": false},
+    {"id": "isolated-runtime-cache", "owner": "scripts/install_windows_runtime.py", "lifecycle": "content-addressed-immutable-cache", "rollback": "retain an unreferenced verified cache generation", "product_state": false},
+    {"id": "transaction-evidence", "owner": "scripts/windows_installer_transaction.py:WindowsInstallerTransaction", "lifecycle": "durable-evidence", "rollback": "retain terminal evidence without reporting product success", "product_state": false}
+  ],
+  "resource_staging": {
+    "production_root": "PROGRAMDATA/MemoryWuxian/installer-resources/<transaction-id>",
+    "rehearsal_root": "PROGRAMDATA/MemoryWuxianRehearsal/installer-resources/<transaction-id>",
+    "invariants": ["The staging root has bounded platform-owned depth and does not inherit the manifest path.", "Production and rehearsal staging roots are disjoint.", "The transaction journal remains beside the manifest and binds every staged path by evidence."]
+  },
+  "transaction_resources": [
+    {
+      "id": "installed-capture-generation",
+      "owner": "scripts/install_windows_transaction.py:CollectorGenerationMutation",
+      "owned_paths": ["target_skill_root/** except delegated mutable overlays", "archive_root/imports/codex/collector-command.json", "archive_root/imports/codex/collector-lifecycle.json", "archive_pointer", "archive_root/imports/codex/run-collector.cmd", "archive_root/imports/codex/run-collector-hidden.vbs", "LOCALAPPDATA/MemoryWuxian/run-collector-hidden.vbs"],
+      "owned_tasks": ["MemoryWuxianCodexSync"],
+      "owned_registry_values": ["HKCU/Software/Microsoft/Windows/CurrentVersion/Run/MemoryWuxianCodexSync"],
+      "delegated_subresources": ["target_skill_root/config.yaml", "target_skill_root/config-migration-receipt.json"],
+      "forbidden_paths": ["archive_root/raw/**", "archive_root/summaries/**"],
+      "invariants": ["Preserve an existing archive pointer byte-for-byte and require it to resolve to archive_root.", "Create a missing archive pointer only for a clean install.", "Runtime capture after activation is append-only runtime behavior, not an installer rollback target.", "Maintenance registration is not hidden inside this resource."]
+    },
+    {
+      "id": "configuration-overlay",
+      "owner": "scripts/install_windows_transaction.py:ConfigurationMigrationMutation",
+      "owned_paths": ["target_skill_root/config.yaml", "target_skill_root/config-migration-receipt.json"],
+      "owned_tasks": [], "owned_registry_values": [], "forbidden_paths": ["archive_root/**"],
+      "invariants": ["Migration is additive and idempotent.", "Rollback restores exact prior bytes and existence state."]
+    },
+    {
+      "id": "archive-scaffold",
+      "owner": "scripts/install_windows_transaction.py:ArchiveInitializationMutation",
+      "owned_paths": ["bounded MemoryStore.init metadata discovered from an isolated probe"],
+      "owned_tasks": [], "owned_registry_values": [], "forbidden_paths": ["archive_root/raw/**", "archive_pointer"],
+      "invariants": ["No authoritative raw record is mutated or rolled back.", "Rollback removes only unchanged installer-created scaffolding and retains runtime-modified files or non-empty directories as evidence."]
+    },
+    {
+      "id": "local-federation-node",
+      "owner": "scripts/install_windows_transaction.py:FederationNodeInitializationMutation",
+      "owned_paths": ["archive_root/federation/node.json", "archive_root/federation/export-state.json", "archive_root/federation/export-ledger.jsonl", "archive_root/federation/sync-log.jsonl", "archive_root/federation/peers/", "archive_root/federation/token-usage-snapshots/", "replica_root/global-index/", "replica_root/peers/"],
+      "owned_tasks": [], "owned_registry_values": [], "forbidden_paths": ["archive_root/raw/**", "archive_root/summaries/**", "archive_root/federation/peers/*.json", "replica_root/peers/**"],
+      "invariants": ["Preserve an existing node.json byte-for-byte.", "A clean install creates exactly one node identity using the current computer name as display_name.", "Prepare materializes expected bytes only under transaction evidence.", "Rollback removes only unchanged files and empty directories created by this transaction; peer records and replica content are never installer rollback targets."]
+    },
+    {
+      "id": "maintenance-scheduler",
+      "owner": "scripts/install_windows_transaction.py:MaintenanceRegistrationMutation",
+      "owned_paths": [], "owned_tasks": ["MemoryWuxianMaintenance"], "owned_registry_values": [], "forbidden_paths": ["archive_root/raw/**"],
+      "invariants": ["Exact previous task XML and existence state are restorable.", "The task uses the manifest-bound runtime and installed Skill root."]
+    },
+    {
+      "id": "auto-update-scheduler",
+      "owner": "scripts/install_windows_transaction.py:AutoUpdateRegistrationMutation",
+      "owned_paths": [], "owned_tasks": ["MemoryWuxianAutoUpdate"], "owned_registry_values": ["HKCU/Software/Microsoft/Windows/CurrentVersion/Run/MemoryWuxianAutoUpdate"], "forbidden_paths": ["archive_root/**"],
+      "invariants": ["The legacy Run value is migrated, never used as a new fallback.", "Rollback restores task XML and the legacy value exactly."]
+    },
+    {
+      "id": "dashboard-launcher",
+      "owner": "scripts/install_windows_transaction.py:DashboardShortcutMutation",
+      "owned_paths": ["Desktop/Memory无限状态台.lnk", "CODEX_HOME/memory-wuxian-dashboard-launcher.json"],
+      "owned_tasks": [], "owned_registry_values": [], "forbidden_paths": ["archive_root/**"],
+      "invariants": ["Verify shortcut target, working directory, icon, arguments, launcher hash, and launcher config."]
+    }
+  ],
+  "mutation_protocol": {
+    "required_identity": ["name", "resource_id", "compensation", "owned_paths", "owned_tasks", "owned_registry_values", "forbidden_paths"],
+    "ordered_methods": ["prepare", "restore_prepare", "apply", "verify", "commit", "rollback", "rollback_verify"],
+    "rules": ["prepare is read-only for product resources and records exact prior evidence", "journal applying intent before apply", "commit is idempotent", "rollback is reverse order", "rollback-incomplete is terminal", "resource ownership is unique except explicit delegation"]
+  },
+  "manifest_v2": {
+    "closed_fields": ["schema_version", "operation", "source_entrypoint", "candidate_root", "target_skill_root", "archive_root", "archive_pointer", "sessions_root", "runtime_bundle", "codex_cli", "package", "requested_components"],
+    "codex_cli_fields": ["path", "sha256"],
+    "requested_components": ["archive", "auto-update", "collector", "config", "federation-node", "maintenance", "shortcut"],
+    "production_exclusions": ["failure_point", "arbitrary_command", "arbitrary_arguments", "trusted_root_override"],
+    "binding": "canonical UTF-8 JSON SHA-256"
+  },
+  "broker_envelope": {
+    "closed_fields": ["transaction_id", "operation", "target_sid", "manifest_path", "manifest_sha256", "controller_path", "controller_sha256", "nonce"],
+    "dispatcher": "manifest-bound Python runs the hash-bound controller with only --execute-manifest",
+    "elevation": "one runas boundary after non-elevated validation; elevated dispatch revalidates and consumes the nonce",
+    "forbidden": ["arbitrary executable", "arbitrary command", "caller-defined controller arguments", "unhashed manifest", "replayed nonce"]
+  },
+  "rehearsal_namespace": {
+    "owner": "scripts/run_windows_installer_rehearsal.py",
+    "injection_boundary": "ProductInstallAdapter constructor only; no manifest or outer entrypoint field",
+    "namespaced_resources": ["collector task", "collector Run value", "maintenance task", "auto-update task", "auto-update Run value", "desktop directory", "shortcut name"],
+    "fixed_manifest_resources": ["candidate root", "target root", "archive root", "archive pointer", "sessions root", "runtime", "Codex CLI"],
+    "invariants": ["Production defaults remain unchanged.", "Every rehearsal task and Run value uses the MemoryWuxianRehearsal- prefix.", "The isolated desktop is outside the user Desktop.", "Production resources are snapshotted before and after cleanup and must remain identical."]
+  },
+  "transaction_order": ["archive-scaffold", "local-federation-node", "installed-capture-generation", "configuration-overlay", "maintenance-scheduler", "auto-update-scheduler", "dashboard-launcher"],
+  "acceptance_cases": ["three outer entrypoints share canonical manifest semantics and one controller", "broker failures remain distinguishable", "special-character and long paths remain structured", "seven unique resources with visible maintenance and federation-node ownership", "clean install creates one local federation node and repeat install preserves its exact bytes", "upgrade and rollback preserve archive pointer and raw bytes", "failure after each resource restores prior resources", "official install.ps1 reaches the broker", "namespaced real-Windows rehearsals cannot address production task, Run-value, Desktop, pointer, or federation-node resources"],
+  "non_goals": ["production installation", "release publication", "S07-S15 promotion", "Summary V2", "archive-content migration", "cloud synchronization"]
+}

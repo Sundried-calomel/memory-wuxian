@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "step": "S03",
+  "verified_at": "2026-08-23T18:27:05+09:00",
+  "contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "git_head": "6c60a539b4d7fc45b6fe12945b0393335ebb8b86",
+  "worktree_sha256": "41149df23bd84e2238a0f3b7773e678fc00aa256a58e7a362716f75c445b4094",
+  "delta_paths": [
+    "docs/install-transaction/architecture-freeze.md",
+    "docs/install-transaction/resource-interface-contract.json",
+    "docs/install-transaction/resource-interface-contract.md",
+    "docs/module-architecture.json",
+    "docs/promotion-reviews/v2.20.0-s03-architecture-v2.json"
+  ],
+  "evidence": [
+    "architecture-contract",
+    "independent-architecture-evaluation"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "review_id": "memory-wuxian-v2.20.0-install-governance-promotion",
+  "work_item_id": "memory-wuxian-v2.20.0-unified-installer-transaction",
+  "candidate_id": "s01-governance-establishment",
+  "owner_id": "windows-installer-transaction-controller",
+  "source_revision": "6c60a539b4d7fc45b6fe12945b0393335ebb8b86",
+  "product_evolution_record_id": "not-applicable-s01-governance-only",
+  "disposition": "no-candidate",
+  "lesson_candidate_ids": [],
+  "governance_proposal_ids": [],
+  "rationale": "The reusable lesson is already represented by active global family G11; this project change adds only the Memory Wuxian installer-specific execution contract.",
+  "evidence_refs": [
+    "docs/defect-receipts/v2.20.0-install-governance-completion.json",
+    "docs/capability-admission/v2.20.0-installer-workflow/receipt.json",
+    "docs/install-transaction/governance-state.json"
+  ],
+  "automatic_acceptance": false,
+  "human_review_required": false,
+  "reviewed_at": "2026-08-22T20:12:00+09:00"
+}

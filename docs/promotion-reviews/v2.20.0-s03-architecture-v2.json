@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "memory-wuxian-s03-architecture-round-1-01a02d85",
+  "artifact": {
+    "paths": [
+      "docs/install-transaction/architecture-freeze.md",
+      "docs/install-transaction/resource-interface-contract.json",
+      "docs/install-transaction/resource-interface-contract.md",
+      "docs/install-transaction/contract.json",
+      "docs/module-architecture.json"
+    ],
+    "sha256": [
+      "b7fc9850a17cfe868af2c540805e3177929a1507c43408e193a55e48df969d82",
+      "9ded5dadf2752beab392c997a725389d19c379560971b5e45e62266337249bfd",
+      "9a10ba81ccd5196d535afdc739953a9663d84379a87f92efe12be7fa32deef9c",
+      "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+      "776a9e61738ac85a0ed1a9fb1c58b9b1a5a002d26aa8382d9716f0159738741b"
+    ],
+    "producer_identity": "codex-primary-producer"
+  },
+  "evaluator": {
+    "identity": "codex-independent-evaluator-dalton-01a02d85-a5e3-7c62-9cec-8006ebff37ac",
+    "independent": true
+  },
+  "contract": {
+    "source": "user-supplied Memory Wuxian S03 architecture acceptance contract",
+    "pass_threshold": 90
+  },
+  "dimensions": [
+    {
+      "id": "artifact-identity-integrity",
+      "weight": 0.2,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{"claim": "All five frozen artifacts exist, parse where applicable, and retain their round-1 SHA-256 identities.", "source": "five frozen candidate artifacts", "method": "deterministic_test"}]
+    },
+    {
+      "id": "single-owner-seven-resource-boundary-closure",
+      "weight": 0.3,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [
+        {"claim": "The architecture declares one WindowsInstallerTransaction controller and seven unique transaction resources with unambiguous Owners.", "source": "docs/install-transaction/resource-interface-contract.json and docs/module-architecture.json", "method": "source_trace"},
+        {"claim": "Schema v2 ownership, dependency allowlists, and Rust capability boundaries pass deterministically.", "source": "scripts/check_architecture_contract.py exit 0", "method": "deterministic_test"}
+      ]
+    },
+    {
+      "id": "legacy-federation-node-preservation-recovery",
+      "weight": 0.3,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [
+        {"claim": "Legacy init-node behavior is a separately owned local-federation-node resource; prepare writes only transaction evidence, existing node bytes are immutable, and rollback removes only unchanged transaction-created files and empty directories.", "source": "docs/install-transaction/resource-interface-contract.json and docs/install-transaction/resource-interface-contract.md", "method": "source_trace"},
+        {"claim": "Peers, replicas, raw records, summaries, and existing archive-pointer bytes are outside destructive installer ownership and rollback.", "source": "docs/install-transaction/architecture-freeze.md and docs/install-transaction/resource-interface-contract.json", "method": "source_trace"}
+      ]
+    },
+    {
+      "id": "unchanged-s13-s15-exact-artifact-promotion",
+      "weight": 0.2,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{"claim": "S13 creates one uniquely hashed CI installer, S14 installs that exact artifact, and S15 publishes identical bytes without rebuilding and verifies the release SHA-256.", "source": "docs/install-transaction/architecture-freeze.md and docs/install-transaction/contract.json", "method": "source_trace"}]
+    }
+  ],
+  "deterministic_checks": [
+    {"id": "architecture-contract", "status": "pass", "evidence": "scripts/check_architecture_contract.py exit 0: schema v2, source ownership, dependency allowlists, and Rust capability boundaries are valid"},
+    {"id": "json-parse", "status": "pass", "evidence": "resource-interface-contract.json, contract.json, and module-architecture.json parsed successfully"},
+    {"id": "artifact-hash-stability", "status": "pass", "evidence": "All five SHA-256 values matched the prior round-1 freeze before report creation"}
+  ],
+  "overall_score": 100,
+  "verdict": "pass",
+  "blocking_findings": [],
+  "limitations": ["This evaluation accepts the frozen S03 architecture contract only; it does not certify installer implementation, Windows runtime effects, installation, or release."],
+  "iteration": {"current": 1, "maximum": 2}
+}

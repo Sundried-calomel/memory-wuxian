@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "step": "S11",
+  "verified_at": "2026-08-23T23:30:09+09:00",
+  "contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "git_head": "6c60a539b4d7fc45b6fe12945b0393335ebb8b86",
+  "worktree_sha256": "6166026a00d0978d9767c83fc9308ecf1a5645ca4ac707c98df7b6ea73fbdb0c",
+  "delta_paths": [
+    "docs/install-transaction/s11-real-windows-rehearsal-evidence.md",
+    "docs/rehearsals/v2.20.0-s11-windows-rehearsal.json"
+  ],
+  "evidence": [
+    "real-windows-rehearsal-receipts",
+    "release-metadata-declared"
+  ]
+}

@@ -19,6 +19,10 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
 from platform_atomic import atomic_replace_bytes
 from platform_process import no_window_kwargs
 from memory_update_governance import apply_delta_bundle, load_signed_metadata, select_release, stage_update
@@ -179,10 +183,29 @@ def stage_install(
     *,
     skill_root: Optional[Path] = None,
     python_executable: Optional[Path] = None,
+    state_path: Optional[Path] = None,
+    expected_sha256: Optional[str] = None,
     runner=subprocess.run,
 ) -> str:
     if system == "Windows":
-        command = f'"{package}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
+        if skill_root is None or python_executable is None or state_path is None:
+            raise ValueError("Windows staged install requires Skill, Python, and state paths")
+        digest = hashlib.sha256(package.read_bytes()).hexdigest()
+        if expected_sha256 is not None and digest != expected_sha256.lower():
+            raise ValueError("Windows staged install package no longer matches the approved SHA-256")
+        pythonw = python_executable.with_name("pythonw.exe")
+        launcher = pythonw if pythonw.is_file() else python_executable
+        command = subprocess.list2cmdline([
+            str(launcher),
+            str(skill_root / "scripts" / "auto_update.py"),
+            "--execute-windows-staged-installer",
+            "--state-file",
+            str(state_path),
+            "--staged-package",
+            str(package),
+            "--expected-sha256",
+            digest,
+        ])
         runner(
             ["reg.exe", "ADD", WINDOWS_RUN_ONCE, "/V", WINDOWS_RUN_ONCE_VALUE,
              "/T", "REG_SZ", "/D", command, "/F"],
@@ -229,6 +252,58 @@ def stage_install(
     return "installed-user-transaction"
 
 
+def execute_windows_staged_installer(
+    package: Path,
+    state_path: Path,
+    expected_sha256: str,
+    *,
+    runner=subprocess.run,
+) -> int:
+    """Run one approved Setup and persist its exact outer transaction result."""
+    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    now = int(time.time())
+    digest = hashlib.sha256(package.read_bytes()).hexdigest() if package.is_file() else ""
+    if digest != expected_sha256.lower() or state.get("sha256") != expected_sha256.lower():
+        state.update({
+            "status": "install-failed",
+            "installer_exit_code": 30,
+            "installer_finished_at_epoch": now,
+            "installer_error": "staged package SHA-256 no longer matches approval",
+        })
+        atomic_json(state_path, state)
+        return 30
+    state.update({"status": "installing", "installer_started_at_epoch": now})
+    atomic_json(state_path, state)
+    try:
+        completed = runner(
+            [
+                str(package),
+                "/VERYSILENT",
+                "/SUPPRESSMSGBOXES",
+                "/NORESTART",
+                "/SOURCEENTRYPOINT=auto-update",
+            ],
+            check=False,
+            **no_window_kwargs(),
+        )
+        exit_code = int(completed.returncode)
+        error = None
+    except OSError as exc:
+        exit_code = 31
+        error = str(exc)
+    state.update({
+        "status": "installed" if exit_code == 0 else "install-failed",
+        "installer_exit_code": exit_code,
+        "installer_finished_at_epoch": int(time.time()),
+    })
+    if error is not None:
+        state["installer_error"] = error
+    else:
+        state.pop("installer_error", None)
+    atomic_json(state_path, state)
+    return exit_code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skill-root", default=str(Path(__file__).resolve().parent.parent))
@@ -245,6 +320,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--expected-version")
     parser.add_argument("--expected-sha256")
+    parser.add_argument("--execute-windows-staged-installer", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--staged-package", help=argparse.SUPPRESS)
     parser.add_argument("--release-json", help=argparse.SUPPRESS)
     parser.add_argument("--channel", choices=("stable", "beta", "development"), default="stable")
     parser.add_argument("--update-metadata-json")
@@ -261,6 +338,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     download_root = Path(args.download_directory).expanduser().resolve()
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     now = int(time.time())
+    if args.execute_windows_staged_installer:
+        if not args.staged_package or not args.expected_sha256:
+            return 30
+        return execute_windows_staged_installer(
+            Path(args.staged_package).expanduser().resolve(),
+            state_path,
+            args.expected_sha256,
+        )
     if args.approve_install:
         try:
             if not args.expected_version or not args.expected_sha256:
@@ -279,6 +364,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 platform.system(),
                 skill_root=skill_root,
                 python_executable=Path(args.python_executable).expanduser(),
+                state_path=state_path,
+                expected_sha256=args.expected_sha256,
             )
             state["install_approved"] = True
             state["approved_at_epoch"] = now

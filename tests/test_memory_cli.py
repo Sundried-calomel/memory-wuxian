@@ -370,6 +370,7 @@ safety:
         inno_setup = (SKILL_ROOT / "packaging/windows/MemoryWuxian.iss").read_text(encoding="utf-8")
         release_workflow = (SKILL_ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
         mac_transaction = (SKILL_ROOT / "scripts/install_macos_transaction.py").read_text(encoding="utf-8")
+        windows_transaction = (SKILL_ROOT / "scripts/install_windows_transaction.py").read_text(encoding="utf-8")
 
         self.assertIn("MemoryWuxianArchive", mac_postinstall)
         self.assertIn("install_macos_transaction.py", mac_postinstall)
@@ -378,15 +379,15 @@ safety:
         self.assertIn("--python-executable", mac_postinstall)
         self.assertIn("init-node --display-name", mac_postinstall)
         self.assertIn("MemoryWuxianArchive", windows_install)
-        self.assertIn("init-node", windows_install)
-        self.assertIn("$env:COMPUTERNAME", windows_install)
+        self.assertIn("FederationNodeInitializationMutation", windows_transaction)
+        self.assertIn('os.environ.get("COMPUTERNAME")', windows_transaction)
         self.assertNotIn("Remove-Item", windows_uninstall)
         self.assertIn("PrivilegesRequired=lowest", inno_setup)
         self.assertIn("memory\\*", inno_setup)
         self.assertIn('Flags: onlyifdoesntexist', inno_setup)
         self.assertIn("softprops/action-gh-release@v2", release_workflow)
         self.assertIn("install_auto_update.py", mac_postinstall)
-        self.assertIn("install_auto_update.py", windows_install)
+        self.assertIn("AutoUpdateRegistrationMutation", windows_transaction)
 
     def run_cli(self, *arguments, expect_json=True):
         completed = self.invoke_cli(*arguments)

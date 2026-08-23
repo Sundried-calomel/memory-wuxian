@@ -1,6 +1,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$SkillRoot,
-  [Parameter(Mandatory = $true)][string]$CandidateRoot
+  [Parameter(Mandatory = $true)][string]$CandidateRoot,
+  [ValidateSet("inno", "manual", "auto-update")][string]$SourceEntrypoint = "manual"
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,59 +58,70 @@ if (Test-Path -LiteralPath $activeRootPointer) {
   if ($preservedArchiveRoot) { $archiveRoot = [IO.Path]::GetFullPath($preservedArchiveRoot) }
 }
 $sessionsRoot = Join-Path $codexHome "sessions"
+if (-not (Test-Path -LiteralPath $sessionsRoot -PathType Container)) {
+  throw "Codex sessions root was not found."
+}
+$packageRuntimeRoot = Join-Path $CandidateRoot "runtime\windows"
+$packagePython = Join-Path $packageRuntimeRoot "python\python.exe"
+if (-not (Test-Path -LiteralPath $packagePython -PathType Leaf)) {
+  throw "MemoryWuxian package does not contain its isolated Python runtime."
+}
+$runtimeParent = Join-Path $env:LOCALAPPDATA "MemoryWuxian\runtime"
+$runtimeText = & $packagePython (Join-Path $CandidateRoot "scripts\install_windows_runtime.py") `
+  activate `
+  --bundle-root $packageRuntimeRoot `
+  --target-parent $runtimeParent
+if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian isolated runtime activation failed." }
+$runtimeOutput = $runtimeText | Out-String
+$runtimeJsonStart = $runtimeOutput.IndexOf("{")
+if ($runtimeJsonStart -lt 0) { throw "MemoryWuxian runtime activation returned no status document." }
+$runtime = $runtimeOutput.Substring($runtimeJsonStart) | ConvertFrom-Json
+if ($runtime.status -ne "ready") { throw "MemoryWuxian isolated runtime is not ready." }
+$python = $runtime.python_executable
+$runtimeBundleRoot = $runtime.runtime_root
+$runtimeBundleId = $runtime.bundle_id
 
-$bootstrapText = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $CandidateRoot "scripts\bootstrap_windows.ps1") -InstallMissing
-if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian runtime bootstrap failed." }
-$bootstrapOutput = $bootstrapText | Out-String
-$jsonStart = $bootstrapOutput.IndexOf("{")
-if ($jsonStart -lt 0) { throw "MemoryWuxian bootstrap did not return a status document." }
-$bootstrap = $bootstrapOutput.Substring($jsonStart) | ConvertFrom-Json
-if (-not $bootstrap.ready) { throw "MemoryWuxian runtime requirements are incomplete." }
-
-$python = $bootstrap.checks.python.path
-$codexCli = $bootstrap.checks.codex_cli.path
-New-Item -ItemType Directory -Force -Path $archiveRoot, $sessionsRoot | Out-Null
-$transactionOutput = & $python (Join-Path $CandidateRoot "scripts\install_codex_autosync_windows.py") `
-  --archive-root $archiveRoot `
-  --skill-root $SkillRoot `
+$bundledCodex = Join-Path $installedUserProfile ".codex\.sandbox-bin\codex.exe"
+$codexCommand = Get-Command codex.exe -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath $bundledCodex -PathType Leaf) {
+  $codexCli = $bundledCodex
+} elseif ($codexCommand) {
+  $codexCli = $codexCommand.Source
+} else {
+  throw "Codex CLI executable was not found."
+}
+$transactionRoot = Join-Path $env:LOCALAPPDATA "MemoryWuxian\installer-transaction"
+New-Item -ItemType Directory -Force -Path $transactionRoot | Out-Null
+$manifestPath = Join-Path $transactionRoot "request.json"
+$brokerRequestPath = Join-Path $transactionRoot "broker-request.json"
+$nonceRoot = Join-Path $transactionRoot "nonces"
+$controllerPath = Join-Path $CandidateRoot "scripts\install_windows_transaction.py"
+$brokerPath = Join-Path $CandidateRoot "scripts\windows_installer_broker.py"
+& $python (Join-Path $CandidateRoot "scripts\install_windows_transaction.py") `
+  --prepare-only `
+  --source-entrypoint $SourceEntrypoint `
   --candidate-root $CandidateRoot `
+  --skill-root $SkillRoot `
+  --archive-root $archiveRoot `
+  --archive-pointer $activeRootPointer `
   --sessions-root $sessionsRoot `
   --python-executable $python `
+  --runtime-bundle-root $runtimeBundleRoot `
+  --runtime-bundle-id $runtimeBundleId `
   --codex-cli $codexCli `
-  --backend task `
-  --defer-commit `
-  --load
-if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian background collector activation failed." }
-$journalLine = @($transactionOutput) | Where-Object { $_ -like "install-journal:*" } | Select-Object -Last 1
-if (-not $journalLine) { throw "MemoryWuxian installer did not return a durable journal." }
-$journalPath = $journalLine.Substring("install-journal:".Length)
-
-try {
-  & $python (Join-Path $SkillRoot "scripts\migrate_config.py") `
-    --current (Join-Path $SkillRoot "config.yaml") `
-    --defaults (Join-Path $SkillRoot "config.defaults.yaml") `
-    --apply | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian configuration migration failed." }
-  & $python (Join-Path $SkillRoot "scripts\memory_cli.py") --root $archiveRoot --config (Join-Path $SkillRoot "config.yaml") init | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian archive initialization failed." }
-
-  & $python (Join-Path $SkillRoot "scripts\memory_cli.py") `
-    --root $archiveRoot `
-    --config (Join-Path $SkillRoot "config.yaml") `
-    init-node `
-    --display-name $env:COMPUTERNAME | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian node initialization failed." }
-
-  & $python (Join-Path $SkillRoot "scripts\install_auto_update.py") --skill-root $SkillRoot --python-executable $python
-  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian automatic update activation failed." }
-
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $SkillRoot "scripts\install_dashboard_shortcut_windows.ps1") `
-    -SkillRoot $SkillRoot -ArchiveRoot $archiveRoot -PythonExecutable $python
-  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian dashboard shortcut installation failed." }
-
-  & $python (Join-Path $SkillRoot "scripts\install_codex_autosync_windows.py") --commit-journal $journalPath
-  if ($LASTEXITCODE -ne 0) { throw "MemoryWuxian transaction commit failed." }
-} catch {
-  & $python (Join-Path $CandidateRoot "scripts\install_codex_autosync_windows.py") --rollback-journal $journalPath
-  throw
+  --manifest-output $manifestPath
+$prepareExit = $LASTEXITCODE
+if ($prepareExit -ne 0) {
+  [Console]::Error.WriteLine("MemoryWuxian manifest preparation failed with exit code $prepareExit.")
+  exit $prepareExit
 }
+& $python $brokerPath `
+  --launch-manifest $manifestPath `
+  --controller $controllerPath `
+  --request-output $brokerRequestPath `
+  --nonce-root $nonceRoot
+$transactionExit = $LASTEXITCODE
+if ($transactionExit -ne 0) {
+  [Console]::Error.WriteLine("MemoryWuxian unified installer transaction failed with exit code $transactionExit.")
+}
+exit $transactionExit

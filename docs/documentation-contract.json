@@ -1,12 +1,16 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.19.0",
+  "reviewed_version": "2.20.0",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
     "README.ja.md"
   ],
   "features": [
+    {
+      "id": "unified-windows-install-transaction",
+      "required_tokens": ["windows_installer_transaction.py", "CollectorGenerationMutation", "commit-intent", "rollback-verified", "archive pointer"]
+    },
     {
       "id": "immutable-archive",
       "required_tokens": ["append", "retrieve", "heartbeat"]

@@ -111,11 +111,14 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn('needs.candidate-proof.result }}" = "success"', block)
 
     def test_installers_and_publish_require_release_gate_and_metadata(self) -> None:
-        for installer in ("macos-installer", "windows-installer"):
-            self.assertRegex(
-                job_block(self.source, installer),
-                r"(?m)^\s{4}needs:\s*\[release-gate,\s*metadata\]\s*$",
-            )
+        self.assertRegex(
+            job_block(self.source, "macos-installer"),
+            r"(?m)^\s{4}needs:\s*\[release-gate,\s*metadata\]\s*$",
+        )
+        self.assertRegex(
+            job_block(self.source, "windows-installer"),
+            r"(?m)^\s{4}needs:\s*\[release-gate,\s*metadata,\s*candidate-proof\]\s*$",
+        )
         publish = job_block(self.source, "publish")
         self.assertRegex(
             publish,
@@ -162,28 +165,33 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn("memory-wuxian-update-v1", publish)
         self.assertIn("deltas\": []", publish)
 
-    def test_release_rebuilds_native_binaries_before_each_installer(self) -> None:
+    def test_candidate_builds_windows_once_and_release_reuses_exact_bytes(self) -> None:
         mac = job_block(self.source, "macos-installer")
-        windows = job_block(self.source, "windows-installer")
+        windows_candidate = job_block(self.test_source, "windows-candidate")
+        windows_release = job_block(self.source, "windows-installer")
         self.assertIn("cargo build --release --locked --bins", mac)
         self.assertIn("lipo -create", mac)
-        self.assertIn("cargo build --release --locked --bins", windows)
-        self.assertIn(
-            "Copy-Item native-collector/target/release/memory-wuxian-collector.exe",
-            windows,
-        )
         self.assertIn("Unexpected native version", mac)
-        self.assertIn("Unexpected native version", windows)
-        self.assertIn('(& "bin\\$binary.exe" --version).Trim()', windows)
+        self.assertIn("./scripts/build_native_collector.ps1", windows_candidate)
+        self.assertIn("Build uniquely hashed Windows installer candidate", windows_candidate)
+        self.assertIn("candidate-provenance.json", windows_candidate)
+        self.assertIn("gh run download", windows_release)
+        self.assertIn("Candidate installer hash drift", windows_release)
+        self.assertNotIn("cargo build", windows_release)
+        self.assertNotIn("ISCC.exe", windows_release)
 
     def test_windows_installer_proves_all_native_executables_are_packaged(self) -> None:
-        windows = job_block(self.source, "windows-installer")
+        windows = job_block(self.test_source, "windows-candidate")
+        native_build = (ROOT / "scripts/build_native_collector.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("./scripts/build_native_collector.ps1", windows)
         for executable in (
-            "bin\\memory-wuxian-collector.exe",
-            "bin\\memory-wuxian-envelope.exe",
-            "bin\\memory-wuxian-dashboard-launcher.exe",
+            "memory-wuxian-collector.exe",
+            "memory-wuxian-envelope.exe",
+            "memory-wuxian-dashboard-launcher.exe",
         ):
-            self.assertIn(executable, windows)
+            self.assertIn(executable, native_build)
 
     def test_both_installers_retain_the_architecture_hard_gate(self) -> None:
         required = [
@@ -193,10 +201,15 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
             "module-architecture.json",
             "check_architecture_contract.py",
         ]
-        for installer in ("macos-installer", "windows-installer"):
-            block = job_block(self.source, installer)
-            for filename in required:
-                self.assertIn(filename, block)
+        mac = job_block(self.source, "macos-installer")
+        for filename in required:
+            self.assertIn(filename, mac)
+        windows_package = (ROOT / "packaging/windows/MemoryWuxian.iss").read_text(encoding="utf-8")
+        self.assertIn('Source: "{#SourceRoot}\\*"', windows_package)
+        for exclusion in (".git\\*", ".github\\*", "dist\\*", "outputs\\*"):
+            self.assertIn(exclusion, windows_package)
+        self.assertNotIn("docs\\*", windows_package)
+        self.assertNotIn("SKILL.md", windows_package.split("Excludes:", 1)[-1])
 
 
 if __name__ == "__main__":

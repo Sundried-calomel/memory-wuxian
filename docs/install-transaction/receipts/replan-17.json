@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T23:07:55+09:00",
+  "reason": "S11 real elevated rehearsal failed before apply: FederationNodeInitializationMutation.prepare nested durable probe paths below the transaction backup root and triggered Windows WinError 206; repair the canonical S06 resource boundary and replay S06-S11.",
+  "approval": "User authorized reuse, repair, redo, UAC, and continuous execution through installed completion; this formal replan preserves S01-S05 and returns only to the canonical S06 owner exposed by the real rehearsal.",
+  "resume_step": "S06",
+  "previous_state_sha256": "e31cc87e7c9dd98b178b0d5957ce23f19deaa8e130d11137cc3792593eae2a59",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "25ff7ad81df26a26b85533903fa2ffde8d84e39139bb8441b4725603b73a8244"
+}

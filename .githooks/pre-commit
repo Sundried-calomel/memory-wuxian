@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+bundled_python="$HOME/.codex/runtimes/memory-wuxian-e5-py312/Scripts/python.exe"
+if [ -x "$bundled_python" ]; then
+  exec "$bundled_python" scripts/install_transaction_workflow.py hook post-edit
+fi
+if command -v python >/dev/null 2>&1; then
+  exec python scripts/install_transaction_workflow.py hook post-edit
+fi
+
+echo "workflow-error: no admitted project Python runtime is available" >&2
+exit 2

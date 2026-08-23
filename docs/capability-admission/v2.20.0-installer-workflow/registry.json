@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "registry_id": "memory-wuxian-installer-workflow-registry",
+  "capabilities": ["manifest.json"]
+}

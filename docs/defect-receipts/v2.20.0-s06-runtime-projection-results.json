@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-s06-runtime-projection",
+  "packet_sha256": "dea57042599b2d29b6d97c0b8ef8a2f7481734e931d008b6fc5430d438a3fa66",
+  "checks": [
+    {
+      "check_id": "runtime-capability-probe",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\install-transaction\\s06-tests.log",
+          "sha256": "e5e27b062ddb18c259c350f07b18be1bb6d41370dcc95325cbb15e1cd3140e70"
+        }
+      ],
+      "note": "The exact bundled Python 3.14.7 runtime executed from the candidate, reported bytecode writes disabled, imported the required package set, and remained manifest-valid after the probe."
+    },
+    {
+      "check_id": "target-platform-effect",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\rehearsals\\v2.20.0-s06-real-platform-rollback.json",
+          "sha256": "044a29e3c1f4c61f25c1a199db874bcf23b6e9b2dcb41b4451fccd91e40ad484"
+        }
+      ],
+      "note": "The real Windows production controller built the runtime-excluded Skill projection, reached actual schtasks registration, received an access-denied platform result, and verified rollback of the archive and collector resources. This proves the negative platform and rollback effect only; successful elevated installation remains an S11 gate."
+    }
+  ]
+}

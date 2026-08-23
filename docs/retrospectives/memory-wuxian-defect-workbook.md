@@ -434,6 +434,40 @@
   Windows 与 macOS CI 运行。
 - Families: `G05`, `G09`, `MW-R03`, `MW-R06`.
 
+### MW-REL-034：采集器计划任务 XML 绕开共享身份 Owner
+
+- 证据：`Windows 2.19.0 官方安装器与事务 journal 已核验`。候选采集器能够启动，
+  但 `schtasks /Create` 在真实 Windows 上拒绝任务 XML；同仓库 `platform_scheduler`
+  已生成 `<UserId>`，采集器安装入口却重复拼装 `<Principal>` 并漏掉该必需身份；修复
+  身份后，Windows 真实解析器还证明 `RestartOnFailure/PT30S` 低于允许的 `PT1M` 下限。
+- 根因：R1-R8 完成了共享 Platform 调度器，却没有把采集器生命周期入口的旧 XML
+  构造器纳入同一身份 Owner；FakeRunner 只回读 XML，没有让 Windows Task Scheduler
+  解析它，因此 mock 通过替代了真实安装效果。
+- 永久门槛：所有 `InteractiveToken` 任务必须从共享 Platform 身份 Owner 取得明确
+  `UserId`，并把它纳入安装后 XML 等价核验；任务注册失败必须在回滚 journal 保留
+  按本机编码可读的原生 stderr；重启间隔必须符合真实 Windows schema；Windows 发布
+  候选必须至少完成一次旧版到候选版的真实安装、任务查询、
+  唯一 Owner 和活动水位推进检查，不能只验证打包或 FakeRunner。
+- Families: `G03`, `G05`, `G09`, `G11`, `MW-R06`, `MW-R10`.
+
+### MW-REL-035：事务探针嵌套完整目录树触发 Windows 长路径失败
+
+- 证据：`Windows 2.20.0 真实 UAC 彩排已核验`。联邦节点资源在 `prepare` 阶段把完整
+  `archive/federation` 与副本目录树放入已经很深的事务备份目录，尚未执行任何正式
+  `apply` 就在创建 `token-usage-snapshots` 时触发 `WinError 206`；同一探针生成的
+  `node.json` 还会把临时副本路径写入预期节点身份。
+- 根因：事务设计把用于计算预期字节的短生命周期探针误当成了持久目录证据，导致探针
+  路径长度叠加事务、资源和目标目录层级；同时没有把临时生成上下文与正式目标身份分开。
+- 逃逸边界：短路径单元测试、模拟事务和 UAC 之前的全部静态门均可通过，只有真实用户
+  临时目录、事务 UUID 与完整资源层级组合后才越过 Windows 目录创建边界。
+- 永久门槛：用于计算安装预期字节的探针必须位于短生命周期系统临时目录，退出
+  `prepare` 前删除；可恢复证据只保存哈希绑定的小型字节载荷，不持久化完整探针树；
+  `node.json` 必须绑定正式副本根，禁止携带探针路径。所有需要展开完整候选树的资源必须
+  使用固定深度的 `%ProgramData%` 暂存根，不得继承 manifest 所在目录；正式安装和彩排根
+  必须分离。Windows 回归必须使用足以让旧实现越界的深事务备份根，并证明 `prepare`
+  不写正式归档、证据可序列化、正式节点不含探针路径，且两个正式入口都调用短根 Owner。
+- Families: `G05`, `G06`, `G09`, `G11`, `MW-R06`, `MW-R10`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。

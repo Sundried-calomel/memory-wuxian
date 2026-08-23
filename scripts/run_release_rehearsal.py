@@ -26,7 +26,7 @@ def validation_profile(version: str) -> tuple[str, list[str]]:
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
     profile = str(contract.get("validation_profile", "full"))
     scenarios = contract.get("required_rehearsal_scenarios", [])
-    if profile not in {"full", "targeted-patch"}:
+    if profile not in {"full", "staged-full", "targeted-patch"}:
         raise ValueError(f"unsupported validation profile: {profile}")
     if profile == "targeted-patch" and (
         not isinstance(scenarios, list)

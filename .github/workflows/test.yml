@@ -108,11 +108,76 @@ jobs:
           python scripts/run_release_rehearsal.py
           --contract-profile
           --output outputs/rehearsal/windows-2022
+      - name: Assemble pinned offline Windows runtime
+        shell: pwsh
+        run: |
+          python scripts/install_windows_runtime.py fetch `
+            --lock scripts/windows_runtime_lock.json `
+            --output "$env:RUNNER_TEMP\memory-wuxian-runtime-assets" `
+            --pip-python (Get-Command python).Source
+          python scripts/install_windows_runtime.py assemble `
+            --lock scripts/windows_runtime_lock.json `
+            --assets "$env:RUNNER_TEMP\memory-wuxian-runtime-assets" `
+            --output runtime/windows
+          python scripts/install_windows_runtime.py validate `
+            --bundle-root runtime/windows
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+      - name: Build uniquely hashed Windows installer candidate
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force candidate-dist | Out-Null
+          $version = (& python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])").Trim()
+          $buildLog = (
+            & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+              "/DSourceRoot=$PWD" `
+              "/DAppVersion=$version" `
+              packaging/windows/MemoryWuxian.iss 2>&1
+          ) -join "`n"
+          Write-Host $buildLog
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          $installer = Get-Item "dist\MemoryWuxian-$version-Windows-x64-Setup.exe"
+          foreach ($required in @(
+            "runtime\windows\bundle-manifest.json",
+            "runtime\windows\python\python.exe",
+            "scripts\install_windows_transaction.py",
+            "scripts\windows_installer_broker.py"
+          )) {
+            $sourcePath = Join-Path $PWD $required
+            if (-not $buildLog.Contains("Compressing: $sourcePath")) {
+              throw "Windows candidate is missing required file: $required"
+            }
+          }
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Copy-Item -LiteralPath $installer.FullName -Destination candidate-dist
+          [IO.File]::WriteAllText(
+            "candidate-dist/$($installer.Name).sha256",
+            "$hash  $($installer.Name)`n",
+            [Text.UTF8Encoding]::new($false)
+          )
+          $provenance = [ordered]@{
+            schema_version = 1
+            source_commit = $env:GITHUB_SHA
+            workflow_run_id = $env:GITHUB_RUN_ID
+            installer_name = $installer.Name
+            installer_sha256 = $hash
+          } | ConvertTo-Json
+          [IO.File]::WriteAllText(
+            "candidate-dist/candidate-provenance.json",
+            "$provenance`n",
+            [Text.UTF8Encoding]::new($false)
+          )
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: candidate-evidence-windows
           path: outputs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer-candidate
+          path: candidate-dist/*
+          if-no-files-found: error
 
   macos-candidate:
     timeout-minutes: 20

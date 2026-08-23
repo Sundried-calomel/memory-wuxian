@@ -1,5 +1,15 @@
 # Memory無限
 
+> **2.20.0：**所有受支持的 Windows 安装与更新入口统一进入
+> `windows_installer_transaction.py`。以 `CollectorGenerationMutation` 开始的
+> 五个有界 mutation 会在 apply 前持久化补偿信息，提交前记录 `commit-intent`，
+> 失败后必须取得 `rollback-verified`。原始归档记录和活动 archive pointer 仍是
+> 不可变权威；记忆、摘要、索引、云同步和语义处理合同均不改变。
+
+> **2.19.1：**修复 Windows 采集器安装：计划任务主体通过共享 Platform 身份
+> Owner 绑定到当前交互式 Windows 用户；任务注册失败时，原生诊断会写入回滚 journal。
+> 归档、摘要、索引、云同步和采集事件语义均不改变。
+
 > **2.19.0：**将已经完成的 R1-R8 行为保持型模块化正式整合到唯一的 Platform、
 > Environment、Exchange、应用服务、CLI 和测试支持 Owner 下。这是已批准的
 > 2.16-2.18 内部里程碑首次进入公开安装器，包含精确候选 CI、事务化激活、回滚、

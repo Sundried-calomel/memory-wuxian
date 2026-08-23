@@ -1,0 +1,8 @@
+test_init_status_and_project_scoped_path_gate (tests.test_install_transaction_workflow.InstallTransactionWorkflowTests.test_init_status_and_project_scoped_path_gate) ... ok
+test_ordering_and_remediation_limit_fail_closed (tests.test_install_transaction_workflow.InstallTransactionWorkflowTests.test_ordering_and_remediation_limit_fail_closed) ... ok
+test_receipt_is_bound_to_unchanged_worktree (tests.test_install_transaction_workflow.InstallTransactionWorkflowTests.test_receipt_is_bound_to_unchanged_worktree) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 4.269s
+
+OK

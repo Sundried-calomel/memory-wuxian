@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "step": "S10",
+  "verified_at": "2026-08-23T23:26:28+09:00",
+  "contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "git_head": "6c60a539b4d7fc45b6fe12945b0393335ebb8b86",
+  "worktree_sha256": "c78e282d3096ef3ec8d99cc84e668aa502e74fb9415d12eeabbb1d50e6e9a7ae",
+  "delta_paths": [
+    "docs/install-transaction/s10-targeted-test-matrix.md"
+  ],
+  "evidence": [
+    "targeted-test-matrix"
+  ]
+}

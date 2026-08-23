@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T12:55:27+09:00",
+  "reason": "Preserve S01-S06 and rebaseline the independently admitted governance-8 control plane plus the complete isolated-runtime entrypoint correction",
+  "approval": "User authorized formal replan from S06, preservation of completed prerequisites, production composition correction, and automatic promotion through S15",
+  "resume_step": "S07",
+  "previous_state_sha256": "1af5ceaea96df8130e622bfd3110046902de1c20d4adfdb3dcff26dc95fec95f",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "a87a03b418b1765a28282b3f04b4f0ff40ee725fa6662f547e2c1e93a729ff4f"
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "step": "S01",
+  "verified_at": "2026-08-22T20:13:29+09:00",
+  "contract_sha256": "6485dfbb8cf18ca26e69c72936386d2dcb4309006dc61dcf820b104c9a769071",
+  "git_head": "6c60a539b4d7fc45b6fe12945b0393335ebb8b86",
+  "worktree_sha256": "81ca5e695f18081c0cf1e278b3028376105157c54a9eb84367c0af8b3ab3db47",
+  "delta_paths": [
+    ".githooks/pre-commit",
+    "docs/capability-admission/v2.20.0-installer-workflow/binding.json",
+    "docs/capability-admission/v2.20.0-installer-workflow/manifest.json",
+    "docs/capability-admission/v2.20.0-installer-workflow/receipt.json",
+    "docs/capability-admission/v2.20.0-installer-workflow/registry.json",
+    "docs/capability-admission/v2.20.0-installer-workflow/semantic-review.json",
+    "docs/defect-receipts/v2.20.0-install-governance-brief.md",
+    "docs/defect-receipts/v2.20.0-install-governance-completion.json",
+    "docs/defect-receipts/v2.20.0-install-governance-load.json",
+    "docs/defect-receipts/v2.20.0-install-governance-packet.json",
+    "docs/defect-receipts/v2.20.0-install-governance-results.json",
+    "docs/defect-receipts/v2.20.0-install-governance-task.json",
+    "docs/defect-receipts/v2.20.0-install-governance-tests.log",
+    "docs/defect-receipts/v2.20.0-install-governance-verification.json",
+    "docs/defect-receipts/v2.20.0-project-hook.log",
+    "docs/install-transaction/optimized-procedure.md",
+    "docs/install-transaction/rules.md",
+    "docs/promotion-reviews/v2.20.0-install-governance.json",
+    "docs/retrospectives/install-transaction-workflow.md",
+    "docs/work-contracts/v2.20.0.json",
+    "scripts/install_transaction_workflow.py",
+    "tests/test_install_transaction_workflow.py"
+  ],
+  "evidence": [
+    "defect-preflight",
+    "project-hook-test",
+    "state-machine-tests",
+    "workflow-governance-check"
+  ]
+}

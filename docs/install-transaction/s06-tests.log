@@ -1,0 +1,24 @@
+Memory Wuxian v2.20.0 S06 validation
+Checked: 2026-08-23
+Runtime: C:\Users\56453\.codex\runtimes\memory-wuxian-e5-py312\Scripts\python.exe
+
+Focused unittest matrix after the S11 long-path replan:
+- 110 tests run across composition, transaction, release-contract, dashboard,
+  defect-contract, broker, runtime, workflow, and lifecycle modules
+- 110 passed
+- 0 skipped
+- exit code 0
+
+Additional gates:
+- Python compilation: passed
+- resource-interface contract JSON parse: passed
+- installer reuse map declares all seven bounded mutations
+- deep federation transaction-root regression: passed
+- installed node excludes temporary probe path and uses formal replica root: passed
+- production and rehearsal entrypoints select disjoint bounded ProgramData staging roots: passed
+- PowerShell parser: passed
+- git diff --check: passed with LF-to-CRLF warnings only
+
+Real elevated Windows rehearsal:
+- first seven-resource attempt retained as `WinError 206` pre-apply failure evidence
+- repaired candidate rehearsal required at S11 with explicit UAC consent

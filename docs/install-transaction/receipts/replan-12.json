@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T16:42:39+09:00",
+  "reason": "Real namespaced S11 rehearsal proved the full package candidate wrongly re-entered collector generation with the already-activated runtime bundle, causing Windows path overflow. Preserve S01-S05; add a hash-bound transaction-private skill projection excluding runtime, retain all existing Owners, then replay S06-S10 and S11.",
+  "approval": "User explicitly directed reuse what is reusable, repair what needs repair, and redo what must be redone.",
+  "resume_step": "S06",
+  "previous_state_sha256": "93a95b3a7d7690a4223a10961578435ed1eb7c81db90d89e45b80b6443e015b9",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "439fd7c09b8f44c2c9835ea9cef3d36206ed78581d5e9d56066bafe4056851be"
+}

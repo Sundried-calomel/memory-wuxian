@@ -54,7 +54,7 @@
       "architecture_owner": "Product Shell",
       "criticality": "P2",
       "failure_domain": "product-shell",
-      "allowed_dependencies": ["capture-core", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services", "platform-foundation"],
+      "allowed_dependencies": ["capture-core", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services", "platform-foundation", "installer-transaction"],
       "forbidden_dependencies": [],
       "patterns": [
         "dashboard/**",
@@ -78,6 +78,21 @@
         "packaging/windows/install.ps1",
         "packaging/windows/uninstall.ps1",
         "native-collector/src/bin/memory-wuxian-dashboard-launcher.rs"
+      ]
+    },
+    {
+      "id": "installer-transaction",
+      "architecture_owner": "Windows Installer Transaction Controller",
+      "criticality": "P1",
+      "failure_domain": "installer-transaction",
+      "allowed_dependencies": ["platform-foundation"],
+      "forbidden_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services"],
+      "patterns": [
+        "scripts/windows_installer_transaction.py",
+        "scripts/windows_installer_broker.py",
+        "scripts/windows_install_manifest.py",
+        "scripts/windows_install_migrations.py",
+        "scripts/validate_installer_reuse_map.py"
       ]
     },
     {
@@ -197,7 +212,7 @@
       "architecture_owner": "Release Evidence Contract",
       "criticality": "P2",
       "failure_domain": "product-quality",
-      "allowed_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services", "platform-foundation"],
+      "allowed_dependencies": ["capture-core", "product-shell", "control-plane", "memory-plane", "environment-plane", "project-evidence-plane", "exchange-plane", "application-services", "platform-foundation", "installer-transaction"],
       "forbidden_dependencies": [],
       "patterns": [
         "scripts/build_native_collector.ps1",
@@ -208,7 +223,8 @@
         "packaging/macos/build_dashboard_app.sh",
         "packaging/macos/build_pkg.sh",
         "packaging/windows/MemoryWuxian.iss",
-        "scripts/run_release_rehearsal.py"
+        "scripts/run_release_rehearsal.py",
+        "scripts/run_windows_installer_rehearsal.py"
       ]
     }
   ],
@@ -234,12 +250,12 @@
     "mechanics": "scripts/platform_scheduler.py",
     "domain_policy_owners": [
       "scripts/install_cloud_sync.py",
+      "scripts/install_codex_autosync_windows.py",
       "scripts/install_governance_ai.py",
       "scripts/install_maintenance_supervisor.py"
     ],
     "intentionally_separate": [
       "scripts/install_codex_autosync.py",
-      "scripts/install_codex_autosync_windows.py",
       "scripts/install_auto_update.py"
     ]
   },
@@ -261,6 +277,34 @@
     "independent_failure_domains": [
       "Rule transaction directories and rollback.bin",
       "Skill transaction JSON and staging/displaced/rollback directories"
+    ]
+  },
+  "python_windows_installer_rules": {
+    "canonical_owner": "installer-transaction",
+    "controller": "scripts/windows_installer_transaction.py:WindowsInstallerTransaction",
+    "manifest_owner": "scripts/windows_install_manifest.py",
+    "migration_owner": "scripts/windows_install_migrations.py",
+    "privilege_broker": "scripts/windows_installer_broker.py",
+    "rehearsal_runner": "scripts/run_windows_installer_rehearsal.py",
+    "transaction_resources": [
+      "archive-scaffold",
+      "local-federation-node",
+      "installed-capture-generation",
+      "configuration-overlay",
+      "maintenance-scheduler",
+      "auto-update-scheduler",
+      "dashboard-launcher"
+    ],
+    "thin_entrypoints": [
+      "packaging/windows/install.ps1",
+      "scripts/auto_update.py",
+      "scripts/bootstrap_windows.ps1"
+    ],
+    "forbidden_capabilities": [
+      "archive record mutation",
+      "summary mutation",
+      "cloud protocol mutation",
+      "environment payload mutation"
     ]
   },
   "python_environment_immutable_record_rules": {

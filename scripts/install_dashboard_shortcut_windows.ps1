@@ -3,16 +3,22 @@ param(
     [Parameter(Mandatory = $true)][string]$ArchiveRoot,
     [Parameter(Mandatory = $true)][string]$PythonExecutable,
     [string]$Desktop = "",
+    [string]$ShortcutName = "",
     [switch]$Uninstall
 )
 
 $ErrorActionPreference = "Stop"
-$shortcutName = (
-    "Memory" +
-    [char]0x65E0 + [char]0x9650 +
-    [char]0x72B6 + [char]0x6001 + [char]0x53F0 +
-    ".lnk"
-)
+if (-not $ShortcutName) {
+    $ShortcutName = (
+        "Memory" +
+        [char]0x65E0 + [char]0x9650 +
+        [char]0x72B6 + [char]0x6001 + [char]0x53F0 +
+        ".lnk"
+    )
+}
+if ([IO.Path]::GetFileName($ShortcutName) -ne $ShortcutName -or [IO.Path]::GetExtension($ShortcutName) -ne ".lnk") {
+    throw "ShortcutName must be a .lnk leaf name."
+}
 $shortcutDescription = (
     "Memory" +
     [char]0x65E0 + [char]0x9650 +
@@ -22,7 +28,7 @@ $shortcutDescription = (
 if (-not $Desktop) { $Desktop = [Environment]::GetFolderPath("Desktop") }
 if (-not $Desktop) { throw "Windows desktop directory was not found." }
 
-$shortcutPath = Join-Path $Desktop $shortcutName
+$shortcutPath = Join-Path $Desktop $ShortcutName
 if ($Uninstall) {
     [IO.File]::Delete($shortcutPath)
     [ordered]@{

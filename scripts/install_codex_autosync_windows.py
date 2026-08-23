@@ -10,16 +10,31 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
-import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
 try:
     from platform_process import _unique_command_argument, no_window_kwargs
+    from platform_scheduler import (
+        WindowsTaskSpec,
+        decode_windows_output,
+        inspect_windows_task_xml,
+        query_windows_task_xml,
+        register_windows_task,
+        render_windows_task_xml,
+        uninstall_windows_task,
+        windows_task_xml_equivalent,
+        windows_user_id,
+    )
     from collector_activation import resolve_activation_since
     from collector_lifecycle import (
         create_installed_effect_probe,
@@ -30,6 +45,17 @@ try:
     from platform_paths import active_root_pointer
 except ModuleNotFoundError:
     from scripts.platform_process import _unique_command_argument, no_window_kwargs
+    from scripts.platform_scheduler import (
+        WindowsTaskSpec,
+        decode_windows_output,
+        inspect_windows_task_xml,
+        query_windows_task_xml,
+        register_windows_task,
+        render_windows_task_xml,
+        uninstall_windows_task,
+        windows_task_xml_equivalent,
+        windows_user_id,
+    )
     from scripts.collector_activation import resolve_activation_since
     from scripts.collector_lifecycle import (
         create_installed_effect_probe,
@@ -44,7 +70,6 @@ DEFAULT_TASK_NAME = "MemoryWuxianCodexSync"
 RUN_KEY = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = "MemoryWuxianCodexSync"
 JOURNAL_FORMAT = "memory-wuxian-windows-install-journal-v1"
-TASK_NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 Runner = Callable[..., subprocess.CompletedProcess[Any]]
 
 
@@ -106,56 +131,37 @@ def command_generation(command: Sequence[str]) -> str:
 
 
 def task_xml(command: Sequence[str]) -> bytes:
-    ET.register_namespace("", TASK_NAMESPACE)
-    task = ET.Element(f"{{{TASK_NAMESPACE}}}Task", {"version": "1.4"})
-    triggers = ET.SubElement(task, f"{{{TASK_NAMESPACE}}}Triggers")
-    logon = ET.SubElement(triggers, f"{{{TASK_NAMESPACE}}}LogonTrigger")
-    ET.SubElement(logon, f"{{{TASK_NAMESPACE}}}Enabled").text = "true"
-    principals = ET.SubElement(task, f"{{{TASK_NAMESPACE}}}Principals")
-    principal = ET.SubElement(principals, f"{{{TASK_NAMESPACE}}}Principal", {"id": "Author"})
-    ET.SubElement(principal, f"{{{TASK_NAMESPACE}}}LogonType").text = "InteractiveToken"
-    ET.SubElement(principal, f"{{{TASK_NAMESPACE}}}RunLevel").text = "LeastPrivilege"
-    settings = ET.SubElement(task, f"{{{TASK_NAMESPACE}}}Settings")
-    for name, value in (
-        ("MultipleInstancesPolicy", "IgnoreNew"),
-        ("DisallowStartIfOnBatteries", "false"),
-        ("StopIfGoingOnBatteries", "false"),
-        ("StartWhenAvailable", "true"),
-        ("Hidden", "true"),
-        ("ExecutionTimeLimit", "PT0S"),
-    ):
-        ET.SubElement(settings, f"{{{TASK_NAMESPACE}}}{name}").text = value
-    restart = ET.SubElement(settings, f"{{{TASK_NAMESPACE}}}RestartOnFailure")
-    ET.SubElement(restart, f"{{{TASK_NAMESPACE}}}Interval").text = "PT30S"
-    ET.SubElement(restart, f"{{{TASK_NAMESPACE}}}Count").text = "5"
-    actions = ET.SubElement(task, f"{{{TASK_NAMESPACE}}}Actions", {"Context": "Author"})
-    execute = ET.SubElement(actions, f"{{{TASK_NAMESPACE}}}Exec")
-    ET.SubElement(execute, f"{{{TASK_NAMESPACE}}}Command").text = str(command[0])
-    ET.SubElement(execute, f"{{{TASK_NAMESPACE}}}Arguments").text = subprocess.list2cmdline(list(command[1:]))
-    return ET.tostring(task, encoding="utf-16", xml_declaration=True)
-
-
-def _xml_value(root: ET.Element, name: str) -> str:
-    value = root.find(f".//{{{TASK_NAMESPACE}}}{name}")
-    return "" if value is None or value.text is None else value.text
+    spec = WindowsTaskSpec(
+        task_name=DEFAULT_TASK_NAME,
+        description="Run the native Memory Wuxian collector.",
+        command=Path(command[0]),
+        arguments=tuple(str(item) for item in command[1:]),
+        interval="PT5M",
+        execution_limit="PT0S",
+        priority=None,
+        allow_hard_terminate=None,
+        multiple_instances="IgnoreNew",
+        disallow_start_on_batteries=False,
+        stop_on_batteries=False,
+        start_when_available=True,
+        network_required=False,
+        hidden=True,
+        logon_type="InteractiveToken",
+        run_level="LeastPrivilege",
+        trigger_kind="logon",
+        restart_interval="PT1M",
+        restart_count=5,
+    )
+    return render_windows_task_xml(spec, user_id=windows_user_id())
 
 
 def inspect_task_xml(payload: bytes) -> dict[str, Any]:
-    root = ET.fromstring(payload)
-    return {
-        "command": _xml_value(root, "Command"),
-        "arguments": _xml_value(root, "Arguments"),
-        "hidden": _xml_value(root, "Hidden").lower() == "true",
-        "multiple_instances": _xml_value(root, "MultipleInstancesPolicy"),
-        "restart_interval": _xml_value(root, "Interval"),
-        "restart_count": _xml_value(root, "Count"),
-    }
+    return inspect_windows_task_xml(payload)
 
 
 def verify_task_definition(payload: bytes, command: Sequence[str]) -> dict[str, Any]:
     actual = inspect_task_xml(payload)
-    expected = inspect_task_xml(task_xml(command))
-    if actual != expected:
+    if not windows_task_xml_equivalent(payload, task_xml(command)):
         raise RuntimeError("scheduled task does not match the intended command, archive root, or policy")
     if actual["command"].lower().endswith(("powershell.exe", "powershell")):
         raise RuntimeError("collector task must launch the native executable directly")
@@ -171,28 +177,16 @@ def _completed_bytes(value: Any) -> bytes:
 
 
 def _decode_output(value: Any) -> str:
-    payload = _completed_bytes(value)
-    if payload.startswith((b"\xff\xfe", b"\xfe\xff")):
-        return payload.decode("utf-16", errors="replace")
-    try:
-        return payload.decode("utf-8")
-    except UnicodeDecodeError:
-        pass
-    return payload.decode("utf-8", errors="replace")
+    return decode_windows_output(value)
 
 
 def query_task_xml(task_name: str, runner: Runner = subprocess.run) -> bytes | None:
-    result = runner(
-        ["schtasks.exe", "/Query", "/TN", task_name, "/XML", "ONE"],
-        check=False,
-        capture_output=True,
-        **no_window_kwargs(),
+    return query_windows_task_xml(
+        task_name,
+        schtasks="schtasks.exe",
+        runner=runner,
+        runner_kwargs=no_window_kwargs(),
     )
-    if result.returncode != 0:
-        return None
-    if isinstance(result.stdout, str):
-        return result.stdout.encode("utf-8")
-    return _completed_bytes(result.stdout)
 
 
 def _task_command(arguments: list[str], runner: Runner, *, check: bool) -> Any:
@@ -200,26 +194,36 @@ def _task_command(arguments: list[str], runner: Runner, *, check: bool) -> Any:
 
 
 def register_task(task_name: str, payload: bytes, runner: Runner = subprocess.run) -> None:
-    runtime = Path(tempfile.mkdtemp(prefix="memory-wuxian-task-"))
-    definition = runtime / "collector-task.xml"
-    try:
-        atomic_write_bytes(definition, payload)
-        _task_command(["schtasks.exe", "/Create", "/TN", task_name, "/XML", str(definition), "/F"], runner, check=True)
-    finally:
-        shutil.rmtree(runtime, ignore_errors=True)
+    register_windows_task(
+        task_name,
+        payload,
+        temporary_prefix="memory-wuxian-task-",
+        schtasks="schtasks.exe",
+        runner=runner,
+        write_bytes=atomic_write_bytes,
+        runner_kwargs=no_window_kwargs(),
+        error_prefix="scheduled task registration failed",
+    )
 
 
 def remove_task(task_name: str, runner: Runner = subprocess.run) -> None:
-    for arguments in (
-        ["schtasks.exe", "/End", "/TN", task_name],
-        ["schtasks.exe", "/Delete", "/TN", task_name, "/F"],
-    ):
-        _task_command(arguments, runner, check=False)
+    uninstall_windows_task(
+        task_name,
+        schtasks="schtasks.exe",
+        runner=runner,
+        end_first=True,
+        runner_kwargs=no_window_kwargs(),
+    )
 
 
-def remove_run_key(runner: Runner = subprocess.run) -> None:
+def remove_run_key(
+    runner: Runner = subprocess.run,
+    *,
+    run_key: str = RUN_KEY,
+    run_value: str = RUN_VALUE,
+) -> None:
     runner(
-        ["reg.exe", "DELETE", RUN_KEY, "/V", RUN_VALUE, "/F"],
+        ["reg.exe", "DELETE", run_key, "/V", run_value, "/F"],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -227,9 +231,14 @@ def remove_run_key(runner: Runner = subprocess.run) -> None:
     )
 
 
-def query_run_key(runner: Runner = subprocess.run) -> dict[str, str] | None:
+def query_run_key(
+    runner: Runner = subprocess.run,
+    *,
+    run_key: str = RUN_KEY,
+    run_value: str = RUN_VALUE,
+) -> dict[str, str] | None:
     result = runner(
-        ["reg.exe", "QUERY", RUN_KEY, "/V", RUN_VALUE],
+        ["reg.exe", "QUERY", run_key, "/V", run_value],
         check=False,
         capture_output=True,
         **no_window_kwargs(),
@@ -239,18 +248,24 @@ def query_run_key(runner: Runner = subprocess.run) -> dict[str, str] | None:
     text = _decode_output(result.stdout)
     for line in text.splitlines():
         parts = line.strip().split(None, 2)
-        if len(parts) == 3 and parts[0].casefold() == RUN_VALUE.casefold() and parts[1].startswith("REG_"):
+        if len(parts) == 3 and parts[0].casefold() == run_value.casefold() and parts[1].startswith("REG_"):
             return {"type": parts[1], "data": parts[2]}
     return None
 
 
-def restore_run_key(snapshot: dict[str, str] | None, runner: Runner = subprocess.run) -> None:
+def restore_run_key(
+    snapshot: dict[str, str] | None,
+    runner: Runner = subprocess.run,
+    *,
+    run_key: str = RUN_KEY,
+    run_value: str = RUN_VALUE,
+) -> None:
     if snapshot is None:
-        remove_run_key(runner)
+        remove_run_key(runner, run_key=run_key, run_value=run_value)
         return
     runner(
         [
-            "reg.exe", "ADD", RUN_KEY, "/V", RUN_VALUE,
+            "reg.exe", "ADD", run_key, "/V", run_value,
             "/T", snapshot["type"], "/D", snapshot["data"], "/F",
         ],
         check=True,
@@ -273,6 +288,18 @@ def probe_candidate(command: Sequence[str], runner: Runner = subprocess.run) -> 
 
 def _read_optional(path: Path) -> bytes | None:
     return path.read_bytes() if path.exists() else None
+
+
+def _ensure_active_pointer(pointer: Path, archive_root: Path, previous: bytes | None) -> None:
+    if previous is None:
+        atomic_write_text(pointer, f"{archive_root}\n")
+        return
+    try:
+        value = previous.decode("utf-8").strip()
+    except UnicodeDecodeError as error:
+        raise RuntimeError("existing active archive pointer is not UTF-8") from error
+    if not value or Path(value).expanduser().resolve() != archive_root.resolve():
+        raise RuntimeError("existing active archive pointer does not match the requested archive root")
 
 
 def _encoded(payload: bytes | None) -> str | None:
@@ -322,7 +349,11 @@ def _restore_transaction(journal: dict[str, Any], runner: Runner) -> None:
     _restore_file(Path(journal["command_manifest"]), _decoded(rollback.get("command_manifest")))
     _restore_file(Path(journal["active_root_pointer"]), _decoded(rollback.get("active_root_pointer")))
     _restore_file(Path(journal["lifecycle_manifest"]), _decoded(rollback.get("lifecycle_manifest")))
-    restore_run_key(rollback.get("run_key"), runner)
+    restore_run_key(
+        rollback.get("run_key"), runner,
+        run_key=str(journal.get("run_key_path", RUN_KEY)),
+        run_value=str(journal.get("run_value_name", RUN_VALUE)),
+    )
 
 
 def _decoded(value: str | None) -> bytes | None:
@@ -335,7 +366,11 @@ def commit_transaction(journal_path: Path, *, runner: Runner = subprocess.run) -
         return journal
     if journal.get("phase") != "verify":
         raise RuntimeError(f"cannot commit transaction in phase {journal.get('phase')!r}")
-    remove_run_key(runner)
+    remove_run_key(
+        runner,
+        run_key=str(journal.get("run_key_path", RUN_KEY)),
+        run_value=str(journal.get("run_value_name", RUN_VALUE)),
+    )
     _journal_phase(journal_path, journal, "commit")
     return journal
 
@@ -512,6 +547,8 @@ def install_transaction(
     command_manifest: Path,
     pointer: Path,
     journal_path: Path,
+    run_key: str = RUN_KEY,
+    run_value: str = RUN_VALUE,
     runner: Runner = subprocess.run,
     readiness_probe: Callable[..., dict[str, Any]] = wait_for_watermark_progress,
     candidate_probe_command: Sequence[str] | None = None,
@@ -525,7 +562,7 @@ def install_transaction(
     old_pointer = _read_optional(pointer)
     lifecycle_manifest = archive_root / "imports" / "codex" / "collector-lifecycle.json"
     old_lifecycle = _read_optional(lifecycle_manifest)
-    old_run_key = query_run_key(runner)
+    old_run_key = query_run_key(runner, run_key=run_key, run_value=run_value)
     previous_pid = None
     telemetry_path = archive_root / "imports" / "codex" / "collector-telemetry.json"
     try:
@@ -548,6 +585,8 @@ def install_transaction(
         "archive_root": str(archive_root),
         "command_manifest": str(command_manifest),
         "active_root_pointer": str(pointer),
+        "run_key_path": run_key,
+        "run_value_name": run_value,
         "lifecycle_manifest": str(lifecycle_manifest),
         "previous_archive_watermark": previous_archive_watermark,
         "rollback": {
@@ -572,7 +611,7 @@ def install_transaction(
         if prepare_mutation is not None:
             prepare_mutation(journal)
             atomic_write_bytes(journal_path, canonical_json(journal))
-        remove_run_key(runner)
+        remove_run_key(runner, run_key=run_key, run_value=run_value)
         if old_task_xml is not None:
             _task_command(["schtasks.exe", "/End", "/TN", task_name], runner, check=False)
         remove_task(task_name, runner)
@@ -590,7 +629,7 @@ def install_transaction(
             "task_name": task_name,
         }
         atomic_write_bytes(command_manifest, canonical_json(manifest))
-        atomic_write_text(pointer, f"{archive_root}\n")
+        _ensure_active_pointer(pointer, archive_root, old_pointer)
         lifecycle = {
             "format": "memory-wuxian-collector-lifecycle-v1",
             "generation": journal["generation_id"],
@@ -633,7 +672,7 @@ def install_transaction(
         }
         atomic_write_bytes(journal_path, canonical_json(journal))
         if not defer_commit:
-            remove_run_key(runner)
+            remove_run_key(runner, run_key=run_key, run_value=run_value)
             _journal_phase(journal_path, journal, "commit")
         return journal
     except BaseException as error:
@@ -666,11 +705,18 @@ def install_generation_transaction(
     archive_root: Path,
     command_manifest: Path,
     pointer: Path,
+    run_key: str = RUN_KEY,
+    run_value: str = RUN_VALUE,
     runner: Runner = subprocess.run,
     readiness_probe: Callable[..., dict[str, Any]] = wait_for_watermark_progress,
     defer_commit: bool = False,
+    journal_path: Optional[Path] = None,
 ) -> tuple[dict[str, Any], Path]:
-    transaction_root = runtime_directory / "transactions" / uuid.uuid4().hex
+    transaction_root = (
+        journal_path.expanduser().resolve().parent
+        if journal_path is not None
+        else runtime_directory / "transactions" / uuid.uuid4().hex
+    )
     staged_root = transaction_root / "candidate"
     previous_root = transaction_root / "previous-generation"
     failed_root = transaction_root / "failed-generation"
@@ -686,7 +732,7 @@ def install_generation_transaction(
     staged_command[0] = str(staged_root / "bin" / "memory-wuxian-collector.exe")
     config_index = staged_command.index("--config") + 1
     staged_command[config_index] = str(staged_root / "config.yaml")
-    journal_path = transaction_root / "journal.json"
+    journal_path = journal_path.expanduser().resolve() if journal_path is not None else transaction_root / "journal.json"
 
     def switch_generation(journal: dict[str, Any]) -> None:
         # Record the rollback obligation before either rename. If the second
@@ -703,6 +749,8 @@ def install_generation_transaction(
         command_manifest=command_manifest,
         pointer=pointer,
         journal_path=journal_path,
+        run_key=run_key,
+        run_value=run_value,
         runner=runner,
         readiness_probe=readiness_probe,
         candidate_probe_command=staged_command,
@@ -732,6 +780,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--since")
     parser.add_argument("--debounce-ms", type=int, default=400)
     parser.add_argument("--task-name", default=DEFAULT_TASK_NAME)
+    parser.add_argument("--run-key", default=RUN_KEY, help=argparse.SUPPRESS)
+    parser.add_argument("--run-value", default=RUN_VALUE, help=argparse.SUPPRESS)
+    parser.add_argument("--active-root-pointer", help=argparse.SUPPRESS)
     parser.add_argument("--backend", choices=("auto", "task"), default="auto")
     parser.add_argument(
         "--runtime-directory",
@@ -741,8 +792,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--load", action="store_true")
     parser.add_argument("--uninstall", action="store_true")
     parser.add_argument("--defer-commit", action="store_true")
+    parser.add_argument("--skip-maintenance", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--commit-journal")
     parser.add_argument("--rollback-journal")
+    parser.add_argument("--journal-path")
     return parser
 
 
@@ -772,7 +825,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             from scripts.install_maintenance_supervisor import uninstall as uninstall_maintenance
         uninstall_maintenance(platform_name="win32", runner=subprocess.run)
         remove_task(args.task_name)
-        remove_run_key()
+        remove_run_key(run_key=args.run_key, run_value=args.run_value)
         for stale in (
             Path(args.archive_root).expanduser().resolve() / "imports/codex/run-collector-hidden.vbs",
             runtime_directory / "run-collector-hidden.vbs",
@@ -816,6 +869,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "startup_owner": "task-scheduler",
         "task_name": args.task_name,
     }
+    pointer = (
+        Path(args.active_root_pointer).expanduser().resolve()
+        if args.active_root_pointer
+        else active_root_pointer()
+    )
     if args.load:
         journal_path = runtime_directory / "install-journal.json"
         if candidate_root:
@@ -838,8 +896,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 candidate_command=candidate_command,
                 archive_root=archive_root,
                 command_manifest=output,
-                pointer=active_root_pointer(),
+                pointer=pointer,
+                run_key=args.run_key,
+                run_value=args.run_value,
                 defer_commit=True,
+                journal_path=Path(args.journal_path) if args.journal_path else None,
             )
         else:
             journal = install_transaction(
@@ -847,7 +908,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 command=command,
                 archive_root=archive_root,
                 command_manifest=output,
-                pointer=active_root_pointer(),
+                pointer=pointer,
+                run_key=args.run_key,
+                run_value=args.run_value,
                 journal_path=journal_path,
                 defer_commit=True,
             )
@@ -858,18 +921,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ):
             stale.unlink(missing_ok=True)
         try:
-            from install_maintenance_supervisor import install as install_maintenance
-        except ModuleNotFoundError:
-            from scripts.install_maintenance_supervisor import install as install_maintenance
-        try:
-            install_maintenance(
-                archive_root,
-                skill_root,
-                python_executable,
-                platform_name="win32",
-                load=True,
-                runner=subprocess.run,
-            )
+            if not args.skip_maintenance:
+                try:
+                    from install_maintenance_supervisor import install as install_maintenance
+                except ModuleNotFoundError:
+                    from scripts.install_maintenance_supervisor import install as install_maintenance
+                install_maintenance(
+                    archive_root,
+                    skill_root,
+                    python_executable,
+                    platform_name="win32",
+                    load=True,
+                    runner=subprocess.run,
+                )
             if not args.defer_commit:
                 journal = commit_transaction(journal_path)
         except BaseException as error:
@@ -879,7 +943,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"install-journal:{journal_path}")
     else:
         atomic_write_bytes(output, canonical_json(preview))
-        atomic_write_text(active_root_pointer(), f"{archive_root}\n")
+        _ensure_active_pointer(pointer, archive_root, _read_optional(pointer))
     print(f"command-manifest:{output}")
     return 0
 

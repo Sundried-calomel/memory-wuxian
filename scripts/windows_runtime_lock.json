@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "python": {
+    "filename": "python-3.14.7-embed-amd64.zip",
+    "sha256": "d297e5ff019966817ad8502465176139f2d3d840fa4ed84b13bed399a6ab1f15",
+    "url": "https://www.python.org/ftp/python/3.14.7/python-3.14.7-embed-amd64.zip",
+    "version": "3.14.7"
+  },
+  "packages": [
+    {"artifact": "wheel", "name": "bottle", "version": "0.13.4"},
+    {"artifact": "wheel", "name": "cffi", "version": "2.1.1"},
+    {"artifact": "wheel", "name": "clr-loader", "version": "0.3.1"},
+    {"artifact": "sdist", "name": "proxy-tools", "version": "0.1.0"},
+    {"artifact": "wheel", "name": "psutil", "version": "7.2.2"},
+    {"artifact": "wheel", "name": "pycparser", "version": "3.0"},
+    {"artifact": "wheel", "name": "pythonnet", "version": "3.1.0"},
+    {"artifact": "wheel", "name": "pywebview", "version": "6.2.1"},
+    {"artifact": "wheel", "name": "PyYAML", "version": "6.0.3"},
+    {"artifact": "wheel", "name": "typing-extensions", "version": "4.16.0"}
+  ]
+}

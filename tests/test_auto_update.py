@@ -4,7 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -315,6 +315,70 @@ class AutoUpdateTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn('"--python-executable"', installer)
         self.assertIn("executable_entry_path", installer)
+
+    def test_windows_run_once_wrapper_persists_exact_installer_exit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = root / "MemoryWuxian-2.20.0-Windows-x64-Setup.exe"
+            package.write_bytes(b"installer")
+            digest = hashlib.sha256(package.read_bytes()).hexdigest()
+            state = root / "state.json"
+            state.write_text(json.dumps({"status": "staged-for-next-login", "sha256": digest}), encoding="utf-8")
+            completed = type("Completed", (), {"returncode": 33})()
+            with patch.object(auto_update.subprocess, "run", return_value=completed) as run:
+                result = auto_update.execute_windows_staged_installer(
+                    package, state, digest, runner=run
+                )
+            document = json.loads(state.read_text(encoding="utf-8"))
+            self.assertEqual(result, 33)
+            self.assertEqual(document["status"], "install-failed")
+            self.assertEqual(document["installer_exit_code"], 33)
+            self.assertIn("/SOURCEENTRYPOINT=auto-update", run.call_args.args[0])
+
+    def test_windows_stage_registers_the_hash_bound_status_wrapper(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = root / "MemoryWuxian-2.20.0-Windows-x64-Setup.exe"
+            package.write_bytes(b"installer")
+            digest = hashlib.sha256(package.read_bytes()).hexdigest()
+            skill = root / "memory-wuxian"
+            (skill / "scripts").mkdir(parents=True)
+            (skill / "scripts" / "auto_update.py").write_text("", encoding="utf-8")
+            python = root / "runtime" / "python.exe"
+            python.parent.mkdir()
+            python.write_bytes(b"")
+            state = root / "state.json"
+            run = Mock()
+            status = auto_update.stage_install(
+                package,
+                "Windows",
+                skill_root=skill,
+                python_executable=python,
+                state_path=state,
+                expected_sha256=digest,
+                runner=run,
+            )
+            self.assertEqual(status, "staged-for-next-login")
+            registered = run.call_args.args[0]
+            command = registered[registered.index("/D") + 1]
+            self.assertIn("--execute-windows-staged-installer", command)
+            self.assertIn(digest, command)
+            self.assertNotIn("/VERYSILENT", command)
+
+    def test_windows_run_once_rejects_drift_before_launch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = root / "setup.exe"
+            package.write_bytes(b"changed")
+            state = root / "state.json"
+            state.write_text(json.dumps({"sha256": "a" * 64}), encoding="utf-8")
+            run = Mock()
+            result = auto_update.execute_windows_staged_installer(
+                package, state, "a" * 64, runner=run
+            )
+            self.assertEqual(result, 30)
+            self.assertFalse(run.called)
+            self.assertEqual(json.loads(state.read_text(encoding="utf-8"))["installer_exit_code"], 30)
 
     def test_macos_pkg_uses_offline_isolated_yaml_fallback(self):
         postinstall = (

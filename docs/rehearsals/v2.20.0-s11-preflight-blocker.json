@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "step": "S11",
+  "status": "blocked-before-mutation",
+  "candidate": "v2.20.0 unified Windows installer",
+  "host_platform": "Windows",
+  "findings": [
+    {
+      "id": "S11-BLOCK-001",
+      "severity": "blocking",
+      "boundary": "v2.15.0-upgrade",
+      "evidence": [
+        "scripts/install_windows_transaction.py computes default_registry().plan only",
+        "scripts/windows_install_migrations.py migrate_document has no production caller"
+      ],
+      "invariant": "A declared migration must execute and emit before/after evidence before generation commit."
+    },
+    {
+      "id": "S11-BLOCK-002",
+      "severity": "blocking",
+      "boundary": "failure-rollback",
+      "evidence": [
+        "auto-update registration and shortcut creation occur inside ComposedInstallMutation.apply",
+        "ComposedInstallMutation.rollback invokes only the collector generation journal"
+      ],
+      "invariant": "Every prepared external side effect must have a durable compensation recorded before apply."
+    }
+  ],
+  "mutation_attempted": false,
+  "reason": "Running the real rehearsal would knowingly risk the active updater, shortcut, or collector authority without complete compensation.",
+  "required_replan_resume_step": "S06"
+}

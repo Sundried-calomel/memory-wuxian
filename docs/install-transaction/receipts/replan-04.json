@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-22T22:48:20+09:00",
+  "reason": "Declare v2.20.0 release identity before rehearsals and candidate freeze so S13-S15 can preserve same bytes",
+  "approval": "User authorized formal replan and automatic promotion through S15",
+  "resume_step": "S11",
+  "previous_state_sha256": "025fbe2dcea982d601a14cb00fb3d5fb01873f639b2bb744614ac41a22b010d0",
+  "old_contract_sha256": "424a25c7b7d46e78aa9a1b8a032a7857873852913667eebfcbee5579a27a9817",
+  "new_contract_sha256": "c0185d99f468e3d51302b6bf84654ba028ee8d0a54a8b23ffb2813914710bc7a",
+  "baseline_sha256": "04b5476b095c82c1e19105e8d0a20ac529b95bb0f01904f4a2e9827f9639bc9d"
+}

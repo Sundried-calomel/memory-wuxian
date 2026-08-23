@@ -46,8 +46,11 @@ jobs:
 
   candidate-proof:
     runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.candidate.outputs.run_id }}
     steps:
       - name: Require successful candidate CI for this commit
+        id: candidate
         uses: actions/github-script@v8
         with:
           script: |
@@ -71,6 +74,7 @@ jobs:
               );
               return;
             }
+            core.setOutput("run_id", String(proof.id));
             core.notice(`Candidate evidence: ${proof.html_url}`);
 
   release-gate:
@@ -162,67 +166,37 @@ jobs:
           path: dist/*
 
   windows-installer:
-    needs: [release-gate, metadata]
+    needs: [release-gate, metadata, candidate-proof]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Build native binaries
+      - name: Download exact candidate-CI installer
         shell: pwsh
-        run: |
-          cargo build --release --locked --bins --manifest-path native-collector/Cargo.toml
-          New-Item -ItemType Directory -Force bin | Out-Null
-          Copy-Item native-collector/target/release/memory-wuxian-collector.exe bin/memory-wuxian-collector.exe -Force
-          Copy-Item native-collector/target/release/memory-wuxian-envelope.exe bin/memory-wuxian-envelope.exe -Force
-          Copy-Item native-collector/target/release/memory-wuxian-dashboard-launcher.exe bin/memory-wuxian-dashboard-launcher.exe -Force
-          $version = "${{ needs.metadata.outputs.version }}"
-          foreach ($binary in @("memory-wuxian-collector", "memory-wuxian-envelope")) {
-            $actual = (& "bin\$binary.exe" --version).Trim()
-            $expected = "$binary $version"
-            if ($LASTEXITCODE -ne 0 -or $actual -ne $expected) {
-              throw "Unexpected native version: $actual != $expected"
-            }
-          }
-      - name: Install Inno Setup
-        shell: pwsh
-        run: choco install innosetup --yes --no-progress
-      - name: Build EXE installer
-        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ needs.candidate-proof.outputs.run_id }}
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
+          gh run download $env:CANDIDATE_RUN_ID `
+            --repo $env:GITHUB_REPOSITORY `
+            --name windows-installer-candidate `
+            --dir dist
+      - name: Verify candidate source and installer hash
+        shell: pwsh
+        run: |
           $version = "${{ needs.metadata.outputs.version }}"
-          $buildLog = (
-            & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
-              "/DSourceRoot=$PWD" `
-              "/DAppVersion=$version" `
-              packaging/windows/MemoryWuxian.iss 2>&1
-          ) -join "`n"
-          Write-Host $buildLog
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
           $installer = Get-Item "dist\MemoryWuxian-$version-Windows-x64-Setup.exe"
-          foreach ($required in @(
-            "SKILL.md",
-            "AGENTS.md",
-            "PRODUCT_ARCHITECTURE.md",
-            "docs\module-architecture.json",
-            "scripts\check_architecture_contract.py",
-            "bin\memory-wuxian-collector.exe",
-            "bin\memory-wuxian-envelope.exe",
-            "bin\memory-wuxian-dashboard-launcher.exe"
-          )) {
-            $sourcePath = Join-Path $PWD $required
-            if (-not $buildLog.Contains("Compressing: $sourcePath")) {
-              throw "Windows package is missing architecture gate file: $required"
-            }
+          $provenance = Get-Content -LiteralPath dist/candidate-provenance.json -Raw -Encoding utf8 | ConvertFrom-Json
+          if ($provenance.source_commit -ne "${{ github.sha }}") {
+            throw "Candidate source commit drift: $($provenance.source_commit)"
           }
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          [IO.File]::WriteAllText(
-            "$($installer.FullName).sha256",
-            "$hash  $($installer.Name)`n",
-            [Text.UTF8Encoding]::new($false)
-          )
+          if ($hash -ne $provenance.installer_sha256) {
+            throw "Candidate installer hash drift: $hash"
+          }
+          $hashLine = (Get-Content -LiteralPath "$($installer.FullName).sha256" -Raw -Encoding utf8).Trim()
+          if ($hashLine -ne "$hash  $($installer.Name)") {
+            throw "Candidate SHA-256 sidecar drift"
+          }
       - uses: actions/upload-artifact@v7
         with:
           name: windows-installer

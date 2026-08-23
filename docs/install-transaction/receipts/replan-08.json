@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T12:47:04+09:00",
+  "reason": "Preserve S01-S06; correct and validate the complete isolated Windows runtime entrypoint family before resuming rehearsals",
+  "approval": "User authorized S06 formal replan, preservation of S01-S05, production composition correction, automatic promotion through S15, and explicitly approved bounded real-task takeover for S11",
+  "resume_step": "S07",
+  "previous_state_sha256": "36a5c10c3c45deaadce8e55e985c59b753cdb175cf200908049b18ecf38a5aa8",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "fc7be551fae522a4ec1748d2a5a2dd1ca15f9cc3c015c1284deb412f205805e5"
+}

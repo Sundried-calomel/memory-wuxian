@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T13:02:10+09:00",
+  "reason": "Preserve S01-S05; connect the existing closed UAC broker to the single production transaction owner, then revalidate S06-S15 through the official outer entrypoint",
+  "approval": "User authorized formal replan from S06, preservation of S01-S05, correction of production composition, and automatic promotion through S15",
+  "resume_step": "S06",
+  "previous_state_sha256": "173dec4cdb0a52ed3fed4e8100a400f6f000a0617022a7e42f4477e7a85bc581",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "a87a03b418b1765a28282b3f04b4f0ff40ee725fa6662f547e2c1e93a729ff4f"
+}

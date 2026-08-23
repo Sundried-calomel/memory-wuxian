@@ -30,8 +30,36 @@ Source: "{#SourceRoot}\config.yaml"; DestDir: "{tmp}\MemoryWuxian\candidate"; De
 Source: "{#SourceRoot}\packaging\windows\install.ps1"; DestDir: "{tmp}\MemoryWuxian"; Flags: ignoreversion deleteafterinstall
 Source: "{#SourceRoot}\packaging\windows\uninstall.ps1"; DestDir: "{tmp}\MemoryWuxian\candidate\packaging\windows"; Flags: ignoreversion deleteafterinstall
 
-[Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{tmp}\MemoryWuxian\install.ps1"" -SkillRoot ""{app}"" -CandidateRoot ""{tmp}\MemoryWuxian\candidate"""; StatusMsg: "Installing and activating MemoryWuxian..."; Flags: runhidden waituntilterminated
-
 [UninstallRun]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\packaging\windows\uninstall.ps1"" -SkillRoot ""{app}"""; Flags: runhidden waituntilterminated; RunOnceId: "MemoryWuxianCollector"
+
+[Code]
+var
+  TransactionExitCode: Integer;
+  TransactionExecuted: Boolean;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Parameters: String;
+  ResultCode: Integer;
+begin
+  if (CurStep <> ssPostInstall) or TransactionExecuted then
+    exit;
+  TransactionExecuted := True;
+  Parameters :=
+    '-NoProfile -ExecutionPolicy Bypass -File "' +
+    ExpandConstant('{tmp}\MemoryWuxian\install.ps1') +
+    '" -SkillRoot "' + ExpandConstant('{app}') +
+    '" -CandidateRoot "' + ExpandConstant('{tmp}\MemoryWuxian\candidate') +
+    '" -SourceEntrypoint "' + ExpandConstant('{param:SOURCEENTRYPOINT|inno}') + '"';
+  if not Exec('powershell.exe', Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    TransactionExitCode := 31
+  else
+    TransactionExitCode := ResultCode;
+  Log(Format('MemoryWuxian transaction exit code: %d', [TransactionExitCode]));
+end;
+
+function GetCustomSetupExitCode: Integer;
+begin
+  Result := TransactionExitCode;
+end;

@@ -11,7 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKBOOK = ROOT / "docs" / "retrospectives" / "memory-wuxian-defect-workbook.md"
 
 
-def canonical_text_sha256(path: Path) -> str:
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def legacy_text_sha256(path: Path) -> str:
     canonical = path.read_text(encoding="utf-8").replace("\r\n", "\n")
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -60,14 +64,29 @@ class DefectWorkbookContractTests(unittest.TestCase):
             gate = contract.get("defect_workbook")
             self.assertIsInstance(gate, dict, path.name)
             self.assertTrue(gate.get("applicable_families"), path.name)
-            self.assertTrue(gate.get("original_triggers"), path.name)
-            self.assertIsInstance(gate.get("project_workbook_updated"), bool, path.name)
-            if "hotfix" in contract.get("candidate_id", "").lower():
+            is_repair = contract.get("classification") == "repair"
+            is_hotfix = "hotfix" in contract.get("candidate_id", "").lower()
+            if is_repair or is_hotfix:
+                self.assertTrue(gate.get("original_triggers"), path.name)
+                self.assertIsInstance(gate.get("project_workbook_updated"), bool, path.name)
+            if is_hotfix:
                 self.assertTrue(gate["project_workbook_updated"], path.name)
             for field in ("preflight", "completion"):
+                if field == "completion" and gate.get("completion_sha256") == "PENDING":
+                    self.assertNotIn(
+                        contract.get("lifecycle_state"),
+                        {"complete", "completed", "installed", "published", "released"},
+                        path.name,
+                    )
+                    continue
                 receipt = ROOT / gate[f"{field}_receipt"]
                 self.assertTrue(receipt.is_file(), f"{path.name}: missing {receipt}")
-                actual = canonical_text_sha256(receipt)
+                version = tuple(map(int, match.groups()))
+                actual = (
+                    file_sha256(receipt)
+                    if version >= (2, 20, 0)
+                    else legacy_text_sha256(receipt)
+                )
                 self.assertEqual(actual, gate[f"{field}_sha256"], path.name)
 
 

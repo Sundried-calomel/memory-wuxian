@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-install-governance",
+  "packet_sha256": "60bdf07aa73ef713bb0337a2d90fd60b6085c95d6d6e7514a7b0a24fe27f50f9",
+  "checks": [
+    {
+      "check_id": "registered-preflight",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-install-governance-preflight.json",
+          "sha256": "7d6f6622853071a59f3b7795de2f9aa7fabe3588f650a59dd03e5845bf618d77"
+        }
+      ],
+      "note": "Target-based workbook discovery produced a hash-bound preflight without relying on chat memory."
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-install-governance-tests.log",
+          "sha256": "0146698032d063f3b18d9d540ba624acf0889ea73dd8dd6c479ee49d98f45363"
+        }
+      ],
+      "note": "The controller rejected worktree drift after verification and changed to needs_replan after the single allowed remediation cycle."
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-s06-runtime-projection",
+  "objective": "Prevent the independently activated Windows runtime bundle from being copied into the installed Skill generation while preserving exact manifest validation and rollback behavior.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "windows-installer-transaction-controller",
+  "platforms": ["windows"],
+  "languages": ["python", "json", "markdown"],
+  "path_globs": [
+    "scripts/install_windows_transaction.py",
+    "scripts/platform_scheduler.py",
+    "tests/test_windows_installer_composition.py",
+    "tests/test_platform_scheduler.py",
+    "docs/install-transaction/**",
+    "docs/rehearsals/**"
+  ],
+  "entrypoints": ["transaction-controller", "collector-child-installer", "windows-task-query", "windows-rehearsal"],
+  "resources": ["runtime-bundle", "skill-candidate-projection", "collector-generation", "task-xml", "transaction-journal"],
+  "operations": ["repair", "project", "install", "rollback", "validate"],
+  "data_formats": ["utf-8", "canonical-json", "windows-path"],
+  "authorization_boundaries": [
+    "The complete package candidate and independent runtime bundle remain hash-validated by the manifest before mutation.",
+    "Only the transaction-private Skill projection excludes the top-level runtime directory.",
+    "No archive, summary, cloud, environment, task-name, registry-name, or production-resource authority changes.",
+    "Rollback continues to use the existing collector subordinate journal."
+  ],
+  "implementation_units": [
+    {
+      "id": "collector-skill-projection",
+      "owner_id": "collector-generation-mutation",
+      "paths": [
+        "scripts/install_windows_transaction.py",
+        "tests/test_windows_installer_composition.py"
+      ],
+      "entrypoints": ["transaction-controller", "collector-child-installer"],
+      "resources": ["runtime-bundle", "skill-candidate-projection", "collector-generation"],
+      "operations": ["repair", "project", "install", "rollback", "validate"],
+      "planned_check_ids": [
+        "manifest-identity-retained",
+        "runtime-excluded-from-installed-skill",
+        "long-path-real-windows-rehearsal",
+        "rollback-boundary"
+      ]
+    },
+    {
+      "id": "windows-task-xml-query-normalization",
+      "owner_id": "platform-scheduler",
+      "paths": [
+        "scripts/platform_scheduler.py",
+        "tests/test_platform_scheduler.py"
+      ],
+      "entrypoints": ["windows-task-query", "windows-rehearsal"],
+      "resources": ["task-xml"],
+      "operations": ["inspect", "normalize", "validate"],
+      "planned_check_ids": [
+        "schtasks-console-byte-decoding",
+        "xml-declaration-normalization",
+        "multilingual-task-roundtrip"
+      ]
+    }
+  ],
+  "rule_exclusions": []
+}

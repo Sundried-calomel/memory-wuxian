@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "step": "S08",
+  "verified_at": "2026-08-23T23:25:47+09:00",
+  "contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "git_head": "6c60a539b4d7fc45b6fe12945b0393335ebb8b86",
+  "worktree_sha256": "a154612b377fa8cceb07f49bf78f554d7ecde75d2229083c0a925edcfaf53194",
+  "delta_paths": [],
+  "evidence": [
+    "migration-registry-tests",
+    "v2.15.0-fixture-rehearsal"
+  ]
+}

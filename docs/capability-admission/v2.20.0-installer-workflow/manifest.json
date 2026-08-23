@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "capability_id": "installer-transaction-workflow",
+  "revision": "2.20.0-governance-11",
+  "owner_id": "windows-installer-transaction-controller",
+  "producer_identity": "codex-primary-producer",
+  "artifact_sha256": "62ba767fc76adf8cebd9e0f551a331f6dc2001f1239aca384bf6638065991c56",
+  "triggers": [
+    {"trigger_id": "installer-protected-edit", "phrase": "Edit a protected Memory Wuxian installer transaction path"},
+    {"trigger_id": "installer-step-transition", "phrase": "Advance the Memory Wuxian unified installer workflow"}
+  ],
+  "calls": [],
+  "resources": [
+    {"resource_id": "installer-workflow-state", "access": "write", "coordination_owner": "windows-installer-transaction-controller"},
+    {"resource_id": "installer-worktree", "access": "read", "coordination_owner": "windows-installer-transaction-controller"}
+  ],
+  "permissions": ["project-file-read", "project-state-write"],
+  "actions": [
+    {"action_id": "check-protected-edit", "risk": "ordinary", "permissions": ["project-file-read"], "resources": ["installer-workflow-state", "installer-worktree"], "authorization_gate": null},
+    {"action_id": "advance-workflow-step", "risk": "ordinary", "permissions": ["project-file-read", "project-state-write"], "resources": ["installer-workflow-state", "installer-worktree"], "authorization_gate": null}
+  ]
+}

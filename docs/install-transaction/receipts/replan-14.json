@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-23T17:37:38+09:00",
+  "reason": "Centralize current-account name/SID semantic equivalence in platform_scheduler and make every scheduler owner reuse it; preserve S01-S03 and invalidate S04 onward.",
+  "approval": "User approved formal replan from S06, preserving S01-S03 and repairing the production composition transaction before automatic promotion.",
+  "resume_step": "S04",
+  "previous_state_sha256": "adce2d60cac562b4c698eb337ed6d310accf2594fc081a5258aea0e67b67b17b",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "0128685a64ccd8aa9652ae7295b77f2cb0c357f9d11ab98784b5c5355d9f598f"
+}

@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.20.0 - 2026-08-22
+
+- Route the Windows manual installer, Inno Setup package, and automatic updater
+  through one `windows_installer_transaction.py` state machine and one closed
+  five-component install manifest.
+- Prepare collector generation, configuration migration, archive scaffolding,
+  automatic-update registration, and dashboard shortcut as separate bounded
+  mutations with durable compensation recorded before each apply.
+- Resume interrupted prepare or commit intent deterministically, verify effects
+  before commit, and require `rollback-verified` before a failed transaction may
+  release its journal or allow another installation.
+- Preserve raw archive records and the active archive pointer as immutable
+  authorities; this release changes installer composition, not memory content,
+  summary formats, indexes, cloud protocols, or semantic processing.
+
+## 2.19.1 - 2026-08-22
+
+- Bind the Windows collector task principal to the current interactive user
+  through the shared Platform identity owner so real Task Scheduler
+  registration accepts the generated XML.
+- Preserve native `schtasks` diagnostics in the transactional rollback journal
+  instead of reducing a failed registration to an unexplained exit code.
+- Add focused XML identity, registration-failure, rollback, and installed-effect
+  coverage without changing archive, summary, index, cloud, or event semantics.
+
 ## 2.19.0 - 2026-08-22
 
 - Integrate the completed R1-R8 behavior-preserving modularization behind

@@ -1,0 +1,26 @@
+Memory Wuxian v2.20.0 S04 scheduler normalization validation
+Checked: 2026-08-23
+
+Command scope:
+- tests.test_platform_scheduler
+- tests.test_windows_lifecycle_transaction
+- tests.test_windows_installer_composition
+- tests.test_windows_installer_transaction
+
+Result:
+- 61 tests run
+- 61 passed
+- exit code 0
+
+Observed real-Windows evidence:
+- Task Scheduler normalized current account name to the same account SID.
+- Command, arguments, hidden state, multiple-instance policy, restart interval,
+  and restart count were byte-semantically unchanged after registration.
+- The diagnostic task was deleted after inspection.
+
+Regression contract:
+- current account name versus current account SID: accepted
+- current account name versus unrelated SID: rejected
+- any non-principal task-definition drift: rejected before SID lookup
+- collector, maintenance, auto-update, and rollback reuse one comparator
+- malformed whoami CSV or invalid SID: rejected

@@ -1,0 +1,19 @@
+{
+  "allowed_actions": [
+    "advance-workflow-step",
+    "check-protected-edit"
+  ],
+  "authorization_gated_actions": [],
+  "binding_sha256": "3c30a6265e9a1d782413391dd294a6901e7bc6a68032213f08fe893756229d00",
+  "candidate_id": "installer-transaction-workflow",
+  "candidate_revision": "2.20.0-governance-11",
+  "deterministic_check_version": 1,
+  "manifest_sha256": "dacf9669697e6758de0a9b727fc4771e33976b307ecadf50f108d065d129d182",
+  "owner_id": "windows-installer-transaction-controller",
+  "project_id": "memory-wuxian-v2.20.0",
+  "receipt_id": "car:fe42ddd1dcfeaa0a128e0d49d09d67ba136a5efef6e5647ccc026037fad35700",
+  "registry_sha256": "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89",
+  "schema_version": 1,
+  "semantic_review_sha256": "dd6ff636bce3f1d1ddac959ad31783539b2d0185dbdc681e3b6a0ddbcece5490",
+  "status": "allowed"
+}

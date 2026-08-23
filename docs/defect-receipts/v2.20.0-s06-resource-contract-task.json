@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-s06-resource-contract",
+  "objective": "Freeze the closed Windows installer resource and interface contract, then route Inno Setup, manual install, and auto-update through the same production transaction owner without changing archive authority or advancing beyond S06.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "windows-installer-transaction-controller",
+  "platforms": ["windows"],
+  "languages": ["python", "powershell", "inno-setup", "json", "markdown"],
+  "path_globs": [
+    "scripts/windows_install*.py",
+    "scripts/windows_installer*.py",
+    "scripts/install_windows_transaction.py",
+    "scripts/auto_update.py",
+    "packaging/windows/**",
+    "tests/test_windows_installer*.py",
+    "tests/test_auto_update.py",
+    "docs/install-transaction/**"
+  ],
+  "entrypoints": ["inno-setup", "manual-install", "auto-update"],
+  "resources": ["installer-manifest", "privilege-boundary", "transaction", "skill-tree", "scheduled-tasks", "configuration", "archive-pointer", "desktop-shortcut"],
+  "operations": ["inventory", "freeze-contract", "repair", "validate"],
+  "data_formats": ["utf-8", "canonical-json", "powershell-argv"],
+  "authorization_boundaries": [
+    "No production installation, release, archive mutation, cloud operation, or S07-S15 promotion is authorized by this S06 implementation task.",
+    "The UAC broker may elevate only the frozen manifest and allowlisted transaction entrypoint; it must not accept arbitrary commands or paths.",
+    "Raw archive records and existing archive contents remain outside every installer mutation owner."
+  ],
+  "implementation_units": [
+    {
+      "id": "s06-resource-interface-contract",
+      "owner_id": "windows-installer-transaction-controller",
+      "paths": ["docs/install-transaction/**", "scripts/windows_install_manifest.py", "scripts/windows_installer_transaction.py"],
+      "entrypoints": ["transaction-controller"],
+      "resources": ["installer-manifest", "transaction", "declared-install-resources"],
+      "operations": ["inventory", "freeze-contract", "validate"],
+      "planned_check_ids": ["cross-entrypoint-contract", "evidence-roundtrip", "migration-idempotence"]
+    },
+    {
+      "id": "s06-production-composition",
+      "owner_id": "windows-installer-entrypoint-composition",
+      "paths": ["scripts/windows_installer_broker.py", "scripts/install_windows_transaction.py", "scripts/auto_update.py", "packaging/windows/install.ps1", "packaging/windows/MemoryWuxian.iss", "tests/test_windows_installer*.py", "tests/test_auto_update.py"],
+      "entrypoints": ["inno-setup", "manual-install", "auto-update"],
+      "resources": ["privilege-boundary", "transaction", "process-exit"],
+      "operations": ["repair", "validate"],
+      "planned_check_ids": ["cross-entrypoint-contract", "permission-boundary", "rollback-failure-propagation"]
+    }
+  ],
+  "rule_exclusions": []
+}

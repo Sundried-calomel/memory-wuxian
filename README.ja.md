@@ -1,5 +1,18 @@
 # Memory無限
 
+> **2.20.0:** 対応するすべての Windows install/update entrypoint を
+> `windows_installer_transaction.py` に統合します。
+> `CollectorGenerationMutation` から始まる 5 個の限定 mutation は apply 前に
+> compensation を永続化し、commit 前に `commit-intent` を記録し、失敗時には
+> `rollback-verified` を必須とします。raw archive record と active
+> archive pointer は不変で、memory、summary、index、cloud、semantic processing 契約は
+> 変更しません。
+
+> **2.19.1:** Windows collector のインストールを修復し、共有 Platform identity
+> Owner を通じて scheduled task principal を現在の対話ユーザーへ束縛します。
+> task 登録失敗時の native 診断は rollback journal に保存されます。archive、summary、
+> index、cloud、collector event の意味は変更しません。
+
 > **2.19.0:** 完了した R1-R8 の挙動互換モジュール化を、唯一の Platform、
 > Environment、Exchange、application service、CLI、test support Owner の下へ
 > 正式に統合します。承認済み 2.16-2.18 内部 milestone を初めて公開 installer に
