@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-25T22:13:45+09:00",
+  "reason": "Preserve S01-S09; repair only CI portability evidence and test contracts; rerun S10-S13.",
+  "approval": "User explicitly approved on 2026-08-25: 保留 S01-S09，从 S10 恢复，只修复 CI 可移植性证据和测试合同，重跑 S10-S13",
+  "resume_step": "S10",
+  "previous_state_sha256": "4b2429498ddf93c2797790dc85d087c5a9399500e000f80b070d4ec9820b7f47",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "c9d5ccf9469b8bf3e000b50f4e59f968904936e16bec0b3e7cdf2202510bf96c"
+}

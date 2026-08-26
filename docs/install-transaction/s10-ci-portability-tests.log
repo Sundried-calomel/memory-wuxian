@@ -1,0 +1,22 @@
+Memory Wuxian v2.20.0 S10 CI portability validation
+Checked: 2026-08-25
+Runtime: C:\Users\56453\.codex\runtimes\memory-wuxian-e5-py312\Scripts\python.exe
+
+Focused original failure set:
+- 44 tests run
+- 44 passed
+- 0 skipped
+
+Final impact matrix:
+- 136 tests run across 16 modules
+- 135 passed
+- 1 declared platform skip
+- exit code 0
+
+Additional gates:
+- architecture contract: passed
+- seven-resource installer reuse map at S10: passed
+- PowerShell parse for install, bootstrap, shortcut install, and shortcut inspect: passed
+- git diff --check: passed with checkout line-ending warnings only
+- v2.20 frozen preflight receipt SHA-256: 7d6f6622853071a59f3b7795de2f9aa7fabe3588f650a59dd03e5845bf618d77
+- v2.20 frozen completion receipt SHA-256: ff136248f8e17b430455e1d9c9a8a5518716017efdbb9101fffdefe131cacaad

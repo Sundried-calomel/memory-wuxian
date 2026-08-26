@@ -1,0 +1,25 @@
+{
+  "change_kind": "repair",
+  "changed_catalog_entries": [],
+  "changed_workbook_entries": [
+    "memory-wuxian-v220-candidate-defects"
+  ],
+  "created_at": "2026-08-25T13:25:20+00:00",
+  "no_applicable_family_reason": null,
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s10-ci-portability-preflight.json",
+  "preflight_sha256": "509beb083773f6eb6dd6962532f7ef29e4471d3fab7d9fd6a24b28ffbd778f38",
+  "receipt_sha256": "65a1b6830e95be0731a63214c56ee240cfabc202250e4bb7c4e2b314cb7339de",
+  "receipt_type": "defect-workbook-completion",
+  "schema_version": 1,
+  "selected_families": [
+    "G04",
+    "G05",
+    "G09",
+    "G11",
+    "MW-R02",
+    "MW-R06",
+    "MW-R10"
+  ],
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218"
+}

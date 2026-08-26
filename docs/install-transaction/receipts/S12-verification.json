@@ -2,10 +2,10 @@
   "schema_version": 1,
   "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
   "step": "S12",
-  "verified_at": "2026-08-23T23:31:55+09:00",
+  "verified_at": "2026-08-26T20:31:40+09:00",
   "contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
-  "git_head": "6c60a539b4d7fc45b6fe12945b0393335ebb8b86",
-  "worktree_sha256": "121889e172e091465cfe2def96e793d4e2a38c239814a09a450a05d7730a03f9",
+  "git_head": "93e6ffb19669a861ccf55c9e36dfca74c6eff278",
+  "worktree_sha256": "fae79e54659e219fb067064e513e104cd57ebde2cb548f8c0445ecc7fff62ca0",
   "delta_paths": [
     "docs/rehearsals/v2.20.0-s12-installed-runtime-effect.json"
   ],

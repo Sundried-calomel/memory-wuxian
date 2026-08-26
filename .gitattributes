@@ -13,3 +13,15 @@ docs/defect-receipts/v2.18-r5-* text eol=lf
 docs/defect-receipts/v2.18-r6-* text eol=lf
 docs/defect-receipts/v2.18-r7-* text eol=lf
 docs/defect-receipts/v2.18-r8-* text eol=lf
+
+# Governance hashes bind checkout bytes, so their line endings must be explicit.
+docs/capability-admission/**/*.json text eol=lf
+docs/defect-receipts/**/*.json text eol=lf
+docs/install-transaction/**/*.json text eol=lf
+docs/work-contracts/*.json text eol=lf
+
+# S01 froze these two receipts from their original Windows bytes.
+docs/defect-receipts/v2.20.0-install-governance-preflight.json -text
+docs/defect-receipts/v2.20.0-install-governance-completion.json -text
+docs/defect-receipts/v2.20.0-install-governance-preflight.json whitespace=cr-at-eol
+docs/defect-receipts/v2.20.0-install-governance-completion.json whitespace=cr-at-eol

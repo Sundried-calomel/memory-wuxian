@@ -42,3 +42,29 @@ The first seven-resource elevated attempt is retained only as failure evidence:
 it exposed the deep-path federation probe before any formal resource was
 applied. The repaired bytes now pass S10-LNG-01; clean, repeat, rollback, and
 v2.15.0 upgrade cases remain mandatory at S11 against the current candidate.
+
+## 2026-08-25 S10 CI-portability replan
+
+PR #75 exposed three test-and-evidence portability defects without identifying a
+production installer semantic change: Git checkout byte normalization, Windows
+8.3-versus-long canonical path identity, and a negative dashboard fixture that
+failed at the icon gate before reaching its declared launcher-hash gate.
+
+The repaired S10 bytes preserve every existing `.gitattributes` rule and add
+explicit checkout policy for v2.20 governance artifacts. Windows path assertions
+now canonicalize both actual and expected values through `Path.resolve()` while
+retaining exact path identity. The launcher-hash fixture supplies the valid icon
+hash required to reach its intended failure boundary.
+
+Validation against the final S10 worktree:
+
+- 16-module impact matrix: 136 tests run, 135 passed, one existing
+  platform-guarded case skipped;
+- original CI failure subset: 44/44 passed;
+- v2.18 hash-bound evidence regression remained passing;
+- architecture contract and seven-resource reuse-map validation passed;
+- four PowerShell installer/bootstrap/shortcut entrypoints parsed without error;
+- `git diff --check` passed, with only expected Windows checkout warnings.
+
+No production Python, PowerShell, Inno Setup, Rust, archive, scheduler, cloud,
+summary, collector, shortcut, or environment behavior changed in this replan.

@@ -468,6 +468,24 @@
   不写正式归档、证据可序列化、正式节点不含探针路径，且两个正式入口都调用短根 Owner。
 - Families: `G05`, `G06`, `G09`, `G11`, `MW-R06`, `MW-R10`.
 
+### MW-REL-036：本机通过的字节收据与路径夹具在 CI Runner 漂移
+
+- 证据：`GitHub PR #75 Ubuntu/Windows CI 已核验`。Ubuntu 对 S01 治理收据计算的
+  SHA-256 与 Windows 工作区冻结值不同；Windows checkout 又把 capability registry
+  转成 CRLF，使所有 workflow fixture 在 admission 阶段提前失败。其余 Windows 失败
+  来自 Runner 暴露的 8.3 短路径与生产 Owner 返回的长规范路径直接比较，以及图标夹具
+  在目标“启动器哈希漂移”断言之前先触发了图标哈希门。
+- 根因：精确字节收据没有声明 Git checkout 的换行策略；路径测试比较了宿主字符串表示，
+  没有在生产 `resolve` 边界两侧构造期待值；负向夹具没有先满足目标断言之前的所有前置门。
+- 逃逸边界：本机完整套件使用创建收据时的工作树字节和长路径用户目录，全部通过；只有
+  Ubuntu LF checkout、Windows `core.autocrlf` 与 Runner 8.3 临时目录组合后才暴露漂移。
+- 永久门槛：所有被原始 SHA-256 收据绑定的文本必须在 `.gitattributes` 声明精确 checkout
+  字节策略；跨平台路径断言必须保留精确路径语义，但比较双方都经过生产 Owner 使用的
+  canonical/resolve 边界；每个负向夹具必须显式满足目标失败点之前的全部独立完整性门。
+  S13 必须在 Ubuntu、Windows 与 macOS 的真实 checkout 上运行完整相关套件，任一失败
+  都不得生成可安装候选。
+- Families: `G04`, `G05`, `G09`, `G11`, `MW-R02`, `MW-R06`, `MW-R10`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。

@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-s10-ci-portability",
+  "objective": "Repair only cross-platform CI evidence and test contracts after PR #75 exposed Git text-byte drift, Windows short-versus-long path identity differences, and a dashboard fixture that failed before reaching its intended executable-hash assertion; preserve all production installer semantics and S01-S09 evidence.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "windows-installer-ci-contracts",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "json", "markdown", "gitattributes"],
+  "path_globs": [
+    ".gitattributes",
+    "docs/defect-receipts/**",
+    "docs/work-contracts/v2.20.0.json",
+    "docs/retrospectives/memory-wuxian-defect-workbook.md",
+    "tests/test_defect_workbook_contract.py",
+    "tests/test_install_transaction_workflow.py",
+    "tests/test_windows_installer_composition.py",
+    "tests/test_windows_installer_transaction.py",
+    "docs/install-transaction/**"
+  ],
+  "entrypoints": ["git-checkout", "python-unittest", "workflow-controller", "windows-installer-test-fixture"],
+  "resources": ["text-byte-identity", "hash-receipt", "canonical-path", "ci-evidence", "test-fixture"],
+  "operations": ["normalize", "compare", "verify", "rehearse"],
+  "data_formats": ["utf-8", "json", "markdown", "sha256", "windows-path"],
+  "authorization_boundaries": [
+    "No production installer, archive, collector, summary, cloud, scheduler, shortcut, or environment behavior may change in this repair.",
+    "S01-S09 remain completed; only S10-S13 evidence is invalidated and rerun.",
+    "No failed CI artifact may be installed or promoted, and no S14 UAC may run before a uniquely hashed S13 artifact passes every required CI lane."
+  ],
+  "implementation_units": [
+    {
+      "id": "git-text-byte-identity",
+      "owner_id": "ci-evidence-byte-contract",
+      "paths": [".gitattributes", "docs/defect-receipts/**", "docs/work-contracts/v2.20.0.json", "tests/test_defect_workbook_contract.py"],
+      "entrypoints": ["git-checkout", "python-unittest", "workflow-controller"],
+      "resources": ["text-byte-identity", "hash-receipt", "ci-evidence"],
+      "operations": ["normalize", "verify"],
+      "planned_check_ids": ["exact-candidate-release", "registered-preflight", "fail-closed-completion"]
+    },
+    {
+      "id": "windows-path-and-fixture-identity",
+      "owner_id": "windows-installer-test-contracts",
+      "paths": ["tests/test_windows_installer_composition.py", "tests/test_windows_installer_transaction.py"],
+      "entrypoints": ["python-unittest", "windows-installer-test-fixture"],
+      "resources": ["canonical-path", "test-fixture"],
+      "operations": ["compare", "verify", "rehearse"],
+      "planned_check_ids": ["unicode-path-fixtures", "target-platform-effect"]
+    }
+  ],
+  "rule_exclusions": []
+}

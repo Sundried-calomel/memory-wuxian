@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "windows-device-skill-lessons",
+      "scope": "global",
+      "artifact_profiles": [
+        "skill",
+        "software-feature"
+      ],
+      "change_kinds": [
+        "create",
+        "modify",
+        "repair"
+      ],
+      "workbook_paths": [
+        "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\general-error-families.md",
+        "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\windows-device-skill-defects.md"
+      ],
+      "rule_catalog_paths": [
+        "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\defect-rule-catalog.json"
+      ],
+      "require_change_on_repair": false
+    },
+    {
+      "id": "memory-wuxian-v220-candidate-defects",
+      "scope": "subtree",
+      "scope_root": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+      "artifact_profiles": [
+        "skill",
+        "software-feature"
+      ],
+      "change_kinds": [
+        "create",
+        "modify",
+        "repair"
+      ],
+      "workbook_paths": [
+        "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\retrospectives\\memory-wuxian-defect-workbook.md"
+      ],
+      "require_change_on_repair": true
+    }
+  ]
+}

@@ -4,7 +4,7 @@
   "scope": "isolated-real-windows-install",
   "source_rehearsal_receipt": {
     "path": "docs/rehearsals/v2.20.0-s11-windows-rehearsal.json",
-    "sha256": "97b01b68b7d0db0b644eff80aa493d113a94d198bb22be3261cdf61def5e127e"
+    "sha256": "01a8944e1f7868bb7f617c2c2f996e0893bbb7fa2f108090dc51b6861f3afe15"
   },
   "task": {
     "verified_at_install": true,
@@ -17,20 +17,20 @@
   },
   "process": {
     "verified_live_at_install": true,
-    "pid": 31684,
-    "source_journal_sha256": "f01a74615f68065291bf7e0f769484e275f8bad8a0d8901ad5f54d1cfb923db4"
+    "pid": 4412,
+    "source_journal_sha256": "e6fff4b6190fa8b2adac703d1f6ef8f3f5c717f1779d8d9056292b0c8a32dbc5"
   },
   "telemetry": {
     "ready": true,
     "phase": "ready",
-    "source_watermark": "2026-08-23T14:28:32Z",
-    "archive_watermark": "2026-08-23T14:28:32Z",
+    "source_watermark": "2026-08-26T11:26:17Z",
+    "archive_watermark": "2026-08-26T11:26:17Z",
     "watermarks_converged": true
   },
   "effect_probe": {
-    "probe_id": "memory-wuxian-install-effect-eab6b4ca56ee4faeab66efe3453aba67",
-    "watermark": "2026-08-23T14:28:32Z",
-    "payload_sha256": "94da7b83013b0c5fb4a2844aa79336063f901d74e03fe0ae127fa830fa3fd6c7",
+    "probe_id": "memory-wuxian-install-effect-4c20fd502812485b9eb7ed23df4e16c3",
+    "watermark": "2026-08-26T11:26:17Z",
+    "payload_sha256": "320639df5bf664e0631ffcb697c466739f11e869eab2a488613147b6dbe3b1b1",
     "contains_visible_messages": false
   },
   "shortcut": {
@@ -46,8 +46,8 @@
     "transient_powershell_console_in_launch_path": false
   },
   "archive_pointer": {
-    "repeat_install_before_sha256": "6cc9628aa6b4990885698b40d54c7c6624d72cb9af61ecb53bf2ada53d9702f6",
-    "repeat_install_after_sha256": "6cc9628aa6b4990885698b40d54c7c6624d72cb9af61ecb53bf2ada53d9702f6",
+    "repeat_install_before_sha256": "a2648d98ff5bd12849da65c9d278b9b040896950a1666b6953b732208c6bcef7",
+    "repeat_install_after_sha256": "a2648d98ff5bd12849da65c9d278b9b040896950a1666b6953b732208c6bcef7",
     "byte_equal": true,
     "raw_archive_targeted": false
   },

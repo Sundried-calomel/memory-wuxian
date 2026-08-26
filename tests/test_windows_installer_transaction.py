@@ -169,7 +169,10 @@ class WindowsInstallerTransactionTests(unittest.TestCase):
     def test_closed_manifest_rejects_unknown_fields(self) -> None:
         document = build_manifest(self.args()).to_document()
         self.assertEqual(document["schema_version"], 2)
-        self.assertEqual(Path(document["codex_cli"]["path"]), self.root / "codex.exe")
+        self.assertEqual(
+            Path(document["codex_cli"]["path"]).resolve(),
+            (self.root / "codex.exe").resolve(),
+        )
         self.assertEqual(
             document["requested_components"],
             ["archive", "auto-update", "collector", "config", "federation-node", "maintenance", "shortcut"],

@@ -200,7 +200,10 @@ class WindowsInstallerCompositionTests(unittest.TestCase):
         node = self.archive / "federation/node.json"
         self.assertTrue(node.is_file())
         node_document = json.loads(node.read_text(encoding="utf-8"))
-        self.assertEqual(node_document["replica_root"], str(self.archive.parent / "archive-federation-cache"))
+        self.assertEqual(
+            Path(node_document["replica_root"]).resolve(),
+            (self.archive.parent / "archive-federation-cache").resolve(),
+        )
         self.assertNotIn("mwf-probe-", node_document["replica_root"])
         mutation.rollback(self.token)
         mutation.rollback_verify(self.token)
@@ -238,8 +241,14 @@ class WindowsInstallerCompositionTests(unittest.TestCase):
         verified = mutation.rollback_verify(self.token)
 
         self.assertTrue(node.is_file())
-        self.assertIn(str(node), evidence["retained_files"])
-        self.assertIn(str(node), verified["retained_files"])
+        self.assertIn(
+            str(node.resolve()),
+            {str(Path(item).resolve()) for item in evidence["retained_files"]},
+        )
+        self.assertIn(
+            str(node.resolve()),
+            {str(Path(item).resolve()) for item in verified["retained_files"]},
+        )
 
     def test_federation_prepare_survives_a_deep_transaction_backup_root(self) -> None:
         backup_root = self.root / ("deep-a-" + "a" * 90) / ("deep-b-" + "b" * 90) / "federation-node"
@@ -262,8 +271,14 @@ class WindowsInstallerCompositionTests(unittest.TestCase):
             production = default_installer_resource_root()
             rehearsal = default_installer_resource_root(rehearsal=True)
 
-        self.assertEqual(production, program_data / "MemoryWuxian/installer-resources")
-        self.assertEqual(rehearsal, program_data / "MemoryWuxianRehearsal/installer-resources")
+        self.assertEqual(
+            production.resolve(),
+            (program_data / "MemoryWuxian/installer-resources").resolve(),
+        )
+        self.assertEqual(
+            rehearsal.resolve(),
+            (program_data / "MemoryWuxianRehearsal/installer-resources").resolve(),
+        )
         self.assertNotEqual(production, rehearsal)
         production_source = (ROOT / "scripts/install_windows_transaction.py").read_text(encoding="utf-8")
         rehearsal_source = (ROOT / "scripts/run_windows_installer_rehearsal.py").read_text(encoding="utf-8")
@@ -486,6 +501,7 @@ class WindowsInstallerCompositionTests(unittest.TestCase):
         icon.write_bytes(b"icon")
         mutation.shortcut = shortcut
         mutation.expected_launcher_sha256 = hashlib.sha256(b"expected-launcher").hexdigest()
+        mutation.expected_icon_sha256 = hashlib.sha256(b"icon").hexdigest()
         mutation.expected_launcher_config = {
             "schema_version": 1,
             "python_executable": str(self.manifest.runtime_bundle.python_executable),
