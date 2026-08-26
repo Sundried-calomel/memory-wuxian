@@ -28,3 +28,14 @@ Windows CI follow-up (run 32964393276):
   the canonical long path, so the fixture stopped before the launcher-hash gate.
 - The fixture now uses the manifest's canonical icon path; no product code changed.
 - Focused launcher-hash test plus both touched installer modules: 35/35 passed.
+
+Windows candidate follow-up (run 32966284160):
+- Documentation, macOS, Ubuntu, Windows Rust, packaged Windows binaries, and the
+  complete Windows Python suite passed.
+- Inno Setup compiled MemoryWuxian-2.20.0-Windows-x64-Setup.exe successfully.
+- The compile log proved runtime\windows\runtime-manifest.json and
+  runtime\windows\python\python.exe were compressed into the candidate.
+- The post-build assertion alone used the stale nonexistent name
+  runtime\windows\bundle-manifest.json and therefore reported a false failure.
+- The assertion now uses the contract-authoritative runtime-manifest.json; no
+  production or installer behavior changed.

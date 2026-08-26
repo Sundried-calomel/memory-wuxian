@@ -69,3 +69,17 @@ Validation against the final S10 worktree:
 
 No production Python, PowerShell, Inno Setup, Rust, archive, scheduler, cloud,
 summary, collector, shortcut, or environment behavior changed in this replan.
+
+## 2026-08-26 candidate-manifest evidence correction
+
+CI run `32966284160` passed the documentation gate, the macOS and Ubuntu jobs,
+the Windows Rust build, the packaged Windows binaries, and the complete Windows
+Python suite. Inno Setup also compiled the v2.20.0 installer successfully and
+logged the bundled `runtime\windows\runtime-manifest.json` and
+`runtime\windows\python\python.exe` files.
+
+The job then failed only because its post-build evidence assertion asked for the
+nonexistent `runtime\windows\bundle-manifest.json`. The frozen runtime contract,
+runtime assembler, transaction installer, rehearsal, and tests consistently use
+`runtime-manifest.json`. The assertion now names that contract-authoritative
+file. No product or installer behavior changed.

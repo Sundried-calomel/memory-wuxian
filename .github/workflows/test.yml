@@ -139,7 +139,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
           $installer = Get-Item "dist\MemoryWuxian-$version-Windows-x64-Setup.exe"
           foreach ($required in @(
-            "runtime\windows\bundle-manifest.json",
+            "runtime\windows\runtime-manifest.json",
             "runtime\windows\python\python.exe",
             "scripts\install_windows_transaction.py",
             "scripts\windows_installer_broker.py"
