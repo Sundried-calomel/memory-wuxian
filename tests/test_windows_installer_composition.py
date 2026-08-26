@@ -501,7 +501,6 @@ class WindowsInstallerCompositionTests(unittest.TestCase):
         icon.write_bytes(b"icon")
         mutation.shortcut = shortcut
         mutation.expected_launcher_sha256 = hashlib.sha256(b"expected-launcher").hexdigest()
-        mutation.expected_icon_sha256 = hashlib.sha256(b"icon").hexdigest()
         mutation.expected_launcher_config = {
             "schema_version": 1,
             "python_executable": str(self.manifest.runtime_bundle.python_executable),
@@ -514,7 +513,7 @@ class WindowsInstallerCompositionTests(unittest.TestCase):
             "target": str(launcher),
             "working_directory": str(self.target),
             "arguments": "",
-            "icon": str(icon) + ",0",
+            "icon": str(self.manifest.target_skill_root / "assets/memory-wuxian.ico") + ",0",
             "target_exists": True,
         }
         completed = __import__("subprocess").CompletedProcess(

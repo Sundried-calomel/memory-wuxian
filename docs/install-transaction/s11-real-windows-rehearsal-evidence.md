@@ -12,8 +12,8 @@ Status: passed with explicit UAC consent on the target Windows device.
 ## Elevated Receipt
 
 - receipt: `docs/rehearsals/v2.20.0-s11-windows-rehearsal.json`
-- receipt SHA-256: `01a8944e1f7868bb7f617c2c2f996e0893bbb7fa2f108090dc51b6861f3afe15`
-- candidate tree SHA-256: `dd9251bf57edd6917bdadc6029e5e9e2a51acef3a3c759592742a1988ac69787`
+- receipt SHA-256: `d32c1f7dfe5597f73f20769c8821ae446c489323b30adeb53d536934483575ac`
+- candidate tree SHA-256: `11ad2535ed9feab26c80c4c906c9c6c123561b782ab39851dbb24a027f7c09a5`
 - clean install: committed, exit 0
 - repeat install: committed, exit 0
 - injected failure: rolled back, exit 34

@@ -6,32 +6,18 @@
   "status": "active",
   "current_step": "S13",
   "created_at": "2026-08-22T19:59:27+09:00",
-  "updated_at": "2026-08-26T20:31:43+09:00",
+  "updated_at": "2026-08-26T21:00:05+09:00",
   "baseline_worktree": {
-    ".gitattributes": "c4eb83fe0fc2f26abe15e2f0cad75cd08ca37a68bd42eebfe6e15ae5f3bf92aa",
     "dist/MemoryWuxian-2.19.1-Windows-x64-Setup.exe": "6eeddcf9f5b7bc9f6219f160b181ac760873bd302852ec3d13429779b99f13a4",
-    "docs/defect-receipts/v2.20.0-install-governance-completion.json": "ff136248f8e17b430455e1d9c9a8a5518716017efdbb9101fffdefe131cacaad",
-    "docs/defect-receipts/v2.20.0-install-governance-preflight.json": "7d6f6622853071a59f3b7795de2f9aa7fabe3588f650a59dd03e5845bf618d77",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-brief.md": "42039a31ebca27baa12537770b9e19493d832eda261248747aef3e470f7213f8",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-completion.json": "664c2ce8db8850a44feace987331d8490ef02064dc0ca037ebadb8a922abed47",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-load.json": "7449f6df82ff53ffd3a40bfd51f52a15dee2bf57af7e83c33c82bf39423c03d7",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-packet.json": "69a02e5b6055c3a522de736f1cb454cdd5b0862a02a991327e611f9146ba3226",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-preflight.json": "509beb083773f6eb6dd6962532f7ef29e4471d3fab7d9fd6a24b28ffbd778f38",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-registry.json": "aa48fd34558b81dfc845df2a487a402fee5047cd0958c45239280aeae37d77d9",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-results.json": "dd5f79e30bc0496eb0fe243b0c5cd9e46ca2c5a976efcb95b013395a2e66449b",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-task.json": "3616fac38d316734fd9b897117344c6624a3076e4baddfab0fc8329270011061",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-verification.json": "386291b1d7a4080551a33559f57e2abac6112ff76d6c38c50bbb5e8eba6624a1",
-    "docs/install-transaction/s10-ci-portability-tests.log": "4495a6b53efdf988aecbaeac2ee690cfc2b66cab6fdba3f69d2dcfd2c1f395cb",
-    "docs/install-transaction/s10-targeted-test-matrix.md": "cd2167d2d3a9f6466cbdf8881606c3e89aa500882b0ca13c1882b09ce2375a0c",
-    "docs/install-transaction/s11-real-windows-rehearsal-evidence.md": "58dd8564fa4f1a5e954b47fba7a69f338629b232bd80b6a03bb204202485a2d4",
-    "docs/rehearsals/v2.20.0-s11-windows-rehearsal.json": "01a8944e1f7868bb7f617c2c2f996e0893bbb7fa2f108090dc51b6861f3afe15",
-    "docs/rehearsals/v2.20.0-s12-installed-runtime-effect.json": "2a556933a136e23cde18a765f52bbd0ce7bec1ca000482d4fdf43ece4943379f",
-    "docs/retrospectives/memory-wuxian-defect-workbook.md": "bb017aa7fd04105cebc698118c04d9a1718551d1dad0d7fac290d8c9c1d543f9",
-    "tests/test_windows_installer_composition.py": "d9bc4b5bd3b5a87bac4abde084954ee749656c2462a53eb4f661cd0546a43bdc",
-    "tests/test_windows_installer_transaction.py": "d621a9c986fb1d9cb042ee03b00e3814d45942abf9e334fd900af2d8d36d9fcc"
+    "docs/install-transaction/s10-ci-portability-tests.log": "734b2256088b338a4d224f8b0fbb049778cb36f470cb68948b433cffa6db357e",
+    "docs/install-transaction/s10-targeted-test-matrix.md": "445fed1ea67ab6eeaabf0b56062f1a52efba4221c5d529dc9fe55001fe92280e",
+    "docs/install-transaction/s11-real-windows-rehearsal-evidence.md": "cd54e0ac24c2dc6be5541cccce3b9569a8e6dd6c0c0fc7b3d043dd678630fa7a",
+    "docs/rehearsals/v2.20.0-s11-windows-rehearsal.json": "d32c1f7dfe5597f73f20769c8821ae446c489323b30adeb53d536934483575ac",
+    "docs/rehearsals/v2.20.0-s12-installed-runtime-effect.json": "4da339c90edba1b1c0cd407eab0369a22c8f0dec19b6836ab990a35cea14953b",
+    "tests/test_windows_installer_composition.py": "82bd48e908d041289903847a763f1e98f02633d82a87f0fd6cc4bdae0cd3ea03"
   },
-  "baseline_sha256": "fae79e54659e219fb067064e513e104cd57ebde2cb548f8c0445ecc7fff62ca0",
-  "last_verified_commit": "93e6ffb19669a861ccf55c9e36dfca74c6eff278",
+  "baseline_sha256": "a6104e833a8f8eb378238c968f91856788f2572ecb8bfc0567c33494beaefdd6",
+  "last_verified_commit": "8a34788b9703bb74912a8ede31d6b9bc5a01a528",
   "freezes": {
     "architecture": {
       "step": "S03",
@@ -130,27 +116,27 @@
       "remediation_cycles": 0,
       "pre_replan_remediation_cycles": 0,
       "verification_receipt": "docs/install-transaction/receipts/S10-verification.json",
-      "verification_sha256": "2e982fc62ad9ec9884f248122f402d0e2eb8a2c76bbee981c8f42b63652861fc",
-      "verified_worktree_sha256": "3d7d3f139eeeb530b88b36c9874c78f7a6e94eae09e58b69909f0bcb1b1a4b27",
-      "completed_at": "2026-08-25T22:25:34+09:00"
+      "verification_sha256": "60e2238fa25e10eaf6196e4c0dddc4b85689cbb52e9dba7c6b0e711f141f6f77",
+      "verified_worktree_sha256": "ffcfb3db08489a8b705d7016c58421f6e17ebfa27cacd5b7e0b230af1aa01389",
+      "completed_at": "2026-08-26T20:54:14+09:00"
     },
     "S11": {
       "status": "completed",
       "remediation_cycles": 0,
       "pre_replan_remediation_cycles": 0,
       "verification_receipt": "docs/install-transaction/receipts/S11-verification.json",
-      "verification_sha256": "310e09c232c982906214d6499b6ab511f022f364a65f7cf041f8ef463fceac50",
-      "verified_worktree_sha256": "b5116768f8be529d7b1b02d80c273a84c34c1172949b57e30f749ea5523e6293",
-      "completed_at": "2026-08-26T20:28:36+09:00"
+      "verification_sha256": "9706988de5b5156a1177ab407c40afe7d94042319c16be03333f16e1178e67c5",
+      "verified_worktree_sha256": "857835a26414cfbc158025a12d2ac1a3dc825f1f5b5ac0a774a05e1b9d7170ec",
+      "completed_at": "2026-08-26T20:56:41+09:00"
     },
     "S12": {
       "status": "completed",
       "remediation_cycles": 0,
       "pre_replan_remediation_cycles": 0,
       "verification_receipt": "docs/install-transaction/receipts/S12-verification.json",
-      "verification_sha256": "be5dfb1f4798b4c6cd0f0dd0b151d2c05deb0f743b3ebb1e90cac2801836f00a",
-      "verified_worktree_sha256": "fae79e54659e219fb067064e513e104cd57ebde2cb548f8c0445ecc7fff62ca0",
-      "completed_at": "2026-08-26T20:31:42+09:00"
+      "verification_sha256": "20595942ed77694d712be5e2cbde756422d91cbbcd7fabf3d0e94e045e66779b",
+      "verified_worktree_sha256": "a6104e833a8f8eb378238c968f91856788f2572ecb8bfc0567c33494beaefdd6",
+      "completed_at": "2026-08-26T21:00:05+09:00"
     },
     "S13": {
       "status": "in_progress",
@@ -244,6 +230,10 @@
     {
       "path": "docs/install-transaction/receipts/replan-19.json",
       "sha256": "230ea39b69b6d788a234ae200cb33291e60874b41186745e1d7e7791f23c8db6"
+    },
+    {
+      "path": "docs/install-transaction/receipts/replan-20.json",
+      "sha256": "995cfe3f70f4a765be50f7c2178cf699f0b85a38e5a911c8e4c2995bc8aab419"
     }
   ]
 }

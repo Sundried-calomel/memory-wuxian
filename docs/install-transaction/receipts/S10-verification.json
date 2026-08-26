@@ -2,27 +2,11 @@
   "schema_version": 1,
   "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
   "step": "S10",
-  "verified_at": "2026-08-25T22:25:33+09:00",
+  "verified_at": "2026-08-26T20:54:13+09:00",
   "contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
-  "git_head": "93e6ffb19669a861ccf55c9e36dfca74c6eff278",
-  "worktree_sha256": "3d7d3f139eeeb530b88b36c9874c78f7a6e94eae09e58b69909f0bcb1b1a4b27",
-  "delta_paths": [
-    ".gitattributes",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-brief.md",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-completion.json",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-load.json",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-packet.json",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-preflight.json",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-registry.json",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-results.json",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-task.json",
-    "docs/defect-receipts/v2.20.0-s10-ci-portability-verification.json",
-    "docs/install-transaction/s10-ci-portability-tests.log",
-    "docs/install-transaction/s10-targeted-test-matrix.md",
-    "docs/retrospectives/memory-wuxian-defect-workbook.md",
-    "tests/test_windows_installer_composition.py",
-    "tests/test_windows_installer_transaction.py"
-  ],
+  "git_head": "8a34788b9703bb74912a8ede31d6b9bc5a01a528",
+  "worktree_sha256": "ffcfb3db08489a8b705d7016c58421f6e17ebfa27cacd5b7e0b230af1aa01389",
+  "delta_paths": [],
   "evidence": [
     "targeted-test-matrix"
   ]

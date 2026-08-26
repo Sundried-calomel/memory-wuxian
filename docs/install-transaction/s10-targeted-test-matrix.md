@@ -53,8 +53,9 @@ failed at the icon gate before reaching its declared launcher-hash gate.
 The repaired S10 bytes preserve every existing `.gitattributes` rule and add
 explicit checkout policy for v2.20 governance artifacts. Windows path assertions
 now canonicalize both actual and expected values through `Path.resolve()` while
-retaining exact path identity. The launcher-hash fixture supplies the valid icon
-hash required to reach its intended failure boundary.
+retaining exact path identity. The launcher-hash fixture uses the manifest's
+canonical icon path so it reaches its intended failure boundary on Windows
+runners with 8.3 checkout aliases.
 
 Validation against the final S10 worktree:
 

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-26T20:53:48+09:00",
+  "reason": "Windows CI run 32964393276 proved the dashboard launcher-hash negative fixture still stopped at an 8.3-versus-long icon-path prerequisite; repair only the S10 portable test contract and rerun S10-S13.",
+  "approval": "User authorized: 保留 S01-S09，从 S10 恢复，只修复 CI 可移植性证据和测试合同，重跑 S10-S13",
+  "resume_step": "S10",
+  "previous_state_sha256": "9995479f9c294521a481b088daf9bd3e329afe5f61207ec1406cf3c9f5ad510b",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "ffcfb3db08489a8b705d7016c58421f6e17ebfa27cacd5b7e0b230af1aa01389"
+}

@@ -20,3 +20,11 @@ Additional gates:
 - git diff --check: passed with checkout line-ending warnings only
 - v2.20 frozen preflight receipt SHA-256: 7d6f6622853071a59f3b7795de2f9aa7fabe3588f650a59dd03e5845bf618d77
 - v2.20 frozen completion receipt SHA-256: ff136248f8e17b430455e1d9c9a8a5518716017efdbb9101fffdefe131cacaad
+
+Windows CI follow-up (run 32964393276):
+- Ubuntu, macOS, and documentation gates passed.
+- Windows ran 865 tests and exposed one remaining negative-fixture prerequisite:
+  the observed icon string used an 8.3 checkout alias while the manifest used
+  the canonical long path, so the fixture stopped before the launcher-hash gate.
+- The fixture now uses the manifest's canonical icon path; no product code changed.
+- Focused launcher-hash test plus both touched installer modules: 35/35 passed.
