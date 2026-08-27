@@ -12,8 +12,8 @@ Status: passed with explicit UAC consent on the target Windows device.
 ## Elevated Receipt
 
 - receipt: `docs/rehearsals/v2.20.0-s11-windows-rehearsal.json`
-- receipt SHA-256: `d32c1f7dfe5597f73f20769c8821ae446c489323b30adeb53d536934483575ac`
-- candidate tree SHA-256: `11ad2535ed9feab26c80c4c906c9c6c123561b782ab39851dbb24a027f7c09a5`
+- receipt SHA-256: `2c3867db1b5f1b206fdf7617a2faeff1c0a86aea63f5dfa95e9c615d0c9cca64`
+- candidate tree SHA-256: `284d648a59f8ffcccc13d02bfb696f3b8f41e255e58493c0879867dfec0450ed`
 - clean install: committed, exit 0
 - repeat install: committed, exit 0
 - injected failure: rolled back, exit 34
@@ -23,14 +23,17 @@ Status: passed with explicit UAC consent on the target Windows device.
 - rehearsal task, Run-value, and shortcut cleanup: verified absent
 
 Earlier elevated attempts are retained as pre-apply failure evidence. The
-original two attempts exposed unbounded federation and collector projection
-paths. The resumed S10-S13 run then rejected a reused work root, a raw Git
-projection containing excluded native build caches, and an incomplete package
-projection missing Git-ignored release binaries. The final candidate follows
-the Inno exclusion contract, contains all three hash-checked Windows binaries,
-uses bounded ProgramData staging roots, and passed all four scenarios. Every
-failed attempt stopped during prepare and did not apply a formal product
-resource.
+original attempts exposed unbounded federation and collector projection paths.
+The resumed S10-S13 run then rejected a reused work root, a raw Git projection
+containing excluded native build caches, and an incomplete package projection
+missing Git-ignored release binaries. The S14 recovery rerun additionally
+proved that Windows PowerShell 5.1 corrupted a no-BOM launcher path containing
+non-ASCII characters and that a candidate projection had accidentally retained
+`native-collector/target`. The launcher now derives the repository from
+`PSScriptRoot`; the final candidate excludes native build caches, contains all
+three hash-checked Windows binaries, uses bounded ProgramData staging roots,
+and passed all four scenarios. Every failed attempt stopped during prepare and
+did not apply a formal product resource.
 
 S11 does not claim production-name installation. The complete committed
 candidate is frozen at S13 and the exact CI artifact is installed at S14.

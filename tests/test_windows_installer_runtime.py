@@ -149,6 +149,18 @@ class WindowsInstallerRuntimeTests(unittest.TestCase):
         self.assertNotIn("pip install", installer)
         self.assertNotIn("get-command python", installer)
 
+    def test_inno_packages_only_the_manifest_bound_runtime_bytecode(self) -> None:
+        installer = (ROOT / "packaging/windows/MemoryWuxian.iss").read_text(encoding="utf-8").lower()
+        self.assertIn("__pycache__\\*,*.pyc", installer)
+        self.assertIn(
+            'source: "{#sourceroot}\\runtime\\windows\\python\\lib\\site-packages\\__pycache__\\sitecustomize.*.pyc"',
+            installer,
+        )
+        self.assertIn(
+            'destdir: "{tmp}\\memorywuxian\\candidate\\runtime\\windows\\python\\lib\\site-packages\\__pycache__"',
+            installer,
+        )
+
     def test_runtime_entrypoints_bootstrap_under_isolated_python(self) -> None:
         environment = os.environ.copy()
         environment["PATH"] = ""

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-28T01:00:06+09:00",
+  "reason": "Exact frozen-artifact S14 logs prove packaging/windows/MemoryWuxian.iss excluded the manifest-bound runtime sitecustomize checked-hash pyc. Preserve S01-S06; correct only the S07 package-integrity boundary, add one focused regression check, and rerun downstream evidence without unrelated production edits.",
+  "approval": "User explicitly confirmed the fixed-list rollback and instructed execution of the agreed minimal-repair path on 2026-08-28.",
+  "resume_step": "S07",
+  "previous_state_sha256": "0c72748f48b26aaaa52894a20707d4e8e6fb5efa8172cc80cde431af3a4ff730",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "a98709099d7c62db57f14580dbaaf3c6b7d44fdd16f66801b7a7d1535d47d65c"
+}

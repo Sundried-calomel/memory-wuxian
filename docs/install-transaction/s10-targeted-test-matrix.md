@@ -70,6 +70,22 @@ Validation against the final S10 worktree:
 No production Python, PowerShell, Inno Setup, Rust, archive, scheduler, cloud,
 summary, collector, shortcut, or environment behavior changed in this replan.
 
+## 2026-08-28 S14 package-integrity correction
+
+The S14 failure was localized to the Inno source projection excluding the
+manifest-bound `sitecustomize.*.pyc`. The corrected candidate changes one Inno
+file rule and one focused regression assertion; all other production modules
+remain byte-identical to the restored first-S14 baseline.
+
+The exact 15-module installer impact matrix ran 146 tests: 145 passed and one
+declared platform case was skipped. Architecture ownership, S10 reuse-map,
+four PowerShell parser checks, and `git diff --check` also passed. A broader
+866-test local run had one unrelated frozen CLI usage-format failure: command,
+parameter, and behavior contracts matched, while this local Python build wrapped
+two long argparse error-usage strings differently. No CLI source or snapshot was
+changed for this installer correction; CI remains responsible for the complete
+candidate suite before S13 freeze.
+
 ## 2026-08-26 candidate-manifest evidence correction
 
 CI run `32966284160` passed the documentation gate, the macOS and Ubuntu jobs,

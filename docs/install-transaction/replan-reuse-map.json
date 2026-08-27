@@ -28,7 +28,7 @@
     },
     {
       "path": "packaging/windows/MemoryWuxian.iss",
-      "disposition": "reuse_exact",
+      "disposition": "reuse_with_correction",
       "baseline_sha256": "8fdc6be315f1f38977036c970d4603b5ed0abcd0fbcd77d36dc091c8772dc705"
     },
     {

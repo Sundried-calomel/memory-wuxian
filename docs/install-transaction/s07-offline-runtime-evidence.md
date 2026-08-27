@@ -16,6 +16,21 @@ x64 plus every packaged dependency. CI remains the only networked asset-fetch
 stage; installation validates and activates supplied bytes without PATH
 discovery or pip.
 
+## Frozen-artifact packaging correction
+
+The first S14 target run exposed one package-integrity mismatch outside the
+runtime assembler. The runtime manifest includes the deterministic checked-hash
+`sitecustomize.*.pyc`, while the Inno source projection excluded every `*.pyc`.
+The target log therefore showed `sitecustomize.py` and an empty `__pycache__`
+directory, and activation failed before creating the target runtime root.
+
+The correction keeps the broad cache exclusion and adds one explicit Inno file
+rule for the manifest-bound `sitecustomize.*.pyc`. No runtime, transaction,
+migration, archive, or background-service implementation changed. A focused
+packaging regression assertion and the 22-test runtime/transaction impact set
+pass against the corrected source; the rebuilt CI artifact must still pass the
+real S14 target installation before this evidence can support promotion.
+
 The S06 manifest v2 now additionally binds the Codex CLI path and SHA-256 while
 retaining the runtime interpreter, dependency lock, bundle manifest, bundle ID,
 and their hashes. The official PowerShell route prepares that manifest with the

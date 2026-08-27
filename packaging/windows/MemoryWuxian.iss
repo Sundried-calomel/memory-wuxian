@@ -26,6 +26,7 @@ OutputBaseFilename=MemoryWuxian-{#AppVersion}-Windows-x64-Setup
 
 [Files]
 Source: "{#SourceRoot}\*"; DestDir: "{tmp}\MemoryWuxian\candidate"; Flags: ignoreversion recursesubdirs createallsubdirs deleteafterinstall; Excludes: ".git\*,.github\*,memory\*,native-collector\target\*,packaging\*,dist\*,outputs\*,__pycache__\*,*.pyc"
+Source: "{#SourceRoot}\runtime\windows\python\Lib\site-packages\__pycache__\sitecustomize.*.pyc"; DestDir: "{tmp}\MemoryWuxian\candidate\runtime\windows\python\Lib\site-packages\__pycache__"; Flags: ignoreversion deleteafterinstall
 Source: "{#SourceRoot}\config.yaml"; DestDir: "{tmp}\MemoryWuxian\candidate"; DestName: "config.defaults.yaml"; Flags: onlyifdoesntexist ignoreversion deleteafterinstall
 Source: "{#SourceRoot}\packaging\windows\install.ps1"; DestDir: "{tmp}\MemoryWuxian"; Flags: ignoreversion deleteafterinstall
 Source: "{#SourceRoot}\packaging\windows\uninstall.ps1"; DestDir: "{tmp}\MemoryWuxian\candidate\packaging\windows"; Flags: ignoreversion deleteafterinstall
