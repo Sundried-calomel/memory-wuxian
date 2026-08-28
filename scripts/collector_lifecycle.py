@@ -75,7 +75,12 @@ def create_installed_effect_probe(
                 raise RuntimeError("collector effect probe could not advance beyond the previous watermark")
             time.sleep(0.05)
     probe_id = f"memory-wuxian-install-effect-{uuid.uuid4().hex}"
-    path = root / f"rollout-{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H-%M-%S')}-{probe_id}.jsonl"
+    # Collector candidates are ordered lexically. Keep the content-free
+    # installation probe ahead of date-partitioned live rollouts so a growing
+    # active conversation cannot starve the bounded installed-effect gate.
+    probe_directory = root / "0000-memory-wuxian-install-effect"
+    probe_directory.mkdir(exist_ok=True)
+    path = probe_directory / f"rollout-{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H-%M-%S')}-{probe_id}.jsonl"
     payload = (
         json.dumps(
             {
@@ -108,7 +113,12 @@ def create_installed_effect_probe(
 def remove_installed_effect_probe(probe: Mapping[str, Any]) -> None:
     raw_path = probe.get("path")
     if isinstance(raw_path, str) and raw_path:
-        Path(raw_path).unlink(missing_ok=True)
+        path = Path(raw_path)
+        path.unlink(missing_ok=True)
+        try:
+            path.parent.rmdir()
+        except OSError:
+            pass
 
 
 def watermark_reached(value: Any, minimum: str) -> bool:

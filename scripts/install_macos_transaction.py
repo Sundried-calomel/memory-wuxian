@@ -108,6 +108,38 @@ def durable_replace(source: Path, destination: Path) -> None:
     )
 
 
+def preserve_failed_tree(
+    source: Path,
+    *,
+    expected_generation: str,
+    preferred_path: Path,
+    failed_root: Path,
+    transaction_id: str,
+    reason: str,
+) -> Path:
+    """Move a failed active tree once while preserving prior failure evidence."""
+
+    actual_generation = tree_generation(source)[0]
+    alternate_path = (
+        failed_root
+        / f"{actual_generation}-{transaction_id}-{reason}-displaced"
+    )
+    destinations = (
+        [preferred_path]
+        if actual_generation == expected_generation
+        else [alternate_path]
+    )
+    for destination in destinations:
+        if destination.exists():
+            if tree_generation(destination)[0] == actual_generation:
+                shutil.rmtree(source)
+                return destination
+            continue
+        durable_replace(source, destination)
+        return destination
+    raise RuntimeError("failed candidate evidence conflicts with preserved recovery trees")
+
+
 def event(timestamp: str, payload: dict[str, Any]) -> str:
     return json.dumps(
         {"timestamp": timestamp, "type": "event_msg", "payload": payload},
@@ -289,6 +321,18 @@ def wait_for_launch_agent(
     raise RuntimeError(f"{label} was not restored under launchd")
 
 
+def installed_collector_label(plist: Path) -> str:
+    """Return the actual installed owner label, including legacy generations."""
+    if not plist.is_file():
+        return COLLECTOR_LABEL
+    try:
+        payload = plistlib.loads(plist.read_bytes())
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        return COLLECTOR_LABEL
+    label = payload.get("Label")
+    return label if isinstance(label, str) and label else COLLECTOR_LABEL
+
+
 @contextmanager
 def quiesce_collector_for_cutover(
     archive_root: Path,
@@ -323,7 +367,8 @@ def quiesce_collector_for_cutover(
                 raise RuntimeError(
                     "native recovery debt remains after the archive became idle"
                 )
-            previous_pid = launchctl_pid(COLLECTOR_LABEL, runner)
+            active_label = installed_collector_label(plist)
+            previous_pid = launchctl_pid(active_label, runner)
             if previous_pid is not None and not plist.is_file():
                 raise RuntimeError(
                     "current collector is running but its LaunchAgent plist is missing"
@@ -348,7 +393,7 @@ def quiesce_collector_for_cutover(
                     )
                 booted_out = True
                 deadline = time.monotonic() + 30
-                while launchctl_pid(COLLECTOR_LABEL, runner) is not None:
+                while launchctl_pid(active_label, runner) is not None:
                     if time.monotonic() >= deadline:
                         raise RuntimeError(
                             "current collector did not stop after idle cutover"
@@ -454,6 +499,18 @@ def transaction_identifier(candidate_generation: str, paths: dict[str, str]) -> 
         separators=(",", ":"),
     ).encode("utf-8")
     return f"mwt-{hashlib.sha256(encoded).hexdigest()}"
+
+
+def rotate_completed_rollback_attempt(transaction_root: Path) -> Path | None:
+    """Preserve an earlier rollback before reusing a deterministic transaction ID."""
+    if not (transaction_root / "rollback-receipt.json").is_file():
+        return None
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    archived = transaction_root.with_name(f"{transaction_root.name}-attempt-{timestamp}")
+    if archived.exists():
+        raise RuntimeError(f"rollback attempt archive already exists: {archived}")
+    durable_replace(transaction_root, archived)
+    return archived
 
 
 def transition(journal_path: Path, journal: dict[str, Any], state: str, **details: Any) -> None:
@@ -813,18 +870,20 @@ def recover_interrupted_transactions(
                 capture_output=True,
                 text=True,
             )
-            if current_generation == candidate_generation and skill_root.exists():
-                if failed_path.exists():
-                    existing_generation = tree_generation(failed_path)[0]
-                    if existing_generation != candidate_generation:
-                        raise RuntimeError("failed candidate evidence conflicts with recovery")
-                    shutil.rmtree(skill_root)
-                else:
-                    durable_replace(skill_root, failed_path)
+            if skill_root.exists() and current_generation != prior_generation:
+                preserve_failed_tree(
+                    skill_root,
+                    expected_generation=candidate_generation,
+                    preferred_path=failed_path,
+                    failed_root=failed_root,
+                    transaction_id=transaction,
+                    reason="recovery",
+                )
             if prior_generation is not None:
                 if not prior_path.is_dir():
                     raise RuntimeError("interrupted transaction lost its prior generation")
-                durable_replace(prior_path, skill_root)
+                if not skill_root.exists():
+                    durable_replace(prior_path, skill_root)
         elif current_generation != prior_generation:
             raise RuntimeError("interrupted transaction pre-state cannot be reconstructed")
 
@@ -958,7 +1017,7 @@ def install(
         / "com.openai.codex.memory-wuxian-maintenance.plist"
     )
     active_root_pointer = codex_home / "memory-wuxian-active-root.txt"
-    old_pid = launchctl_pid(COLLECTOR_LABEL, runner)
+    old_pid = launchctl_pid(installed_collector_label(plist), runner)
     old_telemetry: dict[str, Any] = {}
     telemetry_path = archive_root / "imports" / "codex" / "collector-telemetry.json"
     lifecycle_path = archive_root / "imports" / "codex" / "collector-lifecycle.json"
@@ -1010,6 +1069,7 @@ def install(
     }
     transaction_id = transaction_identifier(candidate_generation, paths)
     transaction_root = transactions_root / transaction_id
+    rotate_completed_rollback_attempt(transaction_root)
     transaction_root.mkdir(parents=True, exist_ok=True)
     journal_path = transaction_root / "journal.json"
     commit_receipt = transaction_root / "commit-receipt.json"
@@ -1293,10 +1353,16 @@ def install(
                 failed_pid = int(read_json(telemetry_path)["pid"])
             except (OSError, ValueError, KeyError, json.JSONDecodeError):
                 pass
+            candidate_evidence = failed_path
             if candidate_active and skill_root.exists():
-                if failed_path.exists():
-                    raise RuntimeError(f"failed candidate evidence already exists: {failed_path}")
-                durable_replace(skill_root, failed_path)
+                candidate_evidence = preserve_failed_tree(
+                    skill_root,
+                    expected_generation=candidate_generation,
+                    preferred_path=failed_path,
+                    failed_root=failed_root,
+                    transaction_id=transaction_id,
+                    reason="rollback",
+                )
             if moved_current and prior_path.exists():
                 durable_replace(prior_path, skill_root)
             restore_snapshot(plist, transaction_root / "collector.plist", snapshots["collector_plist"])
@@ -1346,7 +1412,7 @@ def install(
                     "status": "rolled-back",
                     "transaction_id": transaction_id,
                     "rolled_back_at": datetime.now(timezone.utc).isoformat(),
-                    "candidate_evidence": str(failed_path) if failed_path.exists() else str(candidate),
+                    "candidate_evidence": str(candidate_evidence),
                     "error": str(error),
                     "restored_effect": rollback_effect,
                 },

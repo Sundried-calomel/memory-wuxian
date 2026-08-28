@@ -139,6 +139,49 @@ class CloudApplicationService:
             )
         return MappingProxyType(assembled)
 
+    def sync_all(
+        self,
+        *,
+        force: bool = False,
+        post_sync: Optional[Mapping[str, Callable[[], Any]]] = None,
+    ) -> dict[str, Any]:
+        """Synchronize every registered stream without cross-stream failure."""
+        result: dict[str, Any] = {"status": "ok", "streams": {}}
+        archive_transport: Optional[CloudFolderTransport] = None
+        for definition in self.registry.definitions:
+            try:
+                transport = self.transport(
+                    definition.stream_id,
+                    archive_transport=archive_transport,
+                    bootstrap=definition.stream_id != "archive-v1",
+                )
+                if definition.stream_id == "archive-v1":
+                    archive_transport = transport
+                stream_result = transport.sync(force=force)
+            except (OSError, RuntimeError, ValueError) as error:
+                stream_result = {
+                    "status": "failed",
+                    "stream_id": definition.stream_id,
+                    "error_type": type(error).__name__,
+                    "error": str(error),
+                }
+            callback = (post_sync or {}).get(definition.stream_id)
+            if callback is not None and stream_result.get("status") != "failed":
+                try:
+                    stream_result["incoming"] = callback()
+                except (OSError, RuntimeError, ValueError) as error:
+                    stream_result["incoming"] = {
+                        "status": "failed",
+                        "error_type": type(error).__name__,
+                        "error": str(error),
+                    }
+                    stream_result["status"] = "degraded"
+            result[definition.result_key] = stream_result
+            result["streams"][definition.stream_id] = stream_result
+            if stream_result.get("status") in {"degraded", "failed"}:
+                result["status"] = "degraded"
+        return result
+
     @staticmethod
     def _bootstrap_transport(
         definition: CloudStreamDefinition,

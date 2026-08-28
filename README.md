@@ -1,5 +1,18 @@
 # Memory無限
 
+> **2.19.1:** Repairs semantic maintenance and cross-device cloud closure.
+> One maintenance batch now reads one immutable source snapshot, runs model
+> work concurrently, isolates failed jobs, and applies derived updates once.
+> Summary rebuilds preserve non-contiguous round metadata, while federation
+> quarantines a drifting summary record and replays its verified immutable
+> record without duplicating raw dialogue or Markdown content. Archive,
+> Environment, Evidence, and Attachment streams continue independently and
+> persist successful ACK, import, and publish stages. Malformed rollout files
+> are fingerprint-quarantined until their bytes change, so they stay visible as
+> coverage debt without being reparsed on every collector cycle.
+> The macOS package also restores the canonical universal dashboard build and
+> preserves distinct failed trees during repeatable transactional rollback.
+
 > **2.19.0:** Integrates the completed R1-R8 behavior-preserving modularization
 > behind canonical Platform, Environment, Exchange, application-service, CLI,
 > and test-support owners. It is the first public installer integration of the

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.19.1-maintenance-cloud-recovery",
+  "candidate_id": "v2.19.1-batched-summary-and-isolated-cloud-closure",
+  "artifact_profile": "software-feature",
+  "classification": "repair",
+  "owner_id": "memory-maintenance-and-cloud-application-service",
+  "validation_profile": "full",
+  "target": "Restore bounded semantic-maintenance throughput and cross-device cloud closure without changing raw history, summary text, device trust, or federation wire protocol.",
+  "invariants": [
+    "Raw messages and completed summary Markdown remain immutable authorities.",
+    "A real artifact drift remains fail-closed and produces a quarantine receipt.",
+    "Federation event sequences remain contiguous; no failed artifact is silently skipped.",
+    "One failed summary, peer, or cloud stream does not block unrelated eligible work.",
+    "Replay projections contain only compact summary records and never duplicate raw dialogue or summary Markdown content.",
+    "Successful ACK, import, and publish stages remain durable when a later stage fails.",
+    "Malformed rollout quarantine remains visible as coverage debt and never rewrites or deletes source history.",
+    "Interrupted installation recovery preserves every displaced Skill tree before restoring the prior generation.",
+    "The packaged macOS dashboard is the canonical universal application and every failed transaction tree remains recoverable."
+  ],
+  "allowed_changes": [
+    "Preserve Level-1 round-number metadata during deterministic index reconstruction.",
+    "Share one immutable source snapshot across a bounded semantic batch and finalize derived updates once.",
+    "Add compact content-addressed summary-record replay projections and quarantine receipts.",
+    "Add cross-stream failure isolation and per-stage cloud progress persistence.",
+    "Add bounded maintenance progress and timing telemetry.",
+    "Persist content-free malformed-source fingerprints and retry only after the source bytes change.",
+    "Recover a post-switch-mutated active Skill tree without overwriting a non-empty destination.",
+    "Rebuild the packaged macOS dashboard through the canonical universal pipeline and make repeated rollback evidence idempotent.",
+    "Reproduce ledger-bound summary timestamps and bounded historical empty-default shapes only when the complete candidate payload exactly matches the immutable ledger SHA-256."
+  ],
+  "prohibited_changes": [
+    "Rewrite raw dialogue, existing summary Markdown, device identities, peer trust, keys, or pairing state.",
+    "Skip a federation event, accept a changed artifact as immutable, or partially import a corrupt inbound bundle.",
+    "Duplicate raw dialogue or summary Markdown into export replay storage.",
+    "Change federation protocol version, bundle format, summary format, or trigger thresholds.",
+    "Install or publish a candidate that has not passed the frozen release rehearsal."
+  ],
+  "required_evidence": [
+    "round-metadata-rebuild-hash-parity",
+    "single-snapshot-single-finalize-batch",
+    "semantic-sibling-failure-isolation",
+    "summary-record-replay-without-content-duplication",
+    "cloud-stream-failure-isolation",
+    "ack-import-publish-stage-durability",
+    "windows-80233-80441-isolated-import",
+    "architecture-contract",
+    "documentation-contract",
+    "complete-python-suite",
+    "complete-rust-suite",
+    "transactional-macos-install-and-live-self-check",
+    "persistent-malformed-source-isolation-and-mutation-retry",
+    "interrupted-post-switch-mutation-recovery",
+    "universal-dashboard-live-self-check-and-repeatable-rollback",
+    "nonempty-policy-summary-one-second-ledger-replay",
+    "parent-summary-zero-null-absent-default-replay",
+    "complete-summary-ledger-replay-preflight"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "governance/v2191-maintenance-cloud-preflight.json",
+    "preflight_sha256": "74e8f01690a08ae20ffd0cdefd64e2db39199bc139b578c0a679e1c95d43bd3d",
+    "completion_receipt": "governance/v2191-maintenance-cloud-completion.json",
+    "completion_sha256": "62940c9cdba976e9d4af0ebf3e9e033fe0e2ffdd261e9a907f634830e570d6bc",
+    "applicable_families": [
+      "G03",
+      "G05",
+      "G06",
+      "G09",
+      "MW-R03",
+      "MW-R05",
+      "MW-R06"
+    ],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "A rebuilt summary registry dropped sparse source-round metadata and changed an immutable federation artifact hash.",
+      "One failed summary or cloud stream blocked unrelated eligible work at the same layer.",
+      "A semantic batch repeatedly scanned the complete archive and rebuilt derived indexes after each job.",
+      "Unchanged malformed rollout files were reparsed every event cycle and prevented the installation effect watermark from committing.",
+      "Interrupted macOS recovery attempted to replace a non-empty Skill directory when the active candidate generation had changed after cutover.",
+      "A temporary single-architecture dashboard binary silently exited self-check and a repeated rollback collided with existing failed-candidate evidence.",
+      "A summary Markdown write and its index append crossed a one-second boundary, while rebuilt parent indexes normalized historical null or absent round defaults to zero and empty arrays; the legacy replay path could not reproduce either shape."
+    ]
+  },
+  "failure_escalation": {
+    "first_failure": "Stop the failing stage, preserve evidence, and repair only the canonical owner named by the bounded reproducer.",
+    "maximum_remediation_cycles": 1,
+    "after_limit": "Do not install or publish; return the remaining blocker for a new user decision."
+  },
+  "lifecycle_state": "candidate"
+}

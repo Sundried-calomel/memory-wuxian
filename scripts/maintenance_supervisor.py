@@ -95,6 +95,10 @@ def _run_supervisor_tick_unlocked(
             "semantic_dispatch_seconds": float(
                 timing.get("semantic_dispatch_seconds") or 0.0
             ),
+            "snapshot_seconds": float(timing.get("snapshot_seconds") or 0.0),
+            "finalize_seconds": float(timing.get("finalize_seconds") or 0.0),
+            "scheduling_seconds": float(timing.get("scheduling_seconds") or 0.0),
+            "backup_seconds": float(timing.get("backup_seconds") or 0.0),
             "average_model_seconds": float(
                 semantic_timing.get("average_model_seconds") or 0.0
             ),

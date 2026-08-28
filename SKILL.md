@@ -496,6 +496,13 @@ Pass `--root <memory-directory>` before the subcommand to use a memory archive o
 
 Installing the Skill alone does not intercept Codex events. Automatic capture requires the supplied macOS LaunchAgent or Windows scheduled task. Both keep only the Rust collector alive, use immediate native filesystem events plus an adaptive 5-second, 30-second, and 5-minute metadata fallback, and share the same archive contract. They import user messages, visible assistant commentary/final answers, lightweight task-timeline tool activity, and successful structured file-change diffs from top-level sessions; they exclude subagent sessions, system prompts, hidden reasoning, and general tool output. When a complete-round boundary makes a summary due, the collector persists a model-free eligibility record and invokes the one-shot semantic dispatcher. The dispatcher leases the explicit job and runs one ephemeral Codex CLI summary worker. The independent five-minute maintenance owner may overlap at most three such model calls, then serializes verified ingestion through the archive locks and records completion, retry, or quarantine. Worker failure does not stop native capture or cancel successful sibling jobs. Python remains available for low-frequency maintenance, retrieval, reconstruction, and summary ingestion.
 
+A malformed rollout is isolated by a content-free fingerprint of its canonical
+path, byte size, and nanosecond modification time. An unchanged failed source is
+not reparsed on every event cycle; any source mutation makes it eligible for an
+automatic retry, and a successful retry removes the derived fault record. The
+source remains visible as incomplete coverage throughout quarantine. Never
+delete, rewrite, or replace the rollout to clear this state.
+
 Federation is a separate low-frequency layer and does not change collector
 ownership of the local archive. By default, imported replicas live in the
 sibling `<archive>-federation-cache`, remain read-only, and are omitted from the

@@ -536,6 +536,55 @@ safety:
         self.assertEqual(peer_after["transport"]["type"], "ssh")
         self.assertEqual(peer_after["transport"]["host"], "beta.example")
 
+    def test_publish_value_error_is_quarantined_inside_its_stream(self):
+        self.append_round(self.node_a, "LOCAL-DRIFT")
+
+        with patch.object(
+            self.transport_a,
+            "_publish_peer",
+            side_effect=ValueError("immutable local artifact drift"),
+        ):
+            result = self.transport_a.sync(force=True, now=1100)
+
+        self.assertEqual(result["status"], "degraded")
+        self.assertEqual(result["published"], [])
+        self.assertEqual(result["counts"]["quarantined"], 1)
+        self.assertEqual(result["quarantined"][0]["artifact_type"], "publish")
+        self.assertIn("immutable local artifact drift", result["quarantined"][0]["reason"])
+
+    def test_import_and_ack_progress_survive_later_publish_failure(self):
+        self.append_round(self.node_a, "STAGE")
+        sent = self.transport_a.sync(force=True, now=1200)
+
+        with patch.object(
+            self.transport_b,
+            "_publish_peer",
+            side_effect=ValueError("later publish failed"),
+        ):
+            received = self.transport_b.sync(force=True, now=1210)
+        self.assertEqual(received["imports"][0]["status"], "imported")
+        persisted_b = read_json(self.node_b / "federation/cloud.json")
+        self.assertEqual(persisted_b["progress"]["import"]["completed_at"], 1210.0)
+        self.assertEqual(
+            self.manager_b.replica_state("node-alpha")["last_event_sequence"],
+            sent["published"][0]["to_event_sequence"],
+        )
+
+        with patch.object(
+            self.transport_a,
+            "_publish_peer",
+            side_effect=ValueError("post-ack publish failed"),
+        ):
+            acknowledged = self.transport_a.sync(force=True, now=1220)
+        self.assertEqual(len(acknowledged["acks"]), 1)
+        persisted_a = read_json(self.node_a / "federation/cloud.json")
+        self.assertEqual(persisted_a["progress"]["ack"]["completed_at"], 1220.0)
+        self.assertEqual(
+            persisted_a["outbound"]["node-beta"]["acknowledged"][
+                "last_event_sequence"
+            ],
+            sent["published"][0]["to_event_sequence"],
+        )
     def test_project_evidence_uses_authenticated_encrypted_transport(self):
         config = load_simple_yaml(self.config_path)
         store_a = MemoryStore(self.node_a, config)

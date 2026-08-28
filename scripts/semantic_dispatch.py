@@ -64,6 +64,8 @@ def dispatch_job(
     retry_delay_seconds: int = 60,
     check_availability: bool = False,
     availability_probe=codex_runtime_available,
+    source_snapshot: object | None = None,
+    defer_derived_updates: bool = False,
 ) -> Dict[str, Any]:
     root = root.resolve()
     job_path = job_path.resolve()
@@ -133,6 +135,8 @@ def dispatch_job(
                 job_path,
                 dry_run=dry_run,
                 create_backup=create_backup,
+                source_snapshot=source_snapshot,
+                defer_derived_updates=defer_derived_updates,
             )
         else:
             command = [

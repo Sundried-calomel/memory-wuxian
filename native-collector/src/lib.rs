@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 #[cfg(not(target_os = "macos"))]
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, SystemTime};
@@ -372,25 +371,6 @@ struct Config {
     backup: BackupConfig,
     #[serde(default)]
     safety: SafetyConfig,
-    #[serde(default)]
-    ai_summary: AiSummaryConfig,
-}
-
-#[derive(Debug, Deserialize)]
-struct AiSummaryConfig {
-    #[serde(default = "default_python_path")]
-    python_path: String,
-    #[serde(default)]
-    python_path_windows: Option<String>,
-}
-
-impl Default for AiSummaryConfig {
-    fn default() -> Self {
-        Self {
-            python_path: default_python_path(),
-            python_path_windows: None,
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -469,14 +449,6 @@ fn default_higher_level_trigger() -> usize {
 
 fn default_maximum_summary_depth() -> u64 {
     8
-}
-
-fn default_python_path() -> String {
-    if cfg!(windows) {
-        "python.exe".to_owned()
-    } else {
-        "/opt/homebrew/bin/python3".to_owned()
-    }
 }
 
 fn default_true() -> bool {
@@ -685,10 +657,8 @@ struct AppendResult {
 
 struct Store {
     root: PathBuf,
-    config_path: PathBuf,
     config: Config,
     message_cache: RefCell<Option<HashMap<String, Value>>>,
-    python_executable: Option<PathBuf>,
 }
 
 fn session_metadata(event: &Value) -> Option<(String, Option<String>)> {
@@ -819,7 +789,7 @@ impl Store {
     fn new(
         root: PathBuf,
         config_path: &Path,
-        python_executable: Option<PathBuf>,
+        _python_executable: Option<PathBuf>,
         _codex_cli: Option<PathBuf>,
     ) -> Result<Self> {
         let config_text = fs::read_to_string(config_path)
@@ -831,10 +801,8 @@ impl Store {
         })?;
         let store = Self {
             root,
-            config_path: config_path.canonicalize()?,
             config,
             message_cache: RefCell::new(None),
-            python_executable,
         };
         store.init()?;
         store.recover_capture_wal()?;
@@ -853,6 +821,7 @@ impl Store {
             "archive",
             ".locks",
             "imports/codex",
+            "imports/codex/source-errors",
             "imports/codex/token-usage",
             "dashboard",
         ] {
@@ -1450,6 +1419,59 @@ impl Store {
             .join(format!("{}.json", Self::safe_session_id(session_id)))
     }
 
+    fn source_error_path(&self, source_path: &Path) -> PathBuf {
+        let digest = sha256_hex(portable_path(source_path).as_bytes());
+        self.root
+            .join("imports/codex/source-errors")
+            .join(format!("{digest}.json"))
+    }
+
+    fn source_error_matches(&self, source_path: &Path, metadata: &fs::Metadata) -> bool {
+        let path = self.source_error_path(source_path);
+        let Ok(record) = read_json(&path) else {
+            return false;
+        };
+        record.get("source_path").and_then(Value::as_str)
+            == Some(portable_path(source_path).as_str())
+            && record.get("source_size").and_then(Value::as_u64) == Some(metadata.len())
+            && record.get("source_mtime_ns").and_then(Value::as_str)
+                == source_mtime_ns(metadata).ok().as_deref()
+    }
+
+    fn record_source_error(&self, source_path: &Path, error: &anyhow::Error) -> Result<()> {
+        let metadata = match fs::metadata(source_path) {
+            Ok(value) => value,
+            Err(metadata_error) if metadata_error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(());
+            }
+            Err(metadata_error) => return Err(metadata_error.into()),
+        };
+        let path = self.source_error_path(source_path);
+        let existing = read_json(&path).unwrap_or_else(|_| json!({}));
+        let now = now_iso();
+        let first_observed_at = existing
+            .get("first_observed_at")
+            .and_then(Value::as_str)
+            .unwrap_or(&now)
+            .to_owned();
+        atomic_write_json(
+            &path,
+            &json!({
+                "format_version": 1,
+                "source_path": portable_path(source_path),
+                "source_size": metadata.len(),
+                "source_mtime_ns": source_mtime_ns(&metadata)?,
+                "error": format!("{error:#}"),
+                "first_observed_at": first_observed_at,
+                "last_observed_at": now,
+            }),
+        )
+    }
+
+    fn clear_source_error(&self, source_path: &Path) -> Result<()> {
+        remove_file_if_present(&self.source_error_path(source_path))
+    }
+
     fn write_coverage_status(&self, paths: &[PathBuf]) -> Result<()> {
         let mut missing_cursor_rollouts = 0u64;
         let mut incomplete_rollouts = 0u64;
@@ -1721,6 +1743,16 @@ impl Store {
         let changed = paths
             .into_iter()
             .filter_map(|path| {
+                let metadata = match fs::metadata(&path) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        eprintln!("source metadata error ({}): {error}", path.display());
+                        return Some(path);
+                    }
+                };
+                if self.source_error_matches(&path, &metadata) {
+                    return None;
+                }
                 let session_id = path
                     .file_name()
                     .and_then(|value| value.to_str())
@@ -1734,13 +1766,6 @@ impl Store {
                 let cursor = match read_json(&cursor_path) {
                     Ok(value) => value,
                     Err(_) => return Some(path),
-                };
-                let metadata = match fs::metadata(&path) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        eprintln!("source metadata error ({}): {error}", path.display());
-                        return Some(path);
-                    }
                 };
                 if cursor_requires_sync(&cursor, &path, &metadata) {
                     Some(path)
@@ -2744,10 +2769,15 @@ impl Store {
     }
 
     fn sync_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        self.sync_batch_mode(paths, false)
+        self.sync_batch_mode(paths, true, false)
     }
 
-    fn sync_batch_mode(&self, paths: Vec<PathBuf>, isolate_source_errors: bool) -> Result<Value> {
+    fn sync_batch_mode(
+        &self,
+        paths: Vec<PathBuf>,
+        isolate_source_errors: bool,
+        isolate_missing_source_errors: bool,
+    ) -> Result<Value> {
         self.repair_native_recovery_debt()?;
         let path_count = paths.len();
         let completed_before = self.lock("archive.lock", || {
@@ -2782,9 +2812,16 @@ impl Store {
                 Ok(accumulated_session.expect("a synchronized rollout produces a session result"))
             })();
             match synced {
-                Ok(session) => result.sessions.push(session),
-                Err(error) if isolate_source_errors => {
+                Ok(session) => {
+                    self.clear_source_error(&path)?;
+                    result.sessions.push(session);
+                }
+                Err(error)
+                    if isolate_source_errors
+                        && (isolate_missing_source_errors || path.exists()) =>
+                {
                     eprintln!("source sync error ({}): {error:#}", path.display());
+                    self.record_source_error(&path, &error)?;
                     result.source_errors.push(SourceSyncError {
                         source_path: portable_path(&path),
                         error: error.to_string(),
@@ -2837,7 +2874,7 @@ impl Store {
     }
 
     fn sync_startup_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        self.sync_batch_mode(paths, true)
+        self.sync_batch_mode(paths, true, true)
     }
 
     fn repair_native_recovery_debt(&self) -> Result<()> {
@@ -2845,76 +2882,42 @@ impl Store {
         if !marker.exists() {
             return Ok(());
         }
-        let configured_memory_cli = self
-            .config_path
-            .parent()
-            .unwrap_or(Path::new("."))
-            .join("scripts/memory_cli.py");
-        let bundled_memory_cli = std::env::current_exe()
-            .ok()
-            .and_then(|path| path.parent().map(Path::to_path_buf))
-            .and_then(|path| path.parent().map(Path::to_path_buf))
-            .map(|path| path.join("scripts/memory_cli.py"));
-        let memory_cli = if configured_memory_cli.is_file() {
-            configured_memory_cli
-        } else if let Some(path) = bundled_memory_cli.filter(|path| path.is_file()) {
-            path
-        } else {
-            configured_memory_cli
-        };
-        if !memory_cli.is_file() {
+        let recovery_debt = read_json(&marker)?;
+        let source_path = recovery_debt
+            .get("source_path")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .ok_or_else(|| anyhow!("native recovery debt is missing source_path"))?;
+        if !source_path.is_file() {
             bail!(
-                "native recovery requires the installed memory CLI: {}",
-                memory_cli.display()
+                "native recovery source is unavailable: {}",
+                source_path.display()
             );
         }
-        let python_path = self
-            .python_executable
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned())
-            .or_else(|| std::env::var("MEMORY_WUXIAN_PYTHON").ok())
-            .unwrap_or_else(|| {
-                if cfg!(windows) {
-                    self.config
-                        .ai_summary
-                        .python_path_windows
-                        .as_ref()
-                        .unwrap_or(&self.config.ai_summary.python_path)
-                        .clone()
-                } else {
-                    self.config.ai_summary.python_path.clone()
-                }
-            });
-        let mut command = Command::new(python_path);
-        command
-            .arg(memory_cli)
-            .arg("--root")
-            .arg(&self.root)
-            .arg("--config")
-            .arg(&self.config_path)
-            .arg("heartbeat")
-            .arg("--no-create-jobs")
-            .arg("--repair");
-        #[cfg(windows)]
+        loop {
+            let prepared = self.prepare_sync_file(&source_path)?;
+            let caught_up = prepared.batch.caught_up;
+            self.lock("archive.lock", || self.sync_batch_unlocked(vec![prepared]))?;
+            if caught_up {
+                break;
+            }
+            std::thread::sleep(RECOVERY_LOCK_YIELD);
+        }
+        self.recover_capture_wal()?;
+        let source_key = portable_path(&source_path);
+        if self
+            .capture_wal_state()?
+            .pending
+            .values()
+            .any(|intent| intent.source_path == source_key)
         {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x08000000);
-        }
-        let output = command
-            .output()
-            .context("run deterministic native recovery before resuming collection")?;
-        if !output.status.success() {
             bail!(
-                "native recovery failed before resume: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
+                "native recovery WAL remains pending for {}",
+                source_path.display()
             );
         }
-        let recovery: Value = serde_json::from_slice(&output.stdout)
-            .context("parse deterministic native recovery result")?;
-        if recovery.get("status").and_then(Value::as_str) != Some("ok") {
-            bail!("native recovery did not verify the archive: {recovery}");
-        }
-        fs::remove_file(&marker)?;
+        remove_file_if_present(&marker)?;
         Ok(())
     }
 
@@ -3059,6 +3062,14 @@ fn compact_json(value: &Value) -> Result<String> {
 
 fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn source_mtime_ns(metadata: &fs::Metadata) -> Result<String> {
+    Ok(metadata
+        .modified()?
+        .duration_since(SystemTime::UNIX_EPOCH)?
+        .as_nanos()
+        .to_string())
 }
 
 fn file_sha256(path: &Path) -> Result<String> {
@@ -3425,6 +3436,10 @@ fn write_collector_telemetry(
     store: &Store,
     interval: Duration,
 ) {
+    match store.capture_wal_state() {
+        Ok(wal) => telemetry.record_wal(wal.pending.len(), wal.last_durable_transaction),
+        Err(error) => eprintln!("collector WAL telemetry error: {error:#}"),
+    }
     if let Err(error) = atomic_write_json(
         &store.root.join("imports/codex/collector-telemetry.json"),
         &telemetry.document(interval),
@@ -3900,6 +3915,53 @@ mod adaptive_fallback_tests {
     }
 
     #[test]
+    fn malformed_source_is_quarantined_until_its_bytes_change() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let malformed = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a8.jsonl");
+        let healthy = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        fs::write(&malformed, [0xff, b'\n'])?;
+        event_loop_rollout(&healthy)?;
+        let malformed = malformed.canonicalize()?;
+        let healthy = healthy.canonicalize()?;
+
+        let first = store.sync_batch(vec![malformed.clone(), healthy.clone()])?;
+        assert_eq!(first["status"], "partial");
+        assert_eq!(first["source_error_count"], 1);
+        assert_eq!(first["sessions"].as_array().map(Vec::len), Some(1));
+        assert!(store.source_error_path(&malformed).is_file());
+        assert!(store.changed_rollouts(vec![malformed.clone()])?.is_empty());
+
+        fs::write(
+            &malformed,
+            format!(
+                "{}\n",
+                json!({
+                    "timestamp": "2026-08-18T00:00:00Z",
+                    "type": "session_meta",
+                    "payload": {
+                        "id": "019fb8f2-9a67-7b03-9474-6f92cd6b21a8",
+                        "source": "user"
+                    }
+                })
+            ),
+        )?;
+        assert_eq!(
+            store.changed_rollouts(vec![malformed.clone()])?,
+            vec![malformed.clone()]
+        );
+        let retry = store.sync_batch(vec![malformed.clone()])?;
+        assert_eq!(retry["status"], "synced");
+        assert!(!store.source_error_path(&malformed).exists());
+        Ok(())
+    }
+
+    #[test]
     fn collector_has_no_semantic_ai_execution_path() {
         let sources = [
             include_str!("lib.rs"),
@@ -4021,10 +4083,9 @@ ai_summary:
   dispatcher_path: scripts/semantic_dispatch.py
 "#,
         )?;
-        assert_eq!(config.ai_summary.python_path, "python3");
         assert_eq!(
-            config.ai_summary.python_path_windows.as_deref(),
-            Some("python.exe")
+            config.summaries.level_1_trigger_rounds,
+            default_l1_trigger()
         );
         Ok(())
     }
@@ -4049,6 +4110,24 @@ ai_summary:
         remove_file_if_present(&marker)?;
         assert!(!marker.exists());
         Ok(())
+    }
+
+    #[test]
+    fn native_recovery_is_source_scoped_instead_of_global_audit() {
+        let source = include_str!("lib.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("collector source has a production section");
+        let recovery = production
+            .split("fn repair_native_recovery_debt")
+            .nth(1)
+            .and_then(|value| value.split("fn sync_batch_unlocked").next())
+            .expect("native recovery implementation exists");
+        assert!(recovery.contains("self.prepare_sync_file(&source_path)"));
+        assert!(recovery.contains("self.sync_batch_unlocked(vec![prepared])"));
+        assert!(!recovery.contains("Command::new"));
+        assert!(!recovery.contains("memory_cli.py"));
     }
 
     #[test]
@@ -4097,6 +4176,43 @@ ai_summary:
         let _replayed = Store::new(archive.path().to_path_buf(), &config, None, None)?;
         assert_eq!(fs::metadata(&wal_path)?.len(), recovered_wal_size);
         assert_eq!(fs::read(&raw_path)?, b"durable archive bytes\n");
+        Ok(())
+    }
+
+    #[test]
+    fn telemetry_refreshes_wal_state_on_every_write() -> Result<()> {
+        let archive = tempfile::tempdir()?;
+        let config = archive.path().join("config.yaml");
+        fs::write(&config, "{}\n")?;
+        let store = Store::new(archive.path().to_path_buf(), &config, None, None)?;
+        let intent = WalIntent {
+            transaction_id: "telemetry-tx".to_owned(),
+            session_id: "telemetry-session".to_owned(),
+            source_path: "/tmp/telemetry-rollout.jsonl".to_owned(),
+            cursor_before_line: 0,
+            cursor_after_line: 1,
+            committed_byte_offset: 128,
+        };
+        store.capture_wal().begin(&intent)?;
+        store.capture_wal().commit(&intent.transaction_id)?;
+
+        let mut telemetry = CollectorTelemetry::new();
+        telemetry.record_wal(1, Some("stale-transaction".to_owned()));
+        write_collector_telemetry(&mut telemetry, &store, ACTIVE_FALLBACK);
+
+        let document = read_json(&store.root.join("imports/codex/collector-telemetry.json"))?;
+        assert_eq!(
+            document
+                .get("wal_pending_transactions")
+                .and_then(Value::as_u64),
+            Some(0)
+        );
+        assert_eq!(
+            document
+                .get("last_durable_transaction")
+                .and_then(Value::as_str),
+            Some("telemetry-tx")
+        );
         Ok(())
     }
 

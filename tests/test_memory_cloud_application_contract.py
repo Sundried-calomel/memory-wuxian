@@ -287,6 +287,48 @@ class CloudApplicationContractTest(unittest.TestCase):
         )
         self.assertEqual(payload["environment"]["incoming"], {"status": "processed"})
 
+    def test_sync_all_isolates_one_stream_failure_and_continues(self):
+        events = []
+
+        class FakeTransport:
+            def __init__(self, stream_id):
+                self.stream_id = stream_id
+
+            def sync(self, *, force=False):
+                self.assert_force(force)
+                events.append(self.stream_id)
+                if self.stream_id == "archive-v1":
+                    raise ValueError("immutable artifact replay unavailable")
+                return {"status": "ok", "stream_id": self.stream_id}
+
+            @staticmethod
+            def assert_force(force):
+                if not force:
+                    raise AssertionError("sync_all did not forward force=True")
+
+        def transport(_service, stream_id, **_kwargs):
+            return FakeTransport(stream_id)
+
+        service = CloudApplicationService(self.store)
+        with patch.object(
+            CloudApplicationService,
+            "transport",
+            autospec=True,
+            side_effect=transport,
+        ):
+            result = service.sync_all(force=True)
+
+        self.assertEqual(
+            events,
+            [definition.stream_id for definition in service.registry.definitions],
+        )
+        self.assertEqual(result["status"], "degraded")
+        self.assertEqual(result["archive"]["status"], "failed")
+        self.assertEqual(result["archive"]["error_type"], "ValueError")
+        self.assertEqual(result["environment"]["status"], "ok")
+        self.assertEqual(result["project_evidence"]["status"], "ok")
+        self.assertEqual(result["project_attachments"]["status"], "ok")
+
 
 if __name__ == "__main__":
     unittest.main()

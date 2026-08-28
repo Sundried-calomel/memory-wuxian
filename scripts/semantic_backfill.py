@@ -20,13 +20,46 @@ from memory_jobs import (
     stable_path_identity,
     write_maintenance_projection,
 )
-from semantic_dispatch import dispatch_job
 from platform_lock import exclusive_lock
+from platform_transaction import atomic_write_canonical_json
+from semantic_dispatch import dispatch_job
 
 
 DEFAULT_RECOVERY_AUDIT_INTERVAL_SECONDS = 86400
 DEFAULT_MAXIMUM_PARALLEL_MODEL_CALLS = 3
 MAXIMUM_PARALLEL_MODEL_CALLS = 3
+BATCH_STATE_FORMAT = "memory-wuxian-semantic-batch-state-v1"
+
+
+def _batch_state_path(root: Path) -> Path:
+    return root / "maintenance" / "semantic-batch-state.json"
+
+
+def _write_batch_state(
+    root: Path,
+    *,
+    batch_id: str,
+    stage: str,
+    selected_jobs: int,
+    finished_jobs: int,
+    failed_jobs: int,
+    timing: dict[str, float],
+) -> None:
+    atomic_write_canonical_json(
+        _batch_state_path(root),
+        {
+            "format": BATCH_STATE_FORMAT,
+            "batch_id": batch_id,
+            "stage": stage,
+            "updated_at": now_iso(),
+            "selected_jobs": selected_jobs,
+            "finished_jobs": finished_jobs,
+            "failed_jobs": failed_jobs,
+            "timing": {
+                key: round(max(0.0, value), 3) for key, value in timing.items()
+            },
+        },
+    )
 
 
 def _file_generation(path: Path) -> tuple[int, int, int, int, str] | None:
@@ -147,6 +180,14 @@ def run_backfill(
     store = MemoryStore(root, config)
     store.init()
     batch_started = time.monotonic()
+    batch_id = f"semantic-batch-{os.getpid()}-{time.time_ns()}"
+    stage_timing = {
+        "snapshot_seconds": 0.0,
+        "semantic_dispatch_seconds": 0.0,
+        "finalize_seconds": 0.0,
+        "scheduling_seconds": 0.0,
+        "backup_seconds": 0.0,
+    }
     recovery_debt_path = root / "pending" / "native-recovery-debt.json"
     with exclusive_lock(root / ".locks" / "archive.lock"):
         recovery_debt_generation = _file_generation(recovery_debt_path)
@@ -212,8 +253,26 @@ def run_backfill(
         if dry_run:
             break
 
+    snapshot_started = time.monotonic()
+    source_snapshot = None
+    snapshot_builder = getattr(store, "build_summary_source_snapshot", None)
+    if selected and not dry_run and callable(snapshot_builder):
+        source_snapshot = snapshot_builder()
+    stage_timing["snapshot_seconds"] = time.monotonic() - snapshot_started
+    _write_batch_state(
+        root,
+        batch_id=batch_id,
+        stage="dispatching" if selected else "idle",
+        selected_jobs=len(selected),
+        finished_jobs=0,
+        failed_jobs=0,
+        timing=stage_timing,
+    )
+
     dispatch_started = time.monotonic()
     results_by_path: dict[Path, dict | BaseException] = {}
+    dispatched = 0
+    dispatch_failures = 0
     if selected:
         parallelism = _bounded_parallelism(config, len(selected), dry_run)
         with ThreadPoolExecutor(
@@ -229,6 +288,8 @@ def run_backfill(
                     dry_run=dry_run,
                     create_backup=False,
                     check_availability=not dry_run,
+                    source_snapshot=source_snapshot,
+                    defer_derived_updates=not dry_run,
                 ): job_path
                 for job_path in selected
             }
@@ -238,7 +299,22 @@ def run_backfill(
                     results_by_path[job_path] = future.result()
                 except Exception as exc:
                     results_by_path[job_path] = exc
+                    dispatch_failures += 1
+                dispatched += 1
+                stage_timing["semantic_dispatch_seconds"] = (
+                    time.monotonic() - dispatch_started
+                )
+                _write_batch_state(
+                    root,
+                    batch_id=batch_id,
+                    stage="dispatching",
+                    selected_jobs=len(selected),
+                    finished_jobs=dispatched,
+                    failed_jobs=dispatch_failures,
+                    timing=stage_timing,
+                )
     dispatch_seconds = time.monotonic() - dispatch_started
+    stage_timing["semantic_dispatch_seconds"] = dispatch_seconds
 
     for job_path in selected:
         result = results_by_path[job_path]
@@ -264,13 +340,43 @@ def run_backfill(
             })
             continue
         completed.append(result)
-        if result.get("status") == "ingested" and not scheduling_blocked:
-            due_job = store.make_summary_job()
-            if due_job is not None:
-                scheduled.append(str(due_job))
+
+    finalize_result = None
+    finalize_started = time.monotonic()
+    deferred_results = [
+        result for result in completed if result.get("derived_updates_deferred")
+    ]
+    if deferred_results and not dry_run:
+        finalizer = getattr(store, "finalize_summary_batch", None)
+        if not callable(finalizer):
+            raise RuntimeError(
+                "Deferred summary ingestion requires MemoryStore.finalize_summary_batch"
+            )
+        _write_batch_state(
+            root,
+            batch_id=batch_id,
+            stage="finalizing",
+            selected_jobs=len(selected),
+            finished_jobs=len(completed),
+            failed_jobs=len(selected) - len(completed),
+            timing=stage_timing,
+        )
+        finalize_result = finalizer(completed)
+    stage_timing["finalize_seconds"] = time.monotonic() - finalize_started
+
+    scheduling_started = time.monotonic()
+    if (
+        any(result.get("status") == "ingested" for result in completed)
+        and not scheduling_blocked
+    ):
+        due_job = store.make_summary_job()
+        if due_job is not None:
+            scheduled.append(str(due_job))
+    stage_timing["scheduling_seconds"] = time.monotonic() - scheduling_started
 
     backup = None
     backup_debt_drained = False
+    backup_started = time.monotonic()
     if not dry_run:
         owner = f"semantic-backfill-backup:{os.getpid()}"
         for _ in range(100):
@@ -305,6 +411,7 @@ def run_backfill(
             except Exception as exc:
                 queue.fail(backup_job["job_id"], owner, exc, retry_delay_seconds=300)
             break
+    stage_timing["backup_seconds"] = time.monotonic() - backup_started
     remaining_pending_jobs = len(store.pending_jobs())
     queue_status = queue.status()
     permanent_failures = queue_status["quarantined"]
@@ -319,6 +426,15 @@ def run_backfill(
     projection = write_maintenance_projection(root, queue)
     semantic_timing = _timing_totals(completed)
     batch_seconds = time.monotonic() - batch_started
+    _write_batch_state(
+        root,
+        batch_id=batch_id,
+        stage="completed",
+        selected_jobs=len(selected),
+        finished_jobs=len(completed),
+        failed_jobs=len(selected) - len(completed),
+        timing={**stage_timing, "batch_seconds": batch_seconds},
+    )
     return {
         "status": status,
         "timestamp": now_iso(),
@@ -326,9 +442,16 @@ def run_backfill(
         "attempted_jobs": len(selected),
         "parallel_model_limit": _bounded_parallelism(config, max(1, len(selected)), dry_run),
         "job_ids": [item["job_id"] for item in completed],
+        "batch_id": batch_id,
+        "source_snapshot_built": source_snapshot is not None,
+        "finalize_result": finalize_result,
         "timing": {
             "recovery_seconds": round(recovery_seconds, 3),
             "semantic_dispatch_seconds": round(dispatch_seconds, 3),
+            "snapshot_seconds": round(stage_timing["snapshot_seconds"], 3),
+            "finalize_seconds": round(stage_timing["finalize_seconds"], 3),
+            "scheduling_seconds": round(stage_timing["scheduling_seconds"], 3),
+            "backup_seconds": round(stage_timing["backup_seconds"], 3),
             "batch_seconds": round(batch_seconds, 3),
             "semantic": semantic_timing,
         },

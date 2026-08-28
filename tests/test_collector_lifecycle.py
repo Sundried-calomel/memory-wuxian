@@ -65,6 +65,7 @@ class CollectorLifecycleTests(unittest.TestCase):
         sessions.mkdir()
         probe = create_installed_effect_probe(sessions)
         path = Path(probe["path"])
+        self.assertEqual(path.parent.name, "0000-memory-wuxian-install-effect")
         record = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(record["type"], "session_meta")
         self.assertNotIn("message", path.read_text(encoding="utf-8"))
@@ -72,6 +73,7 @@ class CollectorLifecycleTests(unittest.TestCase):
         self.assertTrue(watermark_reached(probe["watermark"], probe["watermark"]))
         remove_installed_effect_probe(probe)
         self.assertFalse(path.exists())
+        self.assertFalse(path.parent.exists())
 
     def test_installed_effect_probe_advances_from_current_second(self) -> None:
         sessions = self.base / "same-second-sessions"

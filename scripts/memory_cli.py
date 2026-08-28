@@ -2289,13 +2289,34 @@ class MemoryStore:
             raise ValueError(f"Unexpected summary keys: {', '.join(sorted(extra))}")
         return normalized
 
-    def current_job_source_sha256(self, job: Dict[str, Any]) -> str:
+    def build_summary_source_snapshot(self) -> Dict[str, Any]:
+        """Read immutable summary sources once for one maintenance batch."""
+        raw_records = self.read_all_raw()
+        summaries = self.summary_records()
+        return {
+            "raw_by_id": {
+                str(record["message_id"]): record for record in raw_records
+            },
+            "summaries_by_id": {
+                str(record["summary_id"]): record for record in summaries
+            },
+        }
+
+    def current_job_source_sha256(
+        self,
+        job: Dict[str, Any],
+        source_snapshot: Optional[Dict[str, Any]] = None,
+    ) -> str:
         level = int(job["summary_level"])
         if level == 1:
             expected_ids = list(job.get("source_message_ids", []))
-            raw_by_id = {
-                record["message_id"]: record for record in self.read_all_raw()
-            }
+            raw_by_id = (
+                dict(source_snapshot.get("raw_by_id") or {})
+                if source_snapshot is not None
+                else {
+                    record["message_id"]: record for record in self.read_all_raw()
+                }
+            )
             if expected_ids:
                 missing = [message_id for message_id in expected_ids if message_id not in raw_by_id]
                 if missing:
@@ -2312,7 +2333,11 @@ class MemoryStore:
                 raise RuntimeError("Summary source range is incomplete")
             return raw_source_sha256(records)
 
-        summaries = {record["summary_id"]: record for record in self.summary_records()}
+        summaries = (
+            dict(source_snapshot.get("summaries_by_id") or {})
+            if source_snapshot is not None
+            else {record["summary_id"]: record for record in self.summary_records()}
+        )
         child_digests = []
         for summary_id in job.get("source_summaries", []):
             child = summaries.get(summary_id)
@@ -2327,7 +2352,14 @@ class MemoryStore:
             })
         return canonical_sha256(child_digests)
 
-    def ingest_summary(self, job_path: Path, summary_json_path: Path) -> Path:
+    def ingest_summary(
+        self,
+        job_path: Path,
+        summary_json_path: Path,
+        *,
+        source_snapshot: Optional[Dict[str, Any]] = None,
+        defer_derived_updates: bool = False,
+    ) -> Path:
         self.init()
         job_path = job_path.resolve()
         if job_path.parent != self.pending_dir.resolve() or not job_path.exists():
@@ -2361,7 +2393,14 @@ class MemoryStore:
             raise FileExistsError(f"Summary already exists: {output_path}")
 
         with exclusive_lock(self.locks_dir / "summary-ingest.lock"):
-            current_source_sha256 = self.current_job_source_sha256(job)
+            current_source_sha256 = (
+                self.current_job_source_sha256(job)
+                if source_snapshot is None
+                else self.current_job_source_sha256(
+                    job,
+                    source_snapshot=source_snapshot,
+                )
+            )
             expected_source_sha256 = job.get("source_sha256")
             if expected_source_sha256 and current_source_sha256 != expected_source_sha256:
                 raise RuntimeError(
@@ -2466,9 +2505,10 @@ class MemoryStore:
                     "parent_summary_id": summary_id,
                     "timestamp": now_iso(),
                 })
-            self.update_human_indexes(index_record)
-            self.update_concept_indexes(index_record)
-            self.update_policy_indexes(index_record)
+            if not defer_derived_updates:
+                self.update_human_indexes(index_record)
+                self.update_concept_indexes(index_record)
+                self.update_policy_indexes(index_record)
 
             state = self.load_state()
             if level == 1:
@@ -2484,8 +2524,58 @@ class MemoryStore:
 
             archived_job = self.archive_dir / f"{job['job_id']}-ingested.json"
             shutil.move(str(job_path), str(archived_job))
-            self.refresh_unsummarized_registry()
+            if not defer_derived_updates:
+                self.refresh_unsummarized_registry()
         return output_path
+
+    def finalize_summary_batch(self, results: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+        """Apply deferred derived-index updates once after a semantic batch."""
+        summary_paths = {
+            str(item.get("summary"))
+            for item in results
+            if item.get("status") == "ingested"
+            and item.get("derived_updates_deferred")
+            and item.get("summary")
+        }
+        if not summary_paths:
+            return {"status": "no-change", "summaries": 0}
+        by_path = {
+            str((self.root / str(record["path"])).resolve()): record
+            for record in self.summary_records()
+        }
+        summaries = [
+            by_path[str(Path(path).resolve())]
+            for path in sorted(summary_paths)
+            if str(Path(path).resolve()) in by_path
+        ]
+        if len(summaries) != len(summary_paths):
+            raise RuntimeError("Deferred summary batch is missing an indexed summary")
+        with exclusive_lock(self.locks_dir / "archive.lock"):
+            with exclusive_lock(self.locks_dir / "summary-ingest.lock"):
+                for summary in summaries:
+                    self.update_human_indexes(summary)
+                    self.update_concept_indexes(summary)
+                known_policy_ids = {
+                    str(item.get("policy_event_id")) for item in self.policy_records()
+                }
+                policy_changed = False
+                for summary in summaries:
+                    policy_changed = self.update_policy_indexes(
+                        summary,
+                        render_current=False,
+                        known_ids=known_policy_ids,
+                    ) or policy_changed
+                if policy_changed:
+                    atomic_write_text(
+                        self.current_policy_path,
+                        self.render_current_policy_view(),
+                    )
+                self.refresh_unsummarized_registry()
+        return {
+            "status": "completed",
+            "summaries": len(summaries),
+            "summary_ids": [summary["summary_id"] for summary in summaries],
+        }
 
     def update_human_indexes(self, summary: Dict[str, Any]) -> None:
         date = str(summary["start_time"]).split("T", 1)[0]
@@ -2694,17 +2784,25 @@ class MemoryStore:
                 ])
         return "\n".join(lines).rstrip() + "\n"
 
-    def update_policy_indexes(self, summary: Dict[str, Any]) -> None:
+    def update_policy_indexes(
+        self,
+        summary: Dict[str, Any],
+        *,
+        render_current: bool = True,
+        known_ids: Optional[set[str]] = None,
+    ) -> bool:
         records = self.policy_event_records(summary)
         if not records:
-            return
-        known_ids = {
-            str(item.get("policy_event_id"))
-            for item in self.policy_records()
+            return False
+        known_ids = known_ids if known_ids is not None else {
+            str(item.get("policy_event_id")) for item in self.policy_records()
         }
+        changed = False
         for record in records:
             if record["policy_event_id"] not in known_ids:
                 append_jsonl(self.policy_index_path, record)
+                known_ids.add(record["policy_event_id"])
+                changed = True
             if record.get("conversation_id"):
                 directory = self.ensure_conversation_index_files(
                     str(record["conversation_id"])
@@ -2716,10 +2814,12 @@ class MemoryStore:
                 }
                 if record["policy_event_id"] not in conversation_ids:
                     append_jsonl(conversation_path, record)
-        atomic_write_text(
-            self.current_policy_path,
-            self.render_current_policy_view(),
-        )
+        if render_current and changed:
+            atomic_write_text(
+                self.current_policy_path,
+                self.render_current_policy_view(),
+            )
+        return changed
 
     def summary_records_from_files(self) -> List[Dict[str, Any]]:
         raw_records = self.read_all_raw()
@@ -2752,6 +2852,12 @@ class MemoryStore:
                 "source_message_ids": parsed.get("source_message_ids") or [],
                 "source_round_start": parsed.get("source_round_start"),
                 "source_round_end": parsed.get("source_round_end"),
+                "source_round_numbers": parsed.get("source_round_numbers") or [],
+                "source_round_count": (
+                    parsed.get("source_rounds")
+                    if parsed.get("source_rounds") is not None
+                    else len(parsed.get("source_round_numbers") or [])
+                ),
                 "source_sha256": parsed.get("source_sha256"),
                 "summary_sha256": file_sha256(path),
                 "path": self.relative(path),
@@ -4650,35 +4756,27 @@ def dispatch_command(
         )
     elif args.command == "cloud-sync":
         cloud_service = CloudApplicationService(store)
-        archive_transport = cloud_service.transport("archive-v1")
-        result = archive_transport.sync(force=args.force)
-        environment_transport = cloud_service.transport(
-            "environment-v1",
-            archive_transport=archive_transport,
-            bootstrap=True,
+        application_result = cloud_service.sync_all(
+            force=args.force,
+            post_sync={
+                "environment-v1": lambda: EnvironmentIncomingProcessor(
+                    store.root,
+                    platform=local_platform_name(),
+                    runtime_versions=local_runtime_versions([]),
+                ).process(apply=True),
+            },
         )
-        result["environment"] = environment_transport.sync(force=args.force)
-        result["environment"]["incoming"] = EnvironmentIncomingProcessor(
-            store.root,
-            platform=local_platform_name(),
-            runtime_versions=local_runtime_versions([]),
-        ).process(apply=True)
-        project_evidence_transport = cloud_service.transport(
-            "project-evidence-v1",
-            archive_transport=archive_transport,
-            bootstrap=True,
-        )
-        result["project_evidence"] = project_evidence_transport.sync(
-            force=args.force
-        )
-        project_attachment_transport = cloud_service.transport(
-            "project-attachment-v1",
-            archive_transport=archive_transport,
-            bootstrap=True,
-        )
-        result["project_attachments"] = project_attachment_transport.sync(
-            force=args.force
-        )
+        # Preserve the archive-v1 CLI contract for existing callers while also
+        # exposing the independent multi-stream application result.
+        result = dict(application_result.get("archive") or {})
+        result["application_status"] = application_result.get("status", "ok")
+        result["streams"] = application_result.get("streams", {})
+        for result_key in (
+            "environment",
+            "project_evidence",
+            "project_attachments",
+        ):
+            result[result_key] = application_result.get(result_key, {})
     elif args.command == "cloud-status":
         cloud_service = CloudApplicationService(store)
         archive_transport = cloud_service.transport("archive-v1")

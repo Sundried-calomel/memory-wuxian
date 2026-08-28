@@ -1,5 +1,17 @@
 # Memory無限
 
+> **2.19.1:** semantic maintenance の throughput と cross-device cloud の
+> 完結性を修復します。1 maintenance batch は不変 source snapshot を一度だけ読み、
+> model 処理を並列実行し、失敗 job を隔離して、derived index を一度だけ commit
+> します。summary rebuild は非連続 round metadata を保持します。federation は
+> drift した summary record を隔離し、raw dialogue や Markdown 本文を複製せず、
+> 検証済み immutable record を replay します。Archive、Environment、Evidence、
+> Attachment stream は独立して継続し、成功した ACK、import、publish を即時保存します。
+> malformed rollout は本文を含まない fingerprint で隔離し、変更されるまで再解析せず、
+> coverage debt として可視化したまま source 変更後に自動再試行します。
+> macOS package は正規の universal dashboard build も復元し、transaction rollback
+> の再試行時には異なる failed tree を個別に保存します。
+
 > **2.19.0:** 完了した R1-R8 の挙動互換モジュール化を、唯一の Platform、
 > Environment、Exchange、application service、CLI、test support Owner の下へ
 > 正式に統合します。承認済み 2.16-2.18 内部 milestone を初めて公開 installer に

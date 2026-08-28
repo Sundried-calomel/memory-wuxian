@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.19.1 - 2026-08-28
+
+- Preserve `source_round_numbers` and `source_round_count` during deterministic
+  summary-index reconstruction so immutable federation payloads remain stable.
+- Build one immutable source snapshot per semantic-maintenance batch, share it
+  across concurrent model jobs, isolate failed jobs, and finalize derived
+  indexes once with visible per-stage progress and timing.
+- Persist compact summary-record replay projections without duplicating raw
+  dialogue or summary Markdown content; quarantine real projection drift while
+  preserving continuous federation event history.
+- Isolate Archive, Environment, Project Evidence, and Project Attachment cloud
+  failures, and persist successful ACK, import, and publish stages immediately.
+- Persist a content-free fingerprint for each malformed rollout, skip unchanged
+  failures on later event cycles, retry automatically after source mutation,
+  and keep healthy conversations advancing without hiding incomplete coverage.
+- Recover an interrupted macOS switch even when the active candidate acquired
+  post-switch runtime changes by preserving that exact tree as failed evidence
+  before restoring the prior non-empty Skill directory.
+- Build and verify the packaged macOS dashboard through its canonical universal
+  application pipeline, and make rollback idempotent when prior failed-candidate
+  evidence already exists.
+- Reproduce ledger-bound summary index timestamps when Markdown and index writes
+  crossed a one-second boundary, including summaries with non-empty policy events.
+- Reproduce historical parent-summary defaults across `0`, `null`, and absent
+  round-count fields, plus retained or absent empty round-number arrays, only on
+  an exact immutable-ledger hash match.
+
 ## 2.19.0 - 2026-08-22
 
 - Integrate the completed R1-R8 behavior-preserving modularization behind
