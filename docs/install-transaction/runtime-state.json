@@ -6,18 +6,22 @@
   "status": "active",
   "current_step": "S09",
   "created_at": "2026-08-22T19:59:27+09:00",
-  "updated_at": "2026-08-29T14:54:15+09:00",
+  "updated_at": "2026-08-29T15:42:09+09:00",
   "baseline_worktree": {
     "dist/MemoryWuxian-2.19.1-Windows-x64-Setup.exe": "6eeddcf9f5b7bc9f6219f160b181ac760873bd302852ec3d13429779b99f13a4",
+    "docs/install-transaction/s07-inno-placeholder-repair.md": "152fd061b3d4d6d901cc723638134428621f08d6538880c16e207edf681929c3",
+    "docs/install-transaction/s08-inno-placeholder-equivalence.md": "1ab05eab8dd26ebd382e90283877f06b893ff5337c64b894742d4b4dc9b4403d",
     "docs/install-transaction/s13-candidate-evaluation-contract.json": "0ee1565e175df10cb34f4e7358c2a5923a87b455e2568b90811c4ab57fcc2442",
     "docs/install-transaction/s13-candidate-source-commit.md": "2fe891e8e17dff0b73740226d669c79389bd27033b682f2b6545e11bae8df3c4",
     "docs/install-transaction/s13-ci-artifact-sha256.md": "027e8080c5013d2cbef6f7efc95122c7cc0b6123b6379b938d38e6e204312d1a",
     "docs/install-transaction/s13-cross-platform-ci.md": "5a734b262d2910cb0d1de80973cb5b7c0714f8f4a5f54aceed082937136dcce1",
     "docs/install-transaction/s13-full-relevant-tests.md": "767e20f392e175a4fc6d33a754ce253e8f731dc963c3fafdac9bdcf1941b2e7f",
-    "docs/promotion-reviews/v2.20.0-s13-candidate.json": "189a74a52e10369058e24a0ea8f7774b0442c1db4a8c9186596485daea6d8cc8"
+    "docs/promotion-reviews/v2.20.0-s13-candidate.json": "189a74a52e10369058e24a0ea8f7774b0442c1db4a8c9186596485daea6d8cc8",
+    "packaging/windows/install.ps1": "c57bb0c2ee7fd0654d6b7e4198bdb81fd983e021d289317691538c850db85b4d",
+    "tests/test_windows_inno_bootstrap.py": "ab52ed81b14303f7d15627e0792dfc39d05dc0a92be5ce4016745a3e8cdce928"
   },
-  "baseline_sha256": "b8db676d6f9ae066f62cef53fcda1d9fb8b0813ab58489b4a5110a7527e070e5",
-  "last_verified_commit": "8dd72811fd30450c0ccf26d85185e18edbb30ade",
+  "baseline_sha256": "642bbfc2d02058d9da07dea365eb47c20f69746ce76df3522e45ae1c7b3c6c79",
+  "last_verified_commit": "248265b7746f6721769f88ec8764c78577b2ae0a",
   "freezes": {
     "architecture": {
       "step": "S03",
@@ -89,18 +93,18 @@
       "remediation_cycles": 0,
       "pre_replan_remediation_cycles": 0,
       "verification_receipt": "docs/install-transaction/receipts/S07-verification.json",
-      "verification_sha256": "f257f3de0040a3dfe6da6276761dc9576896a3e9b9a709185b5738cb3840be95",
-      "verified_worktree_sha256": "d9dd8afc8e1eb01e8a3dbfb1ef8c4e41554d0863ae86c2a5191f275013c7c999",
-      "completed_at": "2026-08-29T14:17:22+09:00"
+      "verification_sha256": "6867e63e4232fd23defdd83c47a6fcc44101cd06ea21330a2180e87d3d379a5b",
+      "verified_worktree_sha256": "bafbb03cc9b6c4a1038de21e32cf18f6c3e2baf6d8e56de9456d131b6c75c2b3",
+      "completed_at": "2026-08-29T15:40:16+09:00"
     },
     "S08": {
       "status": "completed",
       "remediation_cycles": 0,
       "pre_replan_remediation_cycles": 0,
       "verification_receipt": "docs/install-transaction/receipts/S08-verification.json",
-      "verification_sha256": "763e22e3f0436e09c3c9e3fcb9ff8f71d5875126414fceb973271ca4966dc2a9",
-      "verified_worktree_sha256": "a00c48ce32a294e6a7d5750bbeb2d7c2b82a25f3819cb9545802d6c6f6236824",
-      "completed_at": "2026-08-29T14:19:06+09:00"
+      "verification_sha256": "c7090972a47a9baf4c764dc052ffd80f7ca5306d7db01f6f7a49c17179129a41",
+      "verified_worktree_sha256": "642bbfc2d02058d9da07dea365eb47c20f69746ce76df3522e45ae1c7b3c6c79",
+      "completed_at": "2026-08-29T15:42:08+09:00"
     },
     "S09": {
       "status": "in_progress",
@@ -246,6 +250,10 @@
     {
       "path": "docs/install-transaction/receipts/replan-27.json",
       "sha256": "377e5c754f7b363fa145180acce4e93215e0e8b56181f44ed03fe544bd4f32b3"
+    },
+    {
+      "path": "docs/install-transaction/receipts/replan-28.json",
+      "sha256": "fdd77a9acc3fc92a755ef9d7c4ae025017244540117369517d32ced11762ee31"
     }
   ]
 }

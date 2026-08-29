@@ -16,6 +16,30 @@ function Test-MemoryWuxianSkillRoot([string]$Candidate) {
   if ((Split-Path -Leaf $codex) -ne ".codex") { return $false }
   return (Test-Path -LiteralPath (Join-Path $resolved "SKILL.md") -PathType Leaf)
 }
+function Test-MemoryWuxianSkillPath([string]$Candidate) {
+  if (-not $Candidate) { return $false }
+  $resolved = [IO.Path]::GetFullPath($Candidate)
+  if ((Split-Path -Leaf $resolved) -ne "memory-wuxian") { return $false }
+  $skills = Split-Path -Parent $resolved
+  if ((Split-Path -Leaf $skills) -ne "skills") { return $false }
+  return (Split-Path -Leaf (Split-Path -Parent $skills)) -eq ".codex"
+}
+function Test-MemoryWuxianInnoPlaceholderRoot([string]$Candidate) {
+  if (-not (Test-MemoryWuxianSkillPath $Candidate)) { return $false }
+  if (-not (Test-Path -LiteralPath $Candidate -PathType Container)) { return $false }
+  foreach ($entry in @(Get-ChildItem -LiteralPath $Candidate -Force)) {
+    if (-not $entry.PSIsContainer -and $entry.Name -match '^unins[0-9]+\.(exe|dat|msg)$') { continue }
+    return $false
+  }
+  return $true
+}
+function Copy-MemoryWuxianInnoMetadata([string]$SourceRoot, [string]$DestinationRoot) {
+  if (-not (Test-Path -LiteralPath $SourceRoot -PathType Container)) { return }
+  foreach ($entry in @(Get-ChildItem -LiteralPath $SourceRoot -File -Force)) {
+    if ($entry.Name -notmatch '^unins[0-9]+\.(exe|dat|msg)$') { continue }
+    Copy-Item -LiteralPath $entry.FullName -Destination (Join-Path $DestinationRoot $entry.Name) -Force
+  }
+}
 function Test-MemoryWuxianCandidate([string]$Candidate) {
   if (-not $Candidate) { return $false }
   $resolved = [IO.Path]::GetFullPath($Candidate)
@@ -25,13 +49,17 @@ function Test-MemoryWuxianCandidate([string]$Candidate) {
   return $true
 }
 
-# The package-provided path is authoritative when it is a complete installed
-# Skill root. Sandboxed launchers can have a service SID whose ProfileList entry
-# is not the interactive user's profile.
+# The package-provided path is authoritative when it is either an installed
+# Skill root or the Inno-owned placeholder for a clean install.
+# Sandboxed launchers can have a service SID whose profile is not the interactive user's.
 if (-not (Test-MemoryWuxianCandidate $CandidateRoot)) {
   throw "MemoryWuxian candidate Skill root is incomplete."
 }
-if ((Test-Path -LiteralPath $SkillRoot) -and -not (Test-MemoryWuxianSkillRoot $SkillRoot)) {
+if (
+  (Test-Path -LiteralPath $SkillRoot) -and
+  -not (Test-MemoryWuxianSkillRoot $SkillRoot) -and
+  -not (Test-MemoryWuxianInnoPlaceholderRoot $SkillRoot)
+) {
   $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
   $profileKey = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$currentSid"
   $profileImagePath = (Get-ItemProperty -LiteralPath $profileKey -Name ProfileImagePath).ProfileImagePath
@@ -58,6 +86,7 @@ if (Test-Path -LiteralPath $activeRootPointer) {
   if ($preservedArchiveRoot) { $archiveRoot = [IO.Path]::GetFullPath($preservedArchiveRoot) }
 }
 $sessionsRoot = Join-Path $codexHome "sessions"
+Copy-MemoryWuxianInnoMetadata $resolvedSkillRoot $CandidateRoot
 if (-not (Test-Path -LiteralPath $sessionsRoot -PathType Container)) {
   throw "Codex sessions root was not found."
 }

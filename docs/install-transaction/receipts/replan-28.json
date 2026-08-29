@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-29T15:35:25+09:00",
+  "reason": "Preserve S01-S06; minimally repair Inno placeholder-root admission and preserve only Inno-owned uninstall metadata through the canonical transaction projection, then replay S07-S09.",
+  "approval": "User authorized preserving S01-S06 and a directed replan from S07 for the minimal Inno placeholder and uninstaller-retention repair; no broader production changes and no local candidate installer before S09 passes.",
+  "resume_step": "S07",
+  "previous_state_sha256": "8091519c647e3ac1750773d1b3f03bef9a78f30dad38b62dbfb39eb95b56c379",
+  "old_contract_sha256": "9152f100c16ac2228069e54b183d2b231ad10e08c1e40f0e3d6d52fe9c72c6be",
+  "new_contract_sha256": "9152f100c16ac2228069e54b183d2b231ad10e08c1e40f0e3d6d52fe9c72c6be",
+  "baseline_sha256": "b8db676d6f9ae066f62cef53fcda1d9fb8b0813ab58489b4a5110a7527e070e5"
+}

@@ -2,12 +2,12 @@
   "schema_version": 1,
   "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
   "step": "S08",
-  "verified_at": "2026-08-29T14:19:00+09:00",
-  "contract_sha256": "1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe",
-  "git_head": "319b1b23e90deaba92757da381de985e031b9853",
-  "worktree_sha256": "a00c48ce32a294e6a7d5750bbeb2d7c2b82a25f3819cb9545802d6c6f6236824",
+  "verified_at": "2026-08-29T15:42:08+09:00",
+  "contract_sha256": "9152f100c16ac2228069e54b183d2b231ad10e08c1e40f0e3d6d52fe9c72c6be",
+  "git_head": "248265b7746f6721769f88ec8764c78577b2ae0a",
+  "worktree_sha256": "642bbfc2d02058d9da07dea365eb47c20f69746ce76df3522e45ae1c7b3c6c79",
   "delta_paths": [
-    "docs/install-transaction/s08-equivalence-regression-and-simplification.md"
+    "docs/install-transaction/s08-inno-placeholder-equivalence.md"
   ],
   "evidence": [
     "diff-simplification-review",
