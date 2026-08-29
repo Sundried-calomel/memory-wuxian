@@ -1,6 +1,6 @@
 # Unified Installer Transaction Retrospective
 
-<!-- workflow-governance: current=WF-20260829-007 -->
+<!-- workflow-governance: current=WF-20260830-008 -->
 
 ## Trigger
 
@@ -124,3 +124,20 @@ because the active machine contract still permits only one integrated
 remediation cycle. The overreach was removed before capability admission. This
 revision changes only the Unicode shortcut-inspection Owner boundary; any
 future replan-policy redesign requires its own explicit contract revision.
+
+## 2026-08-30 baseline and historical-fixture correction
+
+Runs `33255533206`, `33256543858`, and `33257404944` separated three serial
+boundaries. The Unicode shortcut production path and all 71 release scenarios
+passed, but S09 then exposed an 8.3 path spelling mismatch, quoted multilingual
+`git ls-files` output, and finally a shallow checkout that could not resolve
+`v2.15.0`. The final failure occurred after clean and repeat packaged installs
+had committed, so it was a rehearsal prerequisite failure rather than an
+installer transaction failure.
+
+The controller also stored only the paths dirty at replan time. After those
+same bytes were committed, the paths disappeared from the dirty set and were
+misclassified as new drift. The corrected baseline stores the exact commit and
+overlay hashes, compares only commit-delta and overlay paths, and preserves
+legacy state compatibility. Windows S09 now fetches complete history before
+running the historical rollback fixture.

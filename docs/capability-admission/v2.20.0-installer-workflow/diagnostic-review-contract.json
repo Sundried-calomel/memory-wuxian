@@ -1,29 +1,32 @@
 {
   "schema_version": 1,
-  "review_id": "v2.20.0-governance-16-unicode-shortcut-inspector",
+  "review_id": "v2.20.0-governance-17-baseline-and-history",
   "producer_identity": "codex-primary-producer",
   "required_reviewer_identity": "independent-readonly-evaluator",
   "classification_expected": "extension",
   "artifacts": [
-    {"path": "docs/capability-admission/v2.20.0-installer-workflow/manifest.json", "sha256": "2a2ae70fec76a14684545fc513efb7b681fefeb59439f709fc7cc3418b1337c6"},
-    {"path": "docs/capability-admission/v2.20.0-installer-workflow/binding.json", "sha256": "28e2a63ebb7a725e63d976cfc5c8c4224476eee9085dff1f5b550c0ba7813c58"},
+    {"path": "docs/capability-admission/v2.20.0-installer-workflow/manifest.json", "sha256": "95d19578e0afc69e65f9627928c7195b95cd6f6ca1dba9e73fef987bb4073e48"},
+    {"path": "docs/capability-admission/v2.20.0-installer-workflow/binding.json", "sha256": "475978676961f49b2ecf7a9e0b799a1fe371f85211282ea300b6989bb5574aa9"},
     {"path": "docs/capability-admission/v2.20.0-installer-workflow/registry.json", "sha256": "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89"},
-    {"path": "docs/install-transaction/installer-diagnostic-v1.json", "sha256": "9cee7021c2263da068056ec96d5d53575f736776fd6933676081ddecb2df3b79"},
-    {"path": "docs/install-transaction/contract.json", "sha256": "d27106848ba370bbe8ea3e692a902f6d7d28f68af5cbb0c3e7c1c8e72c65e1ea"},
-    {"path": "docs/install-transaction/rules.md", "sha256": "c0c68ad762ac23fcea3c9eeca7cae2b8b74c6b3a7e76025d8d69dd179f09edc8"},
-    {"path": "docs/install-transaction/optimized-procedure.md", "sha256": "03a61ea29023c545b090914dd9e3c46462f0ea2b4960b709a038aa6fd685cb43"},
-    {"path": "docs/retrospectives/install-transaction-workflow.md", "sha256": "355a4d5cce8fac5c11023a6636f8209814a4552b36bb8083a59e992afa131dda"},
-    {"path": "docs/install-transaction/change-log.md", "sha256": "7f5b92b3e57cb6c7b0e8e45a358e62965ef90daab8a890db34f30bb660551736"}
+    {"path": ".github/workflows/test.yml", "sha256": "5e9c909b917597ebc16e6cf48782e25446a2782863bea9789435548d83cac651"},
+    {"path": "docs/install-transaction/contract.json", "sha256": "5f2592c759991b95cd4d5cb4a626c878d1144f0014abfb95977e9f2f107a21f2"},
+    {"path": "docs/install-transaction/rules.md", "sha256": "79a77938b29e09b03156d6a838f6f77392558f9923121b0fa8ddbb3507c351a4"},
+    {"path": "docs/install-transaction/optimized-procedure.md", "sha256": "42a0932af461f8690dd518afd36cb0d973e123cc25c4ed936ec6eb3dd517c1d5"},
+    {"path": "docs/retrospectives/install-transaction-workflow.md", "sha256": "93c1d412d062cdc09428dc3708fdce5d24b071407386cf72f7cc2f5b655dbfc8"},
+    {"path": "docs/install-transaction/change-log.md", "sha256": "226fcb5ec9bcc3a2b2b85918e6d2d366a48430ca68cc48fce210a1e61275eeb5"},
+    {"path": "scripts/install_transaction_workflow.py", "sha256": "dd8226ec7149e075dbe2b54a00df63f79b535835d7fe2f80d24036cced0165a4"},
+    {"path": "tests/test_install_transaction_workflow.py", "sha256": "c6e036be5aab17a4c8d1b7f6f0d88b58ecb8548acaf1ad78a0a39dc8e6b90ebc"},
+    {"path": "tests/test_release_workflow_gate.py", "sha256": "15cba0f4f505967075f676a6db1fef533d886db6814fb2040c0fa90c662aa719"}
   ],
   "criteria": [
     {"id": "C01", "requirement": "Every listed artifact hash matches the reviewed bytes."},
-    {"id": "C02", "requirement": "The revision changes only the installer diagnostic and evidence boundary; capability actions, permissions, resources, triggers, owner, and project binding are not expanded."},
-    {"id": "C03", "requirement": "A failure is persisted before rollback and the rollback result is appended afterward."},
-    {"id": "C04", "requirement": "Structured checks retain bounded expected and observed values; unclassified failures do not export arbitrary exception bodies, stdout, stderr, tracebacks, or environment dumps."},
-    {"id": "C05", "requirement": "CI evidence is a closed projection and prohibits transaction tokens, secrets, nonce values, passwords, credentials, authorization material, and raw private payloads."},
-    {"id": "C06", "requirement": "The admitted repair is limited to inspecting the exact final shortcut bytes through a hash-equal ASCII-path projection; it does not rename the visible Unicode shortcut or weaken activation assertions."},
-    {"id": "C07", "requirement": "The S09 path expansion adds only the existing canonical shortcut inspector to the same diagnostic Owner and does not authorize local candidate installation before S14."},
-    {"id": "C08", "requirement": "The deterministic admission inspection has no trigger conflict, call cycle, resource conflict, or binding error."}
+    {"id": "C02", "requirement": "The revision changes only installer baseline identity, Windows CI history availability, their tests, and synchronized governance evidence; capability actions, permissions, resources, triggers, owner, and project binding are not expanded."},
+    {"id": "C03", "requirement": "The workflow baseline is a commit SHA plus working-tree overlay, not a dirty-only map, and legacy state remains readable."},
+    {"id": "C04", "requirement": "Committing bytes already present in the baseline overlay creates no false drift, while a real committed change after a clean baseline remains visible."},
+    {"id": "C05", "requirement": "Git lookup errors fail closed and are not silently classified as deleted paths; non-ASCII paths are handled without lossy parsing."},
+    {"id": "C06", "requirement": "The Windows hosted job fetches complete Git history and the workflow gate binds that setting specifically to the Windows candidate job."},
+    {"id": "C07", "requirement": "S09 may modify only the canonical workflow controller in addition to its existing scope; this does not authorize local candidate installation before S14."},
+    {"id": "C08", "requirement": "Focused tests pass and the deterministic admission inspection has no trigger conflict, call cycle, resource conflict, or binding error."}
   ],
   "verdict_rule": "PASS only when C01-C08 all pass; otherwise FAIL or INCONCLUSIVE with criterion-specific evidence.",
   "output_contract": {

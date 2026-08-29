@@ -4,16 +4,16 @@
     "check-protected-edit"
   ],
   "authorization_gated_actions": [],
-  "binding_sha256": "28e2a63ebb7a725e63d976cfc5c8c4224476eee9085dff1f5b550c0ba7813c58",
+  "binding_sha256": "475978676961f49b2ecf7a9e0b799a1fe371f85211282ea300b6989bb5574aa9",
   "candidate_id": "installer-transaction-workflow",
-  "candidate_revision": "2.20.0-governance-16",
+  "candidate_revision": "2.20.0-governance-17",
   "deterministic_check_version": 1,
-  "manifest_sha256": "2a2ae70fec76a14684545fc513efb7b681fefeb59439f709fc7cc3418b1337c6",
+  "manifest_sha256": "95d19578e0afc69e65f9627928c7195b95cd6f6ca1dba9e73fef987bb4073e48",
   "owner_id": "windows-installer-transaction-controller",
   "project_id": "memory-wuxian-v2.20.0",
-  "receipt_id": "car:03e954e41622664c0797fa36eacdd226496e10038fad2fe7ff18f17928e35ef2",
+  "receipt_id": "car:ec3a7e2a89c10d2f8e1dc69d75a896a23df70c57cfd4886c691f8e10da7aea72",
   "registry_sha256": "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89",
   "schema_version": 1,
-  "semantic_review_sha256": "dbbcc4f34093d0dff3de33f86b5225f730ae6003725ee8037f9fe4aeb57b7422",
+  "semantic_review_sha256": "bf1a600875dde77819f142f359c996f9b088502575b739a01bd8d7948088fb3a",
   "status": "allowed"
 }

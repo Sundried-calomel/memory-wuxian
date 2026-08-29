@@ -1,25 +1,19 @@
 {
   "schema_version": 1,
   "candidate_id": "installer-transaction-workflow",
-  "candidate_revision": "2.20.0-governance-16",
-  "candidate_manifest_sha256": "2a2ae70fec76a14684545fc513efb7b681fefeb59439f709fc7cc3418b1337c6",
+  "candidate_revision": "2.20.0-governance-17",
+  "candidate_manifest_sha256": "95d19578e0afc69e65f9627928c7195b95cd6f6ca1dba9e73fef987bb4073e48",
   "registry_sha256": "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89",
-  "reviewer_identity": "codex-independent-readonly-evaluator-v220-g16",
+  "reviewer_identity": "independent-readonly-evaluator",
   "classification": "extension",
   "owner_id": "windows-installer-transaction-controller",
   "decision": "allow",
   "evidence": [
-    "C01 pass: all nine recomputed SHA-256 values exactly match diagnostic-review-contract.json.",
-    "C02 pass: only manifest.artifact_sha256, the resulting manifest SHA, and the binding manifest reference changed. Owner, triggers, calls, resources, permissions, actions, project binding, and all seven governed workflow-document hashes are unchanged.",
-    "C02 identity check: scripts/install_transaction_workflow.py capability_artifact_sha256() independently recomputed 1309f4c991d9095ea8c3c378081261dc4ae0645f710a0b26acedb5646a98677e, exactly matching manifest.json.",
-    "C03 pass: installer-diagnostic-v1.json:21 and rules.md:65-68 require failure persistence before rollback and rollback-outcome persistence afterward.",
-    "C04 pass: installer-diagnostic-v1.json:14-20 bounds structured expected/observed values and prohibits unrestricted stdout, stderr, tracebacks, and environment dumps; rules.md:71-75 restricts unclassified failures.",
-    "C05 pass: installer-diagnostic-v1.json:20-25 defines closed projections and prohibits transaction tokens, nonce values, secrets, credentials, authorization material, and raw private payloads.",
-    "C06 pass: rules.md:76-82 and optimized-procedure.md:66-70 require a hash-equal ASCII projection of the exact final shortcut bytes, preserve the visible Unicode shortcut and activation assertions, and remove the projection after inspection.",
-    "C07 pass: contract.json:54 adds only scripts/inspect_dashboard_shortcut_windows.ps1 to the S09 implementation scope; rules.md:52-60 still prohibits target-device candidate installation before S14.",
-    "C08 pass: deterministic admission inspection exited 0 with errors=[], trigger_conflicts=[], call_cycles=[], resource_conflicts=[], binding_sha256=28e2a63ebb7a725e63d976cfc5c8c4224476eee9085dff1f5b550c0ba7813c58.",
-    "retrospectives/install-transaction-workflow.md:121-126 records removal of the rejected policy expansion before admission; change-log.md:92-103 binds that correction to the reviewed document hashes.",
-    "No installer was run, no files were modified, and no runtime behavior was inferred."
+    "Producer identity codex-primary-producer differs from reviewer identity independent-readonly-evaluator.",
+    "The capability composite identity independently recomputed as 6fbb2d4bd912cb57b2154c9b93d8c66fd425d97013b50c8a71a06f661931f412, matching manifest.json.",
+    "The frozen focused test files match the hashes recorded by the review contract.",
+    "The earlier generic-runtime PyYAML environment mismatch was overwritten and is not evidence against the frozen candidate.",
+    "No file was edited by the evaluator and no installer was run."
   ],
   "trigger_resolutions": []
 }

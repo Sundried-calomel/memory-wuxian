@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-30T02:16:10+09:00",
+  "reason": "Replace dirty-only baselines with commit-plus-overlay snapshots and fetch complete Windows CI history so the frozen v2.15.0 rehearsal prerequisite resolves before the expensive packaged chain.",
+  "approval": "User explicitly approved both structural corrections with 做挺好，你把这两项改了.",
+  "resume_step": "S09",
+  "previous_state_sha256": "b447fc9f650ca23844e88b72edb8c7e19773f1a42612db7f1da7a1f04017ff51",
+  "old_contract_sha256": "d27106848ba370bbe8ea3e692a902f6d7d28f68af5cbb0c3e7c1c8e72c65e1ea",
+  "new_contract_sha256": "5f2592c759991b95cd4d5cb4a626c878d1144f0014abfb95977e9f2f107a21f2",
+  "baseline_sha256": "3e9adf5f1f468c7d86740bbeb603837b6da6d9dc671fd692eb20942b0948351f"
+}

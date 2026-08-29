@@ -1,6 +1,6 @@
 # Unified Installer Transaction Rules
 
-<!-- workflow-governance: current=WF-20260829-007 -->
+<!-- workflow-governance: current=WF-20260830-008 -->
 
 ## Scope
 
@@ -80,6 +80,15 @@ them.
     projection after inspection. This does not authorize renaming the visible
     shortcut or weakening target, working-directory, icon, argument, or live
     target assertions.
+18. Workflow baselines are commit-plus-overlay snapshots. The controller must
+    retain the baseline commit SHA and the SHA-256 state of paths that differed
+    from that commit. Committing unchanged overlay bytes must produce zero
+    delta; a byte change committed after the baseline must remain visible.
+    Dirty-path presence or absence is never a content identity signal.
+19. Before the expensive Windows packaged-chain lane starts, its checkout must
+    contain every historical ref named by the rehearsal contract. S09 currently
+    requires `v2.15.0`; a shallow checkout that cannot resolve it is a failed
+    prerequisite, not an installer failure.
 ## Required operator sequence
 
 Before a protected edit, run `hook pre-edit` with every intended path. After

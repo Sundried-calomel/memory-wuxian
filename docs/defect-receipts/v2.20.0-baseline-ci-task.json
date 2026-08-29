@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-baseline-ci-repair-v1",
+  "objective": "Replace dirty-only workflow baselines with a commit-plus-overlay snapshot that remains stable across commits, and make the Windows historical v2.15.0 rehearsal fixture available before the expensive packaged-chain stage.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "installer-workflow-controller",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "yaml", "powershell", "json", "markdown"],
+  "path_globs": [
+    "scripts/install_transaction_workflow.py",
+    "tests/test_install_transaction_workflow.py",
+    ".github/workflows/test.yml",
+    "tests/test_release_workflow_gate.py",
+    "docs/install-transaction/**",
+    "docs/retrospectives/**",
+    "docs/defect-receipts/**"
+  ],
+  "entrypoints": ["workflow-controller", "github-windows-candidate"],
+  "resources": ["git-commit", "working-tree-overlay", "historical-tag", "workflow-state", "ci-runner"],
+  "operations": ["snapshot", "compare", "checkout", "validate", "rehearse"],
+  "data_formats": ["utf-8", "json", "yaml", "sha256", "git-tree"],
+  "authorization_boundaries": [
+    "Do not modify the production installer, transaction engine, broker, manifest, or installed product.",
+    "Do not run the candidate installer on the local device.",
+    "Do not include credentials, archive content, conversation content, or raw user data in CI evidence.",
+    "Preserve unrelated S13 evidence and build outputs outside this change.",
+    "A commit transition must not erase or invent a workflow delta when file bytes are unchanged."
+  ],
+  "implementation_units": [
+    {
+      "id": "commit-overlay-baseline",
+      "owner_id": "installer-workflow-controller",
+      "paths": ["scripts/install_transaction_workflow.py", "tests/test_install_transaction_workflow.py", "docs/install-transaction/**", "docs/retrospectives/**"],
+      "entrypoints": ["workflow-controller"],
+      "resources": ["git-commit", "working-tree-overlay", "workflow-state"],
+      "operations": ["snapshot", "compare", "validate"],
+      "planned_check_ids": ["registered-preflight", "fail-closed-completion", "cross-entrypoint-contract"]
+    },
+    {
+      "id": "windows-history-prerequisite",
+      "owner_id": "windows-installer-ci-contracts",
+      "paths": [".github/workflows/test.yml", "tests/test_release_workflow_gate.py"],
+      "entrypoints": ["github-windows-candidate"],
+      "resources": ["historical-tag", "ci-runner"],
+      "operations": ["checkout", "validate", "rehearse"],
+      "planned_check_ids": ["runtime-capability-probe", "target-platform-effect", "exact-candidate-release"]
+    }
+  ],
+  "rule_exclusions": []
+}

@@ -101,3 +101,16 @@
   - `rules`：`C0C68AD762AC23FCEA3C9EECA7CAE2B8B74C6B3A7E76025D8D69DD179F09EDC8`
   - `history`：`355A4D5CCE8FAC5C11023A6636F8209814A4552B36BB8083A59E992AFA131DDA`
   - `optimized`：`03A61EA29023C545B090914DD9E3C46462F0EA2B4960B709A038AA6FD685CB43`
+
+## WF-20260830-008
+
+- 时间：2026-08-30T02:01:00+09:00
+- 类型：correction
+- 摘要：Replace dirty-only workflow baselines with commit-plus-overlay snapshots and make Windows historical-tag rehearsal prerequisites explicit.
+- 项目规则：Require commit-plus-overlay baselines and complete Windows history for the v2.15.0 rehearsal prerequisite.
+- 历史复盘：Recorded the false dirty-state drift and the shallow-checkout failure after successful clean and repeat packaged installs.
+- 优化流程：Compare commit delta plus overlays and resolve historical refs before the expensive Windows packaged-chain lane.
+- 文档SHA-256：
+  - `rules`：`79A77938B29E09B03156D6A838F6F77392558F9923121B0FA8DDBB3507C351A4`
+  - `history`：`93C1D412D062CDC09428DC3708FDCE5D24B071407386CF72F7CC2F5B655DBFC8`
+  - `optimized`：`42A0932AF461F8690DD518AFD36CB0D973E123CC25C4ED936EC6EB3DD517C1D5`

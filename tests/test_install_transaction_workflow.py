@@ -166,6 +166,24 @@ class InstallTransactionWorkflowTests(unittest.TestCase):
         self.assertEqual(status["current_step"], "S02")
         self.assertEqual(status["delta_paths"], [])
 
+    def test_committing_unchanged_overlay_does_not_create_false_drift(self) -> None:
+        target = self.root / "docs" / "install-transaction" / "準備済み.md"
+        target.write_text("prepared\n", encoding="utf-8")
+        workflow(self.root, "init")
+        run(["git", "add", "docs/install-transaction/準備済み.md"], self.root)
+        run(["git", "commit", "-qm", "persist prepared bytes"], self.root)
+        status = json.loads(workflow(self.root, "status").stdout)
+        self.assertEqual(status["delta_paths"], [])
+
+    def test_commit_after_clean_baseline_remains_visible_as_real_drift(self) -> None:
+        workflow(self.root, "init")
+        target = self.root / "docs" / "install-transaction" / "later.md"
+        target.write_text("later\n", encoding="utf-8")
+        run(["git", "add", "docs/install-transaction/later.md"], self.root)
+        run(["git", "commit", "-qm", "add later bytes"], self.root)
+        status = json.loads(workflow(self.root, "status").stdout)
+        self.assertEqual(status["delta_paths"], ["docs/install-transaction/later.md"])
+
     def test_replan_rebinds_contract_and_resumes_requested_step(self) -> None:
         workflow(self.root, "init")
         state_path = self.root / "docs" / "install-transaction" / "runtime-state.json"

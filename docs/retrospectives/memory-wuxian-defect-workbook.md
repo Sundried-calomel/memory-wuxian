@@ -523,6 +523,30 @@
   复开，也禁止依赖 `Get-FileHash` 等可选模块。
 - Families: `G05`, `G11`, `MW-R06`, `MW-R10`.
 
+### MW-REL-039：dirty-only 基线把正常提交误判成工作流漂移
+
+- 证据：S09 修复提交后，`install_transaction_workflow.py hook post-edit` 报告已经提交且
+  工作树干净的 capability-admission 文件属于当前 delta；同一文件在 replan 时只是
+  dirty overlay，提交后从 `git diff HEAD` 集合消失。
+- 根因：基线只保存 dirty 路径哈希，没有保存对应提交；算法把“路径是否仍 dirty”当成
+  内容身份，因此无法区分同字节提交与真正删除或修改。
+- 永久门槛：基线必须保存 commit SHA 与 overlay 哈希；比较候选集合只能来自两提交差异
+  和两侧 overlay。必须同时测试 dirty overlay 原样提交后零漂移，以及基线后提交新字节
+  仍产生漂移；旧状态只能通过明确的 commit/overlay 兼容读取。
+- Families: `G09`, `G11`, `MW-R06`, `MW-R10`.
+
+### MW-REL-040：昂贵 S09 链未预取合同声明的历史标签
+
+- 证据：GitHub run `33257404944` 中 71/71 release scenarios、Inno 编译、clean install
+  与 repeat install 均已通过，随后 `git worktree add ... v2.15.0` 报
+  `fatal: invalid reference: v2.15.0`。Windows candidate checkout 使用默认浅克隆。
+- 根因：历史升级夹具是 S09 的确定前置条件，却直到完整构建和两次安装后才解析；CI
+  checkout 合同没有声明所需历史深度。
+- 永久门槛：引用历史版本的 job 必须在昂贵步骤前获取并验证所需 ref；Windows S09
+  checkout 使用完整历史，并由 workflow contract 测试把 `fetch-depth: 0` 限定在
+  Windows candidate。缺少 ref 必须分类为 prerequisite failure，不得归咎安装器。
+- Families: `G01`, `G05`, `G09`, `G11`, `MW-R06`, `MW-R10`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。

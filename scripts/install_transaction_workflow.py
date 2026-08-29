@@ -71,6 +71,15 @@ def git(*args: str) -> bytes:
     return result.stdout
 
 
+def git_paths(*args: str) -> list[str]:
+    output = git(*args)
+    return [
+        normalize(item.decode("utf-8", errors="surrogateescape"))
+        for item in output.split(b"\0")
+        if item
+    ]
+
+
 def normalize(path: str) -> str:
     candidate = path.replace("\\", "/")
     if candidate.startswith("./"):
@@ -88,9 +97,11 @@ def is_volatile(path: str) -> bool:
 
 def changed_paths() -> list[str]:
     names: set[str] = set()
-    for args in (("diff", "--name-only", "HEAD"), ("ls-files", "--others", "--exclude-standard")):
-        output = git(*args).decode("utf-8", errors="surrogateescape")
-        names.update(normalize(line) for line in output.splitlines() if line.strip())
+    for args in (
+        ("diff", "--name-only", "-z", "HEAD"),
+        ("ls-files", "--others", "--exclude-standard", "-z"),
+    ):
+        names.update(git_paths(*args))
     return sorted(path for path in names if not is_volatile(path))
 
 
@@ -105,6 +116,51 @@ def worktree_map() -> dict[str, str]:
 def map_hash(value: dict[str, str]) -> str:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return sha256_bytes(payload)
+
+
+def current_snapshot() -> dict[str, Any]:
+    return {
+        "commit": git("rev-parse", "HEAD").decode().strip(),
+        "overlay": worktree_map(),
+    }
+
+
+def snapshot_hash(value: dict[str, Any]) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return sha256_bytes(payload)
+
+
+def baseline_snapshot(state: dict[str, Any]) -> dict[str, Any]:
+    commit = state.get("baseline_commit") or state.get("last_verified_commit")
+    if not commit:
+        raise WorkflowError("Workflow baseline commit is missing")
+    git("rev-parse", "--verify", f"{commit}^{{commit}}")
+    overlay = state.get("baseline_overlay", state.get("baseline_worktree", {}))
+    if not isinstance(overlay, dict):
+        raise WorkflowError("Workflow baseline overlay is invalid")
+    return {"commit": commit, "overlay": overlay}
+
+
+def committed_file_sha256(commit: str, relative: str) -> str:
+    if not git("ls-tree", "-z", commit, "--", relative):
+        return "<deleted>"
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{relative}"], cwd=ROOT,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+    )
+    if result.returncode:
+        raise WorkflowError(
+            result.stderr.decode("utf-8", errors="replace").strip()
+            or f"Unable to read baseline path: {relative}"
+        )
+    return sha256_bytes(result.stdout)
+
+
+def snapshot_file_sha256(snapshot: dict[str, Any], relative: str) -> str:
+    overlay = snapshot["overlay"]
+    if relative in overlay:
+        return overlay[relative]
+    return committed_file_sha256(snapshot["commit"], relative)
 
 
 def capability_artifact_sha256() -> str:
@@ -196,9 +252,22 @@ def load_state(contract: dict[str, Any]) -> dict[str, Any]:
 
 
 def delta_from_baseline(state: dict[str, Any]) -> dict[str, str]:
-    baseline = state["baseline_worktree"]
-    current = worktree_map()
-    return {path: current.get(path, "<clean>") for path in sorted(set(baseline) | set(current)) if baseline.get(path) != current.get(path)}
+    baseline = baseline_snapshot(state)
+    current = current_snapshot()
+    paths = set(baseline["overlay"]) | set(current["overlay"])
+    if baseline["commit"] != current["commit"]:
+        paths.update(git_paths(
+            "diff", "--name-only", "--no-renames", "-z",
+            baseline["commit"], current["commit"],
+        ))
+    result: dict[str, str] = {}
+    for relative in sorted(path for path in paths if not is_volatile(path)):
+        before = snapshot_file_sha256(baseline, relative)
+        path = ROOT / relative
+        after = sha256_file(path) if path.is_file() else "<deleted>"
+        if before != after:
+            result[relative] = after
+    return result
 
 
 def current_definition(contract: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
@@ -219,11 +288,11 @@ def cmd_init(_args: argparse.Namespace) -> None:
     if DEFAULT_STATE.exists():
         raise WorkflowError("Workflow state already exists")
     contract = load_contract()
-    baseline = worktree_map()
+    baseline = current_snapshot()
     steps = {step["id"]: {"status": "pending", "remediation_cycles": 0} for step in contract["steps"]}
     steps["S01"]["status"] = "in_progress"
     state = {
-        "schema_version": 1,
+        "schema_version": 2,
         "workflow_id": contract["workflow_id"],
         "contract_path": DEFAULT_CONTRACT.relative_to(ROOT).as_posix(),
         "contract_sha256": sha256_file(DEFAULT_CONTRACT),
@@ -231,9 +300,11 @@ def cmd_init(_args: argparse.Namespace) -> None:
         "current_step": "S01",
         "created_at": now(),
         "updated_at": now(),
-        "baseline_worktree": baseline,
-        "baseline_sha256": map_hash(baseline),
-        "last_verified_commit": git("rev-parse", "HEAD").decode().strip(),
+        "baseline_commit": baseline["commit"],
+        "baseline_overlay": baseline["overlay"],
+        "baseline_worktree": baseline["overlay"],
+        "baseline_sha256": snapshot_hash(baseline),
+        "last_verified_commit": baseline["commit"],
         "freezes": {name: None for name in contract["freeze_points"]},
         "steps": steps,
     }
@@ -250,7 +321,7 @@ def cmd_status(_args: argparse.Namespace) -> None:
         "current_step": state["current_step"],
         "contract_sha256": state["contract_sha256"],
         "baseline_sha256": state["baseline_sha256"],
-        "current_worktree_sha256": map_hash(worktree_map()),
+        "current_worktree_sha256": snapshot_hash(current_snapshot()),
         "delta_paths": sorted(delta),
         "freezes": state["freezes"],
     }
@@ -300,7 +371,7 @@ def cmd_verify(args: argparse.Namespace) -> None:
         "verified_at": now(),
         "contract_sha256": state["contract_sha256"],
         "git_head": git("rev-parse", "HEAD").decode().strip(),
-        "worktree_sha256": map_hash(worktree_map()),
+        "worktree_sha256": snapshot_hash(current_snapshot()),
         "delta_paths": sorted(delta),
         "evidence": sorted(args.evidence),
     }
@@ -324,14 +395,18 @@ def cmd_complete(args: argparse.Namespace) -> None:
     entry = state["steps"][step["id"]]
     if not entry.get("verification_receipt"):
         raise WorkflowError("Step has no verification receipt")
-    if entry["verified_worktree_sha256"] != map_hash(worktree_map()):
+    if entry["verified_worktree_sha256"] != snapshot_hash(current_snapshot()):
         raise WorkflowError("Working bytes changed after verification")
     entry["status"] = "completed"
     entry["completed_at"] = now()
     state["current_step"] = None
-    promoted = worktree_map()
-    state["baseline_worktree"] = promoted
-    state["baseline_sha256"] = map_hash(promoted)
+    promoted = current_snapshot()
+    state["schema_version"] = 2
+    state["baseline_commit"] = promoted["commit"]
+    state["baseline_overlay"] = promoted["overlay"]
+    state["baseline_worktree"] = promoted["overlay"]
+    state["baseline_sha256"] = snapshot_hash(promoted)
+    state["last_verified_commit"] = promoted["commit"]
     state["updated_at"] = now()
     atomic_json(DEFAULT_STATE, state)
     print(json.dumps({"status": "completed", "step": step["id"]}))
@@ -405,7 +480,7 @@ def cmd_replan(args: argparse.Namespace) -> None:
         raise WorkflowError(f"Cannot preserve incomplete prerequisite steps: {', '.join(incomplete)}")
     previous_state_sha256 = sha256_file(DEFAULT_STATE)
     old_contract_sha256 = state.get("contract_sha256")
-    baseline = worktree_map()
+    baseline = current_snapshot()
     for step_id in step_ids[resume_index:]:
         previous_cycles = state["steps"][step_id].get("remediation_cycles", 0)
         state["steps"][step_id] = {
@@ -416,10 +491,13 @@ def cmd_replan(args: argparse.Namespace) -> None:
     state["steps"][args.resume_step]["status"] = "in_progress"
     state["status"] = "active"
     state["current_step"] = args.resume_step
+    state["schema_version"] = 2
     state["contract_sha256"] = sha256_file(DEFAULT_CONTRACT)
-    state["baseline_worktree"] = baseline
-    state["baseline_sha256"] = map_hash(baseline)
-    state["last_verified_commit"] = git("rev-parse", "HEAD").decode().strip()
+    state["baseline_commit"] = baseline["commit"]
+    state["baseline_overlay"] = baseline["overlay"]
+    state["baseline_worktree"] = baseline["overlay"]
+    state["baseline_sha256"] = snapshot_hash(baseline)
+    state["last_verified_commit"] = baseline["commit"]
     state["freezes"] = {name: value for name, value in state["freezes"].items() if step_ids.index(contract["freeze_points"][name]) < resume_index}
     for name in contract["freeze_points"]:
         state["freezes"].setdefault(name, None)
@@ -458,7 +536,7 @@ def cmd_freeze(args: argparse.Namespace) -> None:
         "step": expected,
         "created_at": now(),
         "git_head": git("rev-parse", "HEAD").decode().strip(),
-        "worktree_sha256": map_hash(worktree_map()),
+        "worktree_sha256": snapshot_hash(current_snapshot()),
         "artifact_sha256": args.artifact_sha256,
     }
     state["updated_at"] = now()

@@ -1,0 +1,38 @@
+{
+  "evidence": [
+    {
+      "check_id": "registered-preflight",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-baseline-ci-preflight.json",
+      "sha256": "6305067a81e96a395af1306254b50fd404d5d9b10425adc8d2d7928930f8e64a"
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-baseline-ci-tests.log",
+      "sha256": "5ff0b9c7d2764f538d54a5e961bfb012f1689a13d1f45f03aa0d96e1e445f948"
+    }
+  ],
+  "load_receipt_internal_sha256": "ed8c091ef6fee8db8a13bbdec2c06adea9e81792e7bc27e05c9a49a6df0b70de",
+  "load_receipt_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-baseline-ci-load.json",
+  "load_receipt_sha256": "ecfb7d74179862d532762f99d3abb9465746c2538da1f4eae881467938e77758",
+  "packet_file_sha256": "2f04e844ebbab7e6f24af9c48694575a9676ad969afbfc38a6a30d96bcd17c41",
+  "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-baseline-ci-packet.json",
+  "packet_sha256": "843852784a983c22b320ceea485c493b780a00d62d282cfeaa197db9c9138f29",
+  "passed_check_ids": [
+    "fail-closed-completion",
+    "registered-preflight"
+  ],
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-baseline-ci-preflight.json",
+  "preflight_sha256": "6305067a81e96a395af1306254b50fd404d5d9b10425adc8d2d7928930f8e64a",
+  "receipt_sha256": "aef249d2837be9c1ba4ec66dacd2a053e5d05a17a9d288c8445e6d85aa30079d",
+  "receipt_type": "defect-prevention-verification",
+  "required_check_ids": [
+    "fail-closed-completion",
+    "registered-preflight"
+  ],
+  "results_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-baseline-ci-results.json",
+  "results_sha256": "3e30a9f1e3a37e70b44310663bdd2d65a2f4bf32a29f876a1f5c9a6ba5d1a00f",
+  "schema_version": 1,
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "verified_at": "2026-08-29T17:19:03.787586+00:00"
+}

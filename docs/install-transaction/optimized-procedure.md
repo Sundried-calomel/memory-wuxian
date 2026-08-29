@@ -1,6 +1,6 @@
 # Unified Installer Transaction Procedure
 
-<!-- workflow-governance: current=WF-20260829-007 -->
+<!-- workflow-governance: current=WF-20260830-008 -->
 
 ## Resume protocol
 
@@ -68,6 +68,10 @@
    `.lnk` bytes to a transaction-private ASCII leaf, verify the two SHA-256
    values match, inspect that projection, report the original path, and delete
    the projection in `finally`.
+   The Windows checkout must fetch complete history before build and must prove
+   `v2.15.0^{commit}` resolves before entering the packaged-chain lane. Workflow
+   state uses a baseline commit plus overlay hashes, so a normal commit cannot
+   create a false delta merely by making a formerly dirty file clean.
 10. S10 runs the targeted Unicode, isolated-runtime, broker, cancellation,
     rollback, and idempotency matrix and proves that each result traversed the
     exact packaged chain.

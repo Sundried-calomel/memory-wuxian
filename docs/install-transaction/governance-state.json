@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
   "projectName": "Memory Wuxian unified installer transaction",
-  "currentRevision": "WF-20260829-007",
-  "sequence": 7,
-  "updatedAt": "2026-08-29T22:14:03+09:00",
+  "currentRevision": "WF-20260830-008",
+  "sequence": 8,
+  "updatedAt": "2026-08-30T02:01:00+09:00",
   "documents": {
     "rules": {
       "path": "docs/install-transaction/rules.md",
-      "sha256": "C0C68AD762AC23FCEA3C9EECA7CAE2B8B74C6B3A7E76025D8D69DD179F09EDC8"
+      "sha256": "79A77938B29E09B03156D6A838F6F77392558F9923121B0FA8DDBB3507C351A4"
     },
     "history": {
       "path": "docs/retrospectives/install-transaction-workflow.md",
-      "sha256": "355A4D5CCE8FAC5C11023A6636F8209814A4552B36BB8083A59E992AFA131DDA"
+      "sha256": "93C1D412D062CDC09428DC3708FDCE5D24B071407386CF72F7CC2F5B655DBFC8"
     },
     "optimized": {
       "path": "docs/install-transaction/optimized-procedure.md",
-      "sha256": "03A61EA29023C545B090914DD9E3C46462F0EA2B4960B709A038AA6FD685CB43"
+      "sha256": "42A0932AF461F8690DD518AFD36CB0D973E123CC25C4ED936EC6EB3DD517C1D5"
     }
   },
   "changeLog": "docs/install-transaction/change-log.md",
-  "changeLogSha256": "7F5B92B3E57CB6C7B0E8E45A358E62965EF90DAAB8A890DB34F30BB660551736"
+  "changeLogSha256": "226FCB5EC9BCC3A2B2B85918E6D2D366A48430CA68CC48FCE210A1E61275EEB5"
 }

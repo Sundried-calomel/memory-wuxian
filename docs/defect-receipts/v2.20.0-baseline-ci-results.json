@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-baseline-ci-repair-v1",
+  "packet_sha256": "843852784a983c22b320ceea485c493b780a00d62d282cfeaa197db9c9138f29",
+  "checks": [
+    {
+      "check_id": "registered-preflight",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-baseline-ci-preflight.json",
+          "sha256": "6305067a81e96a395af1306254b50fd404d5d9b10425adc8d2d7928930f8e64a"
+        }
+      ],
+      "note": "Target-based registry discovery produced the hash-bound G11 preflight before implementation."
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-baseline-ci-tests.log",
+          "sha256": "5ff0b9c7d2764f538d54a5e961bfb012f1689a13d1f45f03aa0d96e1e445f948"
+        }
+      ],
+      "note": "Sixty-three focused tests prove false-drift suppression, real committed-drift detection, Unicode path handling, Git failure propagation, and the Windows complete-history contract."
+    }
+  ]
+}

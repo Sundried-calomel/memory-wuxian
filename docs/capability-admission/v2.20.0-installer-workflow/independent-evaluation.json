@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "candidate_id": "installer-transaction-workflow",
+  "candidate_revision": "2.20.0-governance-17",
+  "candidate_manifest_sha256": "95d19578e0afc69e65f9627928c7195b95cd6f6ca1dba9e73fef987bb4073e48",
+  "registry_sha256": "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89",
+  "reviewer_identity": "independent-readonly-evaluator",
+  "classification": "extension",
+  "owner_id": "windows-installer-transaction-controller",
+  "decision": "allow",
+  "criteria": [
+    {"id": "C01", "status": "pass", "evidence": "All 12 listed SHA-256 values were recomputed and exactly match the review contract."},
+    {"id": "C02", "status": "pass", "evidence": "The revision is limited to commit-plus-overlay baseline identity, Windows complete-history checkout, focused tests, S09 controller scope, and synchronized governance evidence. Owner, triggers, calls, actions, permissions, resources, binding scope, and project identity are unchanged."},
+    {"id": "C03", "status": "pass", "evidence": "The controller represents a snapshot as commit plus overlay, reads legacy state through last_verified_commit and baseline_worktree fallbacks, and persists baseline_commit plus baseline_overlay at initialization, completion, and replan."},
+    {"id": "C04", "status": "pass", "evidence": "The controller compares baseline and current commits plus both overlays by resulting file bytes. Focused tests prove that committing unchanged non-ASCII overlay bytes yields no delta and a real committed change after a clean baseline remains visible."},
+    {"id": "C05", "status": "pass", "evidence": "Git failures propagate, paths use NUL-delimited parsing, and committed-file hashing distinguishes an absent tree path from a Git lookup error. The non-ASCII transition is covered by a deterministic test."},
+    {"id": "C06", "status": "pass", "evidence": "The Windows candidate job sets fetch-depth: 0, and the workflow gate extracts that specific job and requires the setting. Rules bind complete history to the v2.15.0 rehearsal prerequisite."},
+    {"id": "C07", "status": "pass", "evidence": "The S09 scope adds only scripts/install_transaction_workflow.py. Existing disposable-runner and no-local-install-before-S14 restrictions remain in force."},
+    {"id": "C08", "status": "pass", "evidence": "The authoritative test log records 63 tests in 54.077 seconds with OK. Deterministic admission inspection reports no errors, trigger conflicts, call cycles, or resource conflicts, with the expected binding hash."}
+  ],
+  "evidence": [
+    "Producer identity codex-primary-producer differs from reviewer identity independent-readonly-evaluator.",
+    "The capability composite identity independently recomputed as 6fbb2d4bd912cb57b2154c9b93d8c66fd425d97013b50c8a71a06f661931f412, matching manifest.json.",
+    "The frozen focused test files match the hashes recorded by the review contract.",
+    "The earlier generic-runtime PyYAML environment mismatch was overwritten and is not evidence against the frozen candidate.",
+    "No file was edited by the evaluator and no installer was run."
+  ],
+  "trigger_resolutions": []
+}
