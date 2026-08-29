@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-29T20:10:42+09:00",
+  "reason": "Preserve S01-S08 and rebind the S09 baseline after commit 9bf01d0 so committed governance files are not misclassified as new protected-path edits; retain only the stale static test correction as the active S09 change.",
+  "approval": "User authorized strict execution of the established diagnostic contract through the GitHub S09 result and its evidence-bound minimal correction.",
+  "resume_step": "S09",
+  "previous_state_sha256": "f11302d1227875cd3571af3f4c9c56ee96ff00476eb64563000b5e3d36ed3fbf",
+  "old_contract_sha256": "9b50302b7b869c600eb2daa0d5f4023b1409c85d76ce4547432b557ee5ad8eea",
+  "new_contract_sha256": "9b50302b7b869c600eb2daa0d5f4023b1409c85d76ce4547432b557ee5ad8eea",
+  "baseline_sha256": "084bc138220d096ff331337e05cf94a3f4e8284911bd582bd2a4f217b02f9c38"
+}

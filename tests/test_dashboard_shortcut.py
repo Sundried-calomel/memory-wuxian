@@ -55,7 +55,14 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn("[IO.File]::Replace($temporaryPath, $shortcutPath, $backupPath)", script)
         self.assertIn("[IO.File]::Move($temporaryPath, $shortcutPath)", script)
         self.assertIn("[IO.File]::Delete($shortcutPath)", script)
-        self.assertIn("$installedShortcut.TargetPath -ne $launcher", script)
+        for check_id in ("target", "working_directory", "icon", "target_exists"):
+            self.assertIn(f'id = "{check_id}"', script)
+        self.assertIn("$installedShortcut.TargetPath -eq $launcher", script)
+        self.assertIn("$installedShortcut.WorkingDirectory -eq $skill", script)
+        self.assertIn('$installedShortcut.IconLocation -eq "$icon,0"', script)
+        diagnostic = script.index("Write-ShortcutDiagnostic $checks")
+        restore = script.index("if ($replacedExisting", diagnostic)
+        self.assertLess(diagnostic, restore)
         self.assertIn("Dashboard shortcut activation verification failed", script)
         inspector = (
             SKILL_ROOT / "scripts/inspect_dashboard_shortcut_windows.ps1"
