@@ -53,6 +53,7 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertEqual(harness.count("Invoke-Setup $installer"), 2)
         self.assertIn('lane = "packaged-production-chain"', harness)
         self.assertIn('lane = "namespaced-direct-controller-rollback"', harness)
+        self.assertIn("git -c core.quotePath=false -C $sourceRoot ls-files", harness)
         self.assertIn("packaged_chain_claim = $false", harness)
         self.assertNotIn("secrets.", windows)
         self.assertIn("[int]$Depth = 0", harness)

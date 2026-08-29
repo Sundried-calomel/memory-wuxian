@@ -281,7 +281,7 @@ try {
 
   $directCandidate = Join-Path $workRoot "direct-candidate"
   New-Item -ItemType Directory -Path $directCandidate -Force | Out-Null
-  $trackedFiles = & git -C $sourceRoot ls-files
+  $trackedFiles = & git -c core.quotePath=false -C $sourceRoot ls-files
   if ($LASTEXITCODE -ne 0) { throw "Unable to enumerate the tracked candidate projection." }
   foreach ($relative in $trackedFiles) {
     $source = Join-Path $sourceRoot $relative
