@@ -63,6 +63,8 @@ jobs:
   windows-candidate:
     timeout-minutes: 25
     runs-on: windows-2022
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

@@ -46,6 +46,7 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         harness = (ROOT / "tests/run_windows_packaged_chain_ci.ps1").read_text(
             encoding="utf-8"
         )
+        self.assertIn('PYTHONUTF8: "1"', windows)
         self.assertIn("run_windows_packaged_chain_ci.ps1", windows)
         self.assertIn('$env:GITHUB_ACTIONS -ne "true"', harness)
         self.assertIn('$env:RUNNER_ENVIRONMENT -ne "github-hosted"', harness)
