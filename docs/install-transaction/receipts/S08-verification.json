@@ -2,13 +2,16 @@
   "schema_version": 1,
   "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
   "step": "S08",
-  "verified_at": "2026-08-28T01:09:36+09:00",
-  "contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
-  "git_head": "037540e8c1c7db1afe9382828364bb72ef4874b0",
-  "worktree_sha256": "89bc52d6b3ac44c1b197f9b17a92b44c8ea1417d661e6b3065c84fe97a05d031",
-  "delta_paths": [],
+  "verified_at": "2026-08-29T14:19:00+09:00",
+  "contract_sha256": "1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe",
+  "git_head": "319b1b23e90deaba92757da381de985e031b9853",
+  "worktree_sha256": "a00c48ce32a294e6a7d5750bbeb2d7c2b82a25f3819cb9545802d6c6f6236824",
+  "delta_paths": [
+    "docs/install-transaction/s08-equivalence-regression-and-simplification.md"
+  ],
   "evidence": [
-    "migration-registry-tests",
-    "v2.15.0-fixture-rehearsal"
+    "diff-simplification-review",
+    "entrypoint-equivalence-tests",
+    "historical-regression-tests"
   ]
 }

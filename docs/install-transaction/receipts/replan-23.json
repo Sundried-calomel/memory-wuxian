@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-29T13:03:50+09:00",
+  "reason": "Replace the S01-S15 patch-loop contract with an evidence-first recovery: preserve exact failed bytes and history, prove the complete packaged production-chain seam, audit owner/reachability redundancy, apply one root-cause repair, then rehearse the exact chain before freeze, install, and release.",
+  "approval": "User explicitly approved this detailed sequence on 2026-08-29 and required the hard gate to be corrected so it enforces, rather than truncates, that sequence.",
+  "resume_step": "S01",
+  "previous_state_sha256": "30953183805eccc5ee812c8cd753a55844a233134d49648fe8043e628db69255",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "baseline_sha256": "1f544ea5cc006979c9d31a86228655de30e7152251fe033b5614a0c1358b25a3"
+}

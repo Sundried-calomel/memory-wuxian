@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-s14-root-cause-and-lean-recovery",
+  "objective": "Replace the over-broad S14 patch-and-replan loop with an evidence-first recovery: preserve the exact failed candidate and history, prove the production broker-to-controller failure boundary, audit ownership and reachability before deleting only demonstrated redundancy, apply one root-cause repair, and require the complete packaged Windows installation chain before candidate promotion.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "windows-installer-production-chain",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "powershell", "inno-setup", "json", "markdown"],
+  "path_globs": [
+    "scripts/install_transaction_workflow.py",
+    "scripts/windows_installer*.py",
+    "scripts/windows_install*.py",
+    "scripts/run_windows_installer_rehearsal.py",
+    "packaging/windows/**",
+    "tests/test_windows_installer*.py",
+    "tests/test_install_transaction_workflow.py",
+    "docs/install-transaction/**",
+    "docs/rehearsals/**",
+    "docs/retrospectives/memory-wuxian-defect-workbook.md"
+  ],
+  "entrypoints": [
+    "inno-installer",
+    "powershell-bootstrap",
+    "uac-broker",
+    "packaged-python-controller",
+    "manual-installer",
+    "auto-update-installer",
+    "workflow-controller"
+  ],
+  "resources": [
+    "exact-ci-artifact",
+    "runtime-launcher",
+    "transaction-manifest",
+    "nonce-ledger",
+    "transaction-journal",
+    "installed-artifact",
+    "governance-receipt"
+  ],
+  "operations": [
+    "diagnose",
+    "launch",
+    "install",
+    "upgrade",
+    "rollback",
+    "audit",
+    "deduplicate",
+    "verify",
+    "release"
+  ],
+  "data_formats": ["utf-8", "json", "sha256", "binary", "windows-path"],
+  "authorization_boundaries": [
+    "Raw archives, summaries, cloud exchange, Environment state, and user data are outside this repair.",
+    "The current failed candidate, S14 logs, historical receipts, and rollback evidence remain immutable evidence; historical records may be archived out of the production package but not rewritten or discarded.",
+    "No production edit or broad replan is allowed before the exact broker/controller failure is proved from the frozen artifact path.",
+    "Deletion requires reachability, owner, package-membership, and behavior-equivalence evidence for each fixed candidate path.",
+    "No S14 install or S15 release may occur until one exact packaged production chain rehearsal passes and is bound to the candidate SHA-256."
+  ],
+  "implementation_units": [
+    {
+      "id": "workflow-contract-recovery",
+      "owner_id": "installer-workflow-controller",
+      "paths": ["scripts/install_transaction_workflow.py", "docs/install-transaction/**"],
+      "entrypoints": ["workflow-controller", "governance", "hook"],
+      "resources": ["governance-receipt", "candidate-freeze"],
+      "operations": ["audit", "replan", "verify"],
+      "planned_check_ids": ["registered-preflight", "fail-closed-completion"]
+    },
+    {
+      "id": "exact-production-chain-proof",
+      "owner_id": "windows-installer-production-chain",
+      "paths": ["packaging/windows/**", "scripts/windows_installer*.py", "scripts/windows_install*.py", "docs/rehearsals/**"],
+      "entrypoints": ["inno-installer", "powershell-bootstrap", "uac-broker", "packaged-python-controller"],
+      "resources": ["exact-ci-artifact", "runtime-launcher", "transaction-manifest", "nonce-ledger", "transaction-journal"],
+      "operations": ["diagnose", "launch", "install", "rollback"],
+      "planned_check_ids": ["entrypoint-inventory", "cross-entrypoint-contract", "target-platform-effect", "real-entrypoint-effect"]
+    },
+    {
+      "id": "lean-owner-and-reachability-audit",
+      "owner_id": "windows-installer-architecture",
+      "paths": ["scripts/windows_installer*.py", "scripts/windows_install*.py", "packaging/windows/**", "tests/test_windows_installer*.py", "docs/install-transaction/**"],
+      "entrypoints": ["packager", "installer", "manual-installer", "auto-update-installer"],
+      "resources": ["source", "package", "installed-artifact", "historical-evidence"],
+      "operations": ["audit", "deduplicate", "verify"],
+      "planned_check_ids": ["entrypoint-inventory", "cross-entrypoint-contract", "exact-candidate-release"]
+    }
+  ],
+  "rule_exclusions": []
+}

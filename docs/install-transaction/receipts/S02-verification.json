@@ -2,15 +2,16 @@
   "schema_version": 1,
   "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
   "step": "S02",
-  "verified_at": "2026-08-22T20:28:31+09:00",
-  "contract_sha256": "6f7229fd804e456c0427e4ac51447ce91d5bbe02da82ddd83707205941e4cdbc",
-  "git_head": "6c60a539b4d7fc45b6fe12945b0393335ebb8b86",
-  "worktree_sha256": "00721fd0ca984c704af89292d5acd68db0ebebf2cfd236b02411b792eef40fd4",
+  "verified_at": "2026-08-29T13:21:40+09:00",
+  "contract_sha256": "1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe",
+  "git_head": "319b1b23e90deaba92757da381de985e031b9853",
+  "worktree_sha256": "9d9c4cf5b775d6eb122fcba7c46cf3c63f104529169e3daa40c6cf21e9023a85",
   "delta_paths": [
-    "docs/install-transaction/entrypoint-inventory.md"
+    "docs/install-transaction/s02-entrypoint-and-call-chain-audit.md"
   ],
   "evidence": [
     "entrypoint-inventory",
+    "packaged-call-chain-map",
     "single-owner-decision"
   ]
 }

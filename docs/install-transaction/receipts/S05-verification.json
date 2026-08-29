@@ -2,13 +2,13 @@
   "schema_version": 1,
   "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
   "step": "S05",
-  "verified_at": "2026-08-23T18:28:03+09:00",
-  "contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
-  "git_head": "6c60a539b4d7fc45b6fe12945b0393335ebb8b86",
-  "worktree_sha256": "41149df23bd84e2238a0f3b7773e678fc00aa256a58e7a362716f75c445b4094",
+  "verified_at": "2026-08-29T14:02:10+09:00",
+  "contract_sha256": "1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe",
+  "git_head": "319b1b23e90deaba92757da381de985e031b9853",
+  "worktree_sha256": "033836b4143e36c71a0d3af4e788562eab3822efe66c913cfa547704c0fbfcdb",
   "delta_paths": [],
   "evidence": [
-    "cancel-and-denial-tests",
-    "uac-allowlist-tests"
+    "broker-controller-trace",
+    "exact-root-cause-proof"
   ]
 }

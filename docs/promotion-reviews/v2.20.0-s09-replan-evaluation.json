@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "eval-v220-installer-workflow-g14-20260829-readonly-001",
+  "artifact": {
+    "paths": [
+      "docs/install-transaction/contract.json",
+      "docs/install-transaction/rules.md",
+      "docs/install-transaction/optimized-procedure.md",
+      "docs/retrospectives/install-transaction-workflow.md",
+      "docs/capability-admission/v2.20.0-installer-workflow/manifest.json",
+      "docs/capability-admission/v2.20.0-installer-workflow/registry.json",
+      "docs/capability-admission/v2.20.0-installer-workflow/binding.json",
+      "scripts/install_transaction_workflow.py",
+      "docs/install-transaction/replan-reuse-map.json",
+      "scripts/validate_installer_reuse_map.py"
+    ],
+    "sha256": [
+      "9152f100c16ac2228069e54b183d2b231ad10e08c1e40f0e3d6d52fe9c72c6be",
+      "d4ff8acdc54c1c65cfc56eaeab748f28b3d5435bd4e0d7fc16716876274cd7f7",
+      "974778cafb810490f7e6c5096de0bd23c5db3edc0a3520d317da46de546a0630",
+      "9105f27ab4e1b60319c3eebaf8711b3ed35c2171812bc60140e9892bb05e7726",
+      "53aded22dab459452d2db748a27beb9f068ade39f432d57436ce808c25f43531",
+      "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89",
+      "ccd306b35bff033c4ea63f73583da3f4bbb5b7afe923ee52114582217393e9d7",
+      "0da9d577ebf72ee8e4c7f063db5ddda1190c39ff166457d1aabcc8a566ed136b",
+      "045579b4e0a6ee0272088a4495eed8629c92403185a0a3d9af45b51ca4a865e0",
+      "21ca18ef21b216865d933cd02208ca980ea5660be85fa3fb46b7ff6eb58cc0ce"
+    ],
+    "producer_identity": "codex-primary-producer"
+  },
+  "evaluator": {"identity": "codex-independent-readonly-evaluator-v220-g14", "independent": true},
+  "contract": {"source": "User-supplied mandatory acceptance criteria and frozen artifact set, 2026-08-29", "pass_threshold": 90},
+  "dimensions": [
+    {"id": "s01_s08_preservation", "weight": 0.1, "score": 100, "mandatory": true, "evidence": [{"claim": "S01-S08 remain completed with all eight verification receipt hashes matching; replan code preserves completed prerequisites before S09.", "source": "runtime-state.json plus receipt hash audit and install_transaction_workflow.py:392-448", "method": "deterministic_test"}]},
+    {"id": "s09_scope_boundary", "weight": 0.1, "score": 100, "mandatory": true, "evidence": [{"claim": "S09 begins the authorized scope expansion and its allowed path set is exactly the four authorized globs.", "source": "contract.json S09 targeted assertion", "method": "deterministic_test"}]},
+    {"id": "hosted_runner_fail_closed", "weight": 0.1, "score": 100, "mandatory": true, "evidence": [{"claim": "Rules require both hosted-runner environment sentinels before packaged Setup execution.", "source": "rules.md hard gate 13", "method": "source_trace"}]},
+    {"id": "secret_independence", "weight": 0.1, "score": 100, "mandatory": true, "evidence": [{"claim": "Rules explicitly prohibit repository-secret use for the S09 runner lane.", "source": "rules.md hard gate 13", "method": "source_trace"}]},
+    {"id": "local_installation_gate", "weight": 0.1, "score": 100, "mandatory": true, "evidence": [{"claim": "Rules forbid executing the candidate installer on the target device before S14.", "source": "rules.md hard gate 13 and contract S14", "method": "source_trace"}]},
+    {"id": "evidence_lane_separation", "weight": 0.1, "score": 100, "mandatory": true, "evidence": [{"claim": "Procedure and rules distinguish actual packaged Setup evidence from namespaced direct-controller rollback evidence.", "source": "optimized-procedure.md step 9 and rules.md hard gate 13", "method": "source_trace"}]},
+    {"id": "capability_domain_stability", "weight": 0.1, "score": 100, "mandatory": true, "evidence": [{"claim": "Owner, producer, triggers, calls, resources, permissions, actions, gates, registry, project binding, and allowlists are unchanged except revision/hash bindings.", "source": "HEAD-to-candidate normalized capability comparison", "method": "deterministic_test"}]},
+    {"id": "domain_classification", "weight": 0.1, "score": 100, "mandatory": true, "evidence": [{"claim": "Candidate is an extension of the existing installer transaction capability, with no duplicate, conflict, or new capability domain.", "source": "manifest/registry/binding semantic review", "method": "specialist_review"}]},
+    {"id": "deterministic_admission_inspect", "weight": 0.1, "score": 100, "mandatory": true, "evidence": [{"claim": "Capability admission inspect reports no errors, call cycles, trigger conflicts, or resource conflicts.", "source": "admit_capability.py --inspect output", "method": "deterministic_test"}]},
+    {"id": "exact_hash_binding", "weight": 0.1, "score": 100, "mandatory": true, "evidence": [{"claim": "All ten artifact SHA-256 values and the four-component aggregate capability hash were independently recomputed and match bindings.", "source": "Get-FileHash plus aggregate hash recomputation", "method": "deterministic_test"}]}
+  ],
+  "deterministic_checks": [
+    {"id": "artifact-sha256-recompute", "status": "pass", "evidence": "Two path-ordered Get-FileHash SHA-256 passes produced identical hashes for all ten frozen artifacts."},
+    {"id": "json-and-python-parse", "status": "pass", "evidence": "Duplicate-key-aware JSON parsing passed for all frozen JSON; AST parsing passed for both Python scripts."},
+    {"id": "capability-admission-inspect", "status": "pass", "evidence": "admit_capability.py --inspect reported no errors, call cycles, trigger conflicts, or resource conflicts."},
+    {"id": "aggregate-capability-hash", "status": "pass", "evidence": "Recomputed aggregate 90bc61c6b7c27229a666ba03b7c56bf0a8b37c4731e3061af911b121f9e640d3 equals manifest artifact_sha256."},
+    {"id": "reuse-map-s09", "status": "pass", "evidence": "validate_installer_reuse_map.py --step S09 returned status=passed."},
+    {"id": "workflow-unit-tests", "status": "pass", "evidence": "tests.test_install_transaction_workflow: 6 tests ran, all passed."},
+    {"id": "mandatory-acceptance-assertions", "status": "pass", "evidence": "Deterministic assertions confirmed all ten mandatory acceptance conditions."}
+  ],
+  "overall_score": 100,
+  "verdict": "pass",
+  "blocking_findings": [],
+  "limitations": [
+    "The frozen set does not include a GitHub Actions workflow or hosted-runner receipts; this verdict admits the governance revision and does not claim S09 has executed or passed.",
+    "The governance-14 semantic review and admission receipt must be issued before activation.",
+    "No candidate installer was run and no local product resource was touched."
+  ],
+  "iteration": {"current": 1, "maximum": 2}
+}

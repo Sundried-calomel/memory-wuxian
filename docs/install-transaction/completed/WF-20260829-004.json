@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "revision": "WF-20260829-004",
+  "previousRevision": "WF-20260829-003",
+  "sequence": 4,
+  "category": "correction",
+  "summary": "Preserve S01-S08 and permit S09 to use an explicitly authorized GitHub-hosted ephemeral Windows runner for the complete packaged-chain rehearsal, without running the candidate installer on the target device.",
+  "startedAt": "2026-08-29T14:26:18+09:00",
+  "preDocumentHashes": {
+    "rules": "D8E5349CF5218F6ACB7C8BB7F7B351B9E1F61452DC304C9190EDC69717A744E9",
+    "history": "50836CDC6D68A6E23DE76F586251BB2040D38F4F32E357896018DEC158A740E4",
+    "optimized": "9053B7A25FF3C998D9CD08E511D3565E5800B9C2DCB50F44606E363FCAECD6C5"
+  },
+  "preChangeLogSha256": "E6CE8FED9AA30B1B94E24E93FB56311800018D53DA816D4B515D94D6085214B9",
+  "completedAt": "2026-08-29T14:30:24+09:00",
+  "postDocumentHashes": {
+    "rules": "D4FF8ACDC54C1C65CFC56EAEAB748F28B3D5435BD4E0D7FC16716876274CD7F7",
+    "history": "9105F27AB4E1B60319C3EEBAF8711B3ED35C2171812BC60140E9892BB05E7726",
+    "optimized": "974778CAFB810490F7E6C5096DE0BD23C5DB3EDC0A3520D317DA46DE546A0630"
+  },
+  "changeLogSha256": "B34DEA888737366B3C5FA581E51784B93141C485EAB7DCC26FD28D579665DBB1"
+}

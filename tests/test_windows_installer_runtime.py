@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 ISOLATED_RUNTIME_ENTRYPOINTS = (
+    "windows_installer_broker.py",
     "install_windows_transaction.py",
     "install_codex_autosync_windows.py",
     "auto_update.py",
@@ -184,6 +185,75 @@ class WindowsInstallerRuntimeTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("usage:", result.stdout.lower())
+
+    def test_broker_dispatch_resolves_sibling_manifest_under_isolated_python(self) -> None:
+        driver = self.root / "isolated-broker-dispatch.py"
+        driver.write_text(
+            "from pathlib import Path\n"
+            "from types import SimpleNamespace\n"
+            "import importlib.util, sys, uuid\n"
+            "broker_path = Path(sys.argv[1]).resolve()\n"
+            "root = Path(sys.argv[2]).resolve()\n"
+            "spec = importlib.util.spec_from_file_location('isolated_broker', broker_path)\n"
+            "module = importlib.util.module_from_spec(spec)\n"
+            "sys.modules[spec.name] = module\n"
+            "spec.loader.exec_module(module)\n"
+            "import windows_install_manifest as manifest_module\n"
+            "sid = 'S-1-5-21-100-200-300-1001'\n"
+            "module.current_user_sid = lambda: sid\n"
+            "manifest = root / 'request.json'\n"
+            "manifest.write_text('{\\\"operation\\\":\\\"install\\\"}\\n', encoding='utf-8')\n"
+            "controller = root / 'controller.py'\n"
+            "controller.write_text('# child\\n', encoding='utf-8')\n"
+            "transaction_id = str(uuid.uuid4())\n"
+            "ledger = module.NonceLedger(root / 'nonces')\n"
+            "payload = {'transaction_id': transaction_id, 'operation': 'install', "
+            "'target_sid': sid, 'manifest_path': str(manifest), "
+            "'manifest_sha256': module.sha256_file(manifest), "
+            "'controller_path': str(controller), "
+            "'controller_sha256': module.sha256_file(controller), "
+            "'nonce': ledger.issue(transaction_id, sid)}\n"
+            "request = root / 'broker-request.json'\n"
+            "request.write_bytes(module._canonical_json(payload))\n"
+            "reader_calls = []\n"
+            "def read_manifest(path):\n"
+            " reader_calls.append(Path(path).resolve())\n"
+            " return SimpleNamespace(operation='install', "
+            "runtime_bundle=SimpleNamespace(python_executable=Path(sys.executable)))\n"
+            "manifest_module.read_manifest = read_manifest\n"
+            "child_calls = []\n"
+            "def run_child(command, check=False):\n"
+            " child_calls.append([str(item) for item in command])\n"
+            " return SimpleNamespace(returncode=37)\n"
+            "module.subprocess.run = run_child\n"
+            "result = module.dispatch_request(request, module.sha256_file(request), root / 'nonces')\n"
+            "assert result == 37, result\n"
+            "assert reader_calls == [manifest.resolve()], reader_calls\n"
+            "assert len(child_calls) == 1, child_calls\n"
+            "assert child_calls[0][1] == str(controller.resolve()), child_calls\n"
+            "assert child_calls[0][2:] == ['--execute-manifest', str(manifest.resolve())], child_calls\n",
+            encoding="utf-8",
+        )
+        environment = os.environ.copy()
+        environment["PATH"] = ""
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                str(driver),
+                str(ROOT / "scripts" / "windows_installer_broker.py"),
+                str(self.root),
+            ],
+            cwd=self.root,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_runtime_lock_pins_python_and_every_dependency_version(self) -> None:
         lock = json.loads((ROOT / "scripts/windows_runtime_lock.json").read_text(encoding="utf-8"))

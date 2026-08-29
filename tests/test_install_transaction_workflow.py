@@ -91,7 +91,14 @@ def workflow(root: Path, *args: str, expect: int = 0) -> subprocess.CompletedPro
 
 def s01_evidence() -> list[str]:
     result: list[str] = []
-    for item in ("defect-preflight", "workflow-governance-check", "state-machine-tests", "project-hook-test"):
+    for item in (
+        "defect-preflight",
+        "workflow-governance-check",
+        "capability-admission-receipt",
+        "state-machine-tests",
+        "project-hook-test",
+        "failed-candidate-evidence-freeze",
+    ):
         result.extend(["--evidence", item])
     return result
 
@@ -110,8 +117,24 @@ class InstallTransactionWorkflowTests(unittest.TestCase):
         status = json.loads(workflow(self.root, "status").stdout)
         self.assertEqual(status["status"], "active")
         workflow(self.root, "hook", "pre-edit", "--path", ".githooks/pre-commit")
+        workflow(
+            self.root,
+            "hook",
+            "pre-edit",
+            "--path",
+            "docs/capability-admission/v2.20.0-installer-workflow/receipt.json",
+        )
         denied = workflow(self.root, "hook", "pre-edit", "--path", "scripts/install_codex_autosync_windows.py", expect=2)
         self.assertIn("does not allow protected paths", denied.stderr)
+
+    def test_evidence_first_contract_blocks_production_repair_before_s07(self) -> None:
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        steps = {step["id"]: step for step in contract["steps"]}
+        self.assertIn("exact packaged production call chain", steps["S02"]["title"])
+        self.assertEqual(steps["S05"]["required_evidence"], ["broker-controller-trace", "exact-root-cause-proof"])
+        self.assertIn("redundancy-disposition-table", steps["S06"]["required_evidence"])
+        self.assertNotIn("scripts/**", steps["S06"]["allowed_paths"])
+        self.assertIn("scripts/**", steps["S07"]["allowed_paths"])
 
     def test_receipt_is_bound_to_unchanged_worktree(self) -> None:
         workflow(self.root, "init")

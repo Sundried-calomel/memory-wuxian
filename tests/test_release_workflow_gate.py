@@ -41,6 +41,20 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn("runs-on: ubuntu-latest", self.test_source)
         self.assertIn("runs-on: macos-latest", self.test_source)
 
+    def test_windows_candidate_runs_the_packaged_chain_only_on_hosted_ci(self) -> None:
+        windows = job_block(self.test_source, "windows-candidate")
+        harness = (ROOT / "tests/run_windows_packaged_chain_ci.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("run_windows_packaged_chain_ci.ps1", windows)
+        self.assertIn('$env:GITHUB_ACTIONS -ne "true"', harness)
+        self.assertIn('$env:RUNNER_ENVIRONMENT -ne "github-hosted"', harness)
+        self.assertEqual(harness.count("Invoke-Setup $installer"), 2)
+        self.assertIn('lane = "packaged-production-chain"', harness)
+        self.assertIn('lane = "namespaced-direct-controller-rollback"', harness)
+        self.assertIn("packaged_chain_claim = $false", harness)
+        self.assertNotIn("secrets.", windows)
+
     def test_ci_does_not_repeat_the_suite_across_unsupported_python_versions(self) -> None:
         self.assertNotIn("python-compatibility:", self.test_source)
         for version in ("3.9", "3.10", "3.11", "3.12", "3.13"):

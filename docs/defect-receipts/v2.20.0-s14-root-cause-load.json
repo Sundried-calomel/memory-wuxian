@@ -1,0 +1,19 @@
+{
+  "blocking_rule_ids": [
+    "G01",
+    "G03",
+    "G04",
+    "G05"
+  ],
+  "brief_sha256": "1912ad6d1df92a00b2f52df43f1d28ae2d8d0bd340f93611237ef75bd619adae",
+  "loaded_at": "2026-08-29T04:03:30.656919+00:00",
+  "packet_file_sha256": "533217b391850dece07b42b67cf6348e4742ae825b6029b5c80297179ca43f94",
+  "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s14-root-cause-packet.json",
+  "packet_sha256": "c5beaf6166bc273bab4e082ba50bb100cd7eb0f4893cadeac3da6afe5659dd97",
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s14-root-cause-preflight.json",
+  "preflight_sha256": "03e7a3a60d5759ee89b4659878c7f71350818dfd951efbd8e7bcd1a1355e689d",
+  "receipt_sha256": "1ac9e792bb6ce23963f7717ba3172d0bbf3e19c851e6bd83605ba36ec285d594",
+  "receipt_type": "defect-prevention-load",
+  "schema_version": 1,
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218"
+}

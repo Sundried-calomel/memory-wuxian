@@ -1,0 +1,192 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "memory-wuxian-v2.20.0-s03-recovery-architecture-eval-20260829-03",
+  "artifact": {
+    "paths": ["docs/install-transaction/s03-recovery-architecture-contract.md"],
+    "sha256": ["df58b01188ea8f52d3b8d2a216d7c774f28d39d236ba598215c53de2acab1259"],
+    "producer_identity": "codex-primary-producer"
+  },
+  "evaluator": {
+    "identity": "codex-independent-evaluator-20260829-c41d9f72",
+    "independent": true
+  },
+  "contract": {
+    "source": "docs/install-transaction/contract.json S03; docs/install-transaction/rules.md at WF-20260829-003; docs/install-transaction/optimized-procedure.md; docs/install-transaction/s01-failed-candidate-evidence-freeze.md; docs/install-transaction/s02-entrypoint-and-call-chain-audit.md; docs/install-transaction/s04-diagnostic-harness-evidence.md; docs/install-transaction/s05-broker-controller-root-cause.md; agent-output-evaluator evaluation-contract.md; user-mandated historical-run correction",
+    "pass_threshold": 100
+  },
+  "dimensions": [
+    {
+      "id": "single-owner-boundaries",
+      "weight": 0.11,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{
+        "claim": "Each responsibility has one sole Owner, a second Owner is forbidden, and the assignments agree with the S02 boundary map and singular transaction Owner.",
+        "source": "docs/install-transaction/s03-recovery-architecture-contract.md:11-23; docs/install-transaction/s02-entrypoint-and-call-chain-audit.md:19-37 (SHA-256 fa8a9e2b2cd905cad73ad63f6f0b2e0f1476fd1d84d00046fbac9e1df49bafd6)",
+        "method": "source_trace"
+      }]
+    },
+    {
+      "id": "production-edit-gate",
+      "weight": 0.11,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{
+        "claim": "The candidate makes S07 the first production-edit step and leaves S01-S06 evidence-first; its completion boundary grants no repair authority.",
+        "source": "docs/install-transaction/s03-recovery-architecture-contract.md:42-44,92-97; docs/install-transaction/rules.md:38-47 (SHA-256 d8e5349cf5218f6acb7c8bb7f7b351b9e1f61452dc304c9190edc69717a744e9); docs/install-transaction/contract.json S03-S07 (SHA-256 1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe)",
+        "method": "source_trace"
+      }]
+    },
+    {
+      "id": "exact-packaged-chain-observability",
+      "weight": 0.11,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "The exact-installer complete-chain lane and detailed broker replay lane must reproduce the same boundary result, with child absence and diagnostics preserved.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md:33-41,60-79; docs/install-transaction/s02-entrypoint-and-call-chain-audit.md:10-17,39-50; docs/install-transaction/s04-diagnostic-harness-evidence.md:6-19,44-62 (SHA-256 919a920addd3c853a9072a9d58e208b6c025eec11a28008d414780b61849d67d)",
+          "method": "source_trace"
+        },
+        {
+          "claim": "Replay and child-probe substitution cannot replace or independently satisfy complete-chain evidence.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md:36-41,73-75",
+          "method": "source_trace"
+        }
+      ]
+    },
+    {
+      "id": "diagnostic-no-product-write-proof",
+      "weight": 0.11,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{
+        "claim": "Diagnostic writes stay below one disposable root, host product resources are excluded, a pre/post snapshot is mandatory, and the harness remains unshipped test infrastructure.",
+        "source": "docs/install-transaction/s03-recovery-architecture-contract.md:27-32,60-82; docs/install-transaction/contract.json S04 required_evidence; docs/install-transaction/s04-diagnostic-harness-evidence.md:18-42,73-77",
+        "method": "source_trace"
+      }]
+    },
+    {
+      "id": "redundancy-deletion-evidence",
+      "weight": 0.11,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{
+        "claim": "Deletion remains deferred to S07 and requires prior S06 reachability, package-membership, Owner-overlap, replacement-coverage, and dependency-test proof.",
+        "source": "docs/install-transaction/s03-recovery-architecture-contract.md:45-47; docs/install-transaction/rules.md:48-51; docs/install-transaction/optimized-procedure.md:45-49 (SHA-256 9053b7a25ff3c998d9cd08e511d3565e5800b9c2dcb50f44606e363fcaecd6c5)",
+        "method": "source_trace"
+      }]
+    },
+    {
+      "id": "selective-invalidation",
+      "weight": 0.11,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{
+        "claim": "Only the earliest contradicted receipt and dependants are invalidated, unrelated evidence is preserved, and one integrated remediation remains the maximum before explicit replan.",
+        "source": "docs/install-transaction/s03-recovery-architecture-contract.md:53-55; docs/install-transaction/rules.md:22-25,52-55; docs/install-transaction/optimized-procedure.md:62-72",
+        "method": "source_trace"
+      }]
+    },
+    {
+      "id": "authority-non-expansion",
+      "weight": 0.11,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{
+        "claim": "Archive, summary, cloud, and Environment semantics remain out of scope; the harness is not a supported entrypoint or shipped component; completion authorizes no installation, elevation, publication, archive write, or production repair.",
+        "source": "docs/install-transaction/s03-recovery-architecture-contract.md:27-32,81-82,92-97; docs/install-transaction/rules.md:5-11,29-30",
+        "method": "source_trace"
+      }]
+    },
+    {
+      "id": "exact-byte-s13-s15-chain",
+      "weight": 0.11,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [{
+        "claim": "S13 freezes one committed source and uniquely hashed CI installer, S14 installs that exact artifact, and S15 promotes the same bytes without rebuilding.",
+        "source": "docs/install-transaction/s03-recovery-architecture-contract.md:51-52; docs/install-transaction/rules.md:24-28; docs/install-transaction/s01-failed-candidate-evidence-freeze.md:5-13 (SHA-256 e497aeb7fdc148dc6feac746a6fc26a0697c2c0ac9ef22876b56075fb962b42b)",
+        "method": "source_trace"
+      }]
+    },
+    {
+      "id": "historical-complete-chain-correction",
+      "weight": 0.12,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "A frozen earlier exact S14 Inno/PowerShell run may supply the complete-chain lane only when installer, extracted candidate, manifest, runtime, broker, exit boundary, and missing-child state are hash-linked to the isolated replay.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md:31-41,60-79; docs/install-transaction/rules.md:41-47; docs/install-transaction/optimized-procedure.md:35-44",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The exception does not weaken future-run isolation: every new full-installer execution must use a disposable Windows boundary unable to address host product resources.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md:40-41,67-72; docs/install-transaction/rules.md:45; docs/install-transaction/optimized-procedure.md:41-43",
+          "method": "source_trace"
+        },
+        {
+          "claim": "Direct transaction-owner tests cannot satisfy the gate, and the correction grants no production-edit authority before S07.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md:7-9,38-44,73-75,92-97; docs/install-transaction/s01-failed-candidate-evidence-freeze.md:15-27; docs/install-transaction/s02-entrypoint-and-call-chain-audit.md:39-50",
+          "method": "source_trace"
+        }
+      ]
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "artifact-sha256-freeze",
+      "status": "pass",
+      "evidence": "Get-FileHash SHA256 recomputed df58b01188ea8f52d3b8d2a216d7c774f28d39d236ba598215c53de2acab1259 before inspection."
+    },
+    {
+      "id": "governing-contract-json-parse",
+      "status": "pass",
+      "evidence": "PowerShell ConvertFrom-Json parsed contract.json at SHA-256 1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe and exposed ordered S01-S15 steps."
+    },
+    {
+      "id": "governing-source-freeze",
+      "status": "pass",
+      "evidence": "Recomputed SHA-256: rules d8e5349cf5218f6acb7c8bb7f7b351b9e1f61452dc304c9190edc69717a744e9; procedure 9053b7a25ff3c998d9cd08e511d3565e5800b9c2dcb50f44606e363fcaecd6c5; S01 e497aeb7fdc148dc6feac746a6fc26a0697c2c0ac9ef22876b56075fb962b42b; S02 fa8a9e2b2cd905cad73ad63f6f0b2e0f1476fd1d84d00046fbac9e1df49bafd6; S04 919a920addd3c853a9072a9d58e208b6c025eec11a28008d414780b61849d67d; S05 ed972b098efa7dccc5086732388f5f8d755e6aefecf4e565aa119256f6e914b6."
+    },
+    {
+      "id": "owner-boundary-trace",
+      "status": "pass",
+      "evidence": "The seven sole-Owner rows at candidate lines 13-21 align with S02 lines 21-37."
+    },
+    {
+      "id": "historical-run-seven-link-trace",
+      "status": "pass",
+      "evidence": "Candidate lines 33-41 contain all seven required linkage elements and condition earlier complete-chain use on binding them to replay."
+    },
+    {
+      "id": "future-full-installer-isolation-trace",
+      "status": "pass",
+      "evidence": "Candidate lines 40-41 and 67-72 require every new full-installer run to execute in a disposable Windows boundary that cannot address host product resources."
+    },
+    {
+      "id": "direct-owner-gate-exclusion-trace",
+      "status": "pass",
+      "evidence": "Candidate lines 7-9 reject direct transaction-owner tests as end-to-end installation, while lines 38-41 and 73-75 reject replay-only complete-chain satisfaction."
+    },
+    {
+      "id": "no-production-edit-before-s07-trace",
+      "status": "pass",
+      "evidence": "Candidate lines 42-44 and 92-97 preserve S07 as the first production-edit step and grant no repair authority."
+    }
+  ],
+  "overall_score": 100,
+  "verdict": "pass",
+  "blocking_findings": [],
+  "limitations": [
+    "This pass covers only the revised S03 architecture candidate at SHA-256 df58b01188ea8f52d3b8d2a216d7c774f28d39d236ba598215c53de2acab1259. It does not authorize implementation, production edits, elevation, installation, activation, archive mutation, promotion, publication, or release.",
+    "The historical-run exception is conditional architecture authority, not a finding that current S05 leaf evidence satisfies all seven linkage elements. S04 and S05 were governing source traces; their referenced pending runtime artifacts were not part of the frozen S03 artifact set and were not independently certified here.",
+    "Direct WindowsInstallerTransaction tests remain transaction-owner evidence only and cannot satisfy the exact packaged-chain gate.",
+    "All nine dimensions are mandatory, so the pass threshold is 100. Any future S03 byte drift invalidates this report."
+  ],
+  "iteration": {
+    "current": 1,
+    "maximum": 2
+  }
+}

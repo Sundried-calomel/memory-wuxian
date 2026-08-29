@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-29T13:53:57+09:00",
+  "reason": "Preserve S01-S02 and all exact S14/S04 evidence; correct only the overstrict requirement to rerun an already frozen exact failure in an unavailable sandbox. Frozen exact-chain evidence may bind to a hash-identical isolated replay; future full-installer runs remain disposable.",
+  "approval": "User explicitly approved preserving S01-S02 and targeted replan from S03 on 2026-08-29.",
+  "resume_step": "S03",
+  "previous_state_sha256": "1951b6d600d416214d9253ca9b4d0fe7c649b8d080c6a1cf5b85747162df13b7",
+  "old_contract_sha256": "1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe",
+  "new_contract_sha256": "1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe",
+  "baseline_sha256": "d0bb9f21089d5b3a411a75466d5ac9b2d5f01ec3a48b8dcb5977b349c89808ba"
+}

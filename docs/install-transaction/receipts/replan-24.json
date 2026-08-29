@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-29T13:17:32+09:00",
+  "reason": "Replace the S14 patch-loop with the approved evidence-first recovery sequence: preserve exact failed bytes and history, prove the complete packaged production boundary, audit Owner/reachability/package membership, then apply one minimal shared-owner repair and rerun exact-chain evidence.",
+  "approval": "User approved the detailed sequence and hard-gate migration on 2026-08-29.",
+  "resume_step": "S01",
+  "previous_state_sha256": "5f076248c09f2f7e1b8605ae7ef4cf35aaef4d23e378a75933d6992db755102b",
+  "old_contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
+  "new_contract_sha256": "1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe",
+  "baseline_sha256": "0a90753b7af44040e9a85de872316fa1bd3a86e9afc81715520e62e78b52a35e"
+}

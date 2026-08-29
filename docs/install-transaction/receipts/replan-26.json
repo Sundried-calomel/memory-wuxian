@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-29T14:45:17+09:00",
+  "reason": "Preserve completed S01-S08 evidence and move only S09 packaged-chain rehearsal to the explicitly authorized GitHub-hosted ephemeral Windows runner because the target Windows Home device has no disposable local backend.",
+  "approval": "允许保留 S01-S08，从 S09 定向 replan；允许修改并推送 GitHub Actions 工作流，在 GitHub 临时 Windows runner 中运行完整打包链、回滚和重复安装彩排。不得在本机运行该候选安装器或触碰本机产品资源；彩排通过后继续 S10-S15。",
+  "resume_step": "S09",
+  "previous_state_sha256": "1b51235a9298a628ec6bd0410a60630a75aa639475ac6d047697c15dc69fd77e",
+  "old_contract_sha256": "1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe",
+  "new_contract_sha256": "9152f100c16ac2228069e54b183d2b231ad10e08c1e40f0e3d6d52fe9c72c6be",
+  "baseline_sha256": "98746fcba6ce54141f97047556db50b9f43d2fe36bfbc2fb2e899bfd4c3c2b55"
+}

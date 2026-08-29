@@ -21,6 +21,14 @@ from typing import Any, Callable, Mapping, Sequence
 import uuid
 
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+for import_root in (SCRIPT_DIR, PROJECT_ROOT):
+    value = str(import_root)
+    if value not in sys.path:
+        sys.path.insert(0, value)
+
+
 ALLOWED_OPERATIONS = frozenset({"install", "repair", "uninstall"})
 REQUEST_FIELDS = frozenset(
     {

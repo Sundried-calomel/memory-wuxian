@@ -2,22 +2,18 @@
   "schema_version": 1,
   "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
   "step": "S07",
-  "verified_at": "2026-08-28T01:09:08+09:00",
-  "contract_sha256": "e8bd32bbea9b2bd12a647dedc4db8dc25a79e2019ae82aae3e1148e743ccd3ea",
-  "git_head": "037540e8c1c7db1afe9382828364bb72ef4874b0",
-  "worktree_sha256": "89bc52d6b3ac44c1b197f9b17a92b44c8ea1417d661e6b3065c84fe97a05d031",
+  "verified_at": "2026-08-29T14:17:17+09:00",
+  "contract_sha256": "1147dd50889de882e7bee60e3a189a19f65ef096b42c593134f67f9a83255abe",
+  "git_head": "319b1b23e90deaba92757da381de985e031b9853",
+  "worktree_sha256": "d9dd8afc8e1eb01e8a3dbfb1ef8c4e41554d0863ae86c2a5191f275013c7c999",
   "delta_paths": [
-    "docs/capability-admission/v2.20.0-installer-workflow/binding.json",
-    "docs/capability-admission/v2.20.0-installer-workflow/manifest.json",
-    "docs/capability-admission/v2.20.0-installer-workflow/receipt.json",
-    "docs/capability-admission/v2.20.0-installer-workflow/semantic-review.json",
-    "docs/install-transaction/replan-reuse-map.json",
-    "docs/install-transaction/s07-offline-runtime-evidence.md",
-    "packaging/windows/MemoryWuxian.iss",
+    "docs/install-transaction/s07-minimal-root-cause-repair.md",
+    "scripts/windows_installer_broker.py",
     "tests/test_windows_installer_runtime.py"
   ],
   "evidence": [
-    "no-path-dependency-test",
-    "offline-runtime-validation"
+    "defect-rule-conformance",
+    "minimal-root-cause-diff",
+    "redundant-path-deletion-proof"
   ]
 }

@@ -1,0 +1,83 @@
+{
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "created_at": "2026-08-29T04:02:24+00:00",
+  "receipt_sha256": "e0bdb691d6a99f54580a6a707959be8ea7967e35cb2be62c5bf5dcb7ed66987e",
+  "receipt_type": "defect-workbook-preflight",
+  "registry_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s10-ci-portability-registry.json",
+  "registry_sha256": "aa48fd34558b81dfc845df2a487a402fee5047cd0958c45239280aeae37d77d9",
+  "schema_version": 1,
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "workbooks": [
+    {
+      "catalogs": [
+        {
+          "catalog_id": "windows-device-general-skill-defects",
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\defect-rule-catalog.json",
+          "rule_count": 11,
+          "sha256": "259d8bfcc16f5b0fa2a714e9b8edbe94d27382d6410c8a7677ed7f50e4112b03"
+        }
+      ],
+      "files": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\general-error-families.md",
+          "sha256": "f22ee81eb4b08347356c68417cf9c1ccc144939538d955b75ff2775f9b7d1a3d"
+        },
+        {
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\windows-device-skill-defects.md",
+          "sha256": "5511cb5c2a9560dd5fe0ef31d4a9c687168cd1b5f4d0213f73247fd2b219532d"
+        }
+      ],
+      "id": "windows-device-skill-lessons",
+      "known_families": [
+        "G01",
+        "G02",
+        "G03",
+        "G04",
+        "G05",
+        "G06",
+        "G07",
+        "G08",
+        "G09",
+        "G10",
+        "G11"
+      ],
+      "require_change_on_repair": false,
+      "scope": "global"
+    },
+    {
+      "catalogs": [],
+      "files": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\retrospectives\\memory-wuxian-defect-workbook.md",
+          "sha256": "bb017aa7fd04105cebc698118c04d9a1718551d1dad0d7fac290d8c9c1d543f9"
+        }
+      ],
+      "id": "memory-wuxian-v220-candidate-defects",
+      "known_families": [
+        "G02",
+        "G03",
+        "G04",
+        "G05",
+        "G06",
+        "G07",
+        "G09",
+        "G11",
+        "MW-R01",
+        "MW-R02",
+        "MW-R03",
+        "MW-R04",
+        "MW-R05",
+        "MW-R06",
+        "MW-R07",
+        "MW-R08",
+        "MW-R09",
+        "MW-R10",
+        "MW-R11",
+        "MW-R12"
+      ],
+      "require_change_on_repair": true,
+      "scope": "subtree"
+    }
+  ]
+}

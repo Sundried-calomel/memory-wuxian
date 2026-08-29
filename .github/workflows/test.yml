@@ -168,6 +168,13 @@ jobs:
             "$provenance`n",
             [Text.UTF8Encoding]::new($false)
           )
+      - name: Rehearse exact packaged chain on the ephemeral Windows runner
+        shell: pwsh
+        run: >-
+          ./tests/run_windows_packaged_chain_ci.ps1
+          -CandidateDir candidate-dist
+          -SourceRoot .
+          -OutputRoot outputs/s09-packaged-chain
       - uses: actions/upload-artifact@v7
         if: always()
         with:
