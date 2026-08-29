@@ -6,7 +6,7 @@
   "status": "active",
   "current_step": "S09",
   "created_at": "2026-08-22T19:59:27+09:00",
-  "updated_at": "2026-08-29T22:23:43+09:00",
+  "updated_at": "2026-08-29T23:00:27+09:00",
   "baseline_worktree": {
     "\".tmp/shortcut-probe/profile/Desktop/Memory/346/227/240/351/231/220/347/212/266/346/200/201/345/217/260.lnk\"": "<deleted>",
     ".tmp/run-33241109178/artifacts/candidate-evidence-macos/baseline/unittest.log": "7dd04fef26e15d0652e4e854d2d67385689211d26f5ddd64f4b19a1e9224e517",
@@ -1144,29 +1144,15 @@
     ".tmp/shortcut-probe/profile/.codex/skills/memory-wuxian/assets/memory-wuxian.ico": "27f23e01120373bbc21177b385634830658da687db2ff4ce6c191aadd6441033",
     ".tmp/shortcut-probe/profile/.codex/skills/memory-wuxian/bin/memory-wuxian-dashboard-launcher.exe": "114ed38d3480847eb95fe7c5adee8ad2a588b292e80e6c2f59e81c877082947a",
     "dist/MemoryWuxian-2.19.1-Windows-x64-Setup.exe": "6eeddcf9f5b7bc9f6219f160b181ac760873bd302852ec3d13429779b99f13a4",
-    "docs/capability-admission/v2.20.0-installer-workflow/binding.json": "28e2a63ebb7a725e63d976cfc5c8c4224476eee9085dff1f5b550c0ba7813c58",
-    "docs/capability-admission/v2.20.0-installer-workflow/diagnostic-review-contract.json": "41e760ee03a588685b73bfa7f08fe3b8b2118514924d9814cd595b79fed930fc",
-    "docs/capability-admission/v2.20.0-installer-workflow/manifest.json": "2a2ae70fec76a14684545fc513efb7b681fefeb59439f709fc7cc3418b1337c6",
-    "docs/capability-admission/v2.20.0-installer-workflow/receipt.json": "1c897f305d729e5c7c4618925b543f8ea9a7d1266968c9469136eb8218530ee5",
-    "docs/capability-admission/v2.20.0-installer-workflow/semantic-review.json": "dbbcc4f34093d0dff3de33f86b5225f730ae6003725ee8037f9fe4aeb57b7422",
-    "docs/defect-receipts/v2.20.0-s09-diagnostic-brief.md": "28e22dc56b557bc775da2c162afe9a1028d62d95be1a14a71cae06b7195a7511",
-    "docs/defect-receipts/v2.20.0-s09-diagnostic-load.json": "7fdf9f28c82d1d1040325b61b2c3470ff86d837e545bce7b0b61e4b2d464b908",
-    "docs/defect-receipts/v2.20.0-s09-diagnostic-packet.json": "e3a64604885b5ecc8d80910d5e0316e5451db396e6610a4411d6ce9b212ab78b",
-    "docs/defect-receipts/v2.20.0-s09-diagnostic-preflight.json": "c1892da9b46262ec0ec525b89deb002fcfb41c5ed099476864da2ef5502209d3",
-    "docs/defect-receipts/v2.20.0-s09-diagnostic-task.json": "6b6f47aff7f88532dbb341759ed766cac181d65e78816f476234f4e14c04eddb",
-    "docs/install-transaction/contract.json": "d27106848ba370bbe8ea3e692a902f6d7d28f68af5cbb0c3e7c1c8e72c65e1ea",
-    "docs/install-transaction/optimized-procedure.md": "03a61ea29023c545b090914dd9e3c46462f0ea2b4960b709a038aa6fd685cb43",
-    "docs/install-transaction/rules.md": "c0c68ad762ac23fcea3c9eeca7cae2b8b74c6b3a7e76025d8d69dd179f09edc8",
     "docs/install-transaction/s13-candidate-evaluation-contract.json": "0ee1565e175df10cb34f4e7358c2a5923a87b455e2568b90811c4ab57fcc2442",
     "docs/install-transaction/s13-candidate-source-commit.md": "2fe891e8e17dff0b73740226d669c79389bd27033b682f2b6545e11bae8df3c4",
     "docs/install-transaction/s13-ci-artifact-sha256.md": "027e8080c5013d2cbef6f7efc95122c7cc0b6123b6379b938d38e6e204312d1a",
     "docs/install-transaction/s13-cross-platform-ci.md": "5a734b262d2910cb0d1de80973cb5b7c0714f8f4a5f54aceed082937136dcce1",
     "docs/install-transaction/s13-full-relevant-tests.md": "767e20f392e175a4fc6d33a754ce253e8f731dc963c3fafdac9bdcf1941b2e7f",
-    "docs/promotion-reviews/v2.20.0-s13-candidate.json": "189a74a52e10369058e24a0ea8f7774b0442c1db4a8c9186596485daea6d8cc8",
-    "docs/retrospectives/install-transaction-workflow.md": "355a4d5cce8fac5c11023a6636f8209814a4552b36bb8083a59e992afa131dda"
+    "docs/promotion-reviews/v2.20.0-s13-candidate.json": "189a74a52e10369058e24a0ea8f7774b0442c1db4a8c9186596485daea6d8cc8"
   },
-  "baseline_sha256": "90a5ced389106c0672d8314095f02cea66386902b95c24981f3a9fa46a19a600",
-  "last_verified_commit": "e769ec57bcb006222649e91ed89330c413bc4c8b",
+  "baseline_sha256": "7bf4c185790dbfaaca36fd2e188d854782fe6248b1ee5b896f99422e13e4ad93",
+  "last_verified_commit": "4d0fb97cfd173b52931e020929e5cfe5a33764da",
   "freezes": {
     "architecture": {
       "step": "S03",
@@ -1411,6 +1397,10 @@
     {
       "path": "docs/install-transaction/receipts/replan-31.json",
       "sha256": "f6b3dfeb452758da40f4da6e0233da32cd8c25fd230d2595aea825007c30742b"
+    },
+    {
+      "path": "docs/install-transaction/receipts/replan-32.json",
+      "sha256": "3a11bbde52991870426a2ee27d47fa78a7bf3fce95231ef9b548d0b05a58aa1d"
     }
   ]
 }

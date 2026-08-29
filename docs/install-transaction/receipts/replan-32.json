@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-29T23:00:27+09:00",
+  "reason": "Bind the already committed and admitted 4d0fb97 state as the clean S09 baseline. Preserve S01-S08. Reapply only the test identity comparison proven by run 33255533206; production bytes remain unchanged.",
+  "approval": "User approved implementation with 行，做吧 after reviewing the bounded feasibility and execution strategy; this replan is the minimum controller-required baseline correction and does not expand production scope.",
+  "resume_step": "S09",
+  "previous_state_sha256": "3feb678772f4e812db821291b470868c922577aaf3ccbc1dcfc486a7aa2c5a9d",
+  "old_contract_sha256": "d27106848ba370bbe8ea3e692a902f6d7d28f68af5cbb0c3e7c1c8e72c65e1ea",
+  "new_contract_sha256": "d27106848ba370bbe8ea3e692a902f6d7d28f68af5cbb0c3e7c1c8e72c65e1ea",
+  "baseline_sha256": "7bf4c185790dbfaaca36fd2e188d854782fe6248b1ee5b896f99422e13e4ad93"
+}
