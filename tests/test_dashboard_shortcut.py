@@ -64,6 +64,18 @@ class DashboardShortcutTest(unittest.TestCase):
             'Write-ShortcutDiagnostic $temporaryChecks "temporary-shortcut-verification"',
             script,
         )
+        self.assertIn('$diagnosticStage = "dependency-validation"', script)
+        self.assertIn('$diagnosticStage = "temporary-shortcut-write"', script)
+        self.assertIn('$diagnosticStage = "installed-shortcut-verification"', script)
+        self.assertIn('id = "python_exists"', script)
+        self.assertIn('id = "launcher_exists"', script)
+        self.assertIn('id = "icon_exists"', script)
+        self.assertIn('id = "exception_type"', script)
+        self.assertIn('id = "hresult"', script)
+        self.assertIn('id = "script_line"', script)
+        self.assertIn('"dashboard-shortcut-script-failed"', script)
+        self.assertNotIn("$_.Exception.Message", script)
+        self.assertNotIn("$_.FullyQualifiedErrorId", script)
         self.assertIn("$installedShortcut.TargetPath -eq $launcher", script)
         self.assertIn("$installedShortcut.WorkingDirectory -eq $skill", script)
         self.assertIn('$installedShortcut.IconLocation -eq "$icon,0"', script)

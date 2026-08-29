@@ -168,7 +168,7 @@ function Get-SafeBrokerProjection([string]$Path) {
 function Assert-NoProhibitedEvidenceField($Value, [string]$Location = "$", [int]$Depth = 0) {
   $prohibited = @("transaction_token", "secret", "nonce", "password", "credential", "authorization", "raw_user_content", "conversation_content", "archive_content", "environment_dump", "unbounded_stdout", "unbounded_stderr", "traceback")
   if ($Depth -gt 32) { throw "Evidence nesting exceeds the closed depth limit at ${Location}." }
-  if ($null -eq $Value -or $Value -is [string] -or $Value.GetType().IsPrimitive) { return }
+  if ($null -eq $Value -or $Value -is [string] -or $Value.GetType().IsPrimitive -or $Value -is [DateTime] -or $Value -is [DateTimeOffset]) { return }
   if ($Value -is [Collections.IDictionary]) {
     foreach ($key in $Value.Keys) {
       if ($prohibited -contains [string]$key) { throw "Prohibited evidence field at ${Location}.${key}." }

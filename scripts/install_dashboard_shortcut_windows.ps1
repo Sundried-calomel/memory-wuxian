@@ -16,14 +16,19 @@ function Limit-DiagnosticText([string]$Value) {
     return $Value.Substring(0, 2048)
 }
 
-function Write-ShortcutDiagnostic($Checks, [string]$FunctionName = "installed-shortcut-verification") {
+function Write-ShortcutDiagnostic(
+    $Checks,
+    [string]$FunctionName = "installed-shortcut-verification",
+    [string]$ErrorCode = "dashboard-shortcut-activation-mismatch",
+    [string]$SafeMessage = "Dashboard shortcut activation verification failed."
+) {
     if (-not $DiagnosticPath) { return }
     $parent = Split-Path -Parent $DiagnosticPath
     if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
     $document = [ordered]@{
         schema_version = 1
-        error_code = "dashboard-shortcut-activation-mismatch"
-        safe_message = "Dashboard shortcut activation verification failed."
+        error_code = $ErrorCode
+        safe_message = $SafeMessage
         source = [ordered]@{
             file = "install_dashboard_shortcut_windows.ps1"
             line = $null
@@ -34,6 +39,9 @@ function Write-ShortcutDiagnostic($Checks, [string]$FunctionName = "installed-sh
     $json = $document | ConvertTo-Json -Depth 8 -Compress
     [IO.File]::WriteAllText($DiagnosticPath, "$json`n", [Text.UTF8Encoding]::new($false))
 }
+
+$diagnosticStage = "input-validation"
+try {
 if (-not $ShortcutName) {
     $ShortcutName = (
         "Memory" +
@@ -68,14 +76,19 @@ $python = [IO.Path]::GetFullPath($PythonExecutable)
 $pythonw = Join-Path (Split-Path -Parent $python) "pythonw.exe"
 if (-not (Test-Path -LiteralPath $pythonw)) { $pythonw = $python }
 
+$diagnosticStage = "dependency-validation"
 $skill = [IO.Path]::GetFullPath($SkillRoot)
 $archive = [IO.Path]::GetFullPath($ArchiveRoot)
 $launcher = Join-Path $skill "bin\memory-wuxian-dashboard-launcher.exe"
 $icon = Join-Path $skill "assets\memory-wuxian.ico"
-foreach ($required in @($pythonw, $launcher, $icon)) {
-    if (-not (Test-Path -LiteralPath $required)) {
-        throw "Dashboard shortcut dependency does not exist: $required"
-    }
+$dependencyChecks = @(
+    [ordered]@{ id = "python_exists"; passed = [bool](Test-Path -LiteralPath $pythonw -PathType Leaf); expected = $true; observed = [bool](Test-Path -LiteralPath $pythonw -PathType Leaf) }
+    [ordered]@{ id = "launcher_exists"; passed = [bool](Test-Path -LiteralPath $launcher -PathType Leaf); expected = $true; observed = [bool](Test-Path -LiteralPath $launcher -PathType Leaf) }
+    [ordered]@{ id = "icon_exists"; passed = [bool](Test-Path -LiteralPath $icon -PathType Leaf); expected = $true; observed = [bool](Test-Path -LiteralPath $icon -PathType Leaf) }
+)
+if (@($dependencyChecks | Where-Object { -not $_.passed }).Count -gt 0) {
+    Write-ShortcutDiagnostic $dependencyChecks "dependency-validation" "dashboard-shortcut-dependency-missing" "A required dashboard shortcut dependency is missing."
+    throw "Dashboard shortcut dependency validation failed."
 }
 
 $skillsRoot = Split-Path -Parent $skill
@@ -85,6 +98,7 @@ if ((Split-Path -Leaf $codexHome) -ne ".codex") {
 }
 $launcherConfig = Join-Path $codexHome "memory-wuxian-dashboard-launcher.json"
 $launcherConfigTemporary = "$launcherConfig.tmp"
+$diagnosticStage = "launcher-config-write"
 $launcherSettings = [ordered]@{
     schema_version = 1
     python_executable = $pythonw
@@ -105,6 +119,7 @@ $backupPath = Join-Path $Desktop ("." + [IO.Path]::GetRandomFileName() + ".bak")
 $discardPath = Join-Path $Desktop ("." + [IO.Path]::GetRandomFileName() + ".discard")
 $replacedExisting = $false
 try {
+    $diagnosticStage = "temporary-shortcut-write"
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($temporaryPath)
     $shortcut.TargetPath = $launcher
@@ -116,6 +131,7 @@ try {
     $shortcut.Save()
 
     $temporaryShortcut = $shell.CreateShortcut($temporaryPath)
+    $diagnosticStage = "temporary-shortcut-verification"
     $temporaryTargetExists = [bool](Test-Path -LiteralPath $temporaryShortcut.TargetPath -PathType Leaf)
     $temporaryChecks = @(
         [ordered]@{ id = "target"; passed = ($temporaryShortcut.TargetPath -eq $launcher); expected = (Limit-DiagnosticText $launcher); observed = (Limit-DiagnosticText $temporaryShortcut.TargetPath) }
@@ -127,6 +143,7 @@ try {
         Write-ShortcutDiagnostic $temporaryChecks "temporary-shortcut-verification"
         throw "Dashboard shortcut did not preserve the requested activation paths."
     }
+    $diagnosticStage = "shortcut-install"
     if (Test-Path -LiteralPath $shortcutPath) {
         [IO.File]::Replace($temporaryPath, $shortcutPath, $backupPath)
         $replacedExisting = $true
@@ -135,6 +152,7 @@ try {
     }
 
     $installedShortcut = $shell.CreateShortcut($shortcutPath)
+    $diagnosticStage = "installed-shortcut-verification"
     $targetExists = [bool](Test-Path -LiteralPath $installedShortcut.TargetPath -PathType Leaf)
     $checks = @(
         [ordered]@{ id = "target"; passed = ($installedShortcut.TargetPath -eq $launcher); expected = (Limit-DiagnosticText $launcher); observed = (Limit-DiagnosticText $installedShortcut.TargetPath) }
@@ -157,6 +175,7 @@ try {
     [IO.File]::Delete($discardPath)
 }
 
+$diagnosticStage = "completed"
 [ordered]@{
     status = "installed"
     shortcut = $shortcutPath
@@ -165,3 +184,18 @@ try {
     launcher_config = $launcherConfig
     archive_root = $archive
 } | ConvertTo-Json
+} catch {
+    if ($DiagnosticPath -and -not (Test-Path -LiteralPath $DiagnosticPath -PathType Leaf)) {
+        $exceptionType = Limit-DiagnosticText $_.Exception.GetType().FullName
+        $hresult = [int]$_.Exception.HResult
+        $line = [int]$_.InvocationInfo.ScriptLineNumber
+        $stageChecks = @(
+            [ordered]@{ id = "stage"; passed = $false; expected = "completed"; observed = (Limit-DiagnosticText $diagnosticStage) }
+            [ordered]@{ id = "exception_type"; passed = $false; expected = "none"; observed = $exceptionType }
+            [ordered]@{ id = "hresult"; passed = ($hresult -eq 0); expected = 0; observed = $hresult }
+            [ordered]@{ id = "script_line"; passed = $false; expected = 0; observed = $line }
+        )
+        Write-ShortcutDiagnostic $stageChecks "script-stage-failure" "dashboard-shortcut-script-failed" "Dashboard shortcut installation failed at a bounded script stage."
+    }
+    throw
+}

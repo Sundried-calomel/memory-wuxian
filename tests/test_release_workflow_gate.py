@@ -58,6 +58,8 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn("[int]$Depth = 0", harness)
         self.assertIn("$Depth -gt 32", harness)
         self.assertIn("$Value -is [PSCustomObject]", harness)
+        self.assertIn("$Value -is [DateTime]", harness)
+        self.assertIn("$Value -is [DateTimeOffset]", harness)
         self.assertIn("Unsupported evidence value type", harness)
 
     def test_ci_does_not_repeat_the_suite_across_unsupported_python_versions(self) -> None:
