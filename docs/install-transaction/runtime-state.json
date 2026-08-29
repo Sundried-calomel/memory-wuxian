@@ -6,46 +6,18 @@
   "status": "active",
   "current_step": "S09",
   "created_at": "2026-08-22T19:59:27+09:00",
-  "updated_at": "2026-08-29T14:45:17+09:00",
+  "updated_at": "2026-08-29T14:54:15+09:00",
   "baseline_worktree": {
     "dist/MemoryWuxian-2.19.1-Windows-x64-Setup.exe": "6eeddcf9f5b7bc9f6219f160b181ac760873bd302852ec3d13429779b99f13a4",
-    "docs/capability-admission/v2.20.0-installer-workflow/binding.json": "ccd306b35bff033c4ea63f73583da3f4bbb5b7afe923ee52114582217393e9d7",
-    "docs/capability-admission/v2.20.0-installer-workflow/manifest.json": "53aded22dab459452d2db748a27beb9f068ade39f432d57436ce808c25f43531",
-    "docs/capability-admission/v2.20.0-installer-workflow/receipt.json": "1bdc6748ac45bb4b0187f5c0d76852399a92a7afaec0d67efce3e4cb8b8b6563",
-    "docs/capability-admission/v2.20.0-installer-workflow/semantic-review.json": "4c55e97708ad5ab1d9413e489ba3fd23a2a3f88c72a433f5a12e8d81a04d3076",
-    "docs/defect-receipts/v2.20.0-s14-root-cause-brief.md": "6ad992fd0a86f02daf3dd53967b81bd5778226e067fc0369188c131ea21bdc2a",
-    "docs/defect-receipts/v2.20.0-s14-root-cause-load.json": "e4feb1fe9ab8c51bf5e6c2024b079f6cd3643b390074668092ba6a13c2c4b19e",
-    "docs/defect-receipts/v2.20.0-s14-root-cause-packet.json": "533217b391850dece07b42b67cf6348e4742ae825b6029b5c80297179ca43f94",
-    "docs/defect-receipts/v2.20.0-s14-root-cause-preflight.json": "03e7a3a60d5759ee89b4659878c7f71350818dfd951efbd8e7bcd1a1355e689d",
-    "docs/defect-receipts/v2.20.0-s14-root-cause-task.json": "5be6e1ccced1e2ac5fd547f9965d7def5a964860713e47df410bf6db47683ab8",
-    "docs/install-transaction/contract.json": "9152f100c16ac2228069e54b183d2b231ad10e08c1e40f0e3d6d52fe9c72c6be",
-    "docs/install-transaction/optimized-procedure.md": "974778cafb810490f7e6c5096de0bd23c5db3edc0a3520d317da46de546a0630",
-    "docs/install-transaction/rules.md": "d4ff8acdc54c1c65cfc56eaeab748f28b3d5435bd4e0d7fc16716876274cd7f7",
-    "docs/install-transaction/s01-failed-candidate-evidence-freeze.md": "e497aeb7fdc148dc6feac746a6fc26a0697c2c0ac9ef22876b56075fb962b42b",
-    "docs/install-transaction/s02-entrypoint-and-call-chain-audit.md": "fa8a9e2b2cd905cad73ad63f6f0b2e0f1476fd1d84d00046fbac9e1df49bafd6",
-    "docs/install-transaction/s03-recovery-architecture-contract.md": "df58b01188ea8f52d3b8d2a216d7c774f28d39d236ba598215c53de2acab1259",
-    "docs/install-transaction/s04-diagnostic-harness-evidence.md": "919a920addd3c853a9072a9d58e208b6c025eec11a28008d414780b61849d67d",
-    "docs/install-transaction/s05-broker-controller-root-cause.md": "ed972b098efa7dccc5086732388f5f8d755e6aefecf4e565aa119256f6e914b6",
-    "docs/install-transaction/s06-owner-reachability-package-redundancy-audit.md": "8d5b2b9d50d548d233935ae121eab8586388ecc37994176d89d8a66e43612044",
-    "docs/install-transaction/s07-minimal-root-cause-repair.md": "53aaea75234036574b085f662ff0ea6e862f5bec0cd290150df41971332fc9a4",
-    "docs/install-transaction/s08-equivalence-regression-and-simplification.md": "052f2312887ba874c0f95e4af2bf2a3a8f12e4c50703483197f31347d12bf52f",
     "docs/install-transaction/s13-candidate-evaluation-contract.json": "0ee1565e175df10cb34f4e7358c2a5923a87b455e2568b90811c4ab57fcc2442",
     "docs/install-transaction/s13-candidate-source-commit.md": "2fe891e8e17dff0b73740226d669c79389bd27033b682f2b6545e11bae8df3c4",
     "docs/install-transaction/s13-ci-artifact-sha256.md": "027e8080c5013d2cbef6f7efc95122c7cc0b6123b6379b938d38e6e204312d1a",
     "docs/install-transaction/s13-cross-platform-ci.md": "5a734b262d2910cb0d1de80973cb5b7c0714f8f4a5f54aceed082937136dcce1",
     "docs/install-transaction/s13-full-relevant-tests.md": "767e20f392e175a4fc6d33a754ce253e8f731dc963c3fafdac9bdcf1941b2e7f",
-    "docs/promotion-reviews/v2.20.0-s03-recovery-architecture.json": "a153635b890f173cc096470616088cb71dc9635012f9b5765d79c73fe0fe36bf",
-    "docs/promotion-reviews/v2.20.0-s09-replan-evaluation.json": "12489136f44a86446e2c9fae6ec0897cd3e1c148c5fe66e244c9bfeb022ee6f3",
-    "docs/promotion-reviews/v2.20.0-s13-candidate.json": "189a74a52e10369058e24a0ea8f7774b0442c1db4a8c9186596485daea6d8cc8",
-    "docs/retrospectives/install-transaction-workflow.md": "9105f27ab4e1b60319c3eebaf8711b3ed35c2171812bc60140e9892bb05e7726",
-    "scripts/install_transaction_diagnostic.py": "8b2b2e5f15c18589e1625704b2ce052349e8c1672a98cd248093890f1c72e924",
-    "scripts/windows_installer_broker.py": "9b3782720281b88650dd59d25a7a22e1de2e43245e5c6f5d47186e7206ad5f73",
-    "tests/test_install_transaction_diagnostic.py": "fd2c526b0691937ab0f2b9d67202590c199b5177f46bb71b3942ea12569f316f",
-    "tests/test_install_transaction_workflow.py": "0125613981c02012662365f2ef16713b848ab7a1fbe0a6f2895ba331e049db3b",
-    "tests/test_windows_installer_runtime.py": "373b572c521e1dbeb23156865a98177281a83cc9210ce894a31ee7c3406f509a"
+    "docs/promotion-reviews/v2.20.0-s13-candidate.json": "189a74a52e10369058e24a0ea8f7774b0442c1db4a8c9186596485daea6d8cc8"
   },
-  "baseline_sha256": "98746fcba6ce54141f97047556db50b9f43d2fe36bfbc2fb2e899bfd4c3c2b55",
-  "last_verified_commit": "319b1b23e90deaba92757da381de985e031b9853",
+  "baseline_sha256": "b8db676d6f9ae066f62cef53fcda1d9fb8b0813ab58489b4a5110a7527e070e5",
+  "last_verified_commit": "8dd72811fd30450c0ccf26d85185e18edbb30ade",
   "freezes": {
     "architecture": {
       "step": "S03",
@@ -270,6 +242,10 @@
     {
       "path": "docs/install-transaction/receipts/replan-26.json",
       "sha256": "cde7ecac72b880e771251ddcd2ec07f26afd1233c40d85503aa234c8fc1f57f8"
+    },
+    {
+      "path": "docs/install-transaction/receipts/replan-27.json",
+      "sha256": "377e5c754f7b363fa145180acce4e93215e0e8b56181f44ed03fe544bd4f32b3"
     }
   ]
 }
