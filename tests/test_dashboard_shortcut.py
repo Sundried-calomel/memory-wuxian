@@ -77,6 +77,10 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertNotIn("$_.Exception.Message", script)
         self.assertNotIn("$_.FullyQualifiedErrorId", script)
         self.assertIn("$installedShortcut.TargetPath -eq $launcher", script)
+        self.assertIn(
+            "$installedShortcut.TargetPath -and (Test-Path -LiteralPath $installedShortcut.TargetPath",
+            script,
+        )
         self.assertIn("$installedShortcut.WorkingDirectory -eq $skill", script)
         self.assertIn('$installedShortcut.IconLocation -eq "$icon,0"', script)
         diagnostic = script.index("Write-ShortcutDiagnostic $checks")

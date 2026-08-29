@@ -153,7 +153,7 @@ try {
 
     $installedShortcut = $shell.CreateShortcut($shortcutPath)
     $diagnosticStage = "installed-shortcut-verification"
-    $targetExists = [bool](Test-Path -LiteralPath $installedShortcut.TargetPath -PathType Leaf)
+    $targetExists = [bool]($installedShortcut.TargetPath -and (Test-Path -LiteralPath $installedShortcut.TargetPath -PathType Leaf))
     $checks = @(
         [ordered]@{ id = "target"; passed = ($installedShortcut.TargetPath -eq $launcher); expected = (Limit-DiagnosticText $launcher); observed = (Limit-DiagnosticText $installedShortcut.TargetPath) }
         [ordered]@{ id = "working_directory"; passed = ($installedShortcut.WorkingDirectory -eq $skill); expected = (Limit-DiagnosticText $skill); observed = (Limit-DiagnosticText $installedShortcut.WorkingDirectory) }
