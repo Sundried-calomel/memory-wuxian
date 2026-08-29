@@ -81,10 +81,12 @@ $skill = [IO.Path]::GetFullPath($SkillRoot)
 $archive = [IO.Path]::GetFullPath($ArchiveRoot)
 $launcher = Join-Path $skill "bin\memory-wuxian-dashboard-launcher.exe"
 $icon = Join-Path $skill "assets\memory-wuxian.ico"
+$inspector = Join-Path $skill "scripts\inspect_dashboard_shortcut_windows.ps1"
 $dependencyChecks = @(
     [ordered]@{ id = "python_exists"; passed = [bool](Test-Path -LiteralPath $pythonw -PathType Leaf); expected = $true; observed = [bool](Test-Path -LiteralPath $pythonw -PathType Leaf) }
     [ordered]@{ id = "launcher_exists"; passed = [bool](Test-Path -LiteralPath $launcher -PathType Leaf); expected = $true; observed = [bool](Test-Path -LiteralPath $launcher -PathType Leaf) }
     [ordered]@{ id = "icon_exists"; passed = [bool](Test-Path -LiteralPath $icon -PathType Leaf); expected = $true; observed = [bool](Test-Path -LiteralPath $icon -PathType Leaf) }
+    [ordered]@{ id = "inspector_exists"; passed = [bool](Test-Path -LiteralPath $inspector -PathType Leaf); expected = $true; observed = [bool](Test-Path -LiteralPath $inspector -PathType Leaf) }
 )
 if (@($dependencyChecks | Where-Object { -not $_.passed }).Count -gt 0) {
     Write-ShortcutDiagnostic $dependencyChecks "dependency-validation" "dashboard-shortcut-dependency-missing" "A required dashboard shortcut dependency is missing."
@@ -151,13 +153,16 @@ try {
         [IO.File]::Move($temporaryPath, $shortcutPath)
     }
 
-    $installedShortcut = $shell.CreateShortcut($shortcutPath)
     $diagnosticStage = "installed-shortcut-verification"
-    $targetExists = [bool]($installedShortcut.TargetPath -and (Test-Path -LiteralPath $installedShortcut.TargetPath -PathType Leaf))
+    $installedShortcut = & $inspector -Path $shortcutPath | ConvertFrom-Json
+    $installedTarget = [string]$installedShortcut.target
+    $installedWorkingDirectory = [string]$installedShortcut.working_directory
+    $installedIcon = [string]$installedShortcut.icon
+    $targetExists = [bool]$installedShortcut.target_exists
     $checks = @(
-        [ordered]@{ id = "target"; passed = ($installedShortcut.TargetPath -eq $launcher); expected = (Limit-DiagnosticText $launcher); observed = (Limit-DiagnosticText $installedShortcut.TargetPath) }
-        [ordered]@{ id = "working_directory"; passed = ($installedShortcut.WorkingDirectory -eq $skill); expected = (Limit-DiagnosticText $skill); observed = (Limit-DiagnosticText $installedShortcut.WorkingDirectory) }
-        [ordered]@{ id = "icon"; passed = ($installedShortcut.IconLocation -eq "$icon,0"); expected = (Limit-DiagnosticText "$icon,0"); observed = (Limit-DiagnosticText $installedShortcut.IconLocation) }
+        [ordered]@{ id = "target"; passed = ($installedTarget -eq $launcher); expected = (Limit-DiagnosticText $launcher); observed = (Limit-DiagnosticText $installedTarget) }
+        [ordered]@{ id = "working_directory"; passed = ($installedWorkingDirectory -eq $skill); expected = (Limit-DiagnosticText $skill); observed = (Limit-DiagnosticText $installedWorkingDirectory) }
+        [ordered]@{ id = "icon"; passed = ($installedIcon -eq "$icon,0"); expected = (Limit-DiagnosticText "$icon,0"); observed = (Limit-DiagnosticText $installedIcon) }
         [ordered]@{ id = "target_exists"; passed = $targetExists; expected = $true; observed = $targetExists }
     )
     if (@($checks | Where-Object { -not $_.passed }).Count -gt 0) {

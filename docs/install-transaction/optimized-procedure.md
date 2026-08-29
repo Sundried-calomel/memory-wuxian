@@ -1,6 +1,6 @@
 # Unified Installer Transaction Procedure
 
-<!-- workflow-governance: current=WF-20260829-005 -->
+<!-- workflow-governance: current=WF-20260829-007 -->
 
 ## Resume protocol
 
@@ -63,6 +63,11 @@
    and upload only the closed journal and broker projections. Transaction
    tokens, nonces, credentials, arbitrary exception bodies, environment dumps,
    and unrestricted command output are forbidden artifact fields.
+   Shortcut creation and post-install inspection share one canonical inspector.
+   When `WScript.Shell` cannot reopen the Unicode final path, copy the exact
+   `.lnk` bytes to a transaction-private ASCII leaf, verify the two SHA-256
+   values match, inspect that projection, report the original path, and delete
+   the projection in `finally`.
 10. S10 runs the targeted Unicode, isolated-runtime, broker, cancellation,
     rollback, and idempotency matrix and proves that each result traversed the
     exact packaged chain.

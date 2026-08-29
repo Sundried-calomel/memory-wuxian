@@ -1,6 +1,6 @@
 # Unified Installer Transaction Rules
 
-<!-- workflow-governance: current=WF-20260829-005 -->
+<!-- workflow-governance: current=WF-20260829-007 -->
 
 ## Scope
 
@@ -73,7 +73,13 @@ them.
     category and bounded source location until a safe component-specific
     classifier exists; unrestricted stdout, stderr, and tracebacks remain
     internal and are never CI evidence.
-
+17. The canonical Windows shortcut inspector belongs to the same S09
+    dashboard diagnostic Owner as shortcut creation. It must inspect the exact
+    final `.lnk` bytes through a hash-equal ASCII-path projection when the
+    platform API cannot reopen the Unicode final path, and it must remove that
+    projection after inspection. This does not authorize renaming the visible
+    shortcut or weakening target, working-directory, icon, argument, or live
+    target assertions.
 ## Required operator sequence
 
 Before a protected edit, run `hook pre-edit` with every intended path. After

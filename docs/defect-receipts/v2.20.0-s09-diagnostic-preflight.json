@@ -1,8 +1,8 @@
 {
   "artifact_profile": "software-feature",
   "change_kind": "repair",
-  "created_at": "2026-08-29T07:08:11+00:00",
-  "receipt_sha256": "246585a0e383bfe721523e1712cbf61dff49a8eb84dc84de9d7df7a8bd96ea95",
+  "created_at": "2026-08-29T13:05:57+00:00",
+  "receipt_sha256": "ca59cc6d525ed63feea0f5316cb96435ea66ee8d54e10c419c8558dbc23b6c18",
   "receipt_type": "defect-workbook-preflight",
   "registry_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s10-ci-portability-registry.json",
   "registry_sha256": "aa48fd34558b81dfc845df2a487a402fee5047cd0958c45239280aeae37d77d9",
@@ -50,7 +50,7 @@
       "files": [
         {
           "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\retrospectives\\memory-wuxian-defect-workbook.md",
-          "sha256": "bb017aa7fd04105cebc698118c04d9a1718551d1dad0d7fac290d8c9c1d543f9"
+          "sha256": "4dc5d8aef9dd0a1fb07934fcd102b4bcac001f25c7e62d4ba1120ff465b95fc7"
         }
       ],
       "id": "memory-wuxian-v220-candidate-defects",

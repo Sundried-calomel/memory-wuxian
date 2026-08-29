@@ -1,19 +1,19 @@
 {
   "schema_version": 1,
-  "review_id": "v2.20.0-governance-15-installer-diagnostic",
+  "review_id": "v2.20.0-governance-16-unicode-shortcut-inspector",
   "producer_identity": "codex-primary-producer",
   "required_reviewer_identity": "independent-readonly-evaluator",
   "classification_expected": "extension",
   "artifacts": [
-    {"path": "docs/capability-admission/v2.20.0-installer-workflow/manifest.json", "sha256": "f6eeebe72a7cf932783e2d78db55cc2db02f20e8006acd2420049f05eb0416b9"},
-    {"path": "docs/capability-admission/v2.20.0-installer-workflow/binding.json", "sha256": "6b07b25479f882e2fd74b68106f1ae049d30e48b5ea4bb51fdc5b33e3efbb5b3"},
+    {"path": "docs/capability-admission/v2.20.0-installer-workflow/manifest.json", "sha256": "2a2ae70fec76a14684545fc513efb7b681fefeb59439f709fc7cc3418b1337c6"},
+    {"path": "docs/capability-admission/v2.20.0-installer-workflow/binding.json", "sha256": "28e2a63ebb7a725e63d976cfc5c8c4224476eee9085dff1f5b550c0ba7813c58"},
     {"path": "docs/capability-admission/v2.20.0-installer-workflow/registry.json", "sha256": "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89"},
     {"path": "docs/install-transaction/installer-diagnostic-v1.json", "sha256": "9cee7021c2263da068056ec96d5d53575f736776fd6933676081ddecb2df3b79"},
-    {"path": "docs/install-transaction/contract.json", "sha256": "9b50302b7b869c600eb2daa0d5f4023b1409c85d76ce4547432b557ee5ad8eea"},
-    {"path": "docs/install-transaction/rules.md", "sha256": "aae649801a878d33b755d45b92b6a5736fdc54c12e2622f2807b4eddc8eae939"},
-    {"path": "docs/install-transaction/optimized-procedure.md", "sha256": "3687e207e3641315ed43b8f7d03030b756519d6585734fd78db81e30190e4500"},
-    {"path": "docs/retrospectives/install-transaction-workflow.md", "sha256": "af667a98748f2348e5b847cfa58baf16f5e0d2cc045bf6ad507a3da5da0de256"},
-    {"path": "docs/install-transaction/change-log.md", "sha256": "1e0e5ba757d63a3b85d256ed6083f8eaae3fd98ad0c35df9edaae55a373dbecf"}
+    {"path": "docs/install-transaction/contract.json", "sha256": "d27106848ba370bbe8ea3e692a902f6d7d28f68af5cbb0c3e7c1c8e72c65e1ea"},
+    {"path": "docs/install-transaction/rules.md", "sha256": "c0c68ad762ac23fcea3c9eeca7cae2b8b74c6b3a7e76025d8d69dd179f09edc8"},
+    {"path": "docs/install-transaction/optimized-procedure.md", "sha256": "03a61ea29023c545b090914dd9e3c46462f0ea2b4960b709a038aa6fd685cb43"},
+    {"path": "docs/retrospectives/install-transaction-workflow.md", "sha256": "355a4d5cce8fac5c11023a6636f8209814a4552b36bb8083a59e992afa131dda"},
+    {"path": "docs/install-transaction/change-log.md", "sha256": "7f5b92b3e57cb6c7b0e8e45a358e62965ef90daab8a890db34f30bb660551736"}
   ],
   "criteria": [
     {"id": "C01", "requirement": "Every listed artifact hash matches the reviewed bytes."},
@@ -21,8 +21,8 @@
     {"id": "C03", "requirement": "A failure is persisted before rollback and the rollback result is appended afterward."},
     {"id": "C04", "requirement": "Structured checks retain bounded expected and observed values; unclassified failures do not export arbitrary exception bodies, stdout, stderr, tracebacks, or environment dumps."},
     {"id": "C05", "requirement": "CI evidence is a closed projection and prohibits transaction tokens, secrets, nonce values, passwords, credentials, authorization material, and raw private payloads."},
-    {"id": "C06", "requirement": "The contract does not authorize a shortcut behavior repair before the failed assertion is identified on the GitHub-hosted disposable Windows runner."},
-    {"id": "C07", "requirement": "The S09 path expansion is the minimum necessary implementation and evidence scope and does not authorize local candidate installation before S14."},
+    {"id": "C06", "requirement": "The admitted repair is limited to inspecting the exact final shortcut bytes through a hash-equal ASCII-path projection; it does not rename the visible Unicode shortcut or weaken activation assertions."},
+    {"id": "C07", "requirement": "The S09 path expansion adds only the existing canonical shortcut inspector to the same diagnostic Owner and does not authorize local candidate installation before S14."},
     {"id": "C08", "requirement": "The deterministic admission inspection has no trigger conflict, call cycle, resource conflict, or binding error."}
   ],
   "verdict_rule": "PASS only when C01-C08 all pass; otherwise FAIL or INCONCLUSIVE with criterion-specific evidence.",

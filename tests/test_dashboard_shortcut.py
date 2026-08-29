@@ -2,6 +2,7 @@ import json
 import plistlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,19 +71,18 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn('id = "python_exists"', script)
         self.assertIn('id = "launcher_exists"', script)
         self.assertIn('id = "icon_exists"', script)
+        self.assertIn('id = "inspector_exists"', script)
         self.assertIn('id = "exception_type"', script)
         self.assertIn('id = "hresult"', script)
         self.assertIn('id = "script_line"', script)
         self.assertIn('"dashboard-shortcut-script-failed"', script)
         self.assertNotIn("$_.Exception.Message", script)
         self.assertNotIn("$_.FullyQualifiedErrorId", script)
-        self.assertIn("$installedShortcut.TargetPath -eq $launcher", script)
-        self.assertIn(
-            "$installedShortcut.TargetPath -and (Test-Path -LiteralPath $installedShortcut.TargetPath",
-            script,
-        )
-        self.assertIn("$installedShortcut.WorkingDirectory -eq $skill", script)
-        self.assertIn('$installedShortcut.IconLocation -eq "$icon,0"', script)
+        self.assertIn("& $inspector -Path $shortcutPath | ConvertFrom-Json", script)
+        self.assertNotIn("$shell.CreateShortcut($shortcutPath)", script)
+        self.assertIn("$installedTarget -eq $launcher", script)
+        self.assertIn("$installedWorkingDirectory -eq $skill", script)
+        self.assertIn('$installedIcon -eq "$icon,0"', script)
         diagnostic = script.index("Write-ShortcutDiagnostic $checks")
         restore = script.index("if ($replacedExisting", diagnostic)
         self.assertLess(diagnostic, restore)
@@ -91,6 +91,94 @@ class DashboardShortcutTest(unittest.TestCase):
             SKILL_ROOT / "scripts/inspect_dashboard_shortcut_windows.ps1"
         ).read_text(encoding="utf-8")
         self.assertIn("[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)", inspector)
+        self.assertIn("[IO.File]::Copy($resolved, $inspectionPath, $false)", inspector)
+        self.assertIn("[Security.Cryptography.SHA256]::Create()", inspector)
+        self.assertNotIn("Get-FileHash", inspector)
+        self.assertIn("$projectionSha256 -ne $sourceSha256", inspector)
+        self.assertIn('inspection_mode = "hash-equal-ascii-projection"', inspector)
+        self.assertIn("[IO.File]::Delete($inspectionPath)", inspector)
+        self.assertNotIn("$shell.CreateShortcut($resolved)", inspector)
+        self.assertNotIn("exit 0", inspector)
+
+    @unittest.skipUnless(sys.platform == "win32", "requires Windows Shell shortcut support")
+    def test_unicode_shortcut_round_trips_through_canonical_inspector(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            skill = root / "profile" / ".codex" / "skills" / "memory-wuxian"
+            launcher = skill / "bin" / "memory-wuxian-dashboard-launcher.exe"
+            icon = skill / "assets" / "memory-wuxian.ico"
+            inspector = skill / "scripts" / "inspect_dashboard_shortcut_windows.ps1"
+            installer_script = root / "install-dashboard-shortcut.ps1"
+            launcher.parent.mkdir(parents=True)
+            icon.parent.mkdir(parents=True)
+            inspector.parent.mkdir(parents=True)
+            launcher.write_bytes(b"launcher")
+            icon.write_bytes(b"icon")
+            shutil.copy2(
+                SKILL_ROOT / "scripts/inspect_dashboard_shortcut_windows.ps1",
+                inspector,
+            )
+            shutil.copy2(
+                SKILL_ROOT / "scripts/install_dashboard_shortcut_windows.ps1",
+                installer_script,
+            )
+            archive = root / "archive"
+            desktop = root / "desktop"
+            archive.mkdir()
+            desktop.mkdir()
+            shortcut_name = "Memory" + "无限状态台" + ".lnk"
+
+            installed = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(installer_script),
+                    "-SkillRoot",
+                    str(skill),
+                    "-ArchiveRoot",
+                    str(archive),
+                    "-PythonExecutable",
+                    sys.executable,
+                    "-Desktop",
+                    str(desktop),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(json.loads(installed.stdout)["status"], "installed")
+
+            inspected = subprocess.run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(inspector),
+                    "-Path",
+                    str(desktop / shortcut_name),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            document = json.loads(inspected.stdout)
+            self.assertEqual(document["target"], str(launcher))
+            self.assertEqual(document["working_directory"], str(skill))
+            self.assertEqual(document["icon"], f"{icon},0")
+            self.assertEqual(document["arguments"], "")
+            self.assertTrue(document["target_exists"])
+            self.assertEqual(document["source_sha256"], document["projection_sha256"])
+            self.assertEqual(
+                list(desktop.glob(".memory-wuxian-inspect-*.lnk")),
+                [],
+            )
 
     def test_installer_prefers_a_valid_explicit_skill_root_over_process_sid(self):
         install = (SKILL_ROOT / "packaging/windows/install.ps1").read_text(

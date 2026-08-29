@@ -1,6 +1,6 @@
 # Unified Installer Transaction Retrospective
 
-<!-- workflow-governance: current=WF-20260829-005 -->
+<!-- workflow-governance: current=WF-20260829-007 -->
 
 ## Trigger
 
@@ -101,3 +101,26 @@ authority valid CI evidence. The correction keeps the recovery journal private,
 records one assertion-level failure before rollback, appends rollback outcome,
 and exports a closed package-bound projection. Shortcut behavior remains frozen
 until the receipt identifies the exact failed assertion.
+
+## 2026-08-29 Unicode shortcut-inspection correction
+
+The closed S09 receipt then proved that the ASCII temporary shortcut preserved
+all requested activation fields, while reopening the byte-identical shortcut
+under its final Chinese desktop name returned empty target, working-directory,
+and icon properties on the GitHub Windows runner. The transaction correctly
+rolled back all seven resources, so the remaining defect was the inspection
+route rather than transaction ordering or compensation.
+
+The earlier contract admitted shortcut creation but omitted the existing
+canonical shortcut inspector from the same diagnostic Owner. That omission
+blocked the minimal shared-owner repair and encouraged repeated inline checks.
+The correction admits the inspector, requires a hash-equal ASCII projection of
+the exact final `.lnk` bytes, preserves the visible Unicode filename, and
+deletes the projection after inspection.
+
+The first governance-16 draft also tried to broaden same-stage remediation and
+narrow when `replan` applies. Independent evaluation rejected that addition
+because the active machine contract still permits only one integrated
+remediation cycle. The overreach was removed before capability admission. This
+revision changes only the Unicode shortcut-inspection Owner boundary; any
+future replan-policy redesign requires its own explicit contract revision.

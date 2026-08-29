@@ -6,8 +6,8 @@
   "capabilities": [
     {
       "capability_id": "installer-transaction-workflow",
-      "revision": "2.20.0-governance-15",
-      "manifest_sha256": "f6eeebe72a7cf932783e2d78db55cc2db02f20e8006acd2420049f05eb0416b9",
+      "revision": "2.20.0-governance-16",
+      "manifest_sha256": "2a2ae70fec76a14684545fc513efb7b681fefeb59439f709fc7cc3418b1337c6",
       "allowed_actions": ["check-protected-edit", "advance-workflow-step"],
       "allowed_permissions": ["project-file-read", "project-state-write"],
       "allowed_resources": ["installer-workflow-state", "installer-worktree"]

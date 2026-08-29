@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-29T22:23:43+09:00",
+  "reason": "Preserve S01-S08 and all existing S09 evidence; admit only the canonical shortcut inspector into the same diagnostic owner for hash-equal ASCII projection of final Unicode link bytes.",
+  "approval": "User authorized this bounded S09 correction and implementation after the detailed feasibility assessment.",
+  "resume_step": "S09",
+  "previous_state_sha256": "bdc5fae75d010e8b5971d0a056b244a3512030a6195ea4055e5b27cf6a106304",
+  "old_contract_sha256": "9b50302b7b869c600eb2daa0d5f4023b1409c85d76ce4547432b557ee5ad8eea",
+  "new_contract_sha256": "d27106848ba370bbe8ea3e692a902f6d7d28f68af5cbb0c3e7c1c8e72c65e1ea",
+  "baseline_sha256": "90a5ced389106c0672d8314095f02cea66386902b95c24981f3a9fa46a19a600"
+}

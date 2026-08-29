@@ -16,6 +16,7 @@
     "docs/retrospectives/memory-wuxian-defect-workbook.md",
     "scripts/install_windows_transaction.py",
     "scripts/install_dashboard_shortcut_windows.ps1",
+    "scripts/inspect_dashboard_shortcut_windows.ps1",
     "tests/test_windows_installer*.py",
     "tests/run_windows_packaged_chain_ci.ps1",
     ".github/workflows/test.yml"
@@ -56,7 +57,7 @@
     {
       "id": "transaction-assertion-diagnostics",
       "owner_id": "windows-installer-transaction-diagnostics",
-      "paths": ["scripts/install_windows_transaction.py", "scripts/install_dashboard_shortcut_windows.ps1", "tests/test_windows_installer*.py"],
+      "paths": ["scripts/install_windows_transaction.py", "scripts/install_dashboard_shortcut_windows.ps1", "scripts/inspect_dashboard_shortcut_windows.ps1", "tests/test_windows_installer*.py"],
       "entrypoints": ["windows-installer-transaction", "dashboard-shortcut"],
       "resources": ["transaction-journal", "diagnostic-receipt", "rollback-evidence", "desktop-shortcut"],
       "operations": ["observe", "validate", "record", "rollback"],

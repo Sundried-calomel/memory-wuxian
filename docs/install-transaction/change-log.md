@@ -75,3 +75,29 @@
   - `rules`：`AAE649801A878D33B755D45B92B6A5736FDC54C12E2622F2807B4EDDC8EAE939`
   - `history`：`AF667A98748F2348E5B847CFA58BAF16F5E0D2CC045BF6AD507A3DA5DA0DE256`
   - `optimized`：`3687E207E3641315ED43B8F7D03030B756519D6585734FD78DB81E30190E4500`
+
+## WF-20260829-006
+
+- 时间：2026-08-29T22:03:29+09:00
+- 类型：correction
+- 摘要：Admit the existing canonical Windows shortcut inspector into the bounded S09 diagnostic owner so exact final-link bytes are inspected without reopening the Unicode path directly.
+- 项目规则：Bound the canonical shortcut inspector to the existing S09 diagnostic owner and reserved replan for real boundary changes.
+- 历史复盘：Recorded the exact Unicode-path inspection failure and why repeated inline repairs were the wrong response.
+- 优化流程：Defined hash-equal ASCII projection inspection and stage-local remediation for same-owner findings.
+- 文档SHA-256：
+  - `rules`：`7E9BF1D59A5193AEC975635E17F55F11B2B883412946B419F1E7358CFFA11B37`
+  - `history`：`FF7B56191E73EA683947FF555D8106A58247045DD267415BE1C86F6ECC02D264`
+  - `optimized`：`BA7DD01C6513C22EF5DE5F72EEDD795B92297834D555241730E953C204A40620`
+
+## WF-20260829-007
+
+- 时间：2026-08-29T22:14:03+09:00
+- 类型：correction
+- 摘要：Remove the unintended remediation-policy expansion from governance-16 and retain only the bounded Unicode shortcut inspector admission.
+- 项目规则：Removed the unadmitted remediation-policy expansion; retained only the canonical Unicode shortcut inspector rule.
+- 历史复盘：Recorded the independent C02 denial and removal of the workflow-policy overreach before admission.
+- 优化流程：Restored the existing one-remediation-cycle protocol while retaining exact-byte shortcut inspection.
+- 文档SHA-256：
+  - `rules`：`C0C68AD762AC23FCEA3C9EECA7CAE2B8B74C6B3A7E76025D8D69DD179F09EDC8`
+  - `history`：`355A4D5CCE8FAC5C11023A6636F8209814A4552B36BB8083A59E992AFA131DDA`
+  - `optimized`：`03A61EA29023C545B090914DD9E3C46462F0EA2B4960B709A038AA6FD685CB43`

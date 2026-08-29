@@ -750,14 +750,14 @@
     }
   ],
   "no_match_reason": null,
-  "packet_id": "packet:0f6196b7fd2e71245230f83e",
-  "packet_sha256": "39aebe410ca6358e2c48942db1580a8630e11b0a70217fe479a6d88613d9f580",
+  "packet_id": "packet:ccaabce1f99d896b39157928",
+  "packet_sha256": "9af96504dd1d275af3c970961e220c25d4a518486912d66c473ccf726b23fa84",
   "review_required_rule_ids": [],
   "schema_version": 1,
   "status": "ready",
   "task": {
     "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-diagnostic-task.json",
-    "sha256": "9499d1b065290747c29c6077efd63e5cd5d745c94fd5471541678275955511e1",
+    "sha256": "6b6f47aff7f88532dbb341759ed766cac181d65e78816f476234f4e14c04eddb",
     "task_id": "memory-wuxian-v2.20.0-s09-installer-diagnostic-v1"
   },
   "thresholds": {

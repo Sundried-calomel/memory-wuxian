@@ -1,0 +1,50 @@
+{
+  "evidence": [
+    {
+      "check_id": "target-platform-effect",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-unicode-shortcut-tests.log",
+      "sha256": "3b7486dd76b3e7aa2310450ff133c6176fbf2120c1400e00891d52f1d1f9c624"
+    },
+    {
+      "check_id": "registered-preflight",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-diagnostic-preflight.json",
+      "sha256": "c1892da9b46262ec0ec525b89deb002fcfb41c5ed099476864da2ef5502209d3"
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-unicode-shortcut-tests.log",
+      "sha256": "3b7486dd76b3e7aa2310450ff133c6176fbf2120c1400e00891d52f1d1f9c624"
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\retrospectives\\memory-wuxian-defect-workbook.md",
+      "sha256": "13946b2d069e26f98d8c540bf22dfb7ff58b6b8023397205c03c1cdf2885645e"
+    }
+  ],
+  "load_receipt_internal_sha256": "1f5a00852a75ceb9bbd28883ddee61ce17b5f1eda6276e799933dfeabb9751ba",
+  "load_receipt_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-diagnostic-load.json",
+  "load_receipt_sha256": "7fdf9f28c82d1d1040325b61b2c3470ff86d837e545bce7b0b61e4b2d464b908",
+  "packet_file_sha256": "e3a64604885b5ecc8d80910d5e0316e5451db396e6610a4411d6ce9b212ab78b",
+  "packet_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-diagnostic-packet.json",
+  "packet_sha256": "9af96504dd1d275af3c970961e220c25d4a518486912d66c473ccf726b23fa84",
+  "passed_check_ids": [
+    "fail-closed-completion",
+    "registered-preflight",
+    "target-platform-effect"
+  ],
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-diagnostic-preflight.json",
+  "preflight_sha256": "c1892da9b46262ec0ec525b89deb002fcfb41c5ed099476864da2ef5502209d3",
+  "receipt_sha256": "ce0f216f30aaa5cbf803e32de19d08e4390a670f06291e67f012fae6ae8d7686",
+  "receipt_type": "defect-prevention-verification",
+  "required_check_ids": [
+    "fail-closed-completion",
+    "registered-preflight",
+    "target-platform-effect"
+  ],
+  "results_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-unicode-shortcut-results.json",
+  "results_sha256": "63139a1d52bffd7b1947379003a57c59390523ec7ce4e9804c5d66f0c5e5ed77",
+  "schema_version": 1,
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "verified_at": "2026-08-29T13:34:28.752506+00:00"
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-s09-installer-diagnostic-v1",
+  "packet_sha256": "9af96504dd1d275af3c970961e220c25d4a518486912d66c473ccf726b23fa84",
+  "checks": [
+    {
+      "check_id": "target-platform-effect",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-unicode-shortcut-tests.log",
+          "sha256": "3b7486dd76b3e7aa2310450ff133c6176fbf2120c1400e00891d52f1d1f9c624"
+        }
+      ],
+      "note": "The isolated product Python launched the production PowerShell shortcut installer, reopened the Chinese final shortcut through a byte-identical ASCII projection, verified target, working directory, icon and source/projection SHA-256, and left no projection file. The adjacent transaction, release, runtime-effect, reuse-map and workflow suites also passed; 67 tests passed in total."
+    },
+    {
+      "check_id": "registered-preflight",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-diagnostic-preflight.json",
+          "sha256": "c1892da9b46262ec0ec525b89deb002fcfb41c5ed099476864da2ef5502209d3"
+        }
+      ],
+      "note": "The target-discovered preflight is bound to the current defect packet and project workbook."
+    },
+    {
+      "check_id": "fail-closed-completion",
+      "status": "passed",
+      "evidence": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\defect-receipts\\v2.20.0-s09-unicode-shortcut-tests.log",
+          "sha256": "3b7486dd76b3e7aa2310450ff133c6176fbf2120c1400e00891d52f1d1f9c624"
+        },
+        {
+          "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\retrospectives\\memory-wuxian-defect-workbook.md",
+          "sha256": "13946b2d069e26f98d8c540bf22dfb7ff58b6b8023397205c03c1cdf2885645e"
+        }
+      ],
+      "note": "The workflow regression suite rejects drift and invalid stage promotion, while MW-REL-038 records the confirmed escape boundary and permanent regression contract."
+    }
+  ]
+}
