@@ -4,10 +4,36 @@ param(
     [Parameter(Mandatory = $true)][string]$PythonExecutable,
     [string]$Desktop = "",
     [string]$ShortcutName = "",
+    [string]$DiagnosticPath = "",
     [switch]$Uninstall
 )
 
 $ErrorActionPreference = "Stop"
+
+function Limit-DiagnosticText([string]$Value) {
+    if ($null -eq $Value) { return $null }
+    if ($Value.Length -le 2048) { return $Value }
+    return $Value.Substring(0, 2048)
+}
+
+function Write-ShortcutDiagnostic($Checks) {
+    if (-not $DiagnosticPath) { return }
+    $parent = Split-Path -Parent $DiagnosticPath
+    if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    $document = [ordered]@{
+        schema_version = 1
+        error_code = "dashboard-shortcut-activation-mismatch"
+        safe_message = "Dashboard shortcut activation verification failed."
+        source = [ordered]@{
+            file = "install_dashboard_shortcut_windows.ps1"
+            line = $null
+            function = "installed-shortcut-verification"
+        }
+        checks = $Checks
+    }
+    $json = $document | ConvertTo-Json -Depth 8 -Compress
+    [IO.File]::WriteAllText($DiagnosticPath, "$json`n", [Text.UTF8Encoding]::new($false))
+}
 if (-not $ShortcutName) {
     $ShortcutName = (
         "Memory" +
@@ -105,12 +131,15 @@ try {
     }
 
     $installedShortcut = $shell.CreateShortcut($shortcutPath)
-    if (
-        $installedShortcut.TargetPath -ne $launcher -or
-        $installedShortcut.WorkingDirectory -ne $skill -or
-        $installedShortcut.IconLocation -ne "$icon,0" -or
-        -not (Test-Path -LiteralPath $installedShortcut.TargetPath -PathType Leaf)
-    ) {
+    $targetExists = [bool](Test-Path -LiteralPath $installedShortcut.TargetPath -PathType Leaf)
+    $checks = @(
+        [ordered]@{ id = "target"; passed = ($installedShortcut.TargetPath -eq $launcher); expected = (Limit-DiagnosticText $launcher); observed = (Limit-DiagnosticText $installedShortcut.TargetPath) }
+        [ordered]@{ id = "working_directory"; passed = ($installedShortcut.WorkingDirectory -eq $skill); expected = (Limit-DiagnosticText $skill); observed = (Limit-DiagnosticText $installedShortcut.WorkingDirectory) }
+        [ordered]@{ id = "icon"; passed = ($installedShortcut.IconLocation -eq "$icon,0"); expected = (Limit-DiagnosticText "$icon,0"); observed = (Limit-DiagnosticText $installedShortcut.IconLocation) }
+        [ordered]@{ id = "target_exists"; passed = $targetExists; expected = $true; observed = $targetExists }
+    )
+    if (@($checks | Where-Object { -not $_.passed }).Count -gt 0) {
+        Write-ShortcutDiagnostic $checks
         if ($replacedExisting -and (Test-Path -LiteralPath $backupPath)) {
             [IO.File]::Replace($backupPath, $shortcutPath, $discardPath)
         } else {

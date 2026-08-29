@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import secrets
+import traceback
 from typing import Any, Callable, Protocol, Sequence
 import uuid
 
@@ -32,6 +33,63 @@ class InstallerExit(IntEnum):
     APPLY_FAILED_ROLLBACK_INCOMPLETE = 33
     EFFECT_VERIFICATION_FAILED = 34
     COMMIT_FAILED = 35
+
+
+class InstallerDiagnosticError(RuntimeError):
+    """A bounded, component-owned failure that is safe to project into CI evidence."""
+
+    def __init__(
+        self,
+        *,
+        error_code: str,
+        safe_message: str,
+        source: dict[str, Any],
+        checks: Sequence[dict[str, Any]],
+    ) -> None:
+        super().__init__(safe_message)
+        self.error_code = error_code
+        self.safe_message = safe_message[:2048]
+        self.source = dict(source)
+        self.checks = [dict(item) for item in checks]
+
+    @classmethod
+    def from_document(cls, document: dict[str, Any]) -> "InstallerDiagnosticError":
+        allowed = {"schema_version", "error_code", "safe_message", "source", "checks"}
+        if set(document) != allowed or document.get("schema_version") != 1:
+            raise ValueError("installer diagnostic document has an unsupported shape")
+        checks = document.get("checks")
+        source = document.get("source")
+        if not isinstance(checks, list) or len(checks) > 32 or not isinstance(source, dict):
+            raise ValueError("installer diagnostic document exceeds its closed bounds")
+        if set(source) != {"file", "line", "function"}:
+            raise ValueError("installer diagnostic source has an unsupported shape")
+        for field in ("file", "function"):
+            value = source.get(field)
+            if value is not None and (not isinstance(value, str) or len(value) > 2048):
+                raise ValueError("installer diagnostic source exceeds its string bound")
+        if source.get("line") is not None and not isinstance(source.get("line"), int):
+            raise ValueError("installer diagnostic source line is not an integer")
+        if not isinstance(document.get("error_code"), str) or len(document["error_code"]) > 2048:
+            raise ValueError("installer diagnostic error code is invalid")
+        if not isinstance(document.get("safe_message"), str) or len(document["safe_message"]) > 2048:
+            raise ValueError("installer diagnostic safe message is invalid")
+        for item in checks:
+            if not isinstance(item, dict) or set(item) != {"id", "passed", "expected", "observed"}:
+                raise ValueError("installer diagnostic check has an unsupported shape")
+            if not isinstance(item.get("id"), str) or not isinstance(item.get("passed"), bool):
+                raise ValueError("installer diagnostic check has invalid identity or status")
+            for field in ("expected", "observed"):
+                value = item.get(field)
+                if value is not None and not isinstance(value, (bool, int, str)):
+                    raise ValueError("installer diagnostic check value is not a safe primitive")
+                if isinstance(value, str) and len(value) > 2048:
+                    raise ValueError("installer diagnostic check value exceeds its bound")
+        return cls(
+            error_code=str(document["error_code"]),
+            safe_message=str(document["safe_message"]),
+            source=source,
+            checks=checks,
+        )
 
 
 @dataclass(frozen=True)
@@ -82,6 +140,41 @@ def _manifest_binding(manifest: WindowsInstallManifest) -> tuple[dict[str, Any],
     return document, hashlib.sha256(payload).hexdigest()
 
 
+def _bounded_source(exc: BaseException) -> dict[str, Any]:
+    frames = traceback.extract_tb(exc.__traceback__)
+    if not frames:
+        return {"file": None, "line": None, "function": None}
+    frame = frames[-1]
+    return {
+        "file": Path(frame.filename).name[:2048],
+        "line": int(frame.lineno),
+        "function": frame.name[:2048],
+    }
+
+
+def _failure_document(
+    journal: dict[str, Any],
+    exc: BaseException,
+    mutation: PreparedMutation | None,
+) -> dict[str, Any]:
+    structured = isinstance(exc, InstallerDiagnosticError)
+    return {
+        "schema_version": 1,
+        "recorded_at": _now(),
+        "phase": str(journal.get("phase", "unknown")),
+        "operation": str(journal.get("operation", "unknown")),
+        "component": mutation.name if mutation is not None else "transaction-controller",
+        "resource_id": mutation.resource_id if mutation is not None else "installer-transaction",
+        "error_code": exc.error_code if structured else "unclassified-exception",
+        "exception_type": type(exc).__name__,
+        "safe_message": exc.safe_message if structured else None,
+        "source": exc.source if structured else _bounded_source(exc),
+        "package": dict(journal.get("package") or {}),
+        "checks": list(exc.checks) if structured else [],
+        "rollback": {"phase": "not-started", "status": "pending", "error_count": 0},
+    }
+
+
 class WindowsInstallerTransaction:
     """Own ordering, durable checkpoints, verification, commit, and rollback."""
 
@@ -100,6 +193,16 @@ class WindowsInstallerTransaction:
         journal["updated_at"] = _now()
         atomic_write_canonical_json(self.journal_path, journal)
 
+    def _record_failure(
+        self,
+        journal: dict[str, Any],
+        exc: BaseException,
+        mutation: PreparedMutation | None,
+    ) -> None:
+        journal["error"] = str(exc)
+        journal["failure"] = _failure_document(journal, exc, mutation)
+        self._write(journal)
+
     def _rollback(
         self,
         journal: dict[str, Any],
@@ -108,6 +211,10 @@ class WindowsInstallerTransaction:
         success_code: InstallerExit,
     ) -> InstallerExit:
         journal["phase"] = "rolling-back"
+        if journal.get("failure"):
+            journal["failure"]["rollback"] = {
+                "phase": "rolling-back", "status": "in-progress", "error_count": 0
+            }
         self._write(journal)
         rollback_errors: list[str] = []
         for index, mutation in reversed(applied):
@@ -132,6 +239,12 @@ class WindowsInstallerTransaction:
             self._write(journal)
             journal["phase"] = "rolled-back"
             code = success_code
+        if journal.get("failure"):
+            journal["failure"]["rollback"] = {
+                "phase": journal["phase"],
+                "status": "incomplete" if rollback_errors else "verified",
+                "error_count": len(rollback_errors),
+            }
         self._write(journal)
         return code
 
@@ -227,10 +340,12 @@ class WindowsInstallerTransaction:
         failure_point: str | None,
     ) -> TransactionResult:
         applied: list[tuple[int, PreparedMutation]] = []
+        active_mutation: PreparedMutation | None = None
         try:
             journal["phase"] = "applying"
             self._write(journal)
             for index, mutation in enumerate(mutations):
+                active_mutation = mutation
                 if failure_point == f"before-apply:{mutation.name}":
                     raise RuntimeError(f"injected failure before {mutation.name}")
                 applied.append((index, mutation))
@@ -245,6 +360,7 @@ class WindowsInstallerTransaction:
             journal["phase"] = "verifying-effects"
             self._write(journal)
             for index, mutation in applied:
+                active_mutation = mutation
                 if failure_point == f"before-verify:{mutation.name}":
                     raise RuntimeError(f"injected verification failure for {mutation.name}")
                 evidence = mutation.verify(token)
@@ -254,7 +370,7 @@ class WindowsInstallerTransaction:
             journal["phase"] = "effect-verified"
             self._write(journal)
         except BaseException as exc:
-            journal["error"] = str(exc)
+            self._record_failure(journal, exc, active_mutation)
             failure_code = InstallerExit.EFFECT_VERIFICATION_FAILED if journal.get("phase") == "verifying-effects" else InstallerExit.APPLY_FAILED_ROLLED_BACK
             code = self._rollback(journal, applied, token, failure_code)
             return TransactionResult(code, journal["phase"], self.journal_path, token.transaction_id)
@@ -278,7 +394,7 @@ class WindowsInstallerTransaction:
             try:
                 evidence = mutation.commit(token)
             except BaseException as exc:
-                journal["error"] = str(exc)
+                self._record_failure(journal, exc, mutation)
                 code = self._rollback(journal, applied, token, InstallerExit.COMMIT_FAILED)
                 return TransactionResult(code, journal["phase"], self.journal_path, token.transaction_id)
             entry["commit_evidence"] = evidence
@@ -385,13 +501,23 @@ class WindowsInstallerTransaction:
             journal["phase"] = "prepared"
             self._write(journal)
         except BaseException as exc:
+            active_mutation = next(
+                (item for item, entry in zip(mutations, journal["mutations"]) if entry.get("status") == "preparing"),
+                None,
+            )
+            self._record_failure(journal, exc, active_mutation)
+            discard_errors = 0
             for mutation in reversed(prepared):
                 try:
                     mutation.discard_prepare(token)
                 except BaseException:
-                    pass
+                    discard_errors += 1
             journal["phase"] = "prepare-failed"
-            journal["error"] = str(exc)
+            journal["failure"]["rollback"] = {
+                "phase": "discard-prepare",
+                "status": "verified" if discard_errors == 0 else "incomplete",
+                "error_count": discard_errors,
+            }
             self._write(journal)
             return TransactionResult(InstallerExit.PREPARE_FAILED, journal["phase"], self.journal_path, token.transaction_id)
 

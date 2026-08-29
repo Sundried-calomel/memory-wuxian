@@ -1,6 +1,6 @@
 # Unified Installer Transaction Retrospective
 
-<!-- workflow-governance: current=WF-20260829-004 -->
+<!-- workflow-governance: current=WF-20260829-005 -->
 
 ## Trigger
 
@@ -85,3 +85,19 @@ clean/repeat execution on the disposable runner, and separately labelled
 namespaced transaction rollback evidence. The latter supplements rollback
 coverage but never substitutes for the outer Inno, PowerShell, Broker, and
 child chain. No candidate installer may run on the target device before S14.
+
+## 2026-08-29 assertion-diagnostic correction
+
+The first corrected S09 runner crossed the Inno placeholder boundary, created
+an `inno` request, and reached the seventh transaction resource. The dashboard
+shortcut then failed inside one four-condition activation assertion. The error
+identified the component but not whether target, working directory, icon, or
+live target existence differed, and rollback removed the observable shortcut.
+
+The exported evidence also copied the internal recovery journal and broker
+request verbatim. Those files contain an ephemeral transaction token and nonce.
+Disposable-runner destruction limits their lifetime but does not make recovery
+authority valid CI evidence. The correction keeps the recovery journal private,
+records one assertion-level failure before rollback, appends rollback outcome,
+and exports a closed package-bound projection. Shortcut behavior remains frozen
+until the receipt identifies the exact failed assertion.

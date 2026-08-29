@@ -62,3 +62,16 @@
   - `rules`：`D4FF8ACDC54C1C65CFC56EAEAB748F28B3D5435BD4E0D7FC16716876274CD7F7`
   - `history`：`9105F27AB4E1B60319C3EEBAF8711B3ED35C2171812BC60140E9892BB05E7726`
   - `optimized`：`974778CAFB810490F7E6C5096DE0BD23C5DB3EDC0A3520D317DA46DE546A0630`
+
+## WF-20260829-005
+
+- 时间：2026-08-29T16:13:24+09:00
+- 类型：correction
+- 摘要：Add an assertion-level installer-diagnostic-v1 contract before any further S09 behavior repair; preserve S01-S08 and retain failure evidence before rollback.
+- 项目规则：Require assertion-level pre-rollback diagnostics, post-rollback status, and closed secret-free S09 evidence projections.
+- 历史复盘：Recorded the generic four-condition shortcut failure and the accidental export of ephemeral recovery token and nonce.
+- 优化流程：Diagnose first, rerun once on the disposable runner, then permit only one evidence-bound root-cause repair.
+- 文档SHA-256：
+  - `rules`：`AAE649801A878D33B755D45B92B6A5736FDC54C12E2622F2807B4EDDC8EAE939`
+  - `history`：`AF667A98748F2348E5B847CFA58BAF16F5E0D2CC045BF6AD507A3DA5DA0DE256`
+  - `optimized`：`3687E207E3641315ED43B8F7D03030B756519D6585734FD78DB81E30190E4500`

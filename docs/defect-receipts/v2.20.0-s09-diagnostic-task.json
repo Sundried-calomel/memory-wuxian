@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-s09-installer-diagnostic-v1",
+  "objective": "Add a bounded, privacy-safe installer-diagnostic-v1 contract that records assertion-level expected and observed values before rollback, appends rollback outcome afterward, and is always uploaded by the existing GitHub-hosted S09 lane before any dashboard-shortcut behavior repair.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "windows-installer-transaction-diagnostics",
+  "platforms": ["windows", "macos", "linux"],
+  "languages": ["python", "powershell", "json", "markdown", "yaml"],
+  "path_globs": [
+    "docs/defect-receipts/**",
+    "docs/install-transaction/**",
+    "docs/retrospectives/install-transaction-workflow.md",
+    "docs/retrospectives/memory-wuxian-defect-workbook.md",
+    "scripts/install_windows_transaction.py",
+    "scripts/install_dashboard_shortcut_windows.ps1",
+    "tests/test_windows_installer*.py",
+    "tests/run_windows_packaged_chain_ci.ps1",
+    ".github/workflows/test.yml"
+  ],
+  "entrypoints": [
+    "inno-installer",
+    "powershell-bootstrap",
+    "windows-installer-transaction",
+    "dashboard-shortcut",
+    "github-s09-runner"
+  ],
+  "resources": [
+    "transaction-journal",
+    "diagnostic-receipt",
+    "rollback-evidence",
+    "ci-artifact",
+    "desktop-shortcut"
+  ],
+  "operations": ["observe", "validate", "record", "rollback", "upload"],
+  "data_formats": ["utf-8", "json", "sha256", "windows-path"],
+  "authorization_boundaries": [
+    "The diagnostic contract may record only installer metadata, assertion identifiers, bounded expected and observed values, source locations, exit codes, and rollback status.",
+    "Secrets, transaction-token material, raw user content, conversation data, archive contents, credentials, and unrestricted environment dumps are prohibited.",
+    "No external telemetry export is added; GitHub receives only the already-authorized S09 evidence artifact created on its ephemeral runner.",
+    "No dashboard-shortcut behavior repair is permitted until the diagnostic receipt identifies the exact failed assertion.",
+    "No candidate installer may run on the target device before S14."
+  ],
+  "implementation_units": [
+    {
+      "id": "diagnostic-contract-and-workflow",
+      "owner_id": "installer-workflow-controller",
+      "paths": ["docs/install-transaction/**", "docs/retrospectives/install-transaction-workflow.md"],
+      "entrypoints": ["workflow-controller", "github-s09-runner"],
+      "resources": ["diagnostic-receipt", "ci-artifact"],
+      "operations": ["validate", "record", "upload"],
+      "planned_check_ids": ["registered-preflight", "fail-closed-completion", "exact-candidate-release"]
+    },
+    {
+      "id": "transaction-assertion-diagnostics",
+      "owner_id": "windows-installer-transaction-diagnostics",
+      "paths": ["scripts/install_windows_transaction.py", "scripts/install_dashboard_shortcut_windows.ps1", "tests/test_windows_installer*.py"],
+      "entrypoints": ["windows-installer-transaction", "dashboard-shortcut"],
+      "resources": ["transaction-journal", "diagnostic-receipt", "rollback-evidence", "desktop-shortcut"],
+      "operations": ["observe", "validate", "record", "rollback"],
+      "planned_check_ids": ["real-entrypoint-effect", "target-platform-effect", "unicode-path-fixtures"]
+    },
+    {
+      "id": "s09-evidence-retention",
+      "owner_id": "windows-installer-ci-contracts",
+      "paths": ["tests/run_windows_packaged_chain_ci.ps1", ".github/workflows/test.yml"],
+      "entrypoints": ["github-s09-runner"],
+      "resources": ["diagnostic-receipt", "rollback-evidence", "ci-artifact"],
+      "operations": ["record", "upload"],
+      "planned_check_ids": ["exact-candidate-release", "target-platform-effect"]
+    }
+  ],
+  "rule_exclusions": []
+}

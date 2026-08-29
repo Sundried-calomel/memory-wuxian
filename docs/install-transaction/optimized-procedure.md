@@ -1,6 +1,6 @@
 # Unified Installer Transaction Procedure
 
-<!-- workflow-governance: current=WF-20260829-004 -->
+<!-- workflow-governance: current=WF-20260829-005 -->
 
 ## Resume protocol
 
@@ -58,6 +58,11 @@
    to inject a failure and prove exact rollback and idempotency. Upload both
    receipts and runner logs as immutable CI artifacts; never represent the
    direct-controller rollback lane as complete packaged-chain evidence.
+   Validate failures against `installer-diagnostic-v1.json`: persist each
+   structured expected/observed check before rollback, append rollback status,
+   and upload only the closed journal and broker projections. Transaction
+   tokens, nonces, credentials, arbitrary exception bodies, environment dumps,
+   and unrestricted command output are forbidden artifact fields.
 10. S10 runs the targeted Unicode, isolated-runtime, broker, cancellation,
     rollback, and idempotency matrix and proves that each result traversed the
     exact packaged chain.
@@ -76,3 +81,9 @@ For a late-stage failure, identify the earliest receipt contradicted by the new
 evidence and invalidate only that step and its dependants. Preserve unrelated
 completed evidence. A missing production-chain rehearsal invalidates the
 rehearsal claim, not the entire installer architecture by default.
+
+When a failure lacks assertion-level evidence, preserve completed predecessor
+steps and correct the diagnostic boundary first. Run the exact disposable lane
+once to identify the failed check, then authorize at most one root-cause
+behavior repair. Do not alternate speculative behavior patches with generic
+reruns.

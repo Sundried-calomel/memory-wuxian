@@ -1,6 +1,6 @@
 # Unified Installer Transaction Rules
 
-<!-- workflow-governance: current=WF-20260829-004 -->
+<!-- workflow-governance: current=WF-20260829-005 -->
 
 ## Scope
 
@@ -62,6 +62,17 @@ them.
     boundary. Replanning may invalidate only the earliest false receipt and its
     dependants; it must not restart an unrelated completed sequence or expand a
     local defect into an unbounded rewrite.
+15. Every installer transaction failure follows
+    `installer-diagnostic-v1.json`: persist assertion-level evidence before
+    rollback, append the verified rollback outcome afterward, and export only
+    the closed safe projection. A combined generic assertion, raw recovery
+    journal, transaction token, nonce, credential, arbitrary exception body,
+    or environment dump cannot satisfy S09 evidence.
+16. Structured assertions report each check independently with bounded
+    expected and observed values. An unclassified exception exposes only its
+    category and bounded source location until a safe component-specific
+    classifier exists; unrestricted stdout, stderr, and tracebacks remain
+    internal and are never CI evidence.
 
 ## Required operator sequence
 

@@ -70,6 +70,122 @@ function Get-RunValueEvidence([string]$Name) {
   return [ordered]@{ exists = ($LASTEXITCODE -eq 0) }
 }
 
+function Get-OptionalProperty($Value, [string]$Name) {
+  if ($null -eq $Value) { return $null }
+  $property = $Value.PSObject.Properties[$Name]
+  if ($null -eq $property) { return $null }
+  return $property.Value
+}
+
+function Get-SafePackageProjection($Value) {
+  if ($null -eq $Value) { return $null }
+  return [ordered]@{ version = (Get-OptionalProperty $Value "version"); sha256 = (Get-OptionalProperty $Value "sha256") }
+}
+
+function Get-SafeRequestProjection([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+  $value = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+  return [ordered]@{
+    schema_version = (Get-OptionalProperty $value "schema_version")
+    source_entrypoint = (Get-OptionalProperty $value "source_entrypoint")
+    operation = (Get-OptionalProperty $value "operation")
+    package = Get-SafePackageProjection (Get-OptionalProperty $value "package")
+  }
+}
+
+function Get-SafeFailureProjection($Value) {
+  if ($null -eq $Value) { return $null }
+  $source = Get-OptionalProperty $Value "source"
+  $rollback = Get-OptionalProperty $Value "rollback"
+  $checks = @()
+  foreach ($check in @(Get-OptionalProperty $Value "checks")) {
+    $checks += [ordered]@{
+      id = (Get-OptionalProperty $check "id")
+      passed = (Get-OptionalProperty $check "passed")
+      expected = (Get-OptionalProperty $check "expected")
+      observed = (Get-OptionalProperty $check "observed")
+    }
+  }
+  return [ordered]@{
+    schema_version = (Get-OptionalProperty $Value "schema_version")
+    recorded_at = (Get-OptionalProperty $Value "recorded_at")
+    phase = (Get-OptionalProperty $Value "phase")
+    operation = (Get-OptionalProperty $Value "operation")
+    component = (Get-OptionalProperty $Value "component")
+    resource_id = (Get-OptionalProperty $Value "resource_id")
+    error_code = (Get-OptionalProperty $Value "error_code")
+    exception_type = (Get-OptionalProperty $Value "exception_type")
+    safe_message = (Get-OptionalProperty $Value "safe_message")
+    source = if ($null -eq $source) { $null } else { [ordered]@{ file = (Get-OptionalProperty $source "file"); line = (Get-OptionalProperty $source "line"); function = (Get-OptionalProperty $source "function") } }
+    package = Get-SafePackageProjection (Get-OptionalProperty $Value "package")
+    checks = $checks
+    rollback = if ($null -eq $rollback) { $null } else { [ordered]@{ phase = (Get-OptionalProperty $rollback "phase"); status = (Get-OptionalProperty $rollback "status"); error_count = (Get-OptionalProperty $rollback "error_count") } }
+  }
+}
+
+function Get-SafeJournalProjection([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+  $value = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+  $mutations = @()
+  foreach ($mutation in @(Get-OptionalProperty $value "mutations")) {
+    $mutations += [ordered]@{
+      name = (Get-OptionalProperty $mutation "name")
+      resource_id = (Get-OptionalProperty $mutation "resource_id")
+      status = (Get-OptionalProperty $mutation "status")
+      apply_recorded = ($null -ne (Get-OptionalProperty $mutation "apply_evidence"))
+      verify_recorded = ($null -ne (Get-OptionalProperty $mutation "verify_evidence"))
+      commit_recorded = ($null -ne (Get-OptionalProperty $mutation "commit_evidence"))
+      rollback_recorded = ($null -ne (Get-OptionalProperty $mutation "rollback_evidence"))
+      rollback_verify_recorded = ($null -ne (Get-OptionalProperty $mutation "rollback_verify_evidence"))
+    }
+  }
+  return [ordered]@{
+    schema_version = (Get-OptionalProperty $value "schema_version")
+    transaction_id = (Get-OptionalProperty $value "transaction_id")
+    phase = (Get-OptionalProperty $value "phase")
+    source_entrypoint = (Get-OptionalProperty $value "source_entrypoint")
+    operation = (Get-OptionalProperty $value "operation")
+    package = Get-SafePackageProjection (Get-OptionalProperty $value "package")
+    manifest_sha256 = (Get-OptionalProperty $value "manifest_sha256")
+    failure = Get-SafeFailureProjection (Get-OptionalProperty $value "failure")
+    mutations = $mutations
+  }
+}
+
+function Get-SafeBrokerProjection([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+  $value = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+  return [ordered]@{
+    controller_sha256 = (Get-OptionalProperty $value "controller_sha256")
+    manifest_sha256 = (Get-OptionalProperty $value "manifest_sha256")
+    operation = (Get-OptionalProperty $value "operation")
+    target_sid = (Get-OptionalProperty $value "target_sid")
+    transaction_id = (Get-OptionalProperty $value "transaction_id")
+    nonce_present = ($null -ne (Get-OptionalProperty $value "nonce"))
+  }
+}
+
+function Assert-NoProhibitedEvidenceField($Value, [string]$Location = "$") {
+  $prohibited = @("transaction_token", "secret", "nonce", "password", "credential", "authorization", "raw_user_content", "conversation_content", "archive_content", "environment_dump", "unbounded_stdout", "unbounded_stderr", "traceback")
+  if ($null -eq $Value -or $Value -is [string] -or $Value.GetType().IsPrimitive) { return }
+  if ($Value -is [Collections.IDictionary]) {
+    foreach ($key in $Value.Keys) {
+      if ($prohibited -contains [string]$key) { throw "Prohibited evidence field at ${Location}.${key}." }
+      Assert-NoProhibitedEvidenceField $Value[$key] "${Location}.${key}"
+    }
+    return
+  }
+  if ($Value -is [Collections.IEnumerable]) {
+    $index = 0
+    foreach ($item in $Value) { Assert-NoProhibitedEvidenceField $item "${Location}[$index]"; $index += 1 }
+    return
+  }
+  foreach ($property in $Value.PSObject.Properties) {
+    if ($prohibited -contains $property.Name) { throw "Prohibited evidence field at ${Location}.$($property.Name)." }
+    Assert-NoProhibitedEvidenceField $property.Value "${Location}.$($property.Name)"
+  }
+}
+
 function Get-ProductEvidence {
   $tasks = [ordered]@{}
   foreach ($name in $taskNames) { $tasks[$name] = Get-TaskEvidence $name }
@@ -81,8 +197,8 @@ function Get-ProductEvidence {
     skill = Get-FileEvidence (Join-Path $skillRoot "SKILL.md")
     request = Get-FileEvidence $request
     journal = Get-FileEvidence $journal
-    request_document = if (Test-Path -LiteralPath $request) { Get-Content -LiteralPath $request -Raw -Encoding UTF8 | ConvertFrom-Json } else { $null }
-    journal_document = if (Test-Path -LiteralPath $journal) { Get-Content -LiteralPath $journal -Raw -Encoding UTF8 | ConvertFrom-Json } else { $null }
+    request_document = Get-SafeRequestProjection $request
+    journal_document = Get-SafeJournalProjection $journal
     tasks = $tasks
     run_values = $values
     shortcut = Get-FileEvidence $shortcut
@@ -101,7 +217,13 @@ function Copy-TransactionEvidence([string]$Name) {
   $destination = Join-Path $outputRoot $Name
   New-Item -ItemType Directory -Path $destination -Force | Out-Null
   if (Test-Path -LiteralPath $transactionRoot) {
-    Copy-Item -Path (Join-Path $transactionRoot "*") -Destination $destination -Recurse -Force -ErrorAction SilentlyContinue
+    $request = Get-SafeRequestProjection (Join-Path $transactionRoot "request.json")
+    $journal = Get-SafeJournalProjection (Join-Path $transactionRoot "journal.json")
+    $broker = Get-SafeBrokerProjection (Join-Path $transactionRoot "broker-request.json")
+    if ($null -ne $request) { Write-CanonicalJson (Join-Path $destination "request-evidence.json") $request }
+    if ($null -ne $journal) { Write-CanonicalJson (Join-Path $destination "journal-evidence.json") $journal }
+    if ($null -ne $broker) { Write-CanonicalJson (Join-Path $destination "broker-evidence.json") $broker }
+    Assert-NoProhibitedEvidenceField ([ordered]@{ request = $request; journal = $journal; broker = $broker })
   }
 }
 
@@ -207,9 +329,10 @@ try {
 
   $receipt.status = "passed"
 } catch {
-  $receipt.error = $_.Exception.Message
+  $receipt.error = [ordered]@{ code = "packaged-chain-rehearsal-failed"; exception_type = $_.Exception.GetType().Name }
   throw
 } finally {
+  Assert-NoProhibitedEvidenceField $receipt
   Write-CanonicalJson $receiptPath $receipt
   if (Test-Path -LiteralPath $workRoot) {
     & git -C $sourceRoot worktree remove --force (Join-Path $workRoot "v215") *> $null

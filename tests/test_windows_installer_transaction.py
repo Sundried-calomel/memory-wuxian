@@ -17,6 +17,7 @@ from install_windows_transaction import build_manifest
 from platform_transaction import atomic_write_canonical_json
 from windows_install_manifest import InstallManifestError, validate_manifest
 from windows_installer_transaction import (
+    InstallerDiagnosticError,
     InstallerExit,
     TransactionToken,
     WindowsInstallerTransaction,
@@ -119,6 +120,28 @@ class FakeAdapter:
         return [self.mutation]
 
 
+class DiagnosticMutation(FakeMutation):
+    def apply(self, token: TransactionToken) -> dict[str, str]:
+        self.calls.append("apply")
+        self.tokens.append(token)
+        raise InstallerDiagnosticError(
+            error_code="fixture-mismatch",
+            safe_message="Fixture assertion failed.",
+            source={"file": "fixture.py", "line": 17, "function": "apply"},
+            checks=[{"id": "fixture", "passed": False, "expected": "a", "observed": "b"}],
+        )
+
+
+class RecordingTransaction(WindowsInstallerTransaction):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.snapshots: list[dict] = []
+
+    def _write(self, journal: dict) -> None:
+        self.snapshots.append(json.loads(json.dumps(journal)))
+        super()._write(journal)
+
+
 class SequenceAdapter:
     def __init__(self, mutations) -> None:
         self.mutations = mutations
@@ -217,6 +240,37 @@ class WindowsInstallerTransactionTests(unittest.TestCase):
                 json.loads(journal.read_text(encoding="utf-8"))["mutations"][0]["status"],
                 "rollback-verified",
             )
+
+    def test_structured_failure_is_persisted_before_rollback_and_completed_afterward(self) -> None:
+        mutation = DiagnosticMutation()
+        transaction = RecordingTransaction(
+            journal_path=self.root / "structured-failure.json",
+            adapters=[FakeAdapter(mutation)],
+        )
+        result = transaction.execute(build_manifest(self.args()))
+        first_failure = next(index for index, item in enumerate(transaction.snapshots) if item.get("failure"))
+        first_rollback = next(index for index, item in enumerate(transaction.snapshots) if item.get("phase") == "rolling-back")
+        self.assertLess(first_failure, first_rollback)
+        self.assertEqual(transaction.snapshots[first_failure]["failure"]["rollback"]["status"], "pending")
+        document = json.loads((self.root / "structured-failure.json").read_text(encoding="utf-8"))
+        self.assertEqual(result.phase, "rolled-back")
+        self.assertEqual(document["failure"]["error_code"], "fixture-mismatch")
+        self.assertEqual(document["failure"]["component"], "fixture")
+        self.assertEqual(document["failure"]["checks"][0]["observed"], "b")
+        self.assertEqual(document["failure"]["rollback"], {"phase": "rolled-back", "status": "verified", "error_count": 0})
+
+    def test_unclassified_failure_exports_category_and_source_without_arbitrary_message(self) -> None:
+        mutation = FakeMutation(fail_apply=True)
+        journal = self.root / "unclassified-failure.json"
+        WindowsInstallerTransaction(journal_path=journal, adapters=[FakeAdapter(mutation)]).execute(
+            build_manifest(self.args())
+        )
+        failure = json.loads(journal.read_text(encoding="utf-8"))["failure"]
+        self.assertEqual(failure["error_code"], "unclassified-exception")
+        self.assertEqual(failure["exception_type"], "RuntimeError")
+        self.assertIsNone(failure["safe_message"])
+        self.assertEqual(failure["checks"], [])
+        self.assertNotIn("apply failed", json.dumps(failure))
 
     def test_dependent_resources_commit_before_foundational_generation(self) -> None:
         calls: list[str] = []
@@ -414,6 +468,20 @@ class WindowsInstallerTransactionTests(unittest.TestCase):
         self.assertIn("/sourceentrypoint=auto-update", updater)
         self.assertIn("exit $transactionexit", powershell)
         self.assertNotIn("write-error", powershell)
+
+    def test_shortcut_diagnostic_precedes_local_restore_and_ci_exports_closed_projections(self) -> None:
+        shortcut = (ROOT / "scripts/install_dashboard_shortcut_windows.ps1").read_text(encoding="utf-8")
+        diagnostic = shortcut.index("Write-ShortcutDiagnostic $checks")
+        local_restore = shortcut.index("if ($replacedExisting", diagnostic)
+        self.assertLess(diagnostic, local_restore)
+        for check_id in ("target", "working_directory", "icon", "target_exists"):
+            self.assertIn(f'id = "{check_id}"', shortcut)
+
+        ci = (ROOT / "tests/run_windows_packaged_chain_ci.ps1").read_text(encoding="utf-8").lower()
+        self.assertNotIn('copy-item -path (join-path $transactionroot "*")', ci)
+        self.assertIn("journal-evidence.json", ci)
+        self.assertIn("broker-evidence.json", ci)
+        self.assertIn("assert-noprohibitedevidencefield", ci)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "contract_id": "memory-wuxian-installer-diagnostic-v1",
+  "owner": "windows-installer-transaction-diagnostics",
+  "boundary": "Windows installer transaction failures and their exported S09 evidence projection",
+  "questions": [
+    "Which transaction phase, component, resource, and assertion failed?",
+    "What bounded expected and observed values caused a structured assertion to fail?",
+    "Was failure evidence persisted before rollback and was rollback subsequently verified?",
+    "Can exported evidence bind to the exact package without exporting recovery secrets or user content?"
+  ],
+  "failure_required_fields": ["schema_version", "recorded_at", "phase", "operation", "component", "resource_id", "error_code", "exception_type", "source", "package", "checks", "rollback"],
+  "failure_allowed_fields": ["schema_version", "recorded_at", "phase", "operation", "component", "resource_id", "error_code", "exception_type", "safe_message", "source", "package", "checks", "rollback"],
+  "check_required_fields": ["id", "passed", "expected", "observed"],
+  "check_allowed_fields": ["id", "passed", "expected", "observed"],
+  "rollback_required_fields": ["phase", "status", "error_count"],
+  "rollback_allowed_fields": ["phase", "status", "error_count"],
+  "allowed_value_types": ["null", "boolean", "integer", "string"],
+  "limits": {"maximum_checks": 32, "maximum_string_characters": 2048, "maximum_exported_mutations": 32},
+  "prohibited_export_fields": ["transaction_token", "secret", "nonce", "password", "credential", "authorization", "raw_user_content", "conversation_content", "archive_content", "environment_dump", "unbounded_stdout", "unbounded_stderr", "traceback"],
+  "persistence_order": ["classify-failure", "persist-pre-rollback-failure", "execute-rollback", "persist-rollback-outcome", "build-safe-export-projection", "upload-always"],
+  "export_projection": {
+    "journal_fields": ["schema_version", "transaction_id", "phase", "source_entrypoint", "operation", "package", "manifest_sha256", "failure", "mutations"],
+    "mutation_fields": ["name", "resource_id", "status", "apply_recorded", "verify_recorded", "commit_recorded", "rollback_recorded", "rollback_verify_recorded"],
+    "broker_fields": ["controller_sha256", "manifest_sha256", "operation", "target_sid", "transaction_id", "nonce_present"]
+  },
+  "retention": {"internal_journal": "transaction recovery lifetime", "ci_projection": "GitHub artifact retention configured by the repository", "external_telemetry": false}
+}

@@ -1,21 +1,22 @@
 {
   "schema_version": 1,
   "candidate_id": "installer-transaction-workflow",
-  "candidate_revision": "2.20.0-governance-14",
-  "candidate_manifest_sha256": "53aded22dab459452d2db748a27beb9f068ade39f432d57436ce808c25f43531",
+  "candidate_revision": "2.20.0-governance-15",
+  "candidate_manifest_sha256": "f6eeebe72a7cf932783e2d78db55cc2db02f20e8006acd2420049f05eb0416b9",
   "registry_sha256": "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89",
-  "reviewer_identity": "codex-independent-readonly-evaluator-v220-g14",
+  "reviewer_identity": "codex-independent-readonly-evaluator-v220-g15",
   "classification": "extension",
   "owner_id": "windows-installer-transaction-controller",
   "decision": "allow",
   "evidence": [
-    "Reviewer identity differs from producer identity codex-primary-producer.",
-    "Deterministic admission inspection found no errors, trigger conflicts, call cycles, or resource conflicts.",
-    "Owner, triggers, calls, actions, resources, permissions, authorization gates, registry, project ID, and binding allowlists remain unchanged; only revision and hash bindings changed.",
-    "S01-S08 remain preserved and S09 is limited to the four explicitly authorized path scopes.",
-    "Runner execution fails closed to GITHUB_ACTIONS=true and RUNNER_ENVIRONMENT=github-hosted, requires no repository secret, and forbids target installation before S14.",
-    "Packaged-chain evidence remains distinct from namespaced direct-controller rollback evidence.",
-    "The independently recomputed aggregate artifact SHA-256 is 90bc61c6b7c27229a666ba03b7c56bf0a8b37c4731e3061af911b121f9e640d3."
+    "The reviewer identity differs from producer identity codex-primary-producer.",
+    "All nine frozen artifact SHA-256 values in diagnostic-review-contract.json were independently recomputed and matched.",
+    "Manifest and binding semantics are unchanged apart from revision and hash bindings; owner, triggers, calls, resources, permissions, actions, project ID, and allowlists are unchanged.",
+    "The diagnostic contract requires structured failure persistence before rollback and appends rollback outcome afterward.",
+    "Structured checks are bounded and the closed CI projection prohibits transaction tokens, secrets, nonce values, credentials, arbitrary exception bodies, environment dumps, unrestricted output, and tracebacks.",
+    "Shortcut behavior remains frozen until one GitHub-hosted disposable Windows run identifies the exact failed assertion.",
+    "S09 expands only the three exact implementation paths and bounded evidence paths needed for diagnostics; local candidate installation remains forbidden before S14.",
+    "Deterministic admission inspection reported no errors, trigger conflicts, call cycles, or resource conflicts."
   ],
   "trigger_resolutions": []
 }

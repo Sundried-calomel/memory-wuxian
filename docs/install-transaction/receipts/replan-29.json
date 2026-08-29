@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "replanned_at": "2026-08-29T16:21:22+09:00",
+  "reason": "The GitHub-hosted S09 run exposed a generic four-condition dashboard shortcut failure and unsafe raw recovery evidence export; preserve S01-S08 and add only the admitted assertion-level diagnostic and closed evidence projection before one exact rerun.",
+  "approval": "User approved establishing this diagnostic contract and executing the complete frozen strategy strictly.",
+  "resume_step": "S09",
+  "previous_state_sha256": "588a852654cb3f966625641d899fa9e7799c5f86c6d11daedc6b7c6059638748",
+  "old_contract_sha256": "9152f100c16ac2228069e54b183d2b231ad10e08c1e40f0e3d6d52fe9c72c6be",
+  "new_contract_sha256": "9b50302b7b869c600eb2daa0d5f4023b1409c85d76ce4547432b557ee5ad8eea",
+  "baseline_sha256": "8869e3c1ff3c63b02fba09e45d03de157ef44de89656395fabe7adfd0ef5a06f"
+}

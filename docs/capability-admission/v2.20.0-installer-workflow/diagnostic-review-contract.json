@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "review_id": "v2.20.0-governance-15-installer-diagnostic",
+  "producer_identity": "codex-primary-producer",
+  "required_reviewer_identity": "independent-readonly-evaluator",
+  "classification_expected": "extension",
+  "artifacts": [
+    {"path": "docs/capability-admission/v2.20.0-installer-workflow/manifest.json", "sha256": "f6eeebe72a7cf932783e2d78db55cc2db02f20e8006acd2420049f05eb0416b9"},
+    {"path": "docs/capability-admission/v2.20.0-installer-workflow/binding.json", "sha256": "6b07b25479f882e2fd74b68106f1ae049d30e48b5ea4bb51fdc5b33e3efbb5b3"},
+    {"path": "docs/capability-admission/v2.20.0-installer-workflow/registry.json", "sha256": "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89"},
+    {"path": "docs/install-transaction/installer-diagnostic-v1.json", "sha256": "9cee7021c2263da068056ec96d5d53575f736776fd6933676081ddecb2df3b79"},
+    {"path": "docs/install-transaction/contract.json", "sha256": "9b50302b7b869c600eb2daa0d5f4023b1409c85d76ce4547432b557ee5ad8eea"},
+    {"path": "docs/install-transaction/rules.md", "sha256": "aae649801a878d33b755d45b92b6a5736fdc54c12e2622f2807b4eddc8eae939"},
+    {"path": "docs/install-transaction/optimized-procedure.md", "sha256": "3687e207e3641315ed43b8f7d03030b756519d6585734fd78db81e30190e4500"},
+    {"path": "docs/retrospectives/install-transaction-workflow.md", "sha256": "af667a98748f2348e5b847cfa58baf16f5e0d2cc045bf6ad507a3da5da0de256"},
+    {"path": "docs/install-transaction/change-log.md", "sha256": "1e0e5ba757d63a3b85d256ed6083f8eaae3fd98ad0c35df9edaae55a373dbecf"}
+  ],
+  "criteria": [
+    {"id": "C01", "requirement": "Every listed artifact hash matches the reviewed bytes."},
+    {"id": "C02", "requirement": "The revision changes only the installer diagnostic and evidence boundary; capability actions, permissions, resources, triggers, owner, and project binding are not expanded."},
+    {"id": "C03", "requirement": "A failure is persisted before rollback and the rollback result is appended afterward."},
+    {"id": "C04", "requirement": "Structured checks retain bounded expected and observed values; unclassified failures do not export arbitrary exception bodies, stdout, stderr, tracebacks, or environment dumps."},
+    {"id": "C05", "requirement": "CI evidence is a closed projection and prohibits transaction tokens, secrets, nonce values, passwords, credentials, authorization material, and raw private payloads."},
+    {"id": "C06", "requirement": "The contract does not authorize a shortcut behavior repair before the failed assertion is identified on the GitHub-hosted disposable Windows runner."},
+    {"id": "C07", "requirement": "The S09 path expansion is the minimum necessary implementation and evidence scope and does not authorize local candidate installation before S14."},
+    {"id": "C08", "requirement": "The deterministic admission inspection has no trigger conflict, call cycle, resource conflict, or binding error."}
+  ],
+  "verdict_rule": "PASS only when C01-C08 all pass; otherwise FAIL or INCONCLUSIVE with criterion-specific evidence.",
+  "output_contract": {
+    "required": ["reviewer_identity", "decision", "classification", "criteria", "evidence", "trigger_resolutions"],
+    "decision": ["allow", "deny", "inconclusive"]
+  }
+}

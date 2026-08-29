@@ -486,6 +486,23 @@
   都不得生成可安装候选。
 - Families: `G04`, `G05`, `G09`, `G11`, `MW-R02`, `MW-R06`, `MW-R10`.
 
+### MW-REL-037：组合断言与原始恢复文件使安装失败既不可定位又泄露权限材料
+
+- 证据：`GitHub S09 run 33239128752 已核验`。完整 Inno 生产链到达
+  `dashboard-shortcut` 后，目标、工作目录、图标和目标存在性被压成一个布尔断言；
+  脚本先恢复或删除快捷方式再抛出通用错误，因此产物无法指出具体失败字段。CI 随后递归
+  复制完整事务目录，把内部 journal 的 `transaction_token.secret` 和 broker request 的
+  nonce 一并上传为证据。
+- 根因：恢复所需的私有状态与发布所需的诊断证据没有分层；组件 Owner 没有在回滚前提交
+  结构化断言，CI 也没有封闭字段投影和禁止键检查。
+- 永久门槛：每个复合效果断言必须逐项记录 bounded `expected`/`observed`，在任何补偿动作
+  之前原子写入事务 failure；事务 Owner 在回滚后只追加 rollback 结果。CI 只能导出合同
+  列出的 journal、mutation 和 broker 投影，nonce 只允许导出存在性布尔值；
+  `transaction_token`、`secret`、nonce 值、凭据、环境转储、任意异常正文、stdout/stderr
+  和 traceback 均不得进入产物。未知失败只导出异常类别和受限源码位置。首次结构化证据
+  尚未指出具体字段前，不得修改被测行为。
+- Families: `G02`, `G05`, `G09`, `G11`, `MW-R01`, `MW-R05`, `MW-R06`, `MW-R10`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。

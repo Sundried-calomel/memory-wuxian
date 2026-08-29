@@ -42,7 +42,7 @@ try:
     )
     from install_maintenance_supervisor import WINDOWS_TASK_NAME as MAINTENANCE_TASK_NAME, windows_xml as maintenance_windows_xml
     from windows_install_migrations import default_registry
-    from windows_installer_transaction import TransactionToken, WindowsInstallerTransaction
+    from windows_installer_transaction import InstallerDiagnosticError, TransactionToken, WindowsInstallerTransaction
     from platform_atomic import atomic_replace_bytes
     from platform_scheduler import (
         WindowsTaskSpec,
@@ -72,7 +72,7 @@ except ModuleNotFoundError:
     )
     from scripts.install_maintenance_supervisor import WINDOWS_TASK_NAME as MAINTENANCE_TASK_NAME, windows_xml as maintenance_windows_xml
     from scripts.windows_install_migrations import default_registry
-    from scripts.windows_installer_transaction import TransactionToken, WindowsInstallerTransaction
+    from scripts.windows_installer_transaction import InstallerDiagnosticError, TransactionToken, WindowsInstallerTransaction
     from scripts.platform_atomic import atomic_replace_bytes
     from scripts.platform_scheduler import (
         WindowsTaskSpec,
@@ -1106,6 +1106,7 @@ class DashboardShortcutMutation(_BoundMutation):
         self.backup_root = backup_root
         self.desktop = desktop
         self.shortcut_name = shortcut_name
+        self.diagnostic_path = backup_root / "dashboard-shortcut-diagnostic.json"
         self.shortcut: Path | None = None
         codex_home = manifest.target_skill_root.parent.parent
         self.launcher_config = codex_home / "memory-wuxian-dashboard-launcher.json"
@@ -1148,7 +1149,17 @@ class DashboardShortcutMutation(_BoundMutation):
         self._check(token)
         if self.desktop is None or self.shortcut is None:
             raise RuntimeError("dashboard shortcut mutation is not prepared")
-        _run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(self.manifest.target_skill_root / "scripts/install_dashboard_shortcut_windows.ps1"), "-SkillRoot", str(self.manifest.target_skill_root), "-ArchiveRoot", str(self.manifest.archive_root), "-PythonExecutable", self._python(), "-Desktop", str(self.desktop), "-ShortcutName", self.shortcut_name])
+        self.diagnostic_path.unlink(missing_ok=True)
+        try:
+            _run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(self.manifest.target_skill_root / "scripts/install_dashboard_shortcut_windows.ps1"), "-SkillRoot", str(self.manifest.target_skill_root), "-ArchiveRoot", str(self.manifest.archive_root), "-PythonExecutable", self._python(), "-Desktop", str(self.desktop), "-ShortcutName", self.shortcut_name, "-DiagnosticPath", str(self.diagnostic_path)])
+        except RuntimeError as error:
+            if self.diagnostic_path.is_file():
+                try:
+                    document = json.loads(self.diagnostic_path.read_text(encoding="utf-8"))
+                    raise InstallerDiagnosticError.from_document(document) from error
+                except (OSError, json.JSONDecodeError, ValueError):
+                    pass
+            raise
         self.created_hashes[self.shortcut] = file_sha256(self.shortcut)
         self.created_hashes[self.launcher_config] = file_sha256(self.launcher_config)
         return {"shortcut": str(self.shortcut), "launcher_config": str(self.launcher_config)}
