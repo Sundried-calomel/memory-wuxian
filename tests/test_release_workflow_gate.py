@@ -74,7 +74,10 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn("(3, 14) <= sys.version_info < (3, 15)", postinstall)
 
     def test_ci_eliminates_duplicate_triggers_and_serial_windows_shards(self) -> None:
-        self.assertIn("branches: [main]", self.test_source)
+        self.assertIn(
+            "branches: [main, codex/v2191-install-fix]",
+            self.test_source,
+        )
         self.assertIn("pull_request:", self.test_source)
         self.assertIn("cancel-in-progress: true", self.test_source)
         self.assertIn("windows-candidate:", self.test_source)

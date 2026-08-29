@@ -2,7 +2,7 @@ name: test
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/v2191-install-fix]
   pull_request:
 
 concurrency:
