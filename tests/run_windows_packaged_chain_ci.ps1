@@ -165,25 +165,30 @@ function Get-SafeBrokerProjection([string]$Path) {
   }
 }
 
-function Assert-NoProhibitedEvidenceField($Value, [string]$Location = "$") {
+function Assert-NoProhibitedEvidenceField($Value, [string]$Location = "$", [int]$Depth = 0) {
   $prohibited = @("transaction_token", "secret", "nonce", "password", "credential", "authorization", "raw_user_content", "conversation_content", "archive_content", "environment_dump", "unbounded_stdout", "unbounded_stderr", "traceback")
+  if ($Depth -gt 32) { throw "Evidence nesting exceeds the closed depth limit at ${Location}." }
   if ($null -eq $Value -or $Value -is [string] -or $Value.GetType().IsPrimitive) { return }
   if ($Value -is [Collections.IDictionary]) {
     foreach ($key in $Value.Keys) {
       if ($prohibited -contains [string]$key) { throw "Prohibited evidence field at ${Location}.${key}." }
-      Assert-NoProhibitedEvidenceField $Value[$key] "${Location}.${key}"
+      Assert-NoProhibitedEvidenceField $Value[$key] "${Location}.${key}" ($Depth + 1)
     }
     return
   }
   if ($Value -is [Collections.IEnumerable]) {
     $index = 0
-    foreach ($item in $Value) { Assert-NoProhibitedEvidenceField $item "${Location}[$index]"; $index += 1 }
+    foreach ($item in $Value) { Assert-NoProhibitedEvidenceField $item "${Location}[$index]" ($Depth + 1); $index += 1 }
     return
   }
-  foreach ($property in $Value.PSObject.Properties) {
-    if ($prohibited -contains $property.Name) { throw "Prohibited evidence field at ${Location}.$($property.Name)." }
-    Assert-NoProhibitedEvidenceField $property.Value "${Location}.$($property.Name)"
+  if ($Value -is [PSCustomObject]) {
+    foreach ($property in $Value.PSObject.Properties) {
+      if ($prohibited -contains $property.Name) { throw "Prohibited evidence field at ${Location}.$($property.Name)." }
+      Assert-NoProhibitedEvidenceField $property.Value "${Location}.$($property.Name)" ($Depth + 1)
+    }
+    return
   }
+  throw "Unsupported evidence value type at ${Location}: $($Value.GetType().FullName)."
 }
 
 function Get-ProductEvidence {

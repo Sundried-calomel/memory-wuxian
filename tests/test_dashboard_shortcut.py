@@ -57,6 +57,13 @@ class DashboardShortcutTest(unittest.TestCase):
         self.assertIn("[IO.File]::Delete($shortcutPath)", script)
         for check_id in ("target", "working_directory", "icon", "target_exists"):
             self.assertIn(f'id = "{check_id}"', script)
+        self.assertIn('$temporaryShortcut.TargetPath -eq $launcher', script)
+        self.assertIn('$temporaryShortcut.WorkingDirectory -eq $skill', script)
+        self.assertIn('$temporaryShortcut.IconLocation -eq "$icon,0"', script)
+        self.assertIn(
+            'Write-ShortcutDiagnostic $temporaryChecks "temporary-shortcut-verification"',
+            script,
+        )
         self.assertIn("$installedShortcut.TargetPath -eq $launcher", script)
         self.assertIn("$installedShortcut.WorkingDirectory -eq $skill", script)
         self.assertIn('$installedShortcut.IconLocation -eq "$icon,0"', script)

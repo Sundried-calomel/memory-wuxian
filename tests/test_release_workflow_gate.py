@@ -55,6 +55,10 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn('lane = "namespaced-direct-controller-rollback"', harness)
         self.assertIn("packaged_chain_claim = $false", harness)
         self.assertNotIn("secrets.", windows)
+        self.assertIn("[int]$Depth = 0", harness)
+        self.assertIn("$Depth -gt 32", harness)
+        self.assertIn("$Value -is [PSCustomObject]", harness)
+        self.assertIn("Unsupported evidence value type", harness)
 
     def test_ci_does_not_repeat_the_suite_across_unsupported_python_versions(self) -> None:
         self.assertNotIn("python-compatibility:", self.test_source)

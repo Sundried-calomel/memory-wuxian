@@ -16,7 +16,7 @@ function Limit-DiagnosticText([string]$Value) {
     return $Value.Substring(0, 2048)
 }
 
-function Write-ShortcutDiagnostic($Checks) {
+function Write-ShortcutDiagnostic($Checks, [string]$FunctionName = "installed-shortcut-verification") {
     if (-not $DiagnosticPath) { return }
     $parent = Split-Path -Parent $DiagnosticPath
     if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
@@ -27,7 +27,7 @@ function Write-ShortcutDiagnostic($Checks) {
         source = [ordered]@{
             file = "install_dashboard_shortcut_windows.ps1"
             line = $null
-            function = "installed-shortcut-verification"
+            function = $FunctionName
         }
         checks = $Checks
     }
@@ -116,11 +116,15 @@ try {
     $shortcut.Save()
 
     $temporaryShortcut = $shell.CreateShortcut($temporaryPath)
-    if (
-        $temporaryShortcut.TargetPath -ne $launcher -or
-        $temporaryShortcut.WorkingDirectory -ne $skill -or
-        $temporaryShortcut.IconLocation -ne "$icon,0"
-    ) {
+    $temporaryTargetExists = [bool](Test-Path -LiteralPath $temporaryShortcut.TargetPath -PathType Leaf)
+    $temporaryChecks = @(
+        [ordered]@{ id = "target"; passed = ($temporaryShortcut.TargetPath -eq $launcher); expected = (Limit-DiagnosticText $launcher); observed = (Limit-DiagnosticText $temporaryShortcut.TargetPath) }
+        [ordered]@{ id = "working_directory"; passed = ($temporaryShortcut.WorkingDirectory -eq $skill); expected = (Limit-DiagnosticText $skill); observed = (Limit-DiagnosticText $temporaryShortcut.WorkingDirectory) }
+        [ordered]@{ id = "icon"; passed = ($temporaryShortcut.IconLocation -eq "$icon,0"); expected = (Limit-DiagnosticText "$icon,0"); observed = (Limit-DiagnosticText $temporaryShortcut.IconLocation) }
+        [ordered]@{ id = "target_exists"; passed = $temporaryTargetExists; expected = $true; observed = $temporaryTargetExists }
+    )
+    if (@($temporaryChecks | Where-Object { -not $_.passed }).Count -gt 0) {
+        Write-ShortcutDiagnostic $temporaryChecks "temporary-shortcut-verification"
         throw "Dashboard shortcut did not preserve the requested activation paths."
     }
     if (Test-Path -LiteralPath $shortcutPath) {
