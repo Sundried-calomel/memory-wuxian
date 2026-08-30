@@ -10,6 +10,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 TEST_WORKFLOW = ROOT / ".github" / "workflows" / "test.yml"
+S09_DIRECT_WORKFLOW = ROOT / ".github" / "workflows" / "s09-direct-clean-diagnostic.yml"
 PYPROJECT = ROOT / "pyproject.toml"
 WINDOWS_BOOTSTRAP = ROOT / "scripts" / "bootstrap_windows.ps1"
 MACOS_POSTINSTALL = ROOT / "packaging" / "macos" / "scripts" / "postinstall"
@@ -33,6 +34,7 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.source = RELEASE_WORKFLOW.read_text(encoding="utf-8")
         cls.test_source = TEST_WORKFLOW.read_text(encoding="utf-8")
+        cls.s09_direct_source = S09_DIRECT_WORKFLOW.read_text(encoding="utf-8")
 
     def test_stable_ci_pins_the_supported_windows_runner(self) -> None:
         self.assertIn('python-version: "3.14"', self.test_source)
@@ -63,6 +65,16 @@ class ReleaseWorkflowGateTests(unittest.TestCase):
         self.assertIn("$Value -is [DateTime]", harness)
         self.assertIn("$Value -is [DateTimeOffset]", harness)
         self.assertIn("Unsupported evidence value type", harness)
+
+    def test_s09_direct_diagnostic_runs_one_non_packaged_case_and_uploads_on_failure(self) -> None:
+        parsed = yaml.safe_load(self.s09_direct_source)
+        self.assertEqual(list(parsed["jobs"]), ["hosted-windows-direct-clean"])
+        self.assertIn("branches: [codex/s09-direct-clean-diagnostic]", self.s09_direct_source)
+        self.assertIn("fetch-depth: 0", self.s09_direct_source)
+        self.assertIn("-DirectCleanOnly", self.s09_direct_source)
+        self.assertIn("if: always()", self.s09_direct_source)
+        self.assertNotIn("innosetup", self.s09_direct_source.casefold())
+        self.assertNotIn("invoke-setup", self.s09_direct_source.casefold())
 
     def test_ci_does_not_repeat_the_suite_across_unsupported_python_versions(self) -> None:
         self.assertNotIn("python-compatibility:", self.test_source)

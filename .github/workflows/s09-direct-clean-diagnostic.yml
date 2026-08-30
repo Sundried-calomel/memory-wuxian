@@ -1,0 +1,58 @@
+name: s09-direct-clean-diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/s09-direct-clean-diagnostic]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: memory-wuxian-s09-direct-clean-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hosted-windows-direct-clean:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - run: python -m pip install --disable-pip-version-check "PyYAML>=6.0,<7"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build packaged Windows binaries
+        shell: pwsh
+        run: ./scripts/build_native_collector.ps1
+      - name: Assemble pinned offline Windows runtime
+        shell: pwsh
+        run: |
+          python scripts/install_windows_runtime.py fetch `
+            --lock scripts/windows_runtime_lock.json `
+            --output "$env:RUNNER_TEMP\memory-wuxian-runtime-assets" `
+            --pip-python (Get-Command python).Source
+          python scripts/install_windows_runtime.py assemble `
+            --lock scripts/windows_runtime_lock.json `
+            --assets "$env:RUNNER_TEMP\memory-wuxian-runtime-assets" `
+            --output runtime/windows
+          python scripts/install_windows_runtime.py validate `
+            --bundle-root runtime/windows
+      - name: Run one namespaced direct clean diagnostic
+        shell: pwsh
+        run: >-
+          ./tests/run_windows_packaged_chain_ci.ps1
+          -SourceRoot .
+          -OutputRoot outputs/s09-direct-clean
+          -DirectCleanOnly
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: s09-direct-clean-${{ github.sha }}
+          path: outputs/s09-direct-clean
+          if-no-files-found: error

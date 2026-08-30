@@ -1,7 +1,8 @@
 param(
-  [Parameter(Mandatory = $true)][string]$CandidateDir,
+  [string]$CandidateDir = "",
   [Parameter(Mandatory = $true)][string]$SourceRoot,
-  [Parameter(Mandatory = $true)][string]$OutputRoot
+  [Parameter(Mandatory = $true)][string]$OutputRoot,
+  [switch]$DirectCleanOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,7 +13,10 @@ if ($env:GITHUB_ACTIONS -ne "true" -or $env:RUNNER_ENVIRONMENT -ne "github-hoste
   throw "Packaged-chain rehearsal is restricted to a GitHub-hosted ephemeral runner."
 }
 
-$candidateDir = [IO.Path]::GetFullPath($CandidateDir)
+$candidateDir = if ([string]::IsNullOrWhiteSpace($CandidateDir)) { $null } else { [IO.Path]::GetFullPath($CandidateDir) }
+if (-not $DirectCleanOnly -and $null -eq $candidateDir) {
+  throw "CandidateDir is required for the complete packaged-chain rehearsal."
+}
 $sourceRoot = [IO.Path]::GetFullPath($SourceRoot)
 $outputRoot = [IO.Path]::GetFullPath($OutputRoot)
 $workRoot = Join-Path $env:RUNNER_TEMP "memory-wuxian-s09"
@@ -27,6 +31,7 @@ $receiptPath = Join-Path $outputRoot "packaged-chain-receipt.json"
 $receipt = [ordered]@{
   schema_version = 1
   lane = "packaged-production-chain"
+  mode = if ($DirectCleanOnly) { "direct-clean-only" } else { "complete" }
   runner = [ordered]@{
     github_actions = $env:GITHUB_ACTIONS
     runner_environment = $env:RUNNER_ENVIRONMENT
@@ -36,6 +41,7 @@ $receipt = [ordered]@{
   installer = $null
   clean_install = $null
   repeat_install = $null
+  direct_clean = $null
   namespaced_rollback = $null
   uninstall = $null
   error = $null
@@ -246,13 +252,101 @@ function Remove-EphemeralProductResources {
   Remove-Item -LiteralPath $transactionRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+function Invoke-DirectControllerLane {
+  $v215 = Join-Path $workRoot "v215"
+  if (-not $DirectCleanOnly) {
+    & git -C $sourceRoot rev-parse --verify "v2.15.0^{commit}" *> $null
+    if ($LASTEXITCODE -ne 0) { throw "The required v2.15.0 fixture ref is unavailable." }
+    & git -C $sourceRoot worktree add --detach $v215 v2.15.0
+    if ($LASTEXITCODE -ne 0) { throw "Unable to materialize the v2.15.0 fixture." }
+  }
+
+  $directCandidate = Join-Path $workRoot "direct-candidate"
+  New-Item -ItemType Directory -Path $directCandidate -Force | Out-Null
+  $trackedFiles = & git -c core.quotePath=false -C $sourceRoot ls-files
+  if ($LASTEXITCODE -ne 0) { throw "Unable to enumerate the tracked candidate projection." }
+  foreach ($relative in $trackedFiles) {
+    $source = Join-Path $sourceRoot $relative
+    $destination = Join-Path $directCandidate $relative
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+    Copy-Item -LiteralPath $source -Destination $destination -Force
+  }
+  Copy-Item -LiteralPath (Join-Path $sourceRoot "bin") -Destination $directCandidate -Recurse -Force
+  New-Item -ItemType Directory -Path (Join-Path $directCandidate "runtime") -Force | Out-Null
+  Copy-Item -LiteralPath (Join-Path $sourceRoot "runtime\windows") -Destination (Join-Path $directCandidate "runtime") -Recurse -Force
+  Copy-Item -LiteralPath (Join-Path $sourceRoot "config.yaml") -Destination (Join-Path $directCandidate "config.defaults.yaml") -Force
+  $runtimeRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot "runtime\windows"))
+  $runtimePython = Join-Path $runtimeRoot "python\python.exe"
+  $directReceipt = Join-Path $outputRoot "namespaced-rollback-receipt.json"
+  $directArguments = @(
+    (Join-Path $sourceRoot "scripts\run_windows_installer_rehearsal.py"),
+    "--candidate-root", $directCandidate,
+    "--runtime-bundle-root", $runtimeRoot,
+    "--python-executable", $runtimePython,
+    "--codex-cli", (Join-Path $env:USERPROFILE ".codex\.sandbox-bin\codex.exe"),
+    "--work-root", (Join-Path $workRoot "namespaced"),
+    "--output", $directReceipt
+  )
+  if ($DirectCleanOnly) {
+    $directArguments += @("--scenario", "clean-install")
+  } else {
+    $directArguments += @("--v215-source", $v215)
+  }
+  & $runtimePython @directArguments
+  $directExit = $LASTEXITCODE
+  $directJournal = Join-Path $workRoot "namespaced\transactions\clean-install\journal.json"
+  $directProjection = $null
+  $projectionErrorType = $null
+  try {
+    $directProjection = Get-SafeJournalProjection $directJournal
+    if ($null -ne $directProjection) {
+      Write-CanonicalJson (Join-Path $outputRoot "direct-clean-journal-evidence.json") $directProjection
+    }
+  } catch {
+    $projectionErrorType = $_.Exception.GetType().Name
+  }
+  $receipt.direct_clean = [ordered]@{
+    exit_code = $directExit
+    journal_available = ($null -ne $directProjection)
+    journal_document = $directProjection
+    projection_error_type = $projectionErrorType
+  }
+  Assert-NoProhibitedEvidenceField $receipt
+  Write-CanonicalJson $receiptPath $receipt
+  if ($directExit -ne 0) { throw "Namespaced direct clean rehearsal failed." }
+
+  $direct = Get-Content -LiteralPath $directReceipt -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ($DirectCleanOnly) {
+    if ($direct.status -ne "passed" -or $direct.scenario_mode -ne "clean-install" -or @($direct.scenarios).Count -ne 1 -or -not $direct.production_resources_unchanged) {
+      throw "Direct clean evidence is incomplete."
+    }
+    return
+  }
+  $receipt.namespaced_rollback = [ordered]@{
+    lane = "namespaced-direct-controller-rollback"
+    packaged_chain_claim = $false
+    status = $direct.status
+    rollback_exact = $direct.rollback_exact
+    production_resources_unchanged = $direct.production_resources_unchanged
+    receipt_sha256 = (Get-FileHash -LiteralPath $directReceipt -Algorithm SHA256).Hash.ToLowerInvariant()
+  }
+  if ($direct.status -ne "passed" -or -not $direct.rollback_exact -or -not $direct.production_resources_unchanged) {
+    throw "Namespaced rollback evidence is incomplete."
+  }
+}
+
 New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
-Remove-EphemeralProductResources
+if (-not $DirectCleanOnly) { Remove-EphemeralProductResources }
 New-Item -ItemType Directory -Path (Join-Path $env:USERPROFILE ".codex\sessions") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $env:USERPROFILE ".codex\.sandbox-bin") -Force | Out-Null
 Copy-Item -LiteralPath "$env:SystemRoot\System32\where.exe" -Destination (Join-Path $env:USERPROFILE ".codex\.sandbox-bin\codex.exe") -Force
 
 try {
+  if ($DirectCleanOnly) {
+    Invoke-DirectControllerLane
+    $receipt.status = "passed"
+    return
+  }
   $provenancePath = Join-Path $candidateDir "candidate-provenance.json"
   $provenance = Get-Content -LiteralPath $provenancePath -Raw -Encoding UTF8 | ConvertFrom-Json
   $installer = Join-Path $candidateDir $provenance.installer_name
@@ -279,47 +373,7 @@ try {
     throw "Repeat packaged-chain installation did not commit idempotently."
   }
 
-  $directCandidate = Join-Path $workRoot "direct-candidate"
-  New-Item -ItemType Directory -Path $directCandidate -Force | Out-Null
-  $trackedFiles = & git -c core.quotePath=false -C $sourceRoot ls-files
-  if ($LASTEXITCODE -ne 0) { throw "Unable to enumerate the tracked candidate projection." }
-  foreach ($relative in $trackedFiles) {
-    $source = Join-Path $sourceRoot $relative
-    $destination = Join-Path $directCandidate $relative
-    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
-    Copy-Item -LiteralPath $source -Destination $destination -Force
-  }
-  Copy-Item -LiteralPath (Join-Path $sourceRoot "bin") -Destination $directCandidate -Recurse -Force
-  New-Item -ItemType Directory -Path (Join-Path $directCandidate "runtime") -Force | Out-Null
-  Copy-Item -LiteralPath (Join-Path $sourceRoot "runtime\windows") -Destination (Join-Path $directCandidate "runtime") -Recurse -Force
-  Copy-Item -LiteralPath (Join-Path $sourceRoot "config.yaml") -Destination (Join-Path $directCandidate "config.defaults.yaml") -Force
-  $v215 = Join-Path $workRoot "v215"
-  & git -C $sourceRoot worktree add --detach $v215 v2.15.0
-  if ($LASTEXITCODE -ne 0) { throw "Unable to materialize the v2.15.0 fixture." }
-  $runtimeRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot "runtime\windows"))
-  $runtimePython = Join-Path $runtimeRoot "python\python.exe"
-  $directReceipt = Join-Path $outputRoot "namespaced-rollback-receipt.json"
-  & $runtimePython (Join-Path $sourceRoot "scripts\run_windows_installer_rehearsal.py") `
-    --candidate-root $directCandidate `
-    --runtime-bundle-root $runtimeRoot `
-    --python-executable $runtimePython `
-    --codex-cli (Join-Path $env:USERPROFILE ".codex\.sandbox-bin\codex.exe") `
-    --v215-source $v215 `
-    --work-root (Join-Path $workRoot "namespaced") `
-    --output $directReceipt
-  if ($LASTEXITCODE -ne 0) { throw "Namespaced rollback rehearsal failed." }
-  $direct = Get-Content -LiteralPath $directReceipt -Raw -Encoding UTF8 | ConvertFrom-Json
-  $receipt.namespaced_rollback = [ordered]@{
-    lane = "namespaced-direct-controller-rollback"
-    packaged_chain_claim = $false
-    status = $direct.status
-    rollback_exact = $direct.rollback_exact
-    production_resources_unchanged = $direct.production_resources_unchanged
-    receipt_sha256 = (Get-FileHash -LiteralPath $directReceipt -Algorithm SHA256).Hash.ToLowerInvariant()
-  }
-  if ($direct.status -ne "passed" -or -not $direct.rollback_exact -or -not $direct.production_resources_unchanged) {
-    throw "Namespaced rollback evidence is incomplete."
-  }
+  Invoke-DirectControllerLane
 
   $uninstaller = Get-ChildItem -LiteralPath $skillRoot -Filter "unins*.exe" | Select-Object -First 1
   if (-not $uninstaller) { throw "Packaged installation did not register an uninstaller." }
@@ -342,5 +396,5 @@ try {
   if (Test-Path -LiteralPath $workRoot) {
     & git -C $sourceRoot worktree remove --force (Join-Path $workRoot "v215") *> $null
   }
-  Remove-EphemeralProductResources
+  if (-not $DirectCleanOnly) { Remove-EphemeralProductResources }
 }

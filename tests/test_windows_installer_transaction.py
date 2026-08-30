@@ -483,6 +483,11 @@ class WindowsInstallerTransactionTests(unittest.TestCase):
         self.assertIn("broker-evidence.json", ci)
         self.assertIn("assert-noprohibitedevidencefield", ci)
 
+        direct_failure = ci.index("if ($directexit -ne 0)")
+        self.assertIn("direct-clean-journal-evidence.json", ci)
+        self.assertLess(ci.rindex("write-canonicaljson $receiptpath", 0, direct_failure), direct_failure)
+        self.assertIn("[switch]$directcleanonly", ci)
+
 
 if __name__ == "__main__":
     unittest.main()

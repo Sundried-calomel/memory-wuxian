@@ -245,11 +245,16 @@ def _cleanup(namespace: WindowsInstallResourceNamespace) -> dict[str, Any]:
 def run(args: argparse.Namespace) -> dict[str, Any]:
     if os.name != "nt":
         raise RuntimeError("real Windows rehearsal requires Windows")
+    scenario_mode = getattr(args, "scenario", "all")
     candidate = Path(args.candidate_root).resolve(strict=True)
     runtime = Path(args.runtime_bundle_root).resolve(strict=True)
     python = Path(args.python_executable).resolve(strict=True)
     codex_cli = Path(args.codex_cli).resolve(strict=True)
-    v215_source = Path(args.v215_source).resolve(strict=True)
+    v215_source = None
+    if scenario_mode == "all":
+        if not args.v215_source:
+            raise ValueError("--v215-source is required for the complete rehearsal")
+        v215_source = Path(args.v215_source).resolve(strict=True)
     work_root = Path(args.work_root).resolve()
     work_root.mkdir(parents=True, exist_ok=False)
     if not (candidate / "config.defaults.yaml").is_file():
@@ -273,43 +278,47 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         ))
         if scenarios[-1]["exit_code"] != int(InstallerExit.SUCCESS):
             raise RuntimeError("clean-install rehearsal failed")
-        scenarios.append(_scenario(
-            name="repeat-install", work_root=work_root, candidate=candidate,
-            target=clean_target, archive=clean_archive, pointer=clean_pointer,
-            sessions=clean_sessions, runtime=runtime, python=python,
-            bundle_id=bundle["bundle_id"], codex_cli=codex_cli, namespace=namespace,
-        ))
-        if scenarios[-1]["exit_code"] != int(InstallerExit.SUCCESS):
-            raise RuntimeError("repeat-install rehearsal failed")
-        rollback_before = namespaced_snapshot(namespace, clean_target, clean_pointer)
-        scenarios.append(_scenario(
-            name="failure-rollback", work_root=work_root, candidate=candidate,
-            target=clean_target, archive=clean_archive, pointer=clean_pointer,
-            sessions=clean_sessions, runtime=runtime, python=python,
-            bundle_id=bundle["bundle_id"], codex_cli=codex_cli, namespace=namespace,
-            failure_point="before-verify:dashboard-shortcut",
-        ))
-        rollback_after = namespaced_snapshot(namespace, clean_target, clean_pointer)
-        if scenarios[-1]["exit_code"] != int(InstallerExit.EFFECT_VERIFICATION_FAILED):
-            raise RuntimeError("failure-rollback rehearsal returned the wrong exit code")
-        if rollback_before != rollback_after:
-            raise RuntimeError("failure-rollback did not restore the exact namespaced baseline")
-        upgrade_root = work_root / "v215-profile"
-        upgrade_target = upgrade_root / ".codex" / "skills" / "memory-wuxian"
-        upgrade_target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(v215_source, upgrade_target)
-        scenarios.append(_scenario(
-            name="v215-upgrade", work_root=work_root, candidate=candidate,
-            target=upgrade_target,
-            archive=upgrade_root / "Documents" / "MemoryWuxianArchive",
-            pointer=upgrade_root / ".codex" / "memory-wuxian-active-root.txt",
-            sessions=upgrade_root / ".codex" / "sessions",
-            runtime=runtime, python=python, bundle_id=bundle["bundle_id"],
-            codex_cli=codex_cli, namespace=namespace,
-        ))
-        if scenarios[-1]["exit_code"] != int(InstallerExit.SUCCESS):
-            raise RuntimeError("v2.15.0 upgrade rehearsal failed")
-        migration = json.loads((upgrade_target / "config-migration-receipt.json").read_text(encoding="utf-8"))
+        migration = {"steps": []}
+        if scenario_mode == "all":
+            scenarios.append(_scenario(
+                name="repeat-install", work_root=work_root, candidate=candidate,
+                target=clean_target, archive=clean_archive, pointer=clean_pointer,
+                sessions=clean_sessions, runtime=runtime, python=python,
+                bundle_id=bundle["bundle_id"], codex_cli=codex_cli, namespace=namespace,
+            ))
+            if scenarios[-1]["exit_code"] != int(InstallerExit.SUCCESS):
+                raise RuntimeError("repeat-install rehearsal failed")
+            rollback_before = namespaced_snapshot(namespace, clean_target, clean_pointer)
+            scenarios.append(_scenario(
+                name="failure-rollback", work_root=work_root, candidate=candidate,
+                target=clean_target, archive=clean_archive, pointer=clean_pointer,
+                sessions=clean_sessions, runtime=runtime, python=python,
+                bundle_id=bundle["bundle_id"], codex_cli=codex_cli, namespace=namespace,
+                failure_point="before-verify:dashboard-shortcut",
+            ))
+            rollback_after = namespaced_snapshot(namespace, clean_target, clean_pointer)
+            if scenarios[-1]["exit_code"] != int(InstallerExit.EFFECT_VERIFICATION_FAILED):
+                raise RuntimeError("failure-rollback rehearsal returned the wrong exit code")
+            if rollback_before != rollback_after:
+                raise RuntimeError("failure-rollback did not restore the exact namespaced baseline")
+            upgrade_root = work_root / "v215-profile"
+            upgrade_target = upgrade_root / ".codex" / "skills" / "memory-wuxian"
+            upgrade_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(v215_source, upgrade_target)
+            scenarios.append(_scenario(
+                name="v215-upgrade", work_root=work_root, candidate=candidate,
+                target=upgrade_target,
+                archive=upgrade_root / "Documents" / "MemoryWuxianArchive",
+                pointer=upgrade_root / ".codex" / "memory-wuxian-active-root.txt",
+                sessions=upgrade_root / ".codex" / "sessions",
+                runtime=runtime, python=python, bundle_id=bundle["bundle_id"],
+                codex_cli=codex_cli, namespace=namespace,
+            ))
+            if scenarios[-1]["exit_code"] != int(InstallerExit.SUCCESS):
+                raise RuntimeError("v2.15.0 upgrade rehearsal failed")
+            migration = json.loads(
+                (upgrade_target / "config-migration-receipt.json").read_text(encoding="utf-8")
+            )
     finally:
         cleanup_evidence = _cleanup(namespace)
     production_after = production_snapshot()
@@ -318,6 +327,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     receipt = {
         "schema_version": 1,
         "status": "passed",
+        "scenario_mode": scenario_mode,
         "candidate_version": "2.20.0",
         "candidate_tree_sha256": _tree_sha256(candidate),
         "runtime_bundle_id": bundle["bundle_id"],
@@ -331,7 +341,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "shortcut": namespace.dashboard_shortcut_name,
         },
         "scenarios": scenarios,
-        "rollback_exact": True,
+        "rollback_exact": True if scenario_mode == "all" else None,
         "production_resources_unchanged": True,
         "cleanup": cleanup_evidence,
         "migration_steps": migration["steps"],
@@ -348,9 +358,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--runtime-bundle-root", required=True)
     result.add_argument("--python-executable", required=True)
     result.add_argument("--codex-cli", required=True)
-    result.add_argument("--v215-source", required=True)
+    result.add_argument("--v215-source")
     result.add_argument("--work-root", required=True)
     result.add_argument("--output", required=True)
+    result.add_argument("--scenario", choices=("all", "clean-install"), default="all")
     return result
 
 

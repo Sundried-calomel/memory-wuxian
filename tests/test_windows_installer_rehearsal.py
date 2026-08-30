@@ -9,10 +9,24 @@ from scripts.run_windows_installer_rehearsal import (
     PRODUCTION_TASKS,
     _cleanup,
     build_namespace,
+    parser,
 )
 
 
 class WindowsInstallerRehearsalTests(unittest.TestCase):
+    def test_direct_clean_mode_does_not_require_the_historical_fixture(self) -> None:
+        args = parser().parse_args([
+            "--candidate-root", "candidate",
+            "--runtime-bundle-root", "runtime",
+            "--python-executable", "python.exe",
+            "--codex-cli", "codex.exe",
+            "--work-root", "work",
+            "--output", "receipt.json",
+            "--scenario", "clean-install",
+        ])
+        self.assertEqual(args.scenario, "clean-install")
+        self.assertIsNone(args.v215_source)
+
     def test_rehearsal_namespace_cannot_collide_with_production_resources(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             namespace = build_namespace(Path(temporary), "0123456789ab")
