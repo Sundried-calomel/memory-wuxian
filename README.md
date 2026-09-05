@@ -5,13 +5,22 @@
 > with `CollectorGenerationMutation`, persist compensation before apply, record
 > `commit-intent`, and require `rollback-verified` after failure. Raw archive
 > records and the active archive pointer remain immutable; memory, summary,
-> index, cloud, and semantic-processing contracts are unchanged.
+> index, cloud, and semantic-processing contracts are unchanged. The collector
+> scheduled-task principal is also bound to the interactive Windows user, and
+> native task-registration diagnostics remain available in the rollback journal.
 
-> **2.19.1:** Repairs Windows collector installation by binding the scheduled
-> task principal to the interactive Windows user through the shared Platform
-> identity owner. Failed task registration now preserves the native diagnostic
-> in the rollback journal. Archive, summary, index, cloud, and collector event
-> semantics remain unchanged.
+> **2.19.1:** Repairs semantic maintenance and cross-device cloud closure.
+> One maintenance batch now reads one immutable source snapshot, runs model
+> work concurrently, isolates failed jobs, and applies derived updates once.
+> Summary rebuilds preserve non-contiguous round metadata, while federation
+> quarantines a drifting summary record and replays its verified immutable
+> record without duplicating raw dialogue or Markdown content. Archive,
+> Environment, Evidence, and Attachment streams continue independently and
+> persist successful ACK, import, and publish stages. Malformed rollout files
+> are fingerprint-quarantined until their bytes change, so they stay visible as
+> coverage debt without being reparsed on every collector cycle.
+> The macOS package also restores the canonical universal dashboard build and
+> preserves distinct failed trees during repeatable transactional rollback.
 
 > **2.19.0:** Integrates the completed R1-R8 behavior-preserving modularization
 > behind canonical Platform, Environment, Exchange, application-service, CLI,

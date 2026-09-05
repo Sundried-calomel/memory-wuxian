@@ -1,67 +1,90 @@
 {
   "schema_version": 1,
-  "work_item_id": "memory-wuxian-v2.19.1-windows-task-principal-repair",
-  "candidate_id": "v2.19.1-windows-task-principal-hotfix",
-  "artifact_profile": "release",
-  "classification": "extension",
-  "owner_id": "windows-collector-installation",
-  "target": "Repair the blocked Windows 2.19.0 collector installation without changing archive, summary, cloud, or capture semantics.",
-  "primary_semantics": "Every InteractiveToken collector task binds an explicit current Windows UserId from the shared Platform identity owner, and registration failures retain their native diagnostic in the rollback journal.",
-  "validation_profile": "targeted-patch",
+  "work_item_id": "memory-wuxian-v2.19.1-maintenance-cloud-recovery",
+  "candidate_id": "v2.19.1-batched-summary-and-isolated-cloud-closure",
+  "artifact_profile": "software-feature",
+  "classification": "repair",
+  "owner_id": "memory-maintenance-and-cloud-application-service",
+  "validation_profile": "full",
+  "target": "Restore bounded semantic-maintenance throughput and cross-device cloud closure without changing raw history, summary text, device trust, or federation wire protocol.",
   "invariants": [
-    "Raw archives, summaries, indexes, cloud state, configuration, cursors, and the active archive-root pointer are not rewritten by this repair.",
-    "The collector remains a direct hidden native Task Scheduler action with LeastPrivilege and exactly one startup owner.",
-    "A failed installation restores the previous generation and preserves the native task-registration diagnostic.",
-    "The installed generation is accepted only after a real Windows task query, process identity check, and archive-watermark advance.",
-    "The existing canonical owner remains authoritative; this repair introduces no additive bypass and cannot regress an earlier passing case that shares the scheduler or installer boundary."
+    "Raw messages and completed summary Markdown remain immutable authorities.",
+    "A real artifact drift remains fail-closed and produces a quarantine receipt.",
+    "Federation event sequences remain contiguous; no failed artifact is silently skipped.",
+    "One failed summary, peer, or cloud stream does not block unrelated eligible work.",
+    "Replay projections contain only compact summary records and never duplicate raw dialogue or summary Markdown content.",
+    "Successful ACK, import, and publish stages remain durable when a later stage fails.",
+    "Malformed rollout quarantine remains visible as coverage debt and never rewrites or deletes source history.",
+    "Interrupted installation recovery preserves every displaced Skill tree before restoring the prior generation.",
+    "The packaged macOS dashboard is the canonical universal application and every failed transaction tree remains recoverable."
   ],
   "allowed_changes": [
-    "Use the shared Platform Windows identity owner when rendering the existing collector task principal.",
-    "Capture native schtasks output in the existing transactional rollback error.",
-    "Update patch-version metadata, documentation, regression tests, receipts, package evidence, and release assets."
+    "Preserve Level-1 round-number metadata during deterministic index reconstruction.",
+    "Share one immutable source snapshot across a bounded semantic batch and finalize derived updates once.",
+    "Add compact content-addressed summary-record replay projections and quarantine receipts.",
+    "Add cross-stream failure isolation and per-stage cloud progress persistence.",
+    "Add bounded maintenance progress and timing telemetry.",
+    "Persist content-free malformed-source fingerprints and retry only after the source bytes change.",
+    "Recover a post-switch-mutated active Skill tree without overwriting a non-empty destination.",
+    "Rebuild the packaged macOS dashboard through the canonical universal pipeline and make repeated rollback evidence idempotent.",
+    "Reproduce ledger-bound summary timestamps and bounded historical empty-default shapes only when the complete candidate payload exactly matches the immutable ledger SHA-256."
   ],
   "prohibited_changes": [
-    "Add a Run-key fallback, second scheduler, wrapper process, alternate installer, or competing startup owner.",
-    "Change Summary V2 rescue, archive formats, capture selection, cloud protocols, dashboard behavior, or maintenance policy.",
-    "Treat mock tests, package construction, installer exit zero, or process existence alone as installed-effect proof."
-  ],
-  "required_rehearsal_scenarios": [
-    "windows-task-principal-contract",
-    "windows-install-rollback-diagnostic",
-    "windows-real-upgrade-effect",
-    "architecture-contract",
-    "documentation-contract",
-    "diff-check"
-  ],
-  "before_after_checks": [
-    "Verify generated and queried task XML contain the same nonempty UserId, direct native command, hidden setting, and LeastPrivilege policy.",
-    "Verify a registration failure records native stderr and rolls back without changing the active archive-root pointer.",
-    "Upgrade the existing 2.15.0 installation through the packaged installer and verify one task, one installed collector generation, fresh telemetry, shortcut identity, and archive-watermark progress.",
-    "Verify Python, Rust, documentation, and packaged binary versions all report 2.19.1."
+    "Rewrite raw dialogue, existing summary Markdown, device identities, peer trust, keys, or pairing state.",
+    "Skip a federation event, accept a changed artifact as immutable, or partially import a corrupt inbound bundle.",
+    "Duplicate raw dialogue or summary Markdown into export replay storage.",
+    "Change federation protocol version, bundle format, summary format, or trigger thresholds.",
+    "Install or publish a candidate that has not passed the frozen release rehearsal."
   ],
   "required_evidence": [
-    "defect-preflight-and-load",
-    "focused-python-tests",
-    "windows-package-build",
-    "windows-real-upgrade-effect",
-    "cross-platform-ci",
-    "independent-evaluation",
-    "published-release-asset-verification",
-    "defect-verification-and-completion"
+    "round-metadata-rebuild-hash-parity",
+    "single-snapshot-single-finalize-batch",
+    "semantic-sibling-failure-isolation",
+    "summary-record-replay-without-content-duplication",
+    "cloud-stream-failure-isolation",
+    "ack-import-publish-stage-durability",
+    "windows-80233-80441-isolated-import",
+    "architecture-contract",
+    "documentation-contract",
+    "complete-python-suite",
+    "complete-rust-suite",
+    "transactional-macos-install-and-live-self-check",
+    "persistent-malformed-source-isolation-and-mutation-retry",
+    "interrupted-post-switch-mutation-recovery",
+    "universal-dashboard-live-self-check-and-repeatable-rollback",
+    "nonempty-policy-summary-one-second-ledger-replay",
+    "parent-summary-zero-null-absent-default-replay",
+    "complete-summary-ledger-replay-preflight"
   ],
   "defect_workbook": {
-    "preflight_receipt": "docs/defect-receipts/v2.19.1-preflight.json",
-    "preflight_sha256": "753f87a76e7adfb375376a94db8b7296f41dda43c846dbb815a4591210f8a037",
-    "completion_receipt": "docs/defect-receipts/v2.19.1-completion.json",
-    "completion_sha256": "PENDING",
-    "applicable_families": ["G03", "G05", "G09", "G11", "MW-R06", "MW-R10"],
+    "preflight_receipt": "governance/v2191-maintenance-cloud-preflight.json",
+    "preflight_sha256": "74e8f01690a08ae20ffd0cdefd64e2db39199bc139b578c0a679e1c95d43bd3d",
+    "completion_receipt": "governance/v2191-maintenance-cloud-completion.json",
+    "completion_sha256": "62940c9cdba976e9d4af0ebf3e9e033fe0e2ffdd261e9a907f634830e570d6bc",
+    "applicable_families": [
+      "G03",
+      "G05",
+      "G06",
+      "G09",
+      "MW-R03",
+      "MW-R05",
+      "MW-R06"
+    ],
     "project_workbook_updated": true,
     "original_triggers": [
-      "The released 2.19.0 installer returned an outer exit code of zero while its hidden install transaction rolled back after schtasks rejected the collector task XML.",
-      "The collector installer duplicated Principal XML and omitted UserId even though the shared Platform scheduler already owned correct Windows identity rendering.",
-      "FakeRunner accepted malformed platform XML, so package and mock evidence escaped without a real Windows Task Scheduler effect check."
+      "A rebuilt summary registry dropped sparse source-round metadata and changed an immutable federation artifact hash.",
+      "One failed summary or cloud stream blocked unrelated eligible work at the same layer.",
+      "A semantic batch repeatedly scanned the complete archive and rebuilt derived indexes after each job.",
+      "Unchanged malformed rollout files were reparsed every event cycle and prevented the installation effect watermark from committing.",
+      "Interrupted macOS recovery attempted to replace a non-empty Skill directory when the active candidate generation had changed after cutover.",
+      "A temporary single-architecture dashboard binary silently exited self-check and a repeated rollback collided with existing failed-candidate evidence.",
+      "A summary Markdown write and its index append crossed a one-second boundary, while rebuilt parent indexes normalized historical null or absent round defaults to zero and empty arrays; the legacy replay path could not reproduce either shape."
     ]
   },
-  "rollback_version": "2.19.0",
-  "lifecycle_state": "candidate-validation"
+  "failure_escalation": {
+    "first_failure": "Stop the failing stage, preserve evidence, and repair only the canonical owner named by the bounded reproducer.",
+    "maximum_remediation_cycles": 1,
+    "after_limit": "Do not install or publish; return the remaining blocker for a new user decision."
+  },
+  "lifecycle_state": "candidate"
 }

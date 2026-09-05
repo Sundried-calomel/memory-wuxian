@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import os
 import subprocess
@@ -493,6 +494,8 @@ def run_job(
     dry_run: bool,
     create_backup: bool = True,
     invoker: Callable[[list[str], int, str], dict] = invoke_codex,
+    source_snapshot: object | None = None,
+    defer_derived_updates: bool = False,
 ) -> dict:
     total_started = time.monotonic()
     config = load_simple_yaml(config_path)
@@ -550,7 +553,21 @@ def run_job(
             encoding="utf-8",
         )
         with exclusive_lock(root / ".locks/archive.lock"):
-            summary_path = store.ingest_summary(job_path, result_path)
+            ingest_parameters = inspect.signature(store.ingest_summary).parameters
+            accepts_keywords = any(
+                parameter.kind == inspect.Parameter.VAR_KEYWORD
+                for parameter in ingest_parameters.values()
+            )
+            ingest_kwargs = {}
+            if source_snapshot is not None and (
+                accepts_keywords or "source_snapshot" in ingest_parameters
+            ):
+                ingest_kwargs["source_snapshot"] = source_snapshot
+            if defer_derived_updates and (
+                accepts_keywords or "defer_derived_updates" in ingest_parameters
+            ):
+                ingest_kwargs["defer_derived_updates"] = True
+            summary_path = store.ingest_summary(job_path, result_path, **ingest_kwargs)
             backup_path = None
             if create_backup:
                 backup_path = store.create_backup_snapshot(
@@ -570,6 +587,9 @@ def run_job(
         "job_id": job["job_id"],
         "summary": str(summary_path),
         "backup": str(backup_path) if backup_path else None,
+        "derived_updates_deferred": bool(
+            defer_derived_updates and ingest_kwargs.get("defer_derived_updates")
+        ),
         "ai_invocations": ai_invocations,
         "prompt_size": prompt_size(prompt),
         "timing": {

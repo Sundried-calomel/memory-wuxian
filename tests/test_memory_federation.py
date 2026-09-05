@@ -14,6 +14,7 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 import memory_federation
 from memory_cli import MemoryStore, load_simple_yaml
 from memory_federation import (
+    ArtifactReplayUnavailableError,
     BUNDLE_FORMAT,
     PROTOCOL_VERSION,
     FederationManager,
@@ -499,8 +500,178 @@ safety:
         ]
         changed["sha256"] = canonical_sha256(changed["payload"])
         with patch.object(manager, "local_artifacts", return_value=artifacts):
-            with self.assertRaisesRegex(ValueError, "Immutable local artifact changed"):
+            replayed = manager.refresh_export_ledger()
+        self.assertEqual(replayed[summary_id]["sha256"], legacy_sha256)
+        self.assertEqual(
+            len(list(manager.artifact_quarantine_dir.glob("drift-*.json"))),
+            2,
+        )
+
+    def test_legacy_summary_ledger_recovers_one_second_index_timestamp(self):
+        self.append_round(self.node_a, "TIMESTAMP")
+        job = self.run_cli(self.node_a, "make-summary-job")
+        source_message_id = memory_federation.read_json(Path(job["job"]))[
+            "source_message_ids"
+        ][0]
+        summary_result = self.base / "timestamp-summary.json"
+        summary_result.write_text(
+            json.dumps(
+                {
+                    "topics": ["timestamp replay"],
+                    "established_conclusions": ["index timestamps can cross a second"],
+                    "open_questions": [],
+                    "concepts": ["federation"],
+                    "policy_events": [
+                        {
+                            "topic": "timestamp replay",
+                            "statement": "Preserve the ledger-bound index timestamp.",
+                            "event_type": "adopted",
+                            "prior_statement": "",
+                            "scope": "summary federation",
+                            "source_message_ids": [source_message_id],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.run_cli(
+            self.node_a,
+            "ingest-summary",
+            "--job",
+            job["job"],
+            "--summary-json",
+            str(summary_result),
+        )
+        manager = FederationManager(
+            MemoryStore(self.node_a, load_simple_yaml(self.config))
+        )
+        current = next(
+            artifact
+            for artifact_id, artifact in manager.local_artifacts().items()
+            if artifact_id.startswith("summary:")
+        )
+        legacy_record = dict(current["payload"]["record"])
+        legacy_record["created_at"] = (
+            datetime.fromisoformat(legacy_record["created_at"])
+            + timedelta(seconds=1)
+        ).isoformat()
+        legacy_payload = {**current["payload"], "record": legacy_record}
+        legacy_sha256 = canonical_sha256(legacy_payload)
+
+        replay = manager._legacy_summary_artifact(current, legacy_sha256)
+
+        self.assertIsNotNone(replay)
+        self.assertEqual(replay["payload"]["record"], legacy_record)
+        self.assertEqual(replay["sha256"], legacy_sha256)
+        self.assertEqual(len(replay["payload"]["record"]["policy_events"]), 1)
+
+    def test_legacy_parent_summary_recovers_round_default_shapes(self):
+        record = {
+            "event": "created",
+            "summary_id": "L2-000001",
+            "level": 2,
+            "created_at": "2026-07-20T18:18:19+09:00",
+            "policy_events": [],
+            "source_round_count": 0,
+            "source_round_numbers": [],
+        }
+        current = {
+            "artifact_type": "summary",
+            "artifact_id": "summary:L2-000001",
+            "payload": {"record": record, "content": "summary bytes"},
+        }
+        current["sha256"] = canonical_sha256(current["payload"])
+        legacy_records = [
+            {**record, "source_round_count": None},
+            {
+                key: value
+                for key, value in record.items()
+                if key not in {"source_round_count", "source_round_numbers"}
+            },
+        ]
+
+        for legacy_record in legacy_records:
+            with self.subTest(legacy_record=legacy_record):
+                legacy_sha256 = canonical_sha256(
+                    {**current["payload"], "record": legacy_record}
+                )
+                replay = FederationManager._legacy_summary_artifact(
+                    current, legacy_sha256
+                )
+                self.assertIsNotNone(replay)
+                self.assertEqual(replay["payload"]["record"], legacy_record)
+                self.assertEqual(replay["sha256"], legacy_sha256)
+
+    def test_registered_artifact_drift_without_snapshot_fails_typed(self):
+        self.append_round(self.node_a, "DRIFT")
+        manager = FederationManager(
+            MemoryStore(self.node_a, load_simple_yaml(self.config))
+        )
+        artifacts = manager.refresh_export_ledger()
+        artifact_id = next(item for item in artifacts if item.startswith("raw:"))
+        expected_sha256 = artifacts[artifact_id]["sha256"]
+        self.assertFalse(manager._export_snapshot_path(expected_sha256).exists())
+        changed = dict(artifacts[artifact_id])
+        changed["payload"] = {**changed["payload"], "text": "drifted"}
+        changed["sha256"] = canonical_sha256(changed["payload"])
+        artifacts[artifact_id] = changed
+
+        with patch.object(manager, "local_artifacts", return_value=artifacts):
+            with self.assertRaises(ArtifactReplayUnavailableError) as raised:
                 manager.refresh_export_ledger()
+
+        self.assertEqual(raised.exception.artifact_id, artifact_id)
+        self.assertEqual(raised.exception.expected_sha256, expected_sha256)
+        ledger = memory_federation.read_jsonl(manager.export_ledger_path)
+        self.assertEqual(
+            next(item for item in ledger if item["artifact_id"] == artifact_id)["sha256"],
+            expected_sha256,
+        )
+        self.assertEqual(
+            len(list(manager.artifact_quarantine_dir.glob("drift-*.json"))),
+            1,
+        )
+
+    def test_export_snapshot_is_durable_before_ledger_assignment(self):
+        manager = FederationManager(
+            MemoryStore(self.node_a, load_simple_yaml(self.config))
+        )
+        payload = {
+            "record": {"summary_id": "L1-snapshot-first", "level": 1},
+            "content": "# immutable summary\n",
+        }
+        artifact = {
+            "artifact_type": "summary",
+            "artifact_id": "summary:L1-snapshot-first",
+            "sha256": canonical_sha256(payload),
+            "payload": payload,
+        }
+        original_write = memory_federation.atomic_write_jsonl
+
+        def fail_ledger(path, records):
+            if path == manager.export_ledger_path:
+                raise RuntimeError("simulated ledger failure")
+            return original_write(path, records)
+
+        with (
+            patch.object(
+                manager,
+                "local_artifacts",
+                return_value={artifact["artifact_id"]: artifact},
+            ),
+            patch("memory_federation.atomic_write_jsonl", side_effect=fail_ledger),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "simulated ledger failure"):
+                manager.refresh_export_ledger()
+
+        snapshot = memory_federation.read_json(
+            next(manager.export_snapshot_dir.glob("*.json"))
+        )
+        self.assertEqual(snapshot["record"], payload["record"])
+        self.assertNotIn("payload", snapshot)
+        self.assertNotIn("content", snapshot)
+        self.assertEqual(memory_federation.read_jsonl(manager.export_ledger_path), [])
 
     def test_export_recovers_state_and_pages_large_deltas(self):
         self.append_round(self.node_a, "PAGED")

@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.20.0 - 2026-08-22
+## 2.20.0 - 2026-09-05
 
 - Route the Windows manual installer, Inno Setup package, and automatic updater
   through one `windows_installer_transaction.py` state machine and one closed
@@ -14,9 +14,6 @@
 - Preserve raw archive records and the active archive pointer as immutable
   authorities; this release changes installer composition, not memory content,
   summary formats, indexes, cloud protocols, or semantic processing.
-
-## 2.19.1 - 2026-08-22
-
 - Bind the Windows collector task principal to the current interactive user
   through the shared Platform identity owner so real Task Scheduler
   registration accepts the generated XML.
@@ -24,6 +21,33 @@
   instead of reducing a failed registration to an unexplained exit code.
 - Add focused XML identity, registration-failure, rollback, and installed-effect
   coverage without changing archive, summary, index, cloud, or event semantics.
+
+## 2.19.1 - 2026-08-28
+
+- Preserve `source_round_numbers` and `source_round_count` during deterministic
+  summary-index reconstruction so immutable federation payloads remain stable.
+- Build one immutable source snapshot per semantic-maintenance batch, share it
+  across concurrent model jobs, isolate failed jobs, and finalize derived
+  indexes once with visible per-stage progress and timing.
+- Persist compact summary-record replay projections without duplicating raw
+  dialogue or summary Markdown content; quarantine real projection drift while
+  preserving continuous federation event history.
+- Isolate Archive, Environment, Project Evidence, and Project Attachment cloud
+  failures, and persist successful ACK, import, and publish stages immediately.
+- Persist a content-free fingerprint for each malformed rollout, skip unchanged
+  failures on later event cycles, retry automatically after source mutation,
+  and keep healthy conversations advancing without hiding incomplete coverage.
+- Recover an interrupted macOS switch even when the active candidate acquired
+  post-switch runtime changes by preserving that exact tree as failed evidence
+  before restoring the prior non-empty Skill directory.
+- Build and verify the packaged macOS dashboard through its canonical universal
+  application pipeline, and make rollback idempotent when prior failed-candidate
+  evidence already exists.
+- Reproduce ledger-bound summary index timestamps when Markdown and index writes
+  crossed a one-second boundary, including summaries with non-empty policy events.
+- Reproduce historical parent-summary defaults across `0`, `null`, and absent
+  round-count fields, plus retained or absent empty round-number arrays, only on
+  an exact immutable-ledger hash match.
 
 ## 2.19.0 - 2026-08-22
 

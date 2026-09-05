@@ -315,6 +315,7 @@ def _default_config() -> Dict[str, Any]:
             "published": _empty_marker(),
         },
         "outbound": {},
+        "progress": {},
     }
 
 
@@ -365,10 +366,29 @@ class CloudFolderTransport:
             schedule.update(loaded.get("schedule") or {})
             config["schedule"] = schedule
             config["outbound"] = dict(loaded.get("outbound") or {})
+            config["progress"] = dict(loaded.get("progress") or {})
         return config
 
     def save_config(self) -> None:
         atomic_write_json(self.config_path, self.config)
+
+    def _persist_stage(
+        self,
+        stage: str,
+        timestamp: float,
+        *,
+        peer_id: Optional[str] = None,
+        status: str = "completed",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        progress = self.config.setdefault("progress", {})
+        progress[stage] = {
+            "completed_at": float(timestamp),
+            "peer": peer_id,
+            "status": status,
+            "details": dict(details or {}),
+        }
+        self.save_config()
 
     def configure(
         self,
@@ -877,6 +897,31 @@ class CloudFolderTransport:
         atomic_write_json(destination, record)
         return record
 
+    def _quarantine_local_failure(
+        self,
+        peer_node_id: str,
+        artifact_type: str,
+        reason: str,
+    ) -> Dict[str, Any]:
+        digest = hashlib.sha256(
+            f"{self.port.stream_id}\0{peer_node_id}\0{artifact_type}\0{reason}".encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        record = {
+            "format_version": 1,
+            "observed_at": now_iso(),
+            "peer_node_id": safe_node_id(peer_node_id),
+            "artifact_type": artifact_type,
+            "source_path": None,
+            "source_sha256": None,
+            "reason": reason,
+        }
+        destination = self.quarantine_root / f"{artifact_type}-{digest}.json"
+        if not destination.exists():
+            atomic_write_json(destination, record)
+        return record
+
     def _stable_candidate(self, path: Path) -> bool:
         if path.name.endswith(".partial") or ".partial." in path.name:
             return False
@@ -937,6 +982,7 @@ class CloudFolderTransport:
         self,
         peers: Dict[str, Dict[str, Any]],
         result: Dict[str, Any],
+        timestamp: float,
     ) -> None:
         for peer_id, peer in peers.items():
             incoming = self._incoming_acks(peer_id)
@@ -1005,6 +1051,15 @@ class CloudFolderTransport:
                                 "bundle_id": ack["last_bundle_id"],
                             }
                         )
+                        self._persist_stage(
+                            "ack",
+                            timestamp,
+                            peer_id=peer_id,
+                            details={
+                                "last_event_sequence": sequence,
+                                "bundle_id": ack["last_bundle_id"],
+                            },
+                        )
                 except (OSError, RuntimeError) as exc:
                     result["transient"].append(
                         {
@@ -1065,6 +1120,7 @@ class CloudFolderTransport:
         peers: Dict[str, Dict[str, Any]],
         local_identity: Dict[str, str],
         result: Dict[str, Any],
+        timestamp: float,
     ) -> None:
         for peer_id, peer in peers.items():
             incoming = self._incoming_outbox(peer_id)
@@ -1206,6 +1262,16 @@ class CloudFolderTransport:
                                 expected_node_id=peer_id,
                                 authenticated_open_result=open_result,
                             )
+                        self._persist_stage(
+                            "import",
+                            timestamp,
+                            peer_id=peer_id,
+                            status=str(imported["status"]),
+                            details={
+                                "bundle_id": manifest["bundle_id"],
+                                "to_event_sequence": int(manifest["to_event_sequence"]),
+                            },
+                        )
                         ack_path = self._write_ack(
                             peer_id,
                             peer["cloud_identity"],
@@ -1419,8 +1485,8 @@ class CloudFolderTransport:
                         "reason": str(exc),
                     }
                 )
-        self._process_acks(peers, result)
-        self._process_bundles(peers, local_identity, result)
+        self._process_acks(peers, result, timestamp)
+        self._process_bundles(peers, local_identity, result, timestamp)
         observation = self._observation(timestamp)
         schedule_state = self._schedule_due(observation, timestamp, force)
         result["schedule"] = schedule_state
@@ -1435,6 +1501,13 @@ class CloudFolderTransport:
                         publish_status in {"published", "no-change"}
                         and all_handled
                     )
+                    if publish_status in {"published", "no-change"}:
+                        self._persist_stage(
+                            "publish",
+                            timestamp,
+                            peer_id=peer_id,
+                            status=publish_status,
+                        )
                 except (OSError, RuntimeError) as exc:
                     all_handled = False
                     result["transient"].append(
@@ -1443,6 +1516,15 @@ class CloudFolderTransport:
                             "type": "publish",
                             "reason": str(exc),
                         }
+                    )
+                except (ValueError, json.JSONDecodeError) as exc:
+                    all_handled = False
+                    result["quarantined"].append(
+                        self._quarantine_local_failure(
+                            peer_id,
+                            "publish",
+                            str(exc),
+                        )
                     )
             self.config["schedule"]["last_attempt_at"] = timestamp
             if all_handled and peers:

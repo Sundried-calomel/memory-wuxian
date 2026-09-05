@@ -123,6 +123,64 @@ class MacosTransactionV216Test(unittest.TestCase):
                 runner=runner,
             )
 
+    def test_retry_rotates_completed_rollback_attempt_before_reusing_id(self):
+        transaction_root = self.home / ".codex/updates/memory-wuxian/transactions/mwt-test"
+        transaction_root.mkdir(parents=True)
+        (transaction_root / "journal.json").write_text(
+            '{"state":"rollback"}\n', encoding="utf-8"
+        )
+        (transaction_root / "rollback-receipt.json").write_text(
+            '{"status":"rolled-back"}\n', encoding="utf-8"
+        )
+
+        archived = transaction.rotate_completed_rollback_attempt(transaction_root)
+
+        self.assertIsNotNone(archived)
+        self.assertFalse(transaction_root.exists())
+        self.assertTrue((archived / "journal.json").is_file())
+        self.assertTrue((archived / "rollback-receipt.json").is_file())
+        transaction_root.mkdir()
+        self.assertIsNone(transaction.rotate_completed_rollback_attempt(transaction_root))
+
+    def test_legacy_collector_label_is_read_from_installed_plist(self):
+        plist = self.home / "Library/LaunchAgents/legacy.plist"
+        plist.parent.mkdir(parents=True, exist_ok=True)
+        plist.write_bytes(plistlib.dumps({"Label": "com.memorywuxian.codex-sync"}))
+
+        self.assertEqual(
+            transaction.installed_collector_label(plist),
+            "com.memorywuxian.codex-sync",
+        )
+        self.assertEqual(
+            transaction.installed_collector_label(plist.with_name("missing.plist")),
+            transaction.COLLECTOR_LABEL,
+        )
+
+    def test_failed_tree_uses_actual_generation_when_preferred_evidence_exists(self):
+        failed_root = self.home / ".codex/updates/memory-wuxian/failed"
+        failed_root.mkdir(parents=True)
+        preferred = failed_root / "expected-mwt-test"
+        preferred.mkdir()
+        (preferred / "marker").write_text("earlier failure", encoding="utf-8")
+        actual_generation = transaction.tree_generation(self.skill)[0]
+
+        preserved = transaction.preserve_failed_tree(
+            self.skill,
+            expected_generation="expected",
+            preferred_path=preferred,
+            failed_root=failed_root,
+            transaction_id="mwt-test",
+            reason="rollback",
+        )
+
+        self.assertEqual(
+            preserved,
+            failed_root / f"{actual_generation}-mwt-test-rollback-displaced",
+        )
+        self.assertFalse(self.skill.exists())
+        self.assertEqual((preserved / "marker").read_bytes(), b"prior-generation")
+        self.assertEqual((preferred / "marker").read_text(), "earlier failure")
+
     def test_commit_receipt_precedes_pruning_and_second_run_is_idempotent(self):
         runner = FakeRunner()
         first = self.invoke(runner)
@@ -229,6 +287,10 @@ class MacosTransactionV216Test(unittest.TestCase):
         prior_path = generations / f"{prior_generation}-{transaction_id}"
         self.skill.replace(prior_path)
         final_candidate.replace(self.skill)
+        (self.skill / "post-switch-runtime-state").write_text(
+            "candidate changed after the interrupted switch\n", encoding="utf-8"
+        )
+        displaced_generation = transaction.tree_generation(self.skill)[0]
         plist = self.home / "Library/LaunchAgents/com.memorywuxian.codex-sync.plist"
         maintenance = self.home / "Library/LaunchAgents/maintenance.plist"
         pointer = self.home / ".codex/memory-wuxian-active-root.txt"
@@ -299,6 +361,12 @@ class MacosTransactionV216Test(unittest.TestCase):
             )
 
         self.assertEqual((self.skill / "marker").read_bytes(), b"prior-generation")
+        self.assertTrue(
+            (
+                failed
+                / f"{displaced_generation}-{transaction_id}-recovery-displaced"
+            ).is_dir()
+        )
         self.assertTrue((transaction_root / "rollback-receipt.json").is_file())
         rollback = json.loads((transaction_root / "rollback-receipt.json").read_text(encoding="utf-8"))
         self.assertEqual(rollback["restored_effect"], restored_effect)

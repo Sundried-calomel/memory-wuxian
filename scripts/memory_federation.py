@@ -47,6 +47,19 @@ SSH_CONNECT_TIMEOUT_SECONDS = 15
 SSH_COMMAND_TIMEOUT_SECONDS = 600
 
 
+class ArtifactReplayUnavailableError(ValueError):
+    """A ledgered artifact cannot be reproduced at its immutable hash."""
+
+    def __init__(self, artifact_id: str, expected_sha256: str, actual_sha256: str):
+        self.artifact_id = artifact_id
+        self.expected_sha256 = expected_sha256
+        self.actual_sha256 = actual_sha256
+        super().__init__(
+            "Immutable artifact replay unavailable: "
+            f"{artifact_id} expected {expected_sha256}, observed {actual_sha256}"
+        )
+
+
 def canonical_bytes(payload: Any) -> bytes:
     return json.dumps(
         payload,
@@ -150,6 +163,8 @@ class FederationManager(ExchangeStreamFacade):
         self.peers_dir = self.metadata_root / "peers"
         self.sync_log_path = self.metadata_root / "sync-log.jsonl"
         self.token_snapshot_dir = self.metadata_root / "token-usage-snapshots"
+        self.export_snapshot_dir = self.metadata_root / "export-artifacts"
+        self.artifact_quarantine_dir = self.metadata_root / "artifact-quarantine"
         configured = (
             store.config.get("federation", {}).get("replica_directory")
             if isinstance(store.config.get("federation"), dict)
@@ -227,6 +242,8 @@ class FederationManager(ExchangeStreamFacade):
         for directory in (
             self.metadata_root,
             self.token_snapshot_dir,
+            self.export_snapshot_dir,
+            self.artifact_quarantine_dir,
             self.peers_dir,
             self.replica_root / "peers",
             self.global_index_dir,
@@ -458,6 +475,111 @@ class FederationManager(ExchangeStreamFacade):
             }
         return artifacts
 
+    def _export_snapshot_path(self, artifact_sha256: str) -> Path:
+        if not re.fullmatch(r"[0-9a-f]{64}", artifact_sha256):
+            raise ValueError("Invalid export artifact SHA-256")
+        return self.export_snapshot_dir / f"{artifact_sha256}.json"
+
+    def _persist_export_snapshot(self, artifact: Dict[str, Any]) -> Dict[str, Any]:
+        artifact_id = str(artifact.get("artifact_id", ""))
+        expected_sha256 = str(artifact.get("sha256", ""))
+        if not artifact_id or canonical_sha256(artifact.get("payload")) != expected_sha256:
+            raise ValueError(f"Export artifact payload hash mismatch: {artifact_id}")
+        if artifact.get("artifact_type") != "summary":
+            return artifact
+        payload = artifact.get("payload")
+        if not isinstance(payload, dict) or not isinstance(payload.get("record"), dict):
+            raise ValueError(f"Summary export artifact has no immutable record: {artifact_id}")
+        path = self._export_snapshot_path(expected_sha256)
+        if path.exists():
+            stored = read_json(path)
+            if (
+                stored.get("artifact_id") != artifact_id
+                or stored.get("artifact_type") != artifact.get("artifact_type")
+                or stored.get("sha256") != expected_sha256
+                or not isinstance(stored.get("record"), dict)
+            ):
+                raise ValueError(f"Export artifact snapshot conflict: {artifact_id}")
+            return artifact
+        atomic_write_json(
+            path,
+            {
+                "format_version": 1,
+                "artifact_id": artifact_id,
+                "artifact_type": "summary",
+                "sha256": expected_sha256,
+                "record": payload["record"],
+            },
+        )
+        return artifact
+
+    def _load_export_snapshot(
+        self,
+        artifact_id: str,
+        artifact_type: str,
+        artifact_sha256: str,
+        current_artifact: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        if artifact_type != "summary":
+            return None
+        path = self._export_snapshot_path(artifact_sha256)
+        if not path.exists():
+            return None
+        stored = read_json(path)
+        current_payload = current_artifact.get("payload")
+        if (
+            stored.get("artifact_id") != artifact_id
+            or stored.get("artifact_type") != artifact_type
+            or stored.get("sha256") != artifact_sha256
+            or not isinstance(stored.get("record"), dict)
+            or not isinstance(current_payload, dict)
+            or not isinstance(current_payload.get("content"), str)
+        ):
+            raise ValueError(f"Export artifact snapshot conflict: {artifact_id}")
+        payload = {
+            "record": stored["record"],
+            "content": current_payload["content"],
+        }
+        if canonical_sha256(payload) != artifact_sha256:
+            return None
+        return {
+            "artifact_type": artifact_type,
+            "artifact_id": artifact_id,
+            "sha256": artifact_sha256,
+            "payload": payload,
+        }
+
+    def _record_artifact_drift(
+        self,
+        artifact: Dict[str, Any],
+        expected_sha256: str,
+    ) -> Path:
+        artifact_id = str(artifact.get("artifact_id", ""))
+        actual_sha256 = str(artifact.get("sha256", ""))
+        receipt_id = canonical_sha256(
+            {
+                "artifact_id": artifact_id,
+                "expected_sha256": expected_sha256,
+                "actual_sha256": actual_sha256,
+            }
+        )
+        path = self.artifact_quarantine_dir / f"drift-{receipt_id}.json"
+        if not path.exists():
+            atomic_write_json(
+                path,
+                {
+                    "format_version": 1,
+                    "status": "quarantined",
+                    "observed_at": now_iso(),
+                    "artifact_id": artifact_id,
+                    "artifact_type": artifact.get("artifact_type"),
+                    "expected_sha256": expected_sha256,
+                    "actual_sha256": actual_sha256,
+                    "reason": "immutable-local-artifact-drift",
+                },
+            )
+        return path
+
     def refresh_export_ledger(self) -> Dict[str, Dict[str, Any]]:
         self.init_layout()
         artifacts = self.local_artifacts()
@@ -480,18 +602,36 @@ class FederationManager(ExchangeStreamFacade):
         for artifact_id in sorted(artifacts):
             artifact = artifacts[artifact_id]
             if artifact_id in known:
-                if known[artifact_id]["sha256"] != artifact["sha256"]:
+                expected_sha256 = str(known[artifact_id]["sha256"])
+                if expected_sha256 != artifact["sha256"]:
+                    self._record_artifact_drift(artifact, expected_sha256)
+                    snapshot = self._load_export_snapshot(
+                        artifact_id,
+                        str(known[artifact_id]["artifact_type"]),
+                        expected_sha256,
+                        artifact,
+                    )
+                    if snapshot is not None:
+                        artifacts[artifact_id] = snapshot
+                        continue
                     legacy = self._legacy_summary_artifact(
                         artifact,
-                        str(known[artifact_id]["sha256"]),
+                        expected_sha256,
                     )
                     if legacy is not None:
-                        artifacts[artifact_id] = legacy
+                        artifacts[artifact_id] = self._persist_export_snapshot(legacy)
                         continue
-                    raise ValueError(
-                        f"Immutable local artifact changed: {artifact_id}"
+                    raise ArtifactReplayUnavailableError(
+                        artifact_id,
+                        expected_sha256,
+                        str(artifact["sha256"]),
                     )
+                snapshot_path = self._export_snapshot_path(expected_sha256)
+                if artifact.get("artifact_type") == "summary" and not snapshot_path.exists():
+                    self._persist_export_snapshot(artifact)
                 continue
+            artifact = self._persist_export_snapshot(artifact)
+            artifacts[artifact_id] = artifact
             event = {
                 "event_sequence": next_sequence,
                 "artifact_type": artifact["artifact_type"],
@@ -529,28 +669,60 @@ class FederationManager(ExchangeStreamFacade):
         if not isinstance(payload, dict):
             return None
         record = payload.get("record")
-        if not isinstance(record, dict) or record.get("policy_events") != []:
+        if not isinstance(record, dict):
             return None
-        legacy_record = {
-            key: value
-            for key, value in record.items()
-            if key != "policy_events"
-        }
-        candidate_records = [legacy_record]
-        created_at = legacy_record.get("created_at")
-        if isinstance(created_at, str):
+        base_records = [dict(record)]
+        if record.get("policy_events") == []:
+            base_records += [
+                {key: value for key, value in candidate.items() if key != "policy_events"}
+                for candidate in base_records
+            ]
+        if record.get("source_round_numbers") == []:
+            base_records += [
+                {
+                    key: value
+                    for key, value in candidate.items()
+                    if key != "source_round_numbers"
+                }
+                for candidate in base_records
+            ]
+        if record.get("source_round_count") in {None, 0}:
+            count_variants = []
+            for candidate in base_records:
+                count_variants.extend(
+                    (
+                        {**candidate, "source_round_count": None},
+                        {**candidate, "source_round_count": 0},
+                        {
+                            key: value
+                            for key, value in candidate.items()
+                            if key != "source_round_count"
+                        },
+                    )
+                )
+            base_records = count_variants
+        candidate_records = []
+        seen_records = set()
+        for base_record in base_records:
+            record_key = canonical_bytes(base_record)
+            if record_key in seen_records:
+                continue
+            seen_records.add(record_key)
+            candidate_records.append(base_record)
+            created_at = base_record.get("created_at")
+            if not isinstance(created_at, str):
+                continue
             try:
                 timestamp = datetime.fromisoformat(created_at)
             except ValueError:
-                timestamp = None
-            if timestamp is not None:
-                for offset in (-1, 1):
-                    candidate_records.append(
-                        {
-                            **legacy_record,
-                            "created_at": (timestamp + timedelta(seconds=offset)).isoformat(),
-                        }
-                    )
+                continue
+            for offset in (-1, 1):
+                candidate_records.append(
+                    {
+                        **base_record,
+                        "created_at": (timestamp + timedelta(seconds=offset)).isoformat(),
+                    }
+                )
         for candidate_record in candidate_records:
             legacy_payload = {
                 **payload,

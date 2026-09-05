@@ -6,12 +6,20 @@
 > compensation を永続化し、commit 前に `commit-intent` を記録し、失敗時には
 > `rollback-verified` を必須とします。raw archive record と active
 > archive pointer は不変で、memory、summary、index、cloud、semantic processing 契約は
-> 変更しません。
+> 変更しません。collector scheduled task principal は現在の対話ユーザーへ束縛され、
+> task 登録失敗時の native 診断は rollback journal に保存されます。
 
-> **2.19.1:** Windows collector のインストールを修復し、共有 Platform identity
-> Owner を通じて scheduled task principal を現在の対話ユーザーへ束縛します。
-> task 登録失敗時の native 診断は rollback journal に保存されます。archive、summary、
-> index、cloud、collector event の意味は変更しません。
+> **2.19.1:** semantic maintenance の throughput と cross-device cloud の
+> 完結性を修復します。1 maintenance batch は不変 source snapshot を一度だけ読み、
+> model 処理を並列実行し、失敗 job を隔離して、derived index を一度だけ commit
+> します。summary rebuild は非連続 round metadata を保持します。federation は
+> drift した summary record を隔離し、raw dialogue や Markdown 本文を複製せず、
+> 検証済み immutable record を replay します。Archive、Environment、Evidence、
+> Attachment stream は独立して継続し、成功した ACK、import、publish を即時保存します。
+> malformed rollout は本文を含まない fingerprint で隔離し、変更されるまで再解析せず、
+> coverage debt として可視化したまま source 変更後に自動再試行します。
+> macOS package は正規の universal dashboard build も復元し、transaction rollback
+> の再試行時には異なる failed tree を個別に保存します。
 
 > **2.19.0:** 完了した R1-R8 の挙動互換モジュール化を、唯一の Platform、
 > Environment、Exchange、application service、CLI、test support Owner の下へ

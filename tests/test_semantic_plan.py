@@ -312,6 +312,12 @@ class SemanticPlanTests(unittest.TestCase):
             index = json.loads((store.index_dir / "summaries.jsonl").read_text(encoding="utf-8"))
             self.assertEqual(index["source_round_count"], 3)
             self.assertEqual(index["source_round_numbers"], [940, 941, 953])
+            reconstructed = store.summary_records_from_files()[0]
+            self.assertEqual(reconstructed["source_round_count"], 3)
+            self.assertEqual(
+                reconstructed["source_round_numbers"],
+                [940, 941, 953],
+            )
 
 
 if __name__ == "__main__":

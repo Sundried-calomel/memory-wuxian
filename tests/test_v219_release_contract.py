@@ -22,15 +22,15 @@ class V219ReleaseContractTests(unittest.TestCase):
         contract = json.loads(
             (ROOT / "docs/work-contracts/v2.19.1.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(contract["validation_profile"], "targeted-patch")
+        self.assertEqual(contract["validation_profile"], "full")
         joined = "\n".join(contract["invariants"] + contract["prohibited_changes"])
         for token in (
-            "Raw archives",
-            "archive-root pointer",
-            "Summary V2 rescue",
-            "canonical owner",
-            "additive bypass",
-            "regress an earlier passing case",
+            "Raw messages",
+            "device identities",
+            "summary Markdown",
+            "failed artifact",
+            "Federation event sequences",
+            "Malformed rollout quarantine",
         ):
             self.assertIn(token, joined)
 
