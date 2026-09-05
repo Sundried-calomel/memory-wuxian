@@ -1,5 +1,11 @@
 # Memory無限
 
+> **2.19.2:** An archive integrity warning no longer freezes every existing
+> semantic job. Memory Wuxian keeps the warning visible and creates no new job
+> from the incomplete archive, while each already frozen source-hash-bound job
+> is validated and processed independently. A failed job remains quarantined;
+> healthy siblings continue reducing the backlog without rewriting raw history.
+
 > **2.19.1:** Repairs semantic maintenance and cross-device cloud closure.
 > One maintenance batch now reads one immutable source snapshot, runs model
 > work concurrently, isolates failed jobs, and applies derived updates once.

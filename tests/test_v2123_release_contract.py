@@ -20,12 +20,14 @@ class V2123ReleaseContractTest(unittest.TestCase):
             contract["required_rehearsal_scenarios"],
         )
 
-    def test_repairable_drift_and_integrity_block_are_distinct(self):
-        source = (ROOT / "scripts/semantic_backfill.py").read_text(encoding="utf-8")
-        self.assertIn("dispatch_blocked = bool(integrity_issues)", source)
+    def test_v2123_historical_contract_remains_recorded(self):
+        contract = json.loads(
+            (ROOT / "docs/work-contracts/v2.12.3.json").read_text(encoding="utf-8")
+        )
+        self.assertIn("Raw-integrity failures fail closed", contract["primary_semantics"])
         self.assertIn(
-            "scheduling_blocked = bool(integrity_issues or repairable_issues)",
-            source,
+            "Repairable projection drift cannot be reported as healthy",
+            "\n".join(contract["invariants"]),
         )
 
 

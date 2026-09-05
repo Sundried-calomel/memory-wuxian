@@ -747,6 +747,18 @@ def main() -> int:
                 "tests.test_v2127_release_contract",
             ],
         ),
+        (
+            "v2192-integrity-isolation-contract",
+            [
+                python, "-m", "unittest", "-v",
+                "tests.test_semantic_backfill",
+                "tests.test_semantic_dispatch",
+                "tests.test_maintenance_scheduler",
+                "tests.test_v2123_release_contract",
+                "tests.test_v219_release_contract",
+                "tests.test_v2192_release_contract",
+            ],
+        ),
         ("diff-check", ["git", "diff", "--check"]),
     ]
     if args.contract_profile:

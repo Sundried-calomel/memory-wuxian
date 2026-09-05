@@ -211,7 +211,6 @@ def run_backfill(
     recovery_seconds = time.monotonic() - recovery_started
     integrity_issues = list((recovery or {}).get("integrity_issues") or [])
     repairable_issues = list((recovery or {}).get("repairable_issues") or [])
-    dispatch_blocked = bool(integrity_issues)
     scheduling_blocked = bool(integrity_issues or repairable_issues)
     queue = MaintenanceQueue(root)
     scheduled = []
@@ -231,15 +230,16 @@ def run_backfill(
         and job["payload"].get("summary_job")
     }
     limit = len(pending) if max_jobs == 0 else max_jobs
-    if dispatch_blocked:
+    if integrity_issues:
         skipped.append({
-            "reason": "integrity-failure",
+            "reason": "integrity-debt",
             "error": redact_error(
                 "; ".join(str(item) for item in integrity_issues)
             ),
+            "dispatch_policy": "frozen-jobs-continue",
         })
     selected: list[Path] = []
-    for job_path in ([] if dispatch_blocked else pending):
+    for job_path in pending:
         if len(selected) >= limit:
             break
         maintenance = maintenance_by_path.get(stable_path_identity(job_path))

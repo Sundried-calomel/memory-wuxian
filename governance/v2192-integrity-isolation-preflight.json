@@ -1,0 +1,49 @@
+{
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "created_at": "2026-09-05T11:05:40+00:00",
+  "receipt_sha256": "617f2f7f991289ee6f19778c5598f0cd2525af039360cafa3a1d7f1b38bbb44c",
+  "receipt_type": "defect-workbook-preflight",
+  "registry_path": "C:\\Users\\56453\\.codex\\defect-workbooks.json",
+  "registry_sha256": "12889b7c5c9a439ed7d544540a953e0a553f91196d42fc864b435f7b0088a89e",
+  "schema_version": 1,
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v2192-integrity-isolation",
+  "workbooks": [
+    {
+      "catalogs": [
+        {
+          "catalog_id": "windows-device-general-skill-defects",
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\defect-rule-catalog.json",
+          "rule_count": 11,
+          "sha256": "052dcc11da0a9568a0d1d075f2ac98f78e4bd5183cf7269baf09265c23a0f4d6"
+        }
+      ],
+      "files": [
+        {
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\general-error-families.md",
+          "sha256": "51095ab4c50aabee1b3ecd1ce80068de127f1fbde58e3a93364d9ee2e0cc78d3"
+        },
+        {
+          "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\windows-device-skill-defects.md",
+          "sha256": "11e55c8cc199f31b1801ed67ac6d024913deb816017ee930cdc629480c61d5c2"
+        }
+      ],
+      "id": "windows-device-skill-lessons",
+      "known_families": [
+        "G01",
+        "G02",
+        "G03",
+        "G04",
+        "G05",
+        "G06",
+        "G07",
+        "G08",
+        "G09",
+        "G10",
+        "G11"
+      ],
+      "require_change_on_repair": false,
+      "scope": "global"
+    }
+  ]
+}
