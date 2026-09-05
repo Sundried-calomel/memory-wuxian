@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S01",
+  "attempt": 1,
+  "evidence_id": "failed-candidate-evidence-freeze",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "inspection",
+    "name": "memory-wuxian-inspection-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": ["readonly-inspection", "freeze-legacy-state-and-reviewed-baseline"],
+    "cwd": ".",
+    "runner": "local-readonly",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "6c61949017b66a27a9c8d509ca7a8f7ef5baf841e88b01f52d75812e737004ef"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s01-failed-candidate-freeze-result.json",
+      "sha256": "5f109595c491e49f2d73c6bd6d4dcfd598e0244e360bdf5b23e1ba1c952b23be",
+      "role": "frozen-evidence"
+    }
+  ],
+  "subjects": []
+}

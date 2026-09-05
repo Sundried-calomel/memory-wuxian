@@ -1,0 +1,13 @@
+{
+    "schema_version":  1,
+    "stage":  "S14",
+    "installer":  "C:\\Users\\56453\\AppData\\Local\\Temp\\memory-wuxian-s13-ci-319b1b2\\artifact-33095212332\\MemoryWuxian-2.20.0-Windows-x64-Setup.exe",
+    "installer_sha256":  "24ce332059b79731916124e47ab32441d1dde63e610359ab734b37a0535317d8",
+    "source_entrypoint":  "inno",
+    "started_at":  "2026-08-28T02:20:33.9522865+09:00",
+    "completed_at":  "2026-08-28T02:20:41.0772535+09:00",
+    "exit_code":  1,
+    "inno_log":  "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\install-transaction\\pending\\s14-inno-install.log",
+    "stdout_log":  "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\install-transaction\\pending\\s14-installer.stdout.log",
+    "stderr_log":  "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v218\\docs\\install-transaction\\pending\\s14-installer.stderr.log"
+}

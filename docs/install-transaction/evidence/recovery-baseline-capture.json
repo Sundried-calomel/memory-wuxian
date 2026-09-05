@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "purpose": "pre-v2.20.0-control-plane-repair-baseline",
+  "git_head": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+  "legacy_state_sha256": "694009a4f6ede2904afa2ed04fab4840686328fec6f60e18ebafb49f606cfcf9",
+  "overlay": {
+    "docs/defect-receipts/v2.20.0-unified-installer-recovery-brief.md": "a0e37e08a39e86b3509e067d7e70c156de380f27805b73a365321aa29800e1c7",
+    "docs/defect-receipts/v2.20.0-unified-installer-recovery-load.json": "898dd48d9f5aa711b6f945047fa357e45d6edf05205a61087e8fbe4bff094fce",
+    "docs/defect-receipts/v2.20.0-unified-installer-recovery-packet.json": "f659decc97754c444809246897cd46acb11092bd8c878295331d5c748b95cc7d",
+    "docs/defect-receipts/v2.20.0-unified-installer-recovery-preflight.json": "ee1786b596423ae6afbe2c4ee5c84711e5a8cc9a178aa55af7256e810a2c7fb5",
+    "docs/defect-receipts/v2.20.0-unified-installer-recovery-task.json": "3945b6af73bae2f829ef93880e986cee610c2ce40dbdc7e1ca9ed3ed1f1ba95a",
+    "docs/install-transaction/optimized-procedure.md": "f606086e645843850ce428fa42eaaa4cff8ee7d36c11ce14e70bda391f13ac5e",
+    "docs/install-transaction/rules.md": "545fd74cef4cde293683c1cec76f5d7bdd7956920e978305d02bdc78e7235867",
+    "docs/retrospectives/install-transaction-workflow.md": "89a84d5dde8e7f8414794379b72df6a415efb5286076a1dff61fbf0a2bca3576"
+  }
+}

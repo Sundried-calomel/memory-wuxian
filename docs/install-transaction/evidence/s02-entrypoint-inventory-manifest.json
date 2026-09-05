@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S02",
+  "attempt": 1,
+  "evidence_id": "entrypoint-inventory",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "inspection",
+    "name": "memory-wuxian-inspection-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "rg",
+      "-n",
+      "SOURCEENTRYPOINT|SourceEntrypoint|execute_windows_staged_installer",
+      "packaging/windows/MemoryWuxian.iss",
+      "packaging/windows/install.ps1",
+      "scripts/auto_update.py"
+    ],
+    "cwd": ".",
+    "runner": "local-readonly",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "6c61949017b66a27a9c8d509ca7a8f7ef5baf841e88b01f52d75812e737004ef"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s02-entrypoint-inventory-result.json",
+      "sha256": "a08776f2ccf8d724b0c3c4dfcac2ceaf99dc3d2f82d255bc664bda8f5321d5fc",
+      "role": "inventory"
+    }
+  ],
+  "subjects": []
+}

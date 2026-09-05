@@ -1,0 +1,161 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "eval-memory-wuxian-v220-control-plane-iteration-2-01a06dd3",
+  "artifact": {
+    "paths": [
+      "docs/install-transaction/contract.json",
+      "docs/install-transaction/evidence-manifest-schema.json",
+      "docs/install-transaction/verifier-policy.json",
+      "scripts/install_transaction_workflow.py",
+      "scripts/platform_atomic.py",
+      "scripts/platform_lock.py",
+      "scripts/platform_transaction.py"
+    ],
+    "sha256": [
+      "78d51138065bd0b8dab5837713ab4d2e07f632aae4b4c6b6e0ace22b19070b48",
+      "769f3f67106347bd0f2e90d53bc23fb5f089a148d80c1d8a2c21d36b499cd889",
+      "7eefc83b53eb5eeb1888ec10f553906abd576ae811d654f634eeb3c79003dfd1",
+      "cb49e4e9af74a7d1980a2672b6457c365692a03cfbb4c7d47b11ccc1cc687a9c",
+      "eca6d71a47ecaa2774d68553cf863a1c853f11ea11356dd2079f612456c1c85e",
+      "84f2b1385fd40b68681933ebc198cc5308d0388c329b67660568114106a1cadc",
+      "d843bbe64824a24a8f3753b24bd55f9ae420b4590ff42dbb913584dcba4fd48b"
+    ],
+    "producer_identity": "01a04c51-04fa-7ee0-bd3e-4c16758566f2"
+  },
+  "evaluator": {
+    "identity": "01a06dd3-ec92-7943-8852-afffd1a7937d",
+    "independent": true
+  },
+  "contract": {
+    "source": "docs/install-transaction/contract.json",
+    "pass_threshold": 90
+  },
+  "dimensions": [
+    {
+      "id": "state-machine-correctness-and-lifecycle-invariants",
+      "weight": 0.35,
+      "score": 94,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "The controller enforces ordered S01-S15 definitions, immediate prerequisites, at most one active step, verified completion, mandatory freezes, and candidate-release byte equality.",
+          "source": "scripts/install_transaction_workflow.py:443,1706,3810,3955,4024",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The complete 44-case focused module passed across the preserved 23 completed cases and the targeted 21-case remainder.",
+          "source": "tests/test_install_transaction_workflow.py; unittest outputs: 23 completed ok plus 21 tests in 51.860s, OK",
+          "method": "deterministic_test"
+        }
+      ]
+    },
+    {
+      "id": "evidence-authenticity-same-byte-identity-and-authorization-boundaries",
+      "weight": 0.3,
+      "score": 97,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "All seven artifact hashes and the canonical aggregate control-plane hash matched the frozen identities.",
+          "source": "Get-FileHash output; capability_artifact_sha256 output 1514e7337c53bc8c27e45b45f70495e07625934746e46912aa5e207f12d0b93a",
+          "method": "deterministic_test"
+        },
+        {
+          "claim": "Evidence is bound to workflow, epoch, step, attempt, authorization receipt, source commit, source snapshot, artifact bytes, subjects, and policy-owned assertions.",
+          "source": "scripts/install_transaction_workflow.py:3181",
+          "method": "source_trace"
+        },
+        {
+          "claim": "Production CI validation checks live GitHub run identity and attempt and verifies result and subject attestations against exact digests; grouped evidence rejects mixed attempts.",
+          "source": "scripts/install_transaction_workflow.py:2644,2745,2963",
+          "method": "source_trace"
+        },
+        {
+          "claim": "Authorization is limited to current S14 or S15 attempts and bound to exact scope, actions, source snapshot, candidate hash, epoch, and receipt hash.",
+          "source": "scripts/install_transaction_workflow.py:3773,4101",
+          "method": "source_trace"
+        }
+      ]
+    },
+    {
+      "id": "crash-recovery-replan-preservation-and-anti-bypass-behavior",
+      "weight": 0.2,
+      "score": 94,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "Migration and replan parse and hash one bounded captured byte buffer, archive those exact bytes, and reject archive collisions.",
+          "source": "scripts/install_transaction_workflow.py:123,2227,4232",
+          "method": "source_trace"
+        },
+        {
+          "claim": "Canonical orphan failure receipts are replayed under the workflow lock, while malformed, noncanonical, incorrectly named, or state-unbound receipts fail closed.",
+          "source": "scripts/install_transaction_workflow.py:3564,3669,3716,4489",
+          "method": "source_trace"
+        },
+        {
+          "claim": "Focused tests passed for failure replay, noncanonical or renamed failure rejection, exact migration archival, replan preservation, attempt scoping, event-chain linkage, and failed-worktree non-promotion.",
+          "source": "tests/test_install_transaction_workflow.py; complete 44-case unittest evidence",
+          "method": "deterministic_test"
+        }
+      ]
+    },
+    {
+      "id": "maintainability-ownership-clarity-and-bounded-complexity",
+      "weight": 0.15,
+      "score": 90,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "The contract, schema, verifier policy, atomic-write owner, lock owner, and canonical transaction owner have explicit and closed responsibilities.",
+          "source": "docs/install-transaction/contract.json; scripts/platform_atomic.py; scripts/platform_lock.py; scripts/platform_transaction.py",
+          "method": "source_trace"
+        },
+        {
+          "claim": "Read bounds, closed policy coverage, stable evidence definitions, typed failure codes, and centralized validation constrain behavior, although the 4522-line controller remains a substantial maintenance surface.",
+          "source": "scripts/install_transaction_workflow.py",
+          "method": "llm_judgment"
+        }
+      ]
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "frozen-artifact-sha256-recomputation",
+      "status": "pass",
+      "evidence": "Get-FileHash SHA256 completed with exit 0; all seven values matched in the required order."
+    },
+    {
+      "id": "aggregate-control-plane-sha256-recomputation",
+      "status": "pass",
+      "evidence": "capability_artifact_sha256(load_contract()) returned 1514e7337c53bc8c27e45b45f70495e07625934746e46912aa5e207f12d0b93a with exit 0."
+    },
+    {
+      "id": "evaluator-independence",
+      "status": "pass",
+      "evidence": "CODEX_THREAD_ID was 01a06dd3-ec92-7943-8852-afffd1a7937d, distinct from producer 01a04c51-04fa-7ee0-bd3e-4c16758566f2."
+    },
+    {
+      "id": "focused-44-test-module",
+      "status": "pass",
+      "evidence": "Twenty-three cases completed with ok before process interruption; the explicitly identified remaining 21 cases then ran in 51.860 seconds with exit 0 and OK, covering all 44 unique test methods."
+    },
+    {
+      "id": "standard-report-json-validation",
+      "status": "pass",
+      "evidence": "agent-output-evaluator/scripts/validate_evaluation.py returned VALID with exit 0 against the frozen candidate root."
+    }
+  ],
+  "overall_score": 94.3,
+  "verdict": "pass",
+  "blocking_findings": [],
+  "limitations": [
+    "The 44 focused cases completed across two invocations because the first process was interrupted after 23 completed cases; the second invocation covered exactly the remaining 21 methods.",
+    "Evaluation was limited to the seven frozen control-plane artifacts and did not perform installation, UAC, GitHub writes, publication, release, or remediation.",
+    "GitHub run and attestation enforcement was source-traced and deterministically exercised with test doubles; no live production GitHub record was required to evaluate these frozen control-plane bytes."
+  ],
+  "iteration": {
+    "current": 2,
+    "maximum": 2
+  }
+}

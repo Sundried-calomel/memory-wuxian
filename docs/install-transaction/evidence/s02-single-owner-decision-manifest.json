@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S02",
+  "attempt": 1,
+  "evidence_id": "single-owner-decision",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "inspection",
+    "name": "memory-wuxian-inspection-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "rg",
+      "-n",
+      "class WindowsInstallerTransaction|WindowsInstallerTransaction\\(|class ProductInstallAdapter|def execute_manifest",
+      "scripts/windows_installer_transaction.py",
+      "scripts/install_windows_transaction.py"
+    ],
+    "cwd": ".",
+    "runner": "local-readonly",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "6c61949017b66a27a9c8d509ca7a8f7ef5baf841e88b01f52d75812e737004ef"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s02-single-owner-decision-result.json",
+      "sha256": "a3aafb5f6a8589063e702ceb10513f23bed1356e6588dc990e573f0d7bc87ec6",
+      "role": "owner-decision"
+    }
+  ],
+  "subjects": []
+}

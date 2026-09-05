@@ -1,0 +1,7 @@
+{
+  "failures": 0,
+  "errors": 0,
+  "tests_run": 44,
+  "elapsed_seconds": 127.998,
+  "suite_id": "tests.test_install_transaction_workflow"
+}

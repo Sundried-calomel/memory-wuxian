@@ -1,0 +1,863 @@
+{
+  "advisory_rule_ids": [
+    "G02",
+    "G03",
+    "G04",
+    "G06",
+    "G07",
+    "G08",
+    "G10"
+  ],
+  "authorization_boundaries": [
+    "Independent quality evaluation and deterministic receipt validation do not require repeated user authorization.",
+    "Do not run a candidate installer, request UAC, modify installed Memory Wuxian resources, push, merge, tag, or publish until the preceding deterministic and isolated gates pass.",
+    "Any later UAC, repository write, or release action must be bound to the exact candidate and its concrete action boundary.",
+    "Do not mutate raw conversations, summaries, indexes, cloud replicas, OneDrive data, active archive pointers, or installed product resources during local development and isolated rehearsal.",
+    "Preserve the original dirty v218 worktree and all historical evidence; never promote its transient files into the new workflow baseline.",
+    "Reuse confirmed product fixes only after their current bytes and regression contracts are revalidated.",
+    "Build one immutable Windows installer before platform rehearsals and preserve the same installer SHA-256 through target installation and release.",
+    "Failure diagnostics must be producer-owned, structured, redacted, invocation-bound, and retained before raising.",
+    "A failed gate permits corrective editing but cannot be marked passed, skipped, or converted into user authorization text."
+  ],
+  "blocking_rule_ids": [
+    "G01",
+    "G05",
+    "G09",
+    "G11"
+  ],
+  "budgets": {
+    "full_projection_estimated_tokens": 1534,
+    "max_blocking_rules": 12,
+    "max_projection_tokens": 2500,
+    "overflow_reasons": [],
+    "projection_estimated_tokens": 1534
+  },
+  "catalogs": [
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "path": "C:\\Users\\56453\\Documents\\本地文件整理\\Skill开发错题本\\defect-rule-catalog.json",
+      "scope": "global",
+      "sha256": "052dcc11da0a9568a0d1d075f2ac98f78e4bd5183cf7269baf09265c23a0f4d6"
+    }
+  ],
+  "invalidation_conditions": [
+    "The task manifest bytes or declared scope change.",
+    "A catalog, source workbook binding, rule status, or threshold changes.",
+    "The implementation plan adds an undeclared unit, owner, path, entrypoint, resource, or operation."
+  ],
+  "matches": [
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "blocking",
+      "compact_guidance": "Resolve the declared runtime and prove the exact capability, imports, permissions, version, and working directory; never infer readiness from PATH or process existence.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Treating command existence or process existence as sufficient proof.",
+        "Installing a global dependency before checking a registered project runtime."
+      ],
+      "implementation_unit_ids": [
+        "windows-product-transaction"
+      ],
+      "invariants": [
+        "The selected runtime and tool capability are proven for the exact required operation.",
+        "Audit, build, model, and product runtimes remain separately identified."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            "scripts/install_codex_autosync_windows.py~**/install*",
+            "scripts/install_dashboard_shortcut_windows.ps1~**/install*",
+            "scripts/install_windows_transaction.py~**/install*"
+          ],
+          "signal": "path",
+          "weight": 40
+        },
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        },
+        {
+          "matches": [
+            "install"
+          ],
+          "signal": "operation",
+          "weight": 15
+        },
+        {
+          "matches": [
+            "powershell",
+            "python"
+          ],
+          "signal": "language",
+          "weight": 10
+        },
+        {
+          "matches": [
+            "json",
+            "yaml"
+          ],
+          "signal": "data-format",
+          "weight": 10
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "Execute the exact required capability with the selected runtime and working directory.",
+          "id": "runtime-capability-probe",
+          "level": "L2"
+        }
+      ],
+      "required_patterns": [
+        "Resolve an explicit runtime or tool registry when available.",
+        "Probe version, protocol, critical imports, permissions, and working directory."
+      ],
+      "rule_id": "G01",
+      "score": 95,
+      "severity": "high",
+      "source_incidents": [
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-001"
+        },
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-002"
+        },
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-005"
+        }
+      ],
+      "title": "环境存在不等于能力可用"
+    },
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "advisory",
+      "compact_guidance": "Do not equate existence or exit zero with success; exercise the real entrypoint and capture before/after evidence of the promised effect.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Reporting success solely from existence, registration, process state, or exit code."
+      ],
+      "implementation_unit_ids": [
+        "windows-product-transaction"
+      ],
+      "invariants": [
+        "Success is demonstrated through the user's actual entrypoint and promised state transition."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        },
+        {
+          "matches": [
+            "install"
+          ],
+          "signal": "operation",
+          "weight": 15
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "Exercise the actual entrypoint and prove the expected state change.",
+          "id": "real-entrypoint-effect",
+          "level": "L3"
+        }
+      ],
+      "required_patterns": [
+        "Run the real user entrypoint.",
+        "Record before and after state for the promised count, waterline, file, or UI behavior."
+      ],
+      "rule_id": "G02",
+      "score": 35,
+      "severity": "high",
+      "source_incidents": [
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-011"
+        },
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-012"
+        }
+      ],
+      "title": "文件或进程存在不等于功能生效"
+    },
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "advisory",
+      "compact_guidance": "Inventory every entrypoint touching the resource and reuse one implementation or one contract suite; a new UI, updater, or worker must inherit prior regressions.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Copying a previously fixed boundary implementation into a new entrypoint."
+      ],
+      "implementation_unit_ids": [
+        "candidate-ci-release",
+        "windows-product-transaction",
+        "workflow-control-plane"
+      ],
+      "invariants": [
+        "All entrypoints that touch the same resource share one canonical implementation or one contract test suite."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        },
+        {
+          "matches": [
+            "one"
+          ],
+          "signal": "lexical",
+          "weight": 3
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "List every entrypoint that reaches the affected resource.",
+          "id": "entrypoint-inventory",
+          "level": "L0"
+        },
+        {
+          "description": "Run the same historical regression cases through every affected entrypoint.",
+          "id": "cross-entrypoint-contract",
+          "level": "L2"
+        }
+      ],
+      "required_patterns": [
+        "Enumerate all entrypoints and their Owner before implementation.",
+        "Route through a shared implementation or shared contract tests."
+      ],
+      "rule_id": "G03",
+      "score": 23,
+      "severity": "high",
+      "source_incidents": [],
+      "title": "修复入口没有覆盖后来新增的入口"
+    },
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "advisory",
+      "compact_guidance": "Use structured arguments and explicit protocol encodings: UTF-8 for project-controlled text where permitted, declared encodings for external protocols, strict decoding for machine receipts, and multilingual/path fixtures.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Concatenating untrusted or path-bearing values into a shell command string.",
+        "Using fuzzy path matches for irreversible or authoritative selection."
+      ],
+      "implementation_unit_ids": [
+        "candidate-ci-release",
+        "windows-product-transaction",
+        "workflow-control-plane"
+      ],
+      "invariants": [
+        "File and subprocess text boundaries use explicit UTF-8 where the protocol permits it.",
+        "Arguments remain structured values rather than interpolated command text."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            "tests/run_windows_packaged_chain_ci.ps1~**/*.ps1",
+            "tests/test_release_workflow_gate.py~**/*.py"
+          ],
+          "signal": "path",
+          "weight": 40
+        },
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        },
+        {
+          "matches": [
+            "powershell",
+            "python"
+          ],
+          "signal": "language",
+          "weight": 10
+        },
+        {
+          "matches": [
+            "json",
+            "utf-8",
+            "yaml"
+          ],
+          "signal": "data-format",
+          "weight": 10
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "Round-trip multilingual and special-character paths and values through the production boundary.",
+          "id": "unicode-path-fixtures",
+          "level": "L2"
+        }
+      ],
+      "required_patterns": [
+        "Use argument arrays and structured parsers.",
+        "Use UTF-8 for project-controlled text protocols where permitted; otherwise honor the declared external encoding and transcode at the boundary.",
+        "Decode machine protocols strictly and fail closed; if diagnostic streams use replacement decoding, retain the raw bytes or their hash.",
+        "Test Chinese, Japanese, currency symbols, emoji, spaces, leading hyphens, and long paths."
+      ],
+      "rule_id": "G04",
+      "score": 80,
+      "severity": "high",
+      "source_incidents": [
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-009"
+        },
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-010"
+        }
+      ],
+      "title": "默认编码与字符串命令破坏特殊字符"
+    },
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "blocking",
+      "compact_guidance": "Mocks and schemas cannot prove UI, animation, installation, or background effects; run at least one real target-platform case.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Using a mock, file count, schema pass, or process launch as the sole proof of platform behavior."
+      ],
+      "implementation_unit_ids": [
+        "windows-product-transaction"
+      ],
+      "invariants": [
+        "At least one validation case exercises the real installed artifact or equivalent target platform path."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            "scripts/install_codex_autosync_windows.py~**/install*",
+            "scripts/install_dashboard_shortcut_windows.ps1~**/install*",
+            "scripts/install_windows_transaction.py~**/install*"
+          ],
+          "signal": "path",
+          "weight": 40
+        },
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        },
+        {
+          "matches": [
+            "install",
+            "rollback",
+            "upgrade"
+          ],
+          "signal": "operation",
+          "weight": 15
+        },
+        {
+          "matches": [
+            "json"
+          ],
+          "signal": "data-format",
+          "weight": 10
+        },
+        {
+          "matches": [
+            "one"
+          ],
+          "signal": "lexical",
+          "weight": 3
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "Exercise the production platform path and capture its visible or persisted result.",
+          "id": "target-platform-effect",
+          "level": "L3"
+        }
+      ],
+      "required_patterns": [
+        "Validate UI visually and interactively, background work by state transition, and installers by upgrade and rollback."
+      ],
+      "rule_id": "G05",
+      "score": 88,
+      "severity": "high",
+      "source_incidents": [
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-004"
+        }
+      ],
+      "title": "模拟测试替代真实平台效果"
+    },
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "advisory",
+      "compact_guidance": "Preserve fixtures for every released format, migrate all of them through the production path twice, and never rewrite authoritative raw data.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Testing only the newest legacy format.",
+        "Rewriting the original authoritative archive during migration."
+      ],
+      "implementation_unit_ids": [
+        "windows-product-transaction"
+      ],
+      "invariants": [
+        "Every released legacy format has a minimal immutable fixture.",
+        "Migration is idempotent and never rewrites authoritative raw data."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        },
+        {
+          "matches": [
+            "upgrade"
+          ],
+          "signal": "operation",
+          "weight": 15
+        },
+        {
+          "matches": [
+            "json",
+            "yaml"
+          ],
+          "signal": "data-format",
+          "weight": 10
+        },
+        {
+          "matches": [
+            "through"
+          ],
+          "signal": "lexical",
+          "weight": 3
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "Migrate all released format fixtures through the production migration path.",
+          "id": "legacy-fixture-matrix",
+          "level": "L2"
+        },
+        {
+          "description": "Run migration twice and prove the second run is a no-op.",
+          "id": "migration-idempotence",
+          "level": "L2"
+        }
+      ],
+      "required_patterns": [
+        "Migrate every released fixture to the current format.",
+        "Run each migration twice and require no second-run additions, count drift, or byte changes."
+      ],
+      "rule_id": "G06",
+      "score": 48,
+      "severity": "critical",
+      "source_incidents": [],
+      "title": "持久格式迁移只覆盖最近一种旧格式"
+    },
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "advisory",
+      "compact_guidance": "Periodic work needs a cursor, waterline, cap, lease, and recovery point; prove a normal cycle scales with new data rather than total history.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Recursively scanning the full tree, log set, or archive on every refresh or schedule tick."
+      ],
+      "implementation_unit_ids": [
+        "candidate-ci-release",
+        "windows-product-transaction",
+        "workflow-control-plane"
+      ],
+      "invariants": [
+        "Normal-cycle work is bounded by new data, an explicit batch cap, and a recoverable waterline."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "Use production-scale fixtures to prove per-cycle work is bounded by the delta and configured cap.",
+          "id": "bounded-cycle-work",
+          "level": "L2"
+        }
+      ],
+      "required_patterns": [
+        "Persist cursor, waterline, batch limit, lease, and recovery point.",
+        "Report rows, bytes, and elapsed time processed in the current cycle."
+      ],
+      "rule_id": "G07",
+      "score": 20,
+      "severity": "high",
+      "source_incidents": [],
+      "title": "定时任务把总历史工作伪装成增量工作"
+    },
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "advisory",
+      "compact_guidance": "Optimization must be explicit, type-allowlisted, local, and evidence-preserving; never globally proxy tools or discard code, diffs, conversations, or raw archives.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Globally proxying commands, MCP, code, diffs, searches, conversations, or archives.",
+        "Using an undisclosed external model or network path."
+      ],
+      "implementation_unit_ids": [
+        "candidate-ci-release",
+        "windows-product-transaction",
+        "workflow-control-plane"
+      ],
+      "invariants": [
+        "Raw evidence remains available and the projection can locate its source.",
+        "Optimization is explicit and restricted to an approved content-type allowlist."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        },
+        {
+          "matches": [
+            "json"
+          ],
+          "signal": "data-format",
+          "weight": 10
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "Prove every compact item can locate retained raw evidence and unsupported types remain unmodified.",
+          "id": "evidence-roundtrip",
+          "level": "L2"
+        }
+      ],
+      "required_patterns": [
+        "Retain raw files and fail back to raw evidence.",
+        "Activate only for explicitly allowed repetitive structured data."
+      ],
+      "rule_id": "G08",
+      "score": 30,
+      "severity": "critical",
+      "source_incidents": [
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-003"
+        }
+      ],
+      "title": "优化或压缩破坏证据和作用域"
+    },
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "blocking",
+      "compact_guidance": "Bind code, docs, manifest, package, installed artifact, tag, tests, and release evidence to one exact candidate SHA.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Publishing a package built from a different SHA than the tested candidate.",
+        "Claiming a documented feature exists without verifying the packaged artifact contains it."
+      ],
+      "implementation_unit_ids": [
+        "candidate-ci-release"
+      ],
+      "invariants": [
+        "One exact candidate SHA binds source, documentation, manifest, binary version, tests, and release evidence."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            ".github/workflows/release.yml~**/release*",
+            "changelog.md~**/changelog*",
+            "readme*.md~**/readme*"
+          ],
+          "signal": "path",
+          "weight": 40
+        },
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        },
+        {
+          "matches": [
+            "package",
+            "publish"
+          ],
+          "signal": "operation",
+          "weight": 15
+        },
+        {
+          "matches": [
+            "json"
+          ],
+          "signal": "data-format",
+          "weight": 10
+        },
+        {
+          "matches": [
+            "one",
+            "release"
+          ],
+          "signal": "lexical",
+          "weight": 3
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "Bind source, docs, manifest, package, installed artifact, tag, and CI evidence to one SHA.",
+          "id": "exact-candidate-release",
+          "level": "L4"
+        }
+      ],
+      "required_patterns": [
+        "Verify scenario IDs and documentation tokens before release.",
+        "After merge, wait for CI on the exact main-branch SHA before building release artifacts."
+      ],
+      "rule_id": "G09",
+      "score": 88,
+      "severity": "critical",
+      "source_incidents": [],
+      "title": "文档、版本、二进制和发布证据漂移"
+    },
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "advisory",
+      "compact_guidance": "Keep incident facts at project scope; promote only portable mechanisms stripped of paths, versions, permissions, and project-specific defaults.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Writing one project's paths, permissions, models, or platform choices as a global default."
+      ],
+      "implementation_unit_ids": [
+        "candidate-ci-release"
+      ],
+      "invariants": [
+        "Facts remain at the lowest common ancestor that owns every intended target.",
+        "Only path-, version-, permission-, and project-independent mechanisms may be promoted."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            "skill.md~**/skill.md"
+          ],
+          "signal": "path",
+          "weight": 40
+        },
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        },
+        {
+          "matches": [
+            "json"
+          ],
+          "signal": "data-format",
+          "weight": 10
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "Verify promoted wording contains no project-specific path, permission, version, or implementation default.",
+          "id": "promotion-boundary-review",
+          "level": "L2"
+        }
+      ],
+      "required_patterns": [
+        "Separate incident fact from portable mechanism.",
+        "Require project Owners to retain authority over concrete implementation and stricter gates."
+      ],
+      "rule_id": "G10",
+      "score": 70,
+      "severity": "high",
+      "source_incidents": [],
+      "title": "项目事实被过度提升成全局规则"
+    },
+    {
+      "catalog_id": "windows-device-general-skill-defects",
+      "classification": "blocking",
+      "compact_guidance": "Persistent rules need machine discovery and risk-proportional execution: no blocking match stays silent without model context, an external registry anchors its exact packet/route, bounded high matches load one unit delta, controlled changed directives or other reinforced boundaries load full, human prose never controls the tier, and edit-time checks avoid complete recompilation.",
+      "confidence": "verified",
+      "exclusion": null,
+      "forbidden_patterns": [
+        "Treating documentation existence as proof that future tasks will read or follow it.",
+        "Injecting the full workbook or rerunning complete packet compilation for every edit regardless of match tier.",
+        "Treating a packet self hash as the sole admission anchor for a receipt-free silent route.",
+        "Using line count alone to downgrade migration, credential, permission, persistence, destructive, installation, or release risk.",
+        "Inferring that a boundary is changed merely because human prose mentions a credential, permission, installation, external write, or similar term."
+      ],
+      "implementation_unit_ids": [
+        "candidate-ci-release"
+      ],
+      "invariants": [
+        "Applicable governance is discovered by target path through a machine registry.",
+        "Start and completion evidence are hash-bound and fail closed on drift.",
+        "Context loading and edit-time enforcement are proportional to deterministic rule matches and technical risk boundaries.",
+        "An adaptive brief is loaded once per current packet and session, not once per edit or turn.",
+        "A receipt-free silent route is anchored outside the packet by the exact packet and route hashes.",
+        "Adaptive routing consumes structured signals and exact directives, never guessed polarity from human prose."
+      ],
+      "match_reasons": [
+        {
+          "matches": [
+            "readme*.md~**/readme*",
+            "skill.md~**/skill.md"
+          ],
+          "signal": "path",
+          "weight": 40
+        },
+        {
+          "matches": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "signal": "platform",
+          "weight": 20
+        },
+        {
+          "matches": [
+            "validate"
+          ],
+          "signal": "operation",
+          "weight": 15
+        },
+        {
+          "matches": [
+            "json"
+          ],
+          "signal": "data-format",
+          "weight": 10
+        },
+        {
+          "matches": [
+            "authorization",
+            "one",
+            "release",
+            "through",
+            "without"
+          ],
+          "signal": "lexical",
+          "weight": 3
+        }
+      ],
+      "required_checks": [
+        {
+          "description": "Prove target-based discovery and hash-bound preflight work without chat memory.",
+          "id": "registered-preflight",
+          "level": "L1"
+        },
+        {
+          "description": "Reject missing receipts, registry drift, unknown families, and unchanged required project workbooks.",
+          "id": "fail-closed-completion",
+          "level": "L2"
+        },
+        {
+          "description": "Prove silent no-match work injects no brief, delta stays within budget, controlled changed directives and other reinforced boundaries remain full, negative prose does not create false full routes, and successful edit-time checks do not rerun the compiler.",
+          "id": "adaptive-proportional-gate",
+          "level": "L2"
+        }
+      ],
+      "required_patterns": [
+        "Register applicable documents and rules by target scope.",
+        "Freeze input hashes at preflight and verify applicable families and required updates at completion.",
+        "Route no-blocking work to silent, bounded single-unit high matches to delta, critical or reinforced boundaries to full, and ambiguity or overflow to review.",
+        "Bind the compiled packet and route in an external Hook registry even when silent creates no load receipt.",
+        "Separate full compile-time and completion validation from bounded edit-time hash and route checks.",
+        "Use exact changed/unchanged routing directives for human-described authorization boundaries; prose remains non-authoritative."
+      ],
+      "rule_id": "G11",
+      "score": 88,
+      "severity": "critical",
+      "source_incidents": [
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-008"
+        },
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-012"
+        },
+        {
+          "evidence_status": "verified",
+          "id": "WD-SKILL-013"
+        }
+      ],
+      "title": "被动文档没有执行力"
+    }
+  ],
+  "no_match_reason": null,
+  "packet_id": "packet:986e32b98ef17be9e0811bfb",
+  "packet_sha256": "e2d5351bbe1002733f9a507e9d48f2c1bfed3661016a65416ea3df1ddb210e1f",
+  "review_required_rule_ids": [],
+  "schema_version": 1,
+  "status": "ready",
+  "task": {
+    "path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v220-recovery\\docs\\defect-receipts\\v2.20.0-unified-installer-recovery-task.json",
+    "sha256": "3945b6af73bae2f829ef93880e986cee610c2ce40dbdc7e1ca9ed3ed1f1ba95a",
+    "task_id": "memory-wuxian-v2.20.0-unified-installer-recovery-v1"
+  },
+  "thresholds": {
+    "data_format": 10,
+    "explicit_exclusion": -100,
+    "high_block": 55,
+    "language": 10,
+    "lexical": 3,
+    "operation": 15,
+    "path": 40,
+    "platform": 20,
+    "resource_or_entrypoint": 40,
+    "same_project": 100
+  }
+}

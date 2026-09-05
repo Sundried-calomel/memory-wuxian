@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S08",
+  "attempt": 1,
+  "evidence_id": "diff-simplification-review",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "inspection",
+    "name": "memory-wuxian-inspection-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "git",
+      "diff",
+      "--check",
+      "319b1b23e90deaba92757da381de985e031b9853..8dd7281",
+      "--",
+      "scripts/windows_installer_broker.py",
+      "tests/test_windows_installer_runtime.py"
+    ],
+    "cwd": ".",
+    "runner": "local-readonly",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "47a2886a1e723848fa33c96f53750a58d5721c4d01a2dfdfee60e4a02c212038"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s08-diff-simplification-review-result.json",
+      "sha256": "d8f664f9cbcf1925cfcd465312b33d634aba0816b585d23273377bd171db423d",
+      "role": "review-result"
+    }
+  ],
+  "subjects": []
+}

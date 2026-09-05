@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S01",
+  "attempt": 1,
+  "evidence_id": "workflow-governance-check",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "command",
+    "name": "memory-wuxian-command-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": ["workflow_sync.py", "check", "--project-root", "."],
+    "cwd": ".",
+    "runner": "local-process",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "6c61949017b66a27a9c8d509ca7a8f7ef5baf841e88b01f52d75812e737004ef"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s01-workflow-governance-check-result.json",
+      "sha256": "edd0395dbf45cb712272325aba6964bf8d41e3171001df195b96426928b42b61",
+      "role": "workflow-check"
+    }
+  ],
+  "subjects": []
+}

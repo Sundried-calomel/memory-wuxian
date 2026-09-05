@@ -1,0 +1,207 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "v2.20.0-s03-architecture-e001",
+  "artifact": {
+    "paths": [
+      "docs/install-transaction/evidence/s03-recovery-architecture-contract-result.json",
+      "docs/install-transaction/s03-recovery-architecture-contract.md"
+    ],
+    "sha256": [
+      "73588b08822de424cda9301a38c4c5b2ac961667bef1f5b94f0ed79e2c48b761",
+      "fefb9270b3e28917a6cebeb6639ba8390bae2d57040ff2a5d33737008000d15b"
+    ],
+    "producer_identity": "Codex main agent session 01a04c51-04fa-7ee0-bd3e-4c16758566f2"
+  },
+  "evaluator": {
+    "identity": "Codex independent evaluator v2.20.0-s03-architecture-e001",
+    "independent": true
+  },
+  "contract": {
+    "source": "docs/install-transaction/contract.json",
+    "pass_threshold": 90
+  },
+  "dimensions": [
+    {
+      "id": "single-owner",
+      "weight": 0.15,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "The architecture assigns one sole Owner to each of seven distinct responsibilities and explicitly prohibits creation of a second Owner for any responsibility.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md#frozen-owners",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The frozen result reproduces the same seven-owner allocation and records the no-second-owner invariant.",
+          "source": "docs/install-transaction/evidence/s03-recovery-architecture-contract-result.json#/owners and #/invariants/0",
+          "method": "source_trace"
+        }
+      ]
+    },
+    {
+      "id": "lifecycle-and-freeze-order",
+      "weight": 0.15,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "The architecture freezes at S03, delays production editing until S07, freezes source and one installer at S09, promotes without rebuilding at S13, installs at S14, and releases the same bytes at S15.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md#non-negotiable-invariants",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The result freeze sequence agrees with the governing contract's S03 architecture, S09 candidate, and S15 release freeze points and preserves S13 promotion and S14 installation order.",
+          "source": "docs/install-transaction/evidence/s03-recovery-architecture-contract-result.json#/freeze_sequence; docs/install-transaction/contract.json#/freeze_points and #/steps",
+          "method": "schema_validation"
+        }
+      ]
+    },
+    {
+      "id": "diagnostic-and-authority",
+      "weight": 0.15,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "S04 diagnostics are confined to a disposable namespace, require a host pre/post no-product-write assertion, and are explicitly excluded from supported installer entrypoints and shipped package contents.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md#diagnostic-architecture",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The architecture grants no authority and withholds production repair beyond the current step, elevation, target installation, archive mutation, and publication actions; this matches the governing contract's null S03 authorization and explicit S14/S15 authorization boundaries.",
+          "source": "docs/install-transaction/evidence/s03-recovery-architecture-contract-result.json#/authority_granted and #/authority_withheld; docs/install-transaction/contract.json#/authorization_boundaries and #/steps",
+          "method": "source_trace"
+        }
+      ]
+    },
+    {
+      "id": "packaged-chain-evidence-integrity",
+      "weight": 0.15,
+      "score": 98,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "The contract requires two hash-linked lanes, binds replay extraction to the exact installer by derivation receipt, forbids boundary replay from substituting for complete-chain evidence, and requires both lanes to reproduce the same boundary result.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md#non-negotiable-invariants",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The complete-chain lane traverses the packaged installer in an isolated Windows boundary while the replay lane preserves child stdout, stderr, traceback, exit code, request hash, nonce state, receipt existence, and absence of child launch.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md#diagnostic-architecture",
+          "method": "source_trace"
+        },
+        {
+          "claim": "These evidence boundaries are consistent with the governing S04, S05, S10, and S11 evidence obligations without requiring those future receipts to exist at S03.",
+          "source": "docs/install-transaction/contract.json#/steps",
+          "method": "llm_judgment"
+        }
+      ]
+    },
+    {
+      "id": "selective-invalidation",
+      "weight": 0.1,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "A failure invalidates the earliest contradicted receipt and its dependants while preserving unrelated completed work, and integrated remediation is capped at one cycle before replan.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md#non-negotiable-invariants",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The rule matches the governing maximum_integrated_remediation_cycles value of 1 and the explicit step prerequisite graph.",
+          "source": "docs/install-transaction/contract.json#/maximum_integrated_remediation_cycles and #/steps",
+          "method": "schema_validation"
+        }
+      ]
+    },
+    {
+      "id": "deletion-proof",
+      "weight": 0.1,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "Deletion is forbidden unless S06 proves supported-entrypoint reachability, package membership, Owner overlap, and replacement coverage, followed by tests proving no supported entrypoint dependency remains.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md#non-negotiable-invariants",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The deletion gate is ordered consistently with the governing S06 audits and S07 redundant-path-deletion-proof requirement.",
+          "source": "docs/install-transaction/contract.json#/steps",
+          "method": "source_trace"
+        }
+      ]
+    },
+    {
+      "id": "contract-consistency",
+      "weight": 0.15,
+      "score": 100,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "The architecture's owners, S03-to-S15 sequencing, first production-edit boundary, immutable candidate rule, authorization withholding, and one-cycle remediation limit do not contradict the governing contract.",
+          "source": "docs/install-transaction/s03-recovery-architecture-contract.md; docs/install-transaction/contract.json",
+          "method": "specialist_review"
+        },
+        {
+          "claim": "The frozen result embeds the exact path and SHA-256 of both the architecture document and governing contract, and both embedded hashes equal the recomputed frozen-input hashes.",
+          "source": "docs/install-transaction/evidence/s03-recovery-architecture-contract-result.json#/architecture_document and #/governing_contract",
+          "method": "deterministic_test"
+        }
+      ]
+    },
+    {
+      "id": "traceability",
+      "weight": 0.05,
+      "score": 98,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "The result is bound to exact architecture and contract hashes and restates owners, freeze sequence, invariants, and withheld authority in machine-readable fields.",
+          "source": "docs/install-transaction/evidence/s03-recovery-architecture-contract-result.json",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The governing S03 step explicitly requires both the recovery architecture contract and an independent architecture evaluation, linking this report to the correct lifecycle gate.",
+          "source": "docs/install-transaction/contract.json#/steps/2/required_evidence",
+          "method": "source_trace"
+        }
+      ]
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "frozen-input-hashes",
+      "status": "pass",
+      "evidence": "PowerShell Get-FileHash -Algorithm SHA256 exited 0: result=73588b08822de424cda9301a38c4c5b2ac961667bef1f5b94f0ed79e2c48b761; architecture=fefb9270b3e28917a6cebeb6639ba8390bae2d57040ff2a5d33737008000d15b; contract=78d51138065bd0b8dab5837713ab4d2e07f632aae4b4c6b6e0ace22b19070b48"
+    },
+    {
+      "id": "artifact-root-confinement",
+      "status": "pass",
+      "evidence": "All frozen input paths resolved as regular files beneath C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v220-recovery."
+    },
+    {
+      "id": "embedded-reference-binding",
+      "status": "pass",
+      "evidence": "The result JSON's architecture_document and governing_contract paths and SHA-256 values match the recomputed frozen architecture and governing contract bytes."
+    },
+    {
+      "id": "freeze-and-authority-alignment",
+      "status": "pass",
+      "evidence": "The result and architecture identify S03/S09/S13/S14/S15 consistently with contract.json freeze_points, ordered steps, and S14/S15-only authorization boundaries."
+    }
+  ],
+  "overall_score": 99.6,
+  "verdict": "pass",
+  "blocking_findings": [],
+  "limitations": [
+    "This is an S03 architecture-contract evaluation only. S04-S15 diagnostic, build, installation, runtime-effect, promotion, and release evidence does not yet need to exist and was not treated as missing evidence.",
+    "This verdict confirms architecture clarity, verifiability, and consistency with the governing contract; it does not authorize production repair, elevation, target installation, archive mutation, publication, or release."
+  ],
+  "iteration": {
+    "current": 1,
+    "maximum": 1
+  }
+}

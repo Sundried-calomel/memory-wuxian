@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S03",
+  "attempt": 1,
+  "evidence_id": "recovery-architecture-contract",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "inspection",
+    "name": "memory-wuxian-inspection-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "rg",
+      "-n",
+      "S09 freezes|S13 freezes|candidate|freeze",
+      "docs/install-transaction/s03-recovery-architecture-contract.md",
+      "docs/install-transaction/contract.json",
+      "docs/install-transaction/rules.md",
+      "docs/install-transaction/optimized-procedure.md"
+    ],
+    "cwd": ".",
+    "runner": "local-readonly",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "47a2886a1e723848fa33c96f53750a58d5721c4d01a2dfdfee60e4a02c212038"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s03-recovery-architecture-contract-result.json",
+      "sha256": "73588b08822de424cda9301a38c4c5b2ac961667bef1f5b94f0ed79e2c48b761",
+      "role": "architecture-contract"
+    }
+  ],
+  "subjects": []
+}

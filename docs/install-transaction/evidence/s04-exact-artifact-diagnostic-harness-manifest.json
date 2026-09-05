@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S04",
+  "attempt": 1,
+  "evidence_id": "exact-artifact-diagnostic-harness",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "test",
+    "name": "memory-wuxian-test-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "python",
+      "-m",
+      "unittest",
+      "tests.test_install_transaction_diagnostic",
+      "-v"
+    ],
+    "cwd": ".",
+    "runner": "local-python",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "47a2886a1e723848fa33c96f53750a58d5721c4d01a2dfdfee60e4a02c212038"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s04-exact-artifact-diagnostic-harness-result.json",
+      "sha256": "bafacea60fe470007ac748cb2c8b63bfa399962774d7993d933a7c0dd99d4b24",
+      "role": "harness-report"
+    },
+    {
+      "path": "docs/install-transaction/evidence/historical/s04-prepare-receipt.json",
+      "sha256": "f27b7e15f951464b9604491fce8d2cb8a1b6cd5f1d29155df87e868d5b25ab52",
+      "role": "historical-exact-artifact-preparation"
+    },
+    {
+      "path": "docs/install-transaction/evidence/historical/s04-broker-replay-receipt.json",
+      "sha256": "c2f97172eb385f4285055c42e958794035da96c104e43b61077e35237192ca9f",
+      "role": "historical-boundary-replay"
+    }
+  ],
+  "subjects": []
+}

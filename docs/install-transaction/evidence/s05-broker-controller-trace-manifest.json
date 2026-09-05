@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S05",
+  "attempt": 1,
+  "evidence_id": "broker-controller-trace",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "inspection",
+    "name": "memory-wuxian-inspection-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "git",
+      "show",
+      "319b1b23e90deaba92757da381de985e031b9853:scripts/windows_installer_broker.py"
+    ],
+    "cwd": ".",
+    "runner": "local-readonly",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "47a2886a1e723848fa33c96f53750a58d5721c4d01a2dfdfee60e4a02c212038"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s05-broker-controller-trace-result.json",
+      "sha256": "fd936d765600f84a1c073050fc55fe0cdd456f53b539902d16364c1914c54753",
+      "role": "trace-report"
+    },
+    {
+      "path": "docs/install-transaction/evidence/historical/s05-s14-install-result.json",
+      "sha256": "1d1b16170c402a4ac67b2ced3150d261cbf7934485daabfa13bb2fca1c7a2f3c",
+      "role": "historical-packaged-chain-result"
+    },
+    {
+      "path": "docs/install-transaction/evidence/historical/s05-s14-inno-install.log",
+      "sha256": "4696c599b3e6ebfc93675e25e49f575ac588186766ae97ac2bbd5c2f702fa4ac",
+      "role": "historical-packaged-chain-log"
+    },
+    {
+      "path": "docs/install-transaction/evidence/historical/s04-broker-replay-receipt.json",
+      "sha256": "c2f97172eb385f4285055c42e958794035da96c104e43b61077e35237192ca9f",
+      "role": "historical-boundary-replay"
+    }
+  ],
+  "subjects": []
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S07",
+  "attempt": 1,
+  "evidence_id": "defect-rule-conformance",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "test",
+    "name": "memory-wuxian-test-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "python",
+      "scripts/install_transaction_workflow.py",
+      "hook",
+      "post-edit",
+      "--path",
+      "scripts/windows_installer_broker.py",
+      "--path",
+      "tests/test_windows_installer_runtime.py"
+    ],
+    "cwd": ".",
+    "runner": "local-python",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "47a2886a1e723848fa33c96f53750a58d5721c4d01a2dfdfee60e4a02c212038"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s07-defect-rule-conformance-result.json",
+      "sha256": "8a4c9d4452ac691413b1c90091bc802bf5b74203a01ff7935ddf14c8812eb649",
+      "role": "defect-gate-result"
+    }
+  ],
+  "subjects": []
+}

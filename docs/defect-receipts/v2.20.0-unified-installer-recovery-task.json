@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "task_id": "memory-wuxian-v2.20.0-unified-installer-recovery-v1",
+  "objective": "Replace the contradictory installer workflow control plane, repair the proven Windows transaction defects, and validate one immutable installer through isolated, hosted, target-install, and release stages without treating quality review as user authorization.",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v220-recovery",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "project_id": "memory-wuxian-v2.20.0",
+  "owner_id": "windows-unified-installer",
+  "platforms": [
+    "windows",
+    "linux",
+    "macos"
+  ],
+  "languages": [
+    "python",
+    "powershell",
+    "inno-setup",
+    "yaml",
+    "json",
+    "markdown"
+  ],
+  "path_globs": [
+    "docs/install-transaction/**",
+    "docs/capability-admission/v2.20.0-installer-workflow/**",
+    "docs/defect-receipts/**",
+    "docs/retrospectives/**",
+    "docs/work-contracts/v2.20.0.json",
+    "scripts/install_transaction_workflow.py",
+    "scripts/install_windows_transaction.py",
+    "scripts/windows_installer_transaction.py",
+    "scripts/windows_installer_broker.py",
+    "scripts/windows_install_manifest.py",
+    "scripts/install_codex_autosync_windows.py",
+    "scripts/install_dashboard_shortcut_windows.ps1",
+    "scripts/inspect_dashboard_shortcut_windows.ps1",
+    "packaging/windows/**",
+    "tests/test_install_transaction_workflow.py",
+    "tests/test_windows_installer*.py",
+    "tests/test_windows_lifecycle_transaction.py",
+    "tests/test_windows_inno_bootstrap.py",
+    "tests/test_release_workflow_gate.py",
+    "tests/run_windows_packaged_chain_ci.ps1",
+    ".github/workflows/test.yml",
+    ".github/workflows/release.yml",
+    "README*.md",
+    "SKILL.md",
+    "CHANGELOG.md"
+  ],
+  "entrypoints": [
+    "inno-setup",
+    "manual-windows-install",
+    "windows-auto-update",
+    "windows-uninstall",
+    "github-hosted-windows-rehearsal",
+    "github-release"
+  ],
+  "resources": [
+    "workflow-contract",
+    "workflow-state",
+    "installer-evidence",
+    "installer-candidate",
+    "uac-boundary",
+    "skill-generation",
+    "scheduled-tasks",
+    "registry-run-values",
+    "desktop-shortcut",
+    "release-asset"
+  ],
+  "operations": [
+    "repair",
+    "validate",
+    "package",
+    "install",
+    "upgrade",
+    "rollback",
+    "uninstall",
+    "publish"
+  ],
+  "data_formats": [
+    "utf-8",
+    "json",
+    "yaml",
+    "sha256",
+    "windows-path",
+    "exe"
+  ],
+  "authorization_boundaries": [
+    "Independent quality evaluation and deterministic receipt validation do not require repeated user authorization.",
+    "Do not run a candidate installer, request UAC, modify installed Memory Wuxian resources, push, merge, tag, or publish until the preceding deterministic and isolated gates pass.",
+    "Any later UAC, repository write, or release action must be bound to the exact candidate and its concrete action boundary.",
+    "Do not mutate raw conversations, summaries, indexes, cloud replicas, OneDrive data, active archive pointers, or installed product resources during local development and isolated rehearsal.",
+    "Preserve the original dirty v218 worktree and all historical evidence; never promote its transient files into the new workflow baseline.",
+    "Reuse confirmed product fixes only after their current bytes and regression contracts are revalidated.",
+    "Build one immutable Windows installer before platform rehearsals and preserve the same installer SHA-256 through target installation and release.",
+    "Failure diagnostics must be producer-owned, structured, redacted, invocation-bound, and retained before raising.",
+    "A failed gate permits corrective editing but cannot be marked passed, skipped, or converted into user authorization text."
+  ],
+  "implementation_units": [
+    {
+      "id": "workflow-control-plane",
+      "owner_id": "installer-workflow-controller",
+      "paths": [
+        "docs/install-transaction/**",
+        "scripts/install_transaction_workflow.py",
+        "tests/test_install_transaction_workflow.py"
+      ],
+      "entrypoints": [
+        "installer-workflow-cli"
+      ],
+      "resources": [
+        "workflow-contract",
+        "workflow-state",
+        "installer-evidence"
+      ],
+      "operations": [
+        "repair",
+        "validate"
+      ],
+      "planned_check_ids": [
+        "registered-preflight",
+        "workflow-contract-consistency",
+        "epoch-isolation",
+        "scoped-receipt-invalidation",
+        "automatic-failure-transition"
+      ]
+    },
+    {
+      "id": "windows-product-transaction",
+      "owner_id": "windows-unified-installer",
+      "paths": [
+        "packaging/windows/**",
+        "scripts/install_windows_transaction.py",
+        "scripts/windows_installer_transaction.py",
+        "scripts/windows_installer_broker.py",
+        "scripts/windows_install_manifest.py",
+        "scripts/install_codex_autosync_windows.py",
+        "scripts/install_dashboard_shortcut_windows.ps1",
+        "scripts/inspect_dashboard_shortcut_windows.ps1",
+        "tests/test_windows_installer*.py",
+        "tests/test_windows_lifecycle_transaction.py",
+        "tests/test_windows_inno_bootstrap.py"
+      ],
+      "entrypoints": [
+        "inno-setup",
+        "manual-windows-install",
+        "windows-auto-update",
+        "windows-uninstall"
+      ],
+      "resources": [
+        "uac-boundary",
+        "skill-generation",
+        "scheduled-tasks",
+        "registry-run-values",
+        "desktop-shortcut"
+      ],
+      "operations": [
+        "install",
+        "upgrade",
+        "rollback",
+        "uninstall"
+      ],
+      "planned_check_ids": [
+        "runtime-capability-probe",
+        "cross-entrypoint-contract",
+        "unicode-path-fixtures",
+        "crash-checkpoint-recovery",
+        "concurrent-install-exclusion",
+        "no-path-python-uninstall"
+      ]
+    },
+    {
+      "id": "candidate-ci-release",
+      "owner_id": "installer-release-pipeline",
+      "paths": [
+        "tests/run_windows_packaged_chain_ci.ps1",
+        "tests/test_release_workflow_gate.py",
+        ".github/workflows/test.yml",
+        ".github/workflows/release.yml",
+        "docs/install-transaction/**",
+        "README*.md",
+        "SKILL.md",
+        "CHANGELOG.md"
+      ],
+      "entrypoints": [
+        "github-hosted-windows-rehearsal",
+        "github-release"
+      ],
+      "resources": [
+        "installer-candidate",
+        "installer-evidence",
+        "release-asset"
+      ],
+      "operations": [
+        "package",
+        "validate",
+        "publish"
+      ],
+      "planned_check_ids": [
+        "target-platform-effect",
+        "exact-candidate-release",
+        "lane-identity",
+        "release-state-gate"
+      ]
+    }
+  ],
+  "rule_exclusions": []
+}

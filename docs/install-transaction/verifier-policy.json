@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "policy_id": "memory-wuxian-installer-verifier-v1",
+  "producer_profiles": {
+    "command": {"name": "memory-wuxian-command-recorder", "version": "1", "runner": "local-process"},
+    "test": {"name": "memory-wuxian-test-recorder", "version": "1", "runner": "local-python"},
+    "ci": {"name": "github-actions", "version": "1", "runner": "github-hosted"},
+    "inspection": {"name": "memory-wuxian-inspection-recorder", "version": "1", "runner": "local-readonly"},
+    "evaluator": {"name": "agent-output-evaluator", "version": "1", "runner": "codex-subagent"}
+  },
+  "external_provenance": {
+    "evaluator": {
+      "schema_version": "1.0",
+      "minimum_pass_threshold": 90,
+      "contract_source": "docs/install-transaction/contract.json",
+      "artifact_bindings": {
+        "independent-architecture-evaluation": {"capture": "architecture_sha256"},
+        "independent-candidate-evaluation": {"freeze": "candidate"},
+        "independent-final-evaluation": {"freeze": "candidate"}
+      }
+    },
+    "ci": {
+      "repository": "Sundried-calomel/memory-wuxian",
+      "evidence_workflows": {
+        "candidate-source-commit": ".github/workflows/test.yml",
+        "ci-artifact-sha256": ".github/workflows/test.yml",
+        "immutable-candidate-build": ".github/workflows/test.yml",
+        "packaged-chain-rehearsal": ".github/workflows/test.yml",
+        "direct-rollback-supplement": ".github/workflows/test.yml",
+        "assertion-diagnostic-receipt": ".github/workflows/test.yml",
+        "diagnostic-redaction-receipt": ".github/workflows/test.yml",
+        "clean-install-receipt": ".github/workflows/test.yml",
+        "upgrade-receipt": ".github/workflows/test.yml",
+        "repeat-install-receipt": ".github/workflows/test.yml",
+        "controlled-rollback-receipt": ".github/workflows/test.yml",
+        "installed-runtime-effect-receipt": ".github/workflows/test.yml",
+        "cross-platform-ci": ".github/workflows/test.yml",
+        "full-relevant-tests": ".github/workflows/test.yml",
+        "no-rebuild-proof": ".github/workflows/release.yml",
+        "release-asset-sha256-match": ".github/workflows/release.yml"
+      },
+      "attest_result_artifacts": true,
+      "attested_subjects": {
+        "ci-artifact-sha256": {"role": "installer-candidate", "signer_workflow": ".github/workflows/test.yml"},
+        "release-asset-sha256-match": {"role": "installer-candidate", "signer_workflow": ".github/workflows/test.yml"}
+      },
+      "provenance_groups": {
+        "candidate-build": ["candidate-source-commit", "ci-artifact-sha256", "immutable-candidate-build"],
+        "packaged-rehearsal": ["packaged-chain-rehearsal", "direct-rollback-supplement", "assertion-diagnostic-receipt", "diagnostic-redaction-receipt"],
+        "installation-scenarios": ["clean-install-receipt", "upgrade-receipt", "repeat-install-receipt", "controlled-rollback-receipt"],
+        "candidate-validation": ["cross-platform-ci", "full-relevant-tests"],
+        "release-publication": ["no-rebuild-proof", "release-asset-sha256-match"]
+      }
+    }
+  },
+  "captures": {
+    "ci-artifact-sha256": {"candidate_sha256": "/candidate_sha256"},
+    "immutable-candidate-build": {"candidate_sha256": "/candidate_sha256"},
+    "release-asset-sha256-match": {"release_sha256": "/release_sha256"}
+  },
+  "artifact_hash_captures": {
+    "recovery-architecture-contract": {"architecture_sha256": "architecture-contract"}
+  },
+  "freeze_bindings": {
+    "packaged-chain-rehearsal": {"candidate": "/candidate_sha256"},
+    "direct-rollback-supplement": {"candidate": "/candidate_sha256"},
+    "assertion-diagnostic-receipt": {"candidate": "/candidate_sha256"},
+    "diagnostic-redaction-receipt": {"candidate": "/candidate_sha256"},
+    "clean-install-receipt": {"candidate": "/candidate_sha256"},
+    "upgrade-receipt": {"candidate": "/candidate_sha256"},
+    "repeat-install-receipt": {"candidate": "/candidate_sha256"},
+    "controlled-rollback-receipt": {"candidate": "/candidate_sha256"},
+    "installed-runtime-effect-receipt": {"candidate": "/candidate_sha256"},
+    "cross-platform-ci": {"candidate": "/candidate_sha256"},
+    "full-relevant-tests": {"candidate": "/candidate_sha256"},
+    "independent-candidate-evaluation": {"candidate": "/candidate_sha256"},
+    "candidate-promotion": {"candidate": "/candidate_sha256"},
+    "exact-ci-artifact-download": {"candidate": "/candidate_sha256"},
+    "real-target-upgrade-receipt": {"candidate": "/candidate_sha256"},
+    "no-rebuild-proof": {"candidate": "/candidate_sha256"},
+    "release-asset-sha256-match": {"candidate": "/candidate_sha256"},
+    "official-asset-reinstall": {"candidate": "/candidate_sha256"},
+    "independent-final-evaluation": {"candidate": "/candidate_sha256"}
+  },
+  "subject_bindings": {
+    "ci-artifact-sha256": "installer-candidate",
+    "exact-ci-artifact-download": "installer-candidate",
+    "release-asset-sha256-match": "installer-candidate"
+  },
+  "subject_size_bindings": {
+    "exact-ci-artifact-download": {"role": "installer-candidate", "json_pointer": "/byte_length"},
+    "release-asset-sha256-match": {"role": "installer-candidate", "json_pointer": "/byte_length"}
+  },
+  "state_bindings": {
+    "failed-candidate-evidence-freeze": {
+      "/frozen_snapshot_sha256": "/steps/S01/predecessor_snapshot_sha256"
+    }
+  },
+  "exact_values": {
+    "packaged-chain-rehearsal": {"/route_id": "inno-bootstrap-broker-controller-v1", "/lane": "packaged-production"},
+    "clean-install-receipt": {"/route_id": "inno-bootstrap-broker-controller-v1", "/lane": "packaged-production"},
+    "upgrade-receipt": {"/route_id": "inno-bootstrap-broker-controller-v1", "/lane": "packaged-production"},
+    "repeat-install-receipt": {"/route_id": "inno-bootstrap-broker-controller-v1", "/lane": "packaged-production"},
+    "controlled-rollback-receipt": {"/route_id": "inno-bootstrap-broker-controller-v1", "/lane": "packaged-production"},
+    "installed-runtime-effect-receipt": {"/effect_ids": ["archive-pointer", "focus", "process", "shortcut", "task", "telemetry", "watermark"], "/checked_effects": 7},
+    "cross-platform-ci": {"/platform_ids": ["linux", "macos", "windows"], "/job_ids": ["macos-candidate", "ubuntu-candidate", "windows-candidate"], "/jobs_run": 3},
+    "full-relevant-tests": {"/suite_ids": ["installer-transaction", "platform-scheduler", "release-workflow-gate", "windows-installer", "windows-lifecycle-transaction"]}
+  },
+  "minimums": {
+    "state-machine-tests": {"/tests_run": 1},
+    "project-hook-test": {"/tests_run": 1},
+    "failed-candidate-evidence-freeze": {"/frozen_artifact_count": 1},
+    "entrypoint-inventory": {"/entrypoint_count": 1},
+    "packaged-call-chain-map": {"/boundary_count": 1},
+    "exact-artifact-diagnostic-harness": {"/assertions": 1},
+    "no-product-write-proof": {"/checks_run": 1},
+    "broker-controller-trace": {"/boundary_count": 1},
+    "owner-reachability-audit": {"/owner_count": 1},
+    "package-membership-audit": {"/artifact_count": 1},
+    "redundancy-disposition-table": {"/classified_count": 1},
+    "entrypoint-equivalence-tests": {"/tests_run": 1},
+    "historical-regression-tests": {"/tests_run": 1},
+    "diff-simplification-review": {"/reviewed_files": 1},
+    "packaged-chain-rehearsal": {"/assertions": 1},
+    "direct-rollback-supplement": {"/assertions": 1},
+    "assertion-diagnostic-receipt": {"/assertion_count": 1},
+    "diagnostic-redaction-receipt": {"/fields_checked": 1},
+    "clean-install-receipt": {"/assertions": 1},
+    "upgrade-receipt": {"/assertions": 1},
+    "repeat-install-receipt": {"/assertions": 1},
+    "controlled-rollback-receipt": {"/assertions": 1},
+    "full-relevant-tests": {"/tests_run": 1},
+    "exact-ci-artifact-download": {"/byte_length": 1},
+    "real-target-upgrade-receipt": {"/assertions": 1},
+    "no-rebuild-proof": {"/checks_run": 1},
+    "release-asset-sha256-match": {"/byte_length": 1},
+    "official-asset-reinstall": {"/assertions": 1},
+    "defect-completion": {"/rules_checked": 1}
+  },
+  "requirements": {
+    "defect-preflight": {"producer_kinds": ["command"], "artifact_role": "defect-preflight-receipt", "json_pointer": "/status", "expected": "passed"},
+    "workflow-governance-check": {"producer_kinds": ["command"], "artifact_role": "workflow-check", "json_pointer": "/status", "expected": "passed"},
+    "capability-admission-receipt": {"producer_kinds": ["command"], "artifact_role": "admission-result", "json_pointer": "/status", "expected": "allowed"},
+    "state-machine-tests": {"producer_kinds": ["test"], "artifact_role": "test-result", "json_pointer": "/failures", "expected": 0},
+    "project-hook-test": {"producer_kinds": ["test"], "artifact_role": "test-result", "json_pointer": "/failures", "expected": 0},
+    "failed-candidate-evidence-freeze": {"producer_kinds": ["inspection"], "artifact_role": "frozen-evidence", "json_pointer": "/identity_bound", "expected": true},
+    "entrypoint-inventory": {"producer_kinds": ["inspection"], "artifact_role": "inventory", "json_pointer": "/complete", "expected": true},
+    "packaged-call-chain-map": {"producer_kinds": ["inspection"], "artifact_role": "call-chain", "json_pointer": "/complete", "expected": true},
+    "single-owner-decision": {"producer_kinds": ["inspection"], "artifact_role": "owner-decision", "json_pointer": "/decision", "expected": "single-owner"},
+    "recovery-architecture-contract": {"producer_kinds": ["inspection"], "artifact_role": "architecture-contract", "json_pointer": "/status", "expected": "frozen"},
+    "independent-architecture-evaluation": {"producer_kinds": ["evaluator"], "artifact_role": "evaluation-report", "json_pointer": "/verdict", "expected": "pass"},
+    "exact-artifact-diagnostic-harness": {"producer_kinds": ["test"], "artifact_role": "harness-report", "json_pointer": "/status", "expected": "passed"},
+    "no-product-write-proof": {"producer_kinds": ["test"], "artifact_role": "write-set-report", "json_pointer": "/product_write_count", "expected": 0},
+    "broker-controller-trace": {"producer_kinds": ["inspection"], "artifact_role": "trace-report", "json_pointer": "/complete", "expected": true},
+    "exact-root-cause-proof": {"producer_kinds": ["inspection"], "artifact_role": "root-cause-report", "json_pointer": "/status", "expected": "proven"},
+    "owner-reachability-audit": {"producer_kinds": ["inspection"], "artifact_role": "owner-audit", "json_pointer": "/complete", "expected": true},
+    "package-membership-audit": {"producer_kinds": ["inspection"], "artifact_role": "package-audit", "json_pointer": "/complete", "expected": true},
+    "redundancy-disposition-table": {"producer_kinds": ["inspection"], "artifact_role": "disposition-table", "json_pointer": "/unclassified_count", "expected": 0},
+    "minimal-root-cause-diff": {"producer_kinds": ["inspection"], "artifact_role": "diff-audit", "json_pointer": "/scope_status", "expected": "bounded"},
+    "redundant-path-deletion-proof": {"producer_kinds": ["test"], "artifact_role": "deletion-proof", "json_pointer": "/unsupported_deletion_count", "expected": 0},
+    "defect-rule-conformance": {"producer_kinds": ["test"], "artifact_role": "defect-gate-result", "json_pointer": "/status", "expected": "passed"},
+    "entrypoint-equivalence-tests": {"producer_kinds": ["test"], "artifact_role": "test-result", "json_pointer": "/failures", "expected": 0},
+    "historical-regression-tests": {"producer_kinds": ["test"], "artifact_role": "test-result", "json_pointer": "/failures", "expected": 0},
+    "diff-simplification-review": {"producer_kinds": ["inspection"], "artifact_role": "review-result", "json_pointer": "/blocking_findings", "expected": 0},
+    "candidate-source-commit": {"producer_kinds": ["ci"], "artifact_role": "candidate-provenance", "json_pointer": "/committed", "expected": true},
+    "ci-artifact-sha256": {"producer_kinds": ["ci"], "artifact_role": "candidate-provenance", "json_pointer": "/hash_matches", "expected": true},
+    "immutable-candidate-build": {"producer_kinds": ["ci"], "artifact_role": "candidate-provenance", "json_pointer": "/build_count", "expected": 1},
+    "packaged-chain-rehearsal": {"producer_kinds": ["ci"], "artifact_role": "packaged-chain-result", "json_pointer": "/status", "expected": "passed"},
+    "direct-rollback-supplement": {"producer_kinds": ["ci"], "artifact_role": "rollback-result", "json_pointer": "/lane", "expected": "direct-supplement"},
+    "assertion-diagnostic-receipt": {"producer_kinds": ["ci"], "artifact_role": "diagnostic-result", "json_pointer": "/unclassified_failure_count", "expected": 0},
+    "diagnostic-redaction-receipt": {"producer_kinds": ["ci"], "artifact_role": "redaction-result", "json_pointer": "/forbidden_field_count", "expected": 0},
+    "clean-install-receipt": {"producer_kinds": ["ci"], "artifact_role": "scenario-result", "json_pointer": "/status", "expected": "passed"},
+    "upgrade-receipt": {"producer_kinds": ["ci"], "artifact_role": "scenario-result", "json_pointer": "/status", "expected": "passed"},
+    "repeat-install-receipt": {"producer_kinds": ["ci"], "artifact_role": "scenario-result", "json_pointer": "/status", "expected": "passed"},
+    "controlled-rollback-receipt": {"producer_kinds": ["ci"], "artifact_role": "scenario-result", "json_pointer": "/status", "expected": "passed"},
+    "installed-runtime-effect-receipt": {"producer_kinds": ["ci"], "artifact_role": "runtime-effect-result", "json_pointer": "/failed_effects", "expected": 0},
+    "cross-platform-ci": {"producer_kinds": ["ci"], "artifact_role": "ci-result", "json_pointer": "/failed_jobs", "expected": 0},
+    "full-relevant-tests": {"producer_kinds": ["ci"], "artifact_role": "test-result", "json_pointer": "/failures", "expected": 0},
+    "independent-candidate-evaluation": {"producer_kinds": ["evaluator"], "artifact_role": "evaluation-report", "json_pointer": "/verdict", "expected": "pass"},
+    "candidate-promotion": {"producer_kinds": ["inspection"], "artifact_role": "promotion-receipt", "json_pointer": "/status", "expected": "promoted"},
+    "exact-ci-artifact-download": {"producer_kinds": ["inspection"], "artifact_role": "download-receipt", "json_pointer": "/hash_match", "expected": true},
+    "real-target-upgrade-receipt": {"producer_kinds": ["inspection"], "artifact_role": "target-install-result", "json_pointer": "/status", "expected": "passed"},
+    "no-rebuild-proof": {"producer_kinds": ["ci"], "artifact_role": "release-provenance", "json_pointer": "/rebuild_count", "expected": 0},
+    "release-asset-sha256-match": {"producer_kinds": ["ci"], "artifact_role": "release-provenance", "json_pointer": "/hash_match", "expected": true},
+    "official-asset-reinstall": {"producer_kinds": ["inspection"], "artifact_role": "official-install-result", "json_pointer": "/status", "expected": "passed"},
+    "independent-final-evaluation": {"producer_kinds": ["evaluator"], "artifact_role": "evaluation-report", "json_pointer": "/verdict", "expected": "pass"},
+    "defect-completion": {"producer_kinds": ["command"], "artifact_role": "defect-completion-receipt", "json_pointer": "/status", "expected": "complete"}
+  }
+}

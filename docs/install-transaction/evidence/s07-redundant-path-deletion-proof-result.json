@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "tests_run": 10,
+  "failures": 0,
+  "errors": 0,
+  "unsupported_deletion_count": 0,
+  "production_deletion_count": 0,
+  "audit_source": "docs/install-transaction/evidence/s06-redundancy-disposition-table-result.json",
+  "audit_source_sha256": "41019e1ed03a8420c365dfae0632d80982a00dc643508bfca6578ccc1d38b148",
+  "decision": "delete-none",
+  "reason": "S06 found no production path whose deletion is both necessary for the proven failure and safe for all supported entrypoints.",
+  "deferred_candidates": [
+    "legacy direct controller branch and journal-path",
+    "uninstall contract mismatch",
+    "repeated seven-component tuple",
+    "candidate-internal package pruning"
+  ],
+  "supported_entrypoint_dependency_checks": [
+    "manual",
+    "inno",
+    "auto-update"
+  ]
+}

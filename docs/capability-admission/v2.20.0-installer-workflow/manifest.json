@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "capability_id": "installer-transaction-workflow",
-  "revision": "2.20.0-governance-17",
+  "revision": "2.20.0-governance-18",
   "owner_id": "windows-installer-transaction-controller",
-  "producer_identity": "codex-primary-producer",
-  "artifact_sha256": "6fbb2d4bd912cb57b2154c9b93d8c66fd425d97013b50c8a71a06f661931f412",
+  "producer_identity": "01a04c51-04fa-7ee0-bd3e-4c16758566f2",
+  "artifact_sha256": "1514e7337c53bc8c27e45b45f70495e07625934746e46912aa5e207f12d0b93a",
   "triggers": [
     {"trigger_id": "installer-protected-edit", "phrase": "Edit a protected Memory Wuxian installer transaction path"},
     {"trigger_id": "installer-step-transition", "phrase": "Advance the Memory Wuxian unified installer workflow"}

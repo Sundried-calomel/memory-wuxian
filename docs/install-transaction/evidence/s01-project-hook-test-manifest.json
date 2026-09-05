@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S01",
+  "attempt": 1,
+  "evidence_id": "project-hook-test",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "test",
+    "name": "memory-wuxian-test-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": ["python", "-m", "unittest", "tests.test_install_transaction_workflow.InstallTransactionWorkflowTests.test_init_status_and_project_scoped_path_gate"],
+    "cwd": ".",
+    "runner": "local-python",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "6c61949017b66a27a9c8d509ca7a8f7ef5baf841e88b01f52d75812e737004ef"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s01-project-hook-test-result.json",
+      "sha256": "78d10fbf5e2f082260aefd52f9d2c9294b56dcbb700b8c60725f601c272d8866",
+      "role": "test-result"
+    }
+  ],
+  "subjects": []
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "rules_checked": 4,
+  "defect_preflight": {
+    "path": "docs/defect-receipts/v2.20.0-unified-installer-recovery-preflight.json",
+    "file_sha256": "ee1786b596423ae6afbe2c4ee5c84711e5a8cc9a178aa55af7256e810a2c7fb5",
+    "receipt_sha256": "5df1dc735a6537282ef0cd2c78c5cef0b5cb193c8d26e4162bbfb5d0331d628c",
+    "status": "ready"
+  },
+  "conformance": [
+    {
+      "rule": "G01",
+      "status": "passed",
+      "evidence": "The exact selected Python executed ten broker and isolated-runtime checks from the repository working directory."
+    },
+    {
+      "rule": "G05",
+      "status": "passed-for-s07-scope",
+      "evidence": "S07 makes no installation or activation claim; real packaged and target-platform effects remain mandatory at S10-S14."
+    },
+    {
+      "rule": "G09",
+      "status": "passed-for-s07-scope",
+      "evidence": "The repair commit, current source bytes, test bytes, and failed-candidate hashes are separately identified; no candidate or release identity is claimed before S09."
+    },
+    {
+      "rule": "G11",
+      "status": "passed",
+      "evidence": "The registered preflight was loaded and both project pre-edit and post-edit Hooks passed; no workbook text was treated as a substitute for receipts."
+    }
+  ],
+  "hook_results": {
+    "pre_edit": "passed",
+    "post_edit": "passed",
+    "post_edit_delta_paths": []
+  },
+  "unknown_error_family_count": 0,
+  "required_workbook_change": false
+}

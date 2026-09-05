@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "reviewed_files": 2,
+  "blocking_findings": 0,
+  "applied_fix_count": 0,
+  "mode": "review-only",
+  "scope": {
+    "production": "scripts/windows_installer_broker.py",
+    "tests": "tests/test_windows_installer_runtime.py",
+    "comparison": "319b1b23e90deaba92757da381de985e031b9853..8dd7281"
+  },
+  "rubric": {
+    "reuse": "No project helper can be imported before executable-local import reachability exists.",
+    "quality": "The bootstrap matches the established controller pattern and does not cross an Owner boundary.",
+    "efficiency": "The path initialization runs once at broker startup and adds no repeated scan or I/O.",
+    "clarity": "Eight explicit lines are clearer and safer than introducing a wrapper or hidden fallback."
+  },
+  "diff_summary": {
+    "production_insertions": 8,
+    "production_deletions": 0,
+    "test_insertions": 70,
+    "test_deletions": 0,
+    "whitespace_errors": 0,
+    "post_repair_path_drift": 0
+  },
+  "intentionally_deferred": [
+    "legacy direct controller cleanup",
+    "uninstall contract changes",
+    "component tuple consolidation",
+    "package pruning"
+  ]
+}

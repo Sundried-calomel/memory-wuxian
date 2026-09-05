@@ -11,7 +11,10 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from platform_atomic import ParentSync, atomic_replace_bytes
+if __package__:
+    from scripts.platform_atomic import ParentSync, atomic_replace_bytes
+else:  # pragma: no cover - exercised by CLI subprocess tests
+    from platform_atomic import ParentSync, atomic_replace_bytes
 
 
 INDEX_GENERATION_FORMAT = "memory-wuxian-index-generation-v1"
@@ -63,6 +66,25 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def decode_strict_json(raw: bytes) -> Any:
+    """Decode UTF-8 JSON while rejecting duplicate keys and non-finite values."""
+
+    try:
+        return json.loads(
+            raw.decode("utf-8", errors="strict"),
+            object_pairs_hook=_unique_object,
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                PlatformTransactionError(
+                    f"JSON contains unsupported constant: {value}"
+                )
+            ),
+        )
+    except PlatformTransactionError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise PlatformTransactionError(f"JSON is malformed: {exc}") from exc
+
+
 def read_canonical_json(path: Path) -> Any:
     """Read exact canonical JSON, rejecting malformed or noncanonical bytes."""
 
@@ -72,17 +94,11 @@ def read_canonical_json(path: Path) -> Any:
     except OSError as exc:
         raise PlatformTransactionError(f"canonical JSON is not readable: {path}: {exc}") from exc
     try:
-        value = json.loads(
-            raw.decode("utf-8", errors="strict"),
-            object_pairs_hook=_unique_object,
-            parse_constant=lambda value: (_ for _ in ()).throw(
-                PlatformTransactionError(f"JSON contains unsupported constant: {value}")
-            ),
-        )
-    except PlatformTransactionError:
-        raise
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise PlatformTransactionError(f"canonical JSON is malformed: {path}: {exc}") from exc
+        value = decode_strict_json(raw)
+    except PlatformTransactionError as exc:
+        raise PlatformTransactionError(
+            f"canonical JSON is malformed: {path}: {exc}"
+        ) from exc
     if raw != canonical_json_bytes(value):
         raise PlatformTransactionError(f"JSON bytes are not canonical: {path}")
     return value

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "status": "proven",
+  "root_cause_id": "broker-isolated-runtime-import-reachability",
+  "failed_source_commit": "319b1b23e90deaba92757da381de985e031b9853",
+  "nearest_false_boundary": "scripts/windows_installer_broker.py:run_controller",
+  "failure_mechanism": "The manifest-bound isolated Python cannot resolve the broker's sibling windows_install_manifest module because the broker executable lacks the script-directory and project-root sys.path bootstrap already used by the child controller.",
+  "direct_facts": [
+    {
+      "claim": "The failed broker first imports windows_install_manifest and then scripts.windows_install_manifest without bootstrapping either import root.",
+      "source": "git object 319b1b23e90deaba92757da381de985e031b9853:scripts/windows_installer_broker.py",
+      "sha256": "ad21930d254492f46f66921933073f18ed49dc51e4aa55a5ae8a7eb9ef2b0feb"
+    },
+    {
+      "claim": "The failed candidate contains windows_install_manifest.py, so the module is packaged rather than absent.",
+      "source": "git object 319b1b23e90deaba92757da381de985e031b9853:scripts/windows_install_manifest.py",
+      "sha256": "5efb255f91a9d0a0eff656af936a1109e337b3f1d6263e9a7ff6d517c6b451fa"
+    },
+    {
+      "claim": "The child controller explicitly inserts its script directory and project root into sys.path before sibling imports.",
+      "source": "git object 319b1b23e90deaba92757da381de985e031b9853:scripts/install_windows_transaction.py",
+      "sha256": "570b39cae60ddebcfc32972e4569210daf804c40e593223fbc4cfb47bce335e5"
+    },
+    {
+      "claim": "The broker replay failed at those imports and produced no child receipt.",
+      "source": "docs/install-transaction/evidence/historical/s04-broker-replay-receipt.json",
+      "sha256": "c2f97172eb385f4285055c42e958794035da96c104e43b61077e35237192ca9f"
+    }
+  ],
+  "alternative_causes_excluded": [
+    "the manifest module was omitted from the candidate",
+    "the child controller launched and failed later",
+    "the original Inno entrypoint did not reach the transaction boundary",
+    "the replay used a different failed exit boundary"
+  ],
+  "minimal_repair_boundary": {
+    "owner": "scripts/windows_installer_broker.py",
+    "required_change": "Make the broker executable-script bootstrap equivalent to the existing child-controller bootstrap before sibling imports.",
+    "forbidden_expansion": [
+      "new installer wrapper",
+      "fallback installer path",
+      "weakened manifest, hash, SID, nonce, path, or runtime checks",
+      "second manifest parser",
+      "changed transaction Owner"
+    ]
+  },
+  "production_code_changed_in_s05": false
+}

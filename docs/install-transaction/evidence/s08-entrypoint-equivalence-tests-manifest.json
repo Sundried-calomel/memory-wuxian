@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S08",
+  "attempt": 1,
+  "evidence_id": "entrypoint-equivalence-tests",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "test",
+    "name": "memory-wuxian-test-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "python",
+      "-m",
+      "unittest",
+      "tests.test_windows_installer_runtime",
+      "tests.test_windows_installer_broker",
+      "tests.test_windows_installer_transaction",
+      "tests.test_windows_installer_composition",
+      "tests.test_windows_lifecycle_transaction",
+      "tests.test_auto_update",
+      "-v"
+    ],
+    "cwd": ".",
+    "runner": "local-python",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "47a2886a1e723848fa33c96f53750a58d5721c4d01a2dfdfee60e4a02c212038"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s08-entrypoint-equivalence-tests-result.json",
+      "sha256": "0235df6d88a7c352211e116175650c18a017d0303d963c2a96b63be0f638fd3a",
+      "role": "test-result"
+    }
+  ],
+  "subjects": []
+}

@@ -1,0 +1,15 @@
+{
+  "identity_bound": true,
+  "frozen_artifact_count": 2,
+  "frozen_snapshot_sha256": "d6c1323df9a79a5e4331f6593fcf41d8e2040136a4ca93cb8b345206f050a9c4",
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/recovery-baseline-capture.json",
+      "sha256": "55fb0fdb7f75288e9ff7a40de7bc8633d5a172591db4352db3e35e7ed4da0c99"
+    },
+    {
+      "path": "docs/install-transaction/legacy/runtime-state-694009a4f6ede290.json",
+      "sha256": "694009a4f6ede2904afa2ed04fab4840686328fec6f60e18ebafb49f606cfcf9"
+    }
+  ]
+}

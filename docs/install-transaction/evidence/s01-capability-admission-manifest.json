@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S01",
+  "attempt": 1,
+  "evidence_id": "capability-admission-receipt",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "command",
+    "name": "memory-wuxian-command-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": ["check_capability_receipt.py", "--candidate-id", "installer-transaction-workflow", "--project-id", "memory-wuxian-v2.20.0", "--action-id", "advance-workflow-step", "--json"],
+    "cwd": ".",
+    "runner": "local-process",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "6c61949017b66a27a9c8d509ca7a8f7ef5baf841e88b01f52d75812e737004ef"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s01-capability-admission-result.json",
+      "sha256": "59f46528e99e2b912718e9be39a229aef5dde6e10fe42b4dcd92cc763864eaff",
+      "role": "admission-result"
+    }
+  ],
+  "subjects": []
+}

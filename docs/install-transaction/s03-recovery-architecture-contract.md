@@ -48,8 +48,9 @@ No recovery step may create a second Owner for any row.
 7. S08 must prove supported entrypoint equivalence and all applicable historical
    defects. S09-S11 must traverse the packaged Inno, PowerShell, broker, child,
    and transaction route.
-8. S13 freezes one committed source and one uniquely hashed CI artifact. S14
-   installs that exact artifact. S15 promotes the same bytes without rebuilding.
+8. S09 freezes one committed source and one uniquely hashed CI artifact. S13
+   independently evaluates and promotes that existing artifact without rebuilding;
+   S14 installs it, and S15 publishes and reinstalls the same bytes.
 9. A failure invalidates the earliest contradicted receipt and its dependants,
    not unrelated completed work. One integrated remediation is the maximum
    before explicit replan.

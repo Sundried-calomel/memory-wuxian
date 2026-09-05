@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "complete": true,
+  "owner_count": 8,
+  "supported_entrypoints": [
+    "manual",
+    "inno",
+    "auto-update"
+  ],
+  "owners": [
+    {
+      "path": "packaging/windows/MemoryWuxian.iss",
+      "sha256": "0d3d9e62a0c0b2fcbc56f0e238451d00ad4cfb22503581c6f268c7c7b25800b2",
+      "responsibility": "Setup extraction, outer invocation, and terminal Setup exit",
+      "reachable_from": ["inno", "auto-update"]
+    },
+    {
+      "path": "packaging/windows/install.ps1",
+      "sha256": "3c75616bab77bdde5165005a47d59c1e22f06d398b17e7b76950120db9ee6577",
+      "responsibility": "Runtime resolution, closed manifest preparation, broker invocation, and exit propagation",
+      "reachable_from": ["manual", "inno", "auto-update"]
+    },
+    {
+      "path": "scripts/windows_installer_broker.py",
+      "sha256": "ad71032d9097648ffc8a62f96f426db7c53ffbfb30ed1e3d57063139e49d4352",
+      "responsibility": "Closed elevation request validation, nonce consumption, and one child launch",
+      "reachable_from": ["manual", "inno", "auto-update"]
+    },
+    {
+      "path": "scripts/windows_install_manifest.py",
+      "sha256": "3f24c90c2f9fbd5e50410644fc54d525e7c420e7713aaf49801cbcdfde75ea6a",
+      "responsibility": "Closed install-manifest schema, validation, reading, and serialization",
+      "reachable_from": ["manual", "inno", "auto-update"]
+    },
+    {
+      "path": "scripts/install_windows_transaction.py:ProductInstallAdapter",
+      "sha256": "5b32ec449cc89c42af82779a003aeed42ae489670ab2529211f40daffb7f3028",
+      "responsibility": "Composition of the seven product mutations",
+      "reachable_from": ["manual", "inno", "auto-update"]
+    },
+    {
+      "path": "scripts/install_windows_transaction.py:execute_manifest",
+      "sha256": "5b32ec449cc89c42af82779a003aeed42ae489670ab2529211f40daffb7f3028",
+      "responsibility": "Canonical validated child entry into the transaction",
+      "reachable_from": ["manual", "inno", "auto-update"]
+    },
+    {
+      "path": "scripts/windows_installer_transaction.py:WindowsInstallerTransaction",
+      "sha256": "33ffb5a084543a0bc4a7bf70b5f8a8a8064e8778c39050bf18f8835216bc7b74",
+      "responsibility": "Journal, commit, rollback, and terminal transaction result",
+      "reachable_from": ["manual", "inno", "auto-update"]
+    },
+    {
+      "path": "scripts/auto_update.py:execute_windows_staged_installer",
+      "sha256": "9777b86239e864be30a516722c56ea61472c28a5be8967ec79f8a3a926a8bb30",
+      "responsibility": "Approved Setup-byte recheck, one Setup launch, and outer update result",
+      "reachable_from": ["auto-update"]
+    }
+  ],
+  "chains": {
+    "manual": ["install.ps1", "prepare-only", "broker launch", "broker dispatch", "execute-manifest", "transaction"],
+    "inno": ["MemoryWuxian.iss", "install.ps1", "prepare-only", "broker launch", "broker dispatch", "execute-manifest", "transaction"],
+    "auto-update": ["auto_update.py", "Setup SOURCEENTRYPOINT=auto-update", "MemoryWuxian.iss", "install.ps1", "prepare-only", "broker launch", "broker dispatch", "execute-manifest", "transaction"]
+  },
+  "second_transaction_owner_count": 0,
+  "production_code_changed_in_s06": false
+}

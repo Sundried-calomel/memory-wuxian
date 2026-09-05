@@ -1,0 +1,45 @@
+{
+  "status": "frozen",
+  "architecture_document": {
+    "path": "docs/install-transaction/s03-recovery-architecture-contract.md",
+    "sha256": "fefb9270b3e28917a6cebeb6639ba8390bae2d57040ff2a5d33737008000d15b"
+  },
+  "governing_contract": {
+    "path": "docs/install-transaction/contract.json",
+    "sha256": "78d51138065bd0b8dab5837713ab4d2e07f632aae4b4c6b6e0ace22b19070b48"
+  },
+  "source_snapshot_sha256": "d515ab83644f417db50149aabdb7f44f8eb3e5819359efd79ea5fcf65c432a36",
+  "owners": {
+    "workflow_state": "scripts/install_transaction_workflow.py",
+    "setup_orchestration": "packaging/windows/MemoryWuxian.iss",
+    "manifest_preparation": "packaging/windows/install.ps1 and scripts/install_windows_transaction.py --prepare-only",
+    "elevation_request": "scripts/windows_installer_broker.py",
+    "product_composition": "scripts/install_windows_transaction.py:ProductInstallAdapter",
+    "transaction_commit_and_rollback": "scripts/windows_installer_transaction.py:WindowsInstallerTransaction",
+    "approved_update_staging": "scripts/auto_update.py"
+  },
+  "freeze_sequence": {
+    "architecture": "S03",
+    "candidate": "S09",
+    "candidate_evaluation_and_promotion": "S13",
+    "target_install": "S14",
+    "release": "S15"
+  },
+  "invariants": [
+    "No recovery step creates a second owner for an existing responsibility.",
+    "Raw archives, summaries, cloud exchange, and Environment payloads remain outside installer repair scope.",
+    "The historical failed candidate and its evidence remain immutable.",
+    "Diagnostics cannot write host product resources and cannot substitute for complete packaged-chain evidence.",
+    "Production editing begins only after exact root-cause proof and targets the nearest false boundary.",
+    "Deletion requires prior reachability, package-membership, owner-overlap, replacement, and test proof.",
+    "A failure invalidates the earliest contradicted receipt and its dependants, not unrelated completed work.",
+    "S09 freezes one committed source and one installer; S13 through S15 evaluate, install, and publish those same bytes without rebuilding."
+  ],
+  "authority_granted": [],
+  "authority_withheld": [
+    "production repair beyond the current step",
+    "target installation or elevation",
+    "archive mutation",
+    "GitHub push, merge, tag, or release"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "revision": "WF-20260905-012",
+  "previousRevision": "WF-20260905-011",
+  "sequence": 12,
+  "category": "correction",
+  "summary": "Replace self-locking and self-certifying control-plane rules with provenance-bound evidence, mandatory lifecycle freezes, immutable state recovery, and non-remediation operator errors",
+  "startedAt": "2026-09-05T00:30:25+09:00",
+  "preDocumentHashes": {
+    "rules": "A5D176332A7CCDDB226EE4C8C595C0EA8F18950BB7B9C62B197F333E4A46FBCE",
+    "history": "C25ECB83CAA3B5DB92F8D1912C4A1F666BB7AF08EF2BC9F007E9CB984EA993ED",
+    "optimized": "B3DE4C62D9A4DE7CB6A7BE1C013FD7CCA43D0A854B79CE69AB983271B456E423"
+  },
+  "preChangeLogSha256": "586A7547B64CCF30E87888E8D825BF34636A441BBBEC9B39104F959966A84A8A",
+  "completedAt": "2026-09-05T01:03:28+09:00",
+  "postDocumentHashes": {
+    "rules": "5814320BC8C74431E751A50B90EEF9407AC5D08EC7F830EEBC8C9A74D38A989C",
+    "history": "84B20638A3F143B271E52FBC0EB666216C2396893B5A52CC2A3A75B2EAC3DF7B",
+    "optimized": "4B2F3D226BE8408057C0FA1776F4B7FBD9EEFE03FAAEBE43AB0FE336427375AA"
+  },
+  "changeLogSha256": "73B74DF83C0AAFFE9CDA4009CE9006CF87C6CA566E892462B92F295E8E68C5F9"
+}

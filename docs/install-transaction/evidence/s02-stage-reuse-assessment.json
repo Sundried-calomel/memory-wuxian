@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "evaluated_source": {
+    "commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "snapshot_sha256": "6c61949017b66a27a9c8d509ca7a8f7ef5baf841e88b01f52d75812e737004ef"
+  },
+  "principles": [
+    "Reuse existing code, immutable historical evidence, and tests when their meaning and exact bytes remain applicable.",
+    "Do not inherit a legacy PASS state when its contract, source snapshot, evidence schema, or candidate identity differs.",
+    "Rerun only the smallest test or rehearsal needed to bind evidence to current bytes.",
+    "S09 through S15 must use one newly frozen installer candidate; earlier candidate results remain historical evidence only."
+  ],
+  "stages": [
+    {
+      "step": "S02",
+      "disposition": "reuse_inputs_rebind_current",
+      "reusable": ["docs/install-transaction/s02-entrypoint-and-call-chain-audit.md", "current production entrypoints and owner topology"],
+      "missing": ["E001 evidence manifests bound to the current source snapshot"],
+      "action": "Perform bounded source inspection, emit three current evidence manifests, verify, complete, and advance."
+    },
+    {
+      "step": "S03",
+      "disposition": "reuse_with_minimal_correction_and_new_evaluation",
+      "reusable": ["single-owner architecture", "no-product-write diagnostic boundary", "selective invalidation rule"],
+      "missing": ["correct S09 candidate-freeze wording", "independent evaluation bound to the corrected architecture hash and current contract"],
+      "action": "Correct only the stale S13 freeze statement, then independently evaluate the exact corrected artifact."
+    },
+    {
+      "step": "S04",
+      "disposition": "reuse_historical_inputs_rerun_current_targeted_checks",
+      "reusable": ["exact failed installer identity", "diagnostic harness design", "historical no-product-write snapshots"],
+      "missing": ["test evidence bound to the current harness and test bytes"],
+      "action": "Run the focused diagnostic-harness tests once on current bytes and emit current-schema evidence."
+    },
+    {
+      "step": "S05",
+      "disposition": "reuse_immutable_root_cause_rebind_current",
+      "reusable": ["frozen Inno failure lane", "broker replay traceback", "missing child-receipt observation", "import-reachability proof"],
+      "missing": ["E001 current-schema inspection manifests"],
+      "action": "Rehash the immutable inputs and transcribe the already-proven causal boundary without rerunning the failed installer."
+    },
+    {
+      "step": "S06",
+      "disposition": "reuse_audit_reinspect_current",
+      "reusable": ["owner map", "package-membership findings for the failed candidate", "redundancy dispositions"],
+      "missing": ["confirmation that current source does not alter the ownership or reachability conclusions"],
+      "action": "Perform a bounded current-source comparison and emit the three E001 audit manifests."
+    },
+    {
+      "step": "S07",
+      "disposition": "reuse_implementation_reprove_current_diff",
+      "reusable": ["existing broker bootstrap repair", "historical root-cause linkage", "no-new-owner decision"],
+      "missing": ["current diff audit", "current defect-rule conformance", "proof that later broker changes did not widen the repair"],
+      "action": "Inspect the current broker history and diff; edit production code only if that inspection proves a remaining causal defect."
+    },
+    {
+      "step": "S08",
+      "disposition": "rerun_current_targeted_matrix_once",
+      "reusable": ["test selection", "historical 85-test coverage map", "simplification questions"],
+      "missing": ["test results bound to current production and test bytes"],
+      "action": "Run the affected installer regression matrix once, then inspect only the resulting current diff."
+    },
+    {
+      "step": "S09",
+      "disposition": "new_final_candidate_required",
+      "reusable": ["candidate build implementation", "prior build diagnostics"],
+      "missing": ["all governed source committed", "one current-source CI build", "candidate hash and attested evidence"],
+      "action": "Create exactly one immutable candidate from the final committed source; do not reuse an earlier installer hash."
+    },
+    {
+      "step": "S10",
+      "disposition": "new_same_candidate_evidence_required",
+      "reusable": ["packaged-chain harness", "rollback lane design", "diagnostic taxonomy"],
+      "missing": ["hosted packaged-chain, rollback, assertion, and redaction evidence for the S09 candidate"],
+      "action": "Run the existing hosted lanes against the frozen S09 candidate and repair only a proven failing boundary."
+    },
+    {
+      "step": "S11",
+      "disposition": "new_same_candidate_evidence_required",
+      "reusable": ["clean, v2.15.0 upgrade, repeat, and controlled-rollback scenario definitions"],
+      "missing": ["four scenario receipts for the frozen S09 candidate through the required packaged route"],
+      "action": "Run each required scenario once against the same candidate."
+    },
+    {
+      "step": "S12",
+      "disposition": "new_same_candidate_evidence_required",
+      "reusable": ["seven runtime-effect definitions and prior probes"],
+      "missing": ["task, process, telemetry, watermark, shortcut, focus, and archive-pointer proof for the frozen S09 candidate"],
+      "action": "Verify all seven runtime effects after the S11 candidate installation scenarios."
+    },
+    {
+      "step": "S13",
+      "disposition": "new_candidate_promotion_required",
+      "reusable": ["cross-platform suite definitions", "independent evaluation contract"],
+      "missing": ["same-commit cross-platform CI", "full relevant test evidence", "candidate-bound independent evaluation", "promotion receipt"],
+      "action": "Evaluate and promote the already frozen candidate without rebuilding it."
+    },
+    {
+      "step": "S14",
+      "disposition": "new_authorized_target_install_required",
+      "reusable": ["target-install procedure and rollback design"],
+      "missing": ["exact candidate download proof", "version-and-hash-bound target UAC authorization", "real target upgrade receipt"],
+      "action": "After S13, request or validate the exact candidate-bound authorization and install those same bytes once."
+    },
+    {
+      "step": "S15",
+      "disposition": "new_authorized_release_required",
+      "reusable": ["release workflow and final-evaluation contract"],
+      "missing": ["same-byte publication proof", "official-asset reinstall", "final independent evaluation", "defect completion"],
+      "action": "Publish and reinstall only the already validated candidate after the release authorization gate."
+    }
+  ]
+}

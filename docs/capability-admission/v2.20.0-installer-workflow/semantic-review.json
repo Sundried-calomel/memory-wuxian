@@ -1,19 +1,15 @@
 {
   "schema_version": 1,
   "candidate_id": "installer-transaction-workflow",
-  "candidate_revision": "2.20.0-governance-17",
-  "candidate_manifest_sha256": "95d19578e0afc69e65f9627928c7195b95cd6f6ca1dba9e73fef987bb4073e48",
+  "candidate_revision": "2.20.0-governance-18",
+  "candidate_manifest_sha256": "377653e6e7aaa3fabe70e937ee7934990a0e73665354fc9c4fde6738f1f13862",
   "registry_sha256": "0a1efe8add40f01a0d727203e1dbc0cb8f08596427490060b7efad6c8e892e89",
-  "reviewer_identity": "independent-readonly-evaluator",
+  "reviewer_identity": "01a06dd3-ec92-7943-8852-afffd1a7937d",
   "classification": "extension",
   "owner_id": "windows-installer-transaction-controller",
   "decision": "allow",
   "evidence": [
-    "Producer identity codex-primary-producer differs from reviewer identity independent-readonly-evaluator.",
-    "The capability composite identity independently recomputed as 6fbb2d4bd912cb57b2154c9b93d8c66fd425d97013b50c8a71a06f661931f412, matching manifest.json.",
-    "The frozen focused test files match the hashes recorded by the review contract.",
-    "The earlier generic-runtime PyYAML environment mismatch was overwritten and is not evidence against the frozen candidate.",
-    "No file was edited by the evaluator and no installer was run."
+    "{\"path\":\"docs/promotion-reviews/v2.20.0-control-plane-evaluation-1514e733.json\",\"role\":\"independent-evaluation\",\"sha256\":\"d519f8e12334e9edf55fb937134487dd0e37823270d23d2dc81f0b2a5af6d21d\"}"
   ],
   "trigger_resolutions": []
 }

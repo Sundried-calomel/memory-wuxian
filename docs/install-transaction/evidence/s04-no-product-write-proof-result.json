@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "checks_run": 6,
+  "product_write_count": 0,
+  "current_test_run": {
+    "tests_run": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_seconds": 0.252,
+    "temporary_namespace_only": true
+  },
+  "historical_host_guard": {
+    "entry_count_before": 615,
+    "entry_count_after": 615,
+    "snapshot_sha256_before": "54ec8683f7ba4b8aa5364a89e13a2186c1ebecce359477fa88a83f8f0bb02fd8",
+    "snapshot_sha256_after": "54ec8683f7ba4b8aa5364a89e13a2186c1ebecce359477fa88a83f8f0bb02fd8",
+    "unchanged": true,
+    "preparation_receipt_sha256": "f27b7e15f951464b9604491fce8d2cb8a1b6cd5f1d29155df87e868d5b25ab52",
+    "boundary_replay_receipt_sha256": "c2f97172eb385f4285055c42e958794035da96c104e43b61077e35237192ca9f"
+  },
+  "protected_resource_classes": [
+    "installed Skill root",
+    "active archive pointer",
+    "Desktop shortcut",
+    "scheduled tasks",
+    "Run registry values",
+    "raw archive bytes"
+  ],
+  "assertions": [
+    "the exact-artifact preparation receipt reports an unchanged host guard",
+    "the detailed broker replay receipt reports an unchanged host guard",
+    "current tests create all writable state below a temporary directory",
+    "a hash mismatch creates no diagnostic bundle",
+    "overlapping diagnostic and protected roots fail closed",
+    "no full installer was executed on the host during S04 revalidation"
+  ],
+  "boundary": "S04 proves harness preparation and no-product-write behavior only; complete-chain causal binding belongs to S05."
+}

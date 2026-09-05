@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "eval-20260905-dewey-control-plane-02",
+  "evaluated_candidate_status": "superseded-after-inconclusive-review",
+  "evaluator": {
+    "identity": "Dewey, task id 01a06cbc-96ad-7182-9046-f599242ec5f1",
+    "independent": true
+  },
+  "artifact_sha256": {
+    "scripts/install_transaction_workflow.py": "be8ea7da096f2a3dba93c1ecf86e859b72e8b5ba43dc77e061362e6081e79136",
+    "docs/install-transaction/contract.json": "3c4c1475a1c9bcc2774d7e49d9d4ed36a274037c2b67bdac0bd9b5929a68740e",
+    "docs/install-transaction/evidence-manifest-schema.json": "7d33a3183284c0f165be5ca2e1b029c989967f2e6c28c8363dcc6ed08c44a29a",
+    "tests/test_install_transaction_workflow.py": "d8a567dd3aacb7975796a8dbe8dfcc287ff6a6ecb5f0befec523f6c6e9b565f6",
+    "docs/install-transaction/rules.md": "a5d176332a7ccddb226ee4c8c595c0ea8f18950bb7b9c62b197f333e4a46fbce",
+    "docs/install-transaction/optimized-procedure.md": "b3de4c62d9a4de7cb6a7be1c013fd7cca43d0a854b79ce69ab983271b456e423",
+    "docs/retrospectives/install-transaction-workflow.md": "c25ecb83caa3b5db92f8d1912c4a1f666bb7af08ef2bc9f007e9cb984ea993ed"
+  },
+  "pass_threshold": 90,
+  "overall_score": 46.75,
+  "verdict": "inconclusive",
+  "blocking_findings": [
+    "The artifact set changed during both permitted evaluation rounds.",
+    "A fixed replan receipt identity was overwriteable.",
+    "Failure receipt integrity was not validated during state loading.",
+    "Top-level contract drift was replan-eligible but had no affected-step result.",
+    "Independent evaluator provenance could be self-declared."
+  ],
+  "deterministic_checks": {
+    "focused_unittest": "passed 14 of 14",
+    "contract_structure": "passed",
+    "artifact_immutability": "failed",
+    "top_level_contract_drift_replan": "failed",
+    "replan_receipt_collision": "failed",
+    "failure_receipt_tamper_detection": "failed",
+    "independent_evaluator_provenance": "failed"
+  },
+  "limitations": [
+    "The reviewed bytes are not the current candidate bytes.",
+    "No installer, hosted runner, target-device operation, publication, or user authorization was exercised."
+  ],
+  "repository_modified_by_evaluator": false
+}

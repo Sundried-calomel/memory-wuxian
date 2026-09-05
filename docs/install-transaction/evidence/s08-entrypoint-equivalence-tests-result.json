@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "tests_run": 88,
+  "failures": 0,
+  "errors": 0,
+  "duration_seconds": 3.838,
+  "supported_entrypoints": [
+    "manual",
+    "inno",
+    "auto-update"
+  ],
+  "canonical_chain": [
+    "prepare-only",
+    "broker launch",
+    "broker dispatch",
+    "execute-manifest",
+    "ProductInstallAdapter",
+    "WindowsInstallerTransaction"
+  ],
+  "equivalence_assertions": [
+    "all three source values build the same install contract after removing only source_entrypoint",
+    "all outer entrypoints route to the single controller",
+    "auto-update passes SOURCEENTRYPOINT=auto-update into the same Inno chain",
+    "the broker bootstrap contains no source-entrypoint branch"
+  ],
+  "suite_modules": [
+    "tests.test_windows_installer_runtime",
+    "tests.test_windows_installer_broker",
+    "tests.test_windows_installer_transaction",
+    "tests.test_windows_installer_composition",
+    "tests.test_windows_lifecycle_transaction",
+    "tests.test_auto_update"
+  ]
+}

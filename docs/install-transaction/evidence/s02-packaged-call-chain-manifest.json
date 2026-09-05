@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S02",
+  "attempt": 1,
+  "evidence_id": "packaged-call-chain-map",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "inspection",
+    "name": "memory-wuxian-inspection-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "rg",
+      "-n",
+      "prepare-only|launch-manifest|dispatch-request|execute-manifest|WindowsInstallerTransaction",
+      "packaging/windows/install.ps1",
+      "scripts/windows_installer_broker.py",
+      "scripts/install_windows_transaction.py",
+      "scripts/windows_installer_transaction.py"
+    ],
+    "cwd": ".",
+    "runner": "local-readonly",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "6c61949017b66a27a9c8d509ca7a8f7ef5baf841e88b01f52d75812e737004ef"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s02-packaged-call-chain-result.json",
+      "sha256": "6d80bd54a85a9e9dab8c71afc2584a1e5e642ecce910265b5baaac45a678a162",
+      "role": "call-chain"
+    }
+  ],
+  "subjects": []
+}

@@ -1,0 +1,37 @@
+{
+  "complete": true,
+  "boundary_count": 7,
+  "route_id": "inno-bootstrap-broker-controller-v1",
+  "boundaries": [
+    "packaging/windows/MemoryWuxian.iss",
+    "packaging/windows/install.ps1",
+    "scripts/install_windows_transaction.py --prepare-only",
+    "scripts/windows_installer_broker.py --launch-manifest",
+    "scripts/windows_installer_broker.py --dispatch-request",
+    "scripts/install_windows_transaction.py --execute-manifest",
+    "scripts/windows_installer_transaction.py:WindowsInstallerTransaction.execute"
+  ],
+  "convergence": {
+    "manual": "packaging/windows/install.ps1",
+    "inno": "packaging/windows/MemoryWuxian.iss -> packaging/windows/install.ps1",
+    "auto-update": "scripts/auto_update.py -> packaging/windows/MemoryWuxian.iss -> packaging/windows/install.ps1"
+  },
+  "source_files": [
+    {
+      "path": "scripts/windows_installer_broker.py",
+      "sha256": "ad71032d9097648ffc8a62f96f426db7c53ffbfb30ed1e3d57063139e49d4352"
+    },
+    {
+      "path": "scripts/install_windows_transaction.py",
+      "sha256": "5b32ec449cc89c42af82779a003aeed42ae489670ab2529211f40daffb7f3028"
+    },
+    {
+      "path": "scripts/windows_installer_transaction.py",
+      "sha256": "33ffb5a084543a0bc4a7bf70b5f8a8a8064e8778c39050bf18f8835216bc7b74"
+    },
+    {
+      "path": "scripts/windows_install_manifest.py",
+      "sha256": "3f24c90c2f9fbd5e50410644fc54d525e7c420e7713aaf49801cbcdfde75ea6a"
+    }
+  ]
+}

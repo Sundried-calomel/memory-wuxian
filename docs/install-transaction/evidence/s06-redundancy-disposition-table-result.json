@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "classified_count": 8,
+  "unclassified_count": 0,
+  "production_deletion_admitted": false,
+  "entries": [
+    {
+      "candidate": "new broker wrapper or fallback launcher",
+      "disposition": "do-not-add",
+      "reason": "would duplicate the canonical broker boundary"
+    },
+    {
+      "candidate": "broker-local request hash, nonce, SID, and path checks",
+      "disposition": "keep",
+      "reason": "protect a distinct elevation boundary"
+    },
+    {
+      "candidate": "controller prepare-only and execute-manifest modes",
+      "disposition": "keep",
+      "reason": "both are reachable intentional sides of the broker boundary"
+    },
+    {
+      "candidate": "legacy direct controller branch and journal-path",
+      "disposition": "defer",
+      "reason": "unrelated compatibility cleanup needs a separate proof scope"
+    },
+    {
+      "candidate": "manifest, broker, and product-adapter uninstall mismatch",
+      "disposition": "defer",
+      "reason": "requires a separate contract and negative-path rehearsal"
+    },
+    {
+      "candidate": "repeated seven-component tuple",
+      "disposition": "defer",
+      "reason": "cosmetic consolidation is unrelated to the proven failure"
+    },
+    {
+      "candidate": "candidate-internal packaging sources",
+      "disposition": "defer",
+      "reason": "package pruning requires an exact-build comparison"
+    },
+    {
+      "candidate": "existing Inno, PowerShell, broker, manifest, controller, transaction, and updater files",
+      "disposition": "keep",
+      "reason": "each has a unique live or trust-boundary responsibility"
+    }
+  ],
+  "s07_admitted_scope": {
+    "production_change": "existing broker executable-local import bootstrap only",
+    "deletion_count": 0,
+    "new_owner_count": 0,
+    "new_wrapper_count": 0
+  }
+}

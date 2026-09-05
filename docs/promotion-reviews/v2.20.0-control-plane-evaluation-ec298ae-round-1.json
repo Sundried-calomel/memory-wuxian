@@ -1,0 +1,186 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "eval-memory-wuxian-control-plane-ec298ae-20260905-r1",
+  "artifact": {
+    "paths": [
+      "docs/install-transaction/contract.json",
+      "docs/install-transaction/evidence-manifest-schema.json",
+      "docs/install-transaction/verifier-policy.json",
+      "scripts/install_transaction_workflow.py",
+      "scripts/platform_atomic.py",
+      "scripts/platform_lock.py",
+      "scripts/platform_transaction.py"
+    ],
+    "sha256": [
+      "60de5eb436c6a8e86c9e9463f259cd47356b07a43e6b2d2e3c5ae5496f58e781",
+      "769f3f67106347bd0f2e90d53bc23fb5f089a148d80c1d8a2c21d36b499cd889",
+      "7eefc83b53eb5eeb1888ec10f553906abd576ae811d654f634eeb3c79003dfd1",
+      "ec298ae31756dadbd454bea7225355208b90e6217510ec83e1b626c61f472c1d",
+      "eca6d71a47ecaa2774d68553cf863a1c853f11ea11356dd2079f612456c1c85e",
+      "84f2b1385fd40b68681933ebc198cc5308d0388c329b67660568114106a1cadc",
+      "d843bbe64824a24a8f3753b24bd55f9ae420b4590ff42dbb913584dcba4fd48b"
+    ],
+    "producer_identity": "primary Codex task 01a04c51-04fa-7ee0-bd3e-4c16758566f2"
+  },
+  "evaluator": {
+    "identity": "Codex independent evaluator task 01a06dba-6dfb-7a01-8297-a7723e02389b",
+    "independent": true
+  },
+  "contract": {
+    "source": "docs/install-transaction/contract.json",
+    "pass_threshold": 90
+  },
+  "dimensions": [
+    {
+      "id": "state-machine-correctness-and-lifecycle-invariants",
+      "weight": 0.35,
+      "score": 94,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "The contract closes the workflow to ordered S01-S15, restricts authorization to S14 and S15, and binds architecture, candidate, and release freezes to verified snapshots.",
+          "source": "docs/install-transaction/contract.json; scripts/install_transaction_workflow.py:436-708,1690-2006,3773-4063",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The exact ec298ae candidate passed all 43 isolated workflow tests, including lifecycle completion, prerequisite enforcement, attempt scoping, candidate identity, and terminal-state rejection.",
+          "source": "tests.test_install_transaction_workflow: Ran 43 tests in 127.786s, OK",
+          "method": "deterministic_test"
+        },
+        {
+          "claim": "Eleven related installer, scheduler, transaction, lifecycle, and release modules passed 118 of 118 tests.",
+          "source": "tests.test_platform_scheduler through tests.test_v220_release_contract: Ran 118 tests in 4.168s, OK",
+          "method": "deterministic_test"
+        }
+      ]
+    },
+    {
+      "id": "evidence-authenticity-same-byte-identity-and-authorization-boundaries",
+      "weight": 0.3,
+      "score": 60,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "Strict JSON decoding, exact-type comparisons, bounded artifact reads, policy-owned expected values, direct subject hashing, live CI provenance checks, and attempt-bound authorization receipts are implemented.",
+          "source": "scripts/platform_transaction.py:59-112; scripts/install_transaction_workflow.py:79-158,708-1052,2390-3526,3736-3917,4064-4134",
+          "method": "source_trace"
+        },
+        {
+          "claim": "Local command, test, and inspection evidence remains unauthenticated: producer identity, argv, cwd, and exit status are declarative fields, after which a producer-authored JSON observation matching policy values is accepted.",
+          "source": "scripts/install_transaction_workflow.py:3144-3526; tests/test_install_transaction_workflow.py:29-779,1914",
+          "method": "source_trace"
+        },
+        {
+          "claim": "Evaluator independence is also enforced only by distinct self-declared strings and pass-shaped report fields, not an invocation-bound signature or trusted process receipt.",
+          "source": "scripts/install_transaction_workflow.py:2390-2606; docs/install-transaction/rules.md:49",
+          "method": "source_trace"
+        }
+      ]
+    },
+    {
+      "id": "crash-recovery-replan-preservation-and-anti-bypass",
+      "weight": 0.2,
+      "score": 88,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "Canonical content-addressed failure receipts, state-frozen step-definition checks, predecessor-linked events, attempt invalidation, and preserved-prefix replan logic are implemented and exercised.",
+          "source": "scripts/install_transaction_workflow.py:1321-1507,3527-3735,4135-4398; tests.test_install_transaction_workflow",
+          "method": "source_trace"
+        },
+        {
+          "claim": "Focused tests passed for orphan replay, renamed receipt rejection, contract-drift replay, replan preservation, stale verification rejection, event-chain rejection, and legacy-byte preservation.",
+          "source": "tests.test_install_transaction_workflow: 43 of 43 passed",
+          "method": "deterministic_test"
+        },
+        {
+          "claim": "Migration and replan still use unbounded or second reads of runtime-state bytes after bounded validation, leaving a contract-level same-buffer and race gap.",
+          "source": "scripts/install_transaction_workflow.py:2192-2248,4195-4398; docs/install-transaction/rules.md:35-36",
+          "method": "source_trace"
+        }
+      ]
+    },
+    {
+      "id": "maintainability-ownership-clarity-and-bounded-complexity",
+      "weight": 0.15,
+      "score": 78,
+      "mandatory": true,
+      "evidence": [
+        {
+          "claim": "Ownership is explicit across the contract, verifier policy, canonical atomic writer, and cross-platform lock, and workflow revision WF-20260905-017 is synchronized.",
+          "source": "docs/install-transaction/contract.json; docs/install-transaction/verifier-policy.json; scripts/platform_atomic.py; scripts/platform_lock.py; workflow_sync check",
+          "method": "source_trace"
+        },
+        {
+          "claim": "The exact tree passed in-memory compilation for 206 Python files, workflow synchronization, and git diff validation.",
+          "source": "compiled_in_memory=206; workflow_sync status passed WF-20260905-017; git diff --check exit 0",
+          "method": "deterministic_test"
+        },
+        {
+          "claim": "The 165743-byte, approximately 4450-line controller centralizes many validation and transition responsibilities, increasing audit and change-risk despite clear helper boundaries.",
+          "source": "scripts/install_transaction_workflow.py",
+          "method": "llm_judgment"
+        }
+      ]
+    }
+  ],
+  "deterministic_checks": [
+    {
+      "id": "frozen-artifact-hashes",
+      "status": "pass",
+      "evidence": "All seven SHA-256 values recomputed in the required order; install_transaction_workflow.py was ec298ae31756dadbd454bea7225355208b90e6217510ec83e1b626c61f472c1d and 165743 bytes."
+    },
+    {
+      "id": "workflow-unit-tests",
+      "status": "pass",
+      "evidence": "tests.test_install_transaction_workflow: 43 tests, 0 failures, 0 errors."
+    },
+    {
+      "id": "related-installer-scheduler-release-tests",
+      "status": "pass",
+      "evidence": "The supplied eleven-module set: 118 tests, 0 failures, 0 errors."
+    },
+    {
+      "id": "platform-index-transaction-tests",
+      "status": "pass",
+      "evidence": "tests.test_platform_index_transaction: 5 tests, 0 failures, 0 errors."
+    },
+    {
+      "id": "python-syntax-compilation",
+      "status": "pass",
+      "evidence": "206 scripts/tests Python files compiled in memory with Python 3.12.13 and no bytecode writes."
+    },
+    {
+      "id": "workflow-governance-sync",
+      "status": "pass",
+      "evidence": "workflow_sync check returned status passed, revision WF-20260905-017, errors []."
+    },
+    {
+      "id": "git-diff-check",
+      "status": "pass",
+      "evidence": "git diff --check exited 0; only LF-to-CRLF warnings were emitted."
+    },
+    {
+      "id": "evaluator-write-boundary",
+      "status": "pass",
+      "evidence": "Evaluation used read-only inspection and temporary-directory tests; no product, UAC, GitHub, staging, commit, install, push, or publication action was invoked."
+    }
+  ],
+  "overall_score": 80.2,
+  "verdict": "fail",
+  "blocking_findings": [
+    "Reproducible self-authored-evidence bypass: for local command, test, and inspection producers, the controller authenticates neither the producer process nor the declared invocation. A fabricated hash-bound JSON observation containing the policy-owned passing value and minimum count is accepted; the synthetic full-lifecycle fixture demonstrates this acceptance path.",
+    "Reproducible evaluator-identity bypass: validate_evaluator_report accepts a producer-authored report when producer and evaluator identity strings differ and the report is pass-shaped. The documented process-attestation assumption is honest but is not enforced by the control plane, so it does not satisfy the supplied no-self-authored-evidence blocking condition.",
+    "Mandatory bounded same-byte control-input rule is incomplete: cmd_migrate reads runtime-state with unbounded read_bytes, and cmd_replan re-reads runtime-state bytes after load_state validated an earlier buffer. This violates rules 35-36 and permits the archived predecessor bytes to diverge from the state actually evaluated under an external-write race."
+  ],
+  "limitations": [
+    "The live workspace runtime-state is schema 2 and was inspected only through the read-only status command; no migration, replan, verification mutation, install, or release transition was executed.",
+    "No hosted GitHub Actions API, artifact attestation, target UAC, installed-product, push, merge, or publication boundary was exercised; those paths were reviewed statically and through isolated fixtures.",
+    "The supplied identity model is process-attested rather than cryptographically signed; this report establishes actual task separation for this evaluation, not cryptographic agent identity.",
+    "The two new external-provenance output limits reject responses after subprocess.run has already buffered stdout, so they cap accepted data but do not provide streaming memory bounds."
+  ],
+  "iteration": {
+    "current": 1,
+    "maximum": 2
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S06",
+  "attempt": 1,
+  "evidence_id": "owner-reachability-audit",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "inspection",
+    "name": "memory-wuxian-inspection-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "rg",
+      "-n",
+      "SOURCEENTRYPOINT|SourceEntrypoint|--prepare-only|--dispatch-request|--execute-manifest|WindowsInstallerTransaction|execute_windows_staged_installer",
+      "packaging/windows",
+      "scripts"
+    ],
+    "cwd": ".",
+    "runner": "local-readonly",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "47a2886a1e723848fa33c96f53750a58d5721c4d01a2dfdfee60e4a02c212038"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s06-owner-reachability-audit-result.json",
+      "sha256": "259a087c445a7ddcefd00ef5ccc9e099bb3baa008efcc1c8083a5453ff297acf",
+      "role": "owner-audit"
+    }
+  ],
+  "subjects": []
+}

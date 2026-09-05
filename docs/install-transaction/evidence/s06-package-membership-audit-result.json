@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "complete": true,
+  "artifact_count": 6,
+  "evidence_mode": "frozen-failed-installer-membership-rebound-to-e001",
+  "failed_installer": {
+    "sha256": "24ce332059b79731916124e47ab32441d1dde63e610359ab734b37a0535317d8",
+    "byte_length": 18338281,
+    "source_commit": "319b1b23e90deaba92757da381de985e031b9853",
+    "hash_recomputed_in_s04": true
+  },
+  "members": [
+    {
+      "path": "scripts/windows_installer_broker.py",
+      "sha256": "ad21930d254492f46f66921933073f18ed49dc51e4aa55a5ae8a7eb9ef2b0feb",
+      "runtime_role": "broker before and after elevation"
+    },
+    {
+      "path": "scripts/install_windows_transaction.py",
+      "sha256": "570b39cae60ddebcfc32972e4569210daf804c40e593223fbc4cfb47bce335e5",
+      "runtime_role": "manifest preparer and child controller"
+    },
+    {
+      "path": "scripts/windows_install_manifest.py",
+      "sha256": "5efb255f91a9d0a0eff656af936a1109e337b3f1d6263e9a7ff6d517c6b451fa",
+      "runtime_role": "sibling manifest module"
+    },
+    {
+      "path": "scripts/auto_update.py",
+      "sha256": "2c3caeb8938b7c1c4c85d15e44ede1a15adfd1aed93cf2979d919254c419b03e",
+      "runtime_role": "installed update adapter, inactive during the failed Setup transaction"
+    },
+    {
+      "path": "packaging/windows/install.ps1",
+      "sha256": "0949d916fb9148e85fbde3d543bd72cb0b9e8358967d0b3a7bcd65f04a92ae84",
+      "runtime_role": "candidate copy; Inno executes its temporary outer copy"
+    },
+    {
+      "path": "packaging/windows/MemoryWuxian.iss",
+      "sha256": "cf2945b5c04dfb589167f85d16b7a36b423faed6765d94963f0cb63a17888560",
+      "runtime_role": "build source"
+    }
+  ],
+  "supporting_evidence": [
+    {
+      "path": "docs/install-transaction/evidence/historical/s05-s14-inno-install.log",
+      "sha256": "4696c599b3e6ebfc93675e25e49f575ac588186766ae97ac2bbd5c2f702fa4ac"
+    },
+    {
+      "path": "docs/install-transaction/evidence/historical/s04-broker-replay-receipt.json",
+      "sha256": "c2f97172eb385f4285055c42e958794035da96c104e43b61077e35237192ca9f"
+    }
+  ],
+  "conclusion": "The manifest module is present in the failed package. The proven failure is import reachability, not package omission.",
+  "new_package_built_in_s06": false
+}

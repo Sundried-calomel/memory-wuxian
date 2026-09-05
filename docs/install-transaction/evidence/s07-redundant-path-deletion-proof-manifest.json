@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S07",
+  "attempt": 1,
+  "evidence_id": "redundant-path-deletion-proof",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "test",
+    "name": "memory-wuxian-test-recorder",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "python",
+      "-m",
+      "unittest",
+      "tests.test_windows_installer_broker",
+      "tests.test_windows_installer_runtime.WindowsInstallerRuntimeTests.test_runtime_entrypoints_bootstrap_under_isolated_python",
+      "tests.test_windows_installer_runtime.WindowsInstallerRuntimeTests.test_broker_dispatch_resolves_sibling_manifest_under_isolated_python",
+      "-v"
+    ],
+    "cwd": ".",
+    "runner": "local-python",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "47a2886a1e723848fa33c96f53750a58d5721c4d01a2dfdfee60e4a02c212038"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s07-redundant-path-deletion-proof-result.json",
+      "sha256": "2f64aecb5d09de740146c9384c39255aafbce223b486222df411f5182e74a302",
+      "role": "deletion-proof"
+    }
+  ],
+  "subjects": []
+}

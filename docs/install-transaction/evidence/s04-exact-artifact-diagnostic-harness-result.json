@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "evidence_mode": "frozen-exact-artifact-receipts-plus-current-harness-revalidation",
+  "tests_run": 3,
+  "failures": 0,
+  "errors": 0,
+  "assertions": 8,
+  "current_harness": {
+    "path": "scripts/install_transaction_diagnostic.py",
+    "sha256": "ed6769b4e530426762ff745b1057a9781d4342c3fcf6ae6f63a2d3b495eb3a3e",
+    "test_path": "tests/test_install_transaction_diagnostic.py",
+    "test_sha256": "533f1c7642bca8f980c2828bd8d2823d4222655ff47dce66b9b75b7eae5ceda5",
+    "historical_semantic_diff_exit_code": 0,
+    "historical_semantic_diff_ignores_only_end_of_line_whitespace": true
+  },
+  "exact_failed_artifact": {
+    "historical_source": "C:/Users/56453/Documents/ChatGPT/memory无限/memory-wuxian-v218/docs/install-transaction/pending/s04-exact-sandbox-v2/input/MemoryWuxian-2.20.0-Windows-x64-Setup.exe",
+    "byte_length": 18338281,
+    "sha256": "24ce332059b79731916124e47ab32441d1dde63e610359ab734b37a0535317d8",
+    "hash_recomputed": true,
+    "preparation_receipt": {
+      "path": "docs/install-transaction/evidence/historical/s04-prepare-receipt.json",
+      "sha256": "f27b7e15f951464b9604491fce8d2cb8a1b6cd5f1d29155df87e868d5b25ab52",
+      "status": "backend-unavailable",
+      "guard_snapshot_unchanged": true
+    },
+    "boundary_replay_receipt": {
+      "path": "docs/install-transaction/evidence/historical/s04-broker-replay-receipt.json",
+      "sha256": "c2f97172eb385f4285055c42e958794035da96c104e43b61077e35237192ca9f",
+      "status": "failed",
+      "expected_historical_failure": true,
+      "broker_exit_code": 1,
+      "child_receipt_exists": false,
+      "manifest_sha256": "74e287db44cf49d34943d907e016fe52dc49b31b45511e6ec2df3d461a0a3eb8"
+    }
+  },
+  "verified_behaviors": [
+    "hash mismatch fails before bundle creation",
+    "diagnostic roots cannot overlap protected paths",
+    "Unicode installer paths remain structured",
+    "sandbox input is read-only and output is separate",
+    "sandbox networking and clipboard redirection are disabled",
+    "guard snapshots remain unchanged",
+    "historical detailed broker stderr and exit state remain available",
+    "the exact failed installer identity remains byte-verifiable"
+  ],
+  "not_claimed": [
+    "a new complete-chain installer execution",
+    "installation success",
+    "root-cause admission",
+    "production repair",
+    "elevation or publication authority"
+  ]
+}

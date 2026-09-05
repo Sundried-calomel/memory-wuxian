@@ -1,22 +1,81 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "project_id": "memory-wuxian-v2.20.0",
+  "admission_directory": "docs/capability-admission/v2.20.0-installer-workflow",
+  "control_plane_files": [
+    "docs/install-transaction/contract.json",
+    "docs/install-transaction/evidence-manifest-schema.json",
+    "docs/install-transaction/verifier-policy.json",
+    "scripts/install_transaction_workflow.py",
+    "scripts/platform_atomic.py",
+    "scripts/platform_lock.py",
+    "scripts/platform_transaction.py"
+  ],
   "title": "Memory Wuxian unified Windows installer transaction",
   "maximum_integrated_remediation_cycles": 1,
-  "replan_policy": {
-    "required_previous_status": "needs_replan",
-    "requires_explicit_user_approval": true,
-    "preserve_completed_steps": true,
-    "promote_current_worktree_to_baseline": true,
-    "invalidate_resumed_and_downstream_receipts": true
+  "snapshot_policy": {
+    "excluded_patterns": [
+      ".tmp/**",
+      "dist/**",
+      "outputs/**",
+      "docs/install-transaction/runtime-state.json",
+      "docs/install-transaction/workflow.lock",
+      "docs/install-transaction/receipts/**",
+      "docs/install-transaction/evidence/**",
+      "docs/install-transaction/events/**",
+      "docs/install-transaction/legacy/**",
+      "docs/install-transaction/pending/**",
+      "docs/install-transaction/completed/**",
+      "docs/install-transaction/governance-state.json",
+      "docs/install-transaction/change-log.md"
+    ],
+    "initial_dirty_tree_requires_manifest": true,
+    "replan_baseline": "last-completed-verification",
+    "replan_may_promote_current_worktree": false
+  },
+  "evidence_policy": {
+    "schema_path": "docs/install-transaction/evidence-manifest-schema.json",
+    "verifier_policy_path": "docs/install-transaction/verifier-policy.json",
+    "directory": "docs/install-transaction/evidence",
+    "artifact_roots": ["docs/install-transaction/evidence"],
+    "subject_roots": ["dist"],
+    "maximum_manifest_bytes": 262144,
+    "maximum_artifacts_per_manifest": 8,
+    "maximum_artifact_bytes": 1048576,
+    "maximum_total_artifact_bytes": 4194304,
+    "maximum_subjects_per_manifest": 2,
+    "maximum_subject_bytes": 1073741824
+  },
+  "evidence_trust_model": {
+    "local_process_records": "non-adversarial-process-audit",
+    "github_actions_records": "workflow-attested",
+    "independent_evaluator_records": "separate-process-attested"
+  },
+  "independent_evaluation_steps": ["S03", "S13", "S15"],
+  "authorization_boundaries": {
+    "S14": "target-windows-uac-install",
+    "S15": "github-push-merge-release-and-official-asset-reinstall"
+  },
+  "authorization_actions": {
+    "S14": ["install-target-windows-exact-candidate"],
+    "S15": ["github-push", "github-pr", "github-merge", "github-release", "reinstall-official-asset"]
   },
   "protected_paths": [
     "AGENTS.md",
+    "workflow-governance.json",
     "docs/capability-admission/v2.20.0-installer-workflow/**",
+    "docs/defect-receipts/**",
     "docs/install-transaction/**",
+    "docs/module-architecture.json",
+    "docs/promotion-reviews/**",
+    "docs/rehearsals/**",
     "docs/retrospectives/install-transaction-workflow.md",
     "docs/work-contracts/v2.20.0.json",
     "scripts/install_transaction_*.py",
+    "scripts/platform_atomic.py",
+    "scripts/platform_lock.py",
+    "scripts/platform_transaction.py",
     "scripts/install_codex_autosync_windows.py",
     "scripts/platform_scheduler.py",
     "scripts/install_auto_update.py",
@@ -31,32 +90,140 @@
     "packaging/windows/**",
     ".github/workflows/test.yml",
     ".github/workflows/release.yml",
+    ".github/workflows/s09-direct-clean-diagnostic.yml",
     "tests/test_platform_scheduler.py",
     "tests/test_windows_lifecycle_transaction.py",
     "tests/test_windows_installer*.py",
     "tests/test_install_transaction_*.py",
+    "tests/test_release_workflow_gate.py",
+    "pyproject.toml",
     ".githooks/pre-commit"
   ],
   "freeze_points": {
-    "architecture": "S03",
-    "candidate": "S13",
-    "release": "S15"
+    "architecture": {"step": "S03", "capture": "architecture_sha256"},
+    "candidate": {"step": "S09", "capture": "candidate_sha256"},
+    "release": {"step": "S15", "capture": "release_sha256", "must_equal": "candidate"}
   },
   "steps": [
-    {"id": "S01", "title": "Adopt the evidence-first recovery contract and freeze the exact failed candidate evidence", "prerequisites": [], "allowed_paths": ["AGENTS.md", "workflow-governance.json", "docs/capability-admission/v2.20.0-installer-workflow/**", "docs/defect-receipts/**", "docs/install-transaction/**", "docs/retrospectives/install-transaction-workflow.md", "docs/work-contracts/v2.20.0.json", "scripts/install_transaction_*.py", "tests/test_install_transaction_*.py", ".githooks/pre-commit"], "required_evidence": ["defect-preflight", "workflow-governance-check", "capability-admission-receipt", "state-machine-tests", "project-hook-test", "failed-candidate-evidence-freeze"]},
-    {"id": "S02", "title": "Inventory every outer installer and the exact packaged production call chain", "prerequisites": ["S01"], "allowed_paths": ["docs/install-transaction/**"], "required_evidence": ["entrypoint-inventory", "packaged-call-chain-map", "single-owner-decision"]},
-    {"id": "S03", "title": "Freeze recovery architecture, invariants, and evidence boundaries", "prerequisites": ["S02"], "allowed_paths": ["docs/install-transaction/**", "docs/module-architecture.json", "docs/promotion-reviews/**"], "required_evidence": ["recovery-architecture-contract", "independent-architecture-evaluation"]},
-    {"id": "S04", "title": "Build a no-product-write diagnostic harness for the exact failed artifact", "prerequisites": ["S03"], "allowed_paths": ["scripts/install_transaction_diagnostic*.py", "tests/test_install_transaction_diagnostic*.py", "docs/install-transaction/**"], "required_evidence": ["exact-artifact-diagnostic-harness", "no-product-write-proof"]},
-    {"id": "S05", "title": "Prove the exact broker-to-controller failure boundary with child diagnostics", "prerequisites": ["S04"], "allowed_paths": ["docs/install-transaction/**", "docs/rehearsals/**"], "required_evidence": ["broker-controller-trace", "exact-root-cause-proof"]},
-    {"id": "S06", "title": "Audit ownership, reachability, package membership, and redundancy before repair", "prerequisites": ["S05"], "allowed_paths": ["docs/install-transaction/**", "docs/promotion-reviews/**"], "required_evidence": ["owner-reachability-audit", "package-membership-audit", "redundancy-disposition-table"]},
-    {"id": "S07", "title": "Apply one root-cause repair and delete only proven redundant production paths", "prerequisites": ["S06"], "allowed_paths": ["scripts/**", "packaging/windows/**", "tests/**", "docs/install-transaction/**", "pyproject.toml"], "required_evidence": ["minimal-root-cause-diff", "redundant-path-deletion-proof", "defect-rule-conformance"]},
-    {"id": "S08", "title": "Prove behavior equivalence and historical installer regression coverage", "prerequisites": ["S07"], "allowed_paths": ["tests/**", "docs/install-transaction/**"], "required_evidence": ["entrypoint-equivalence-tests", "historical-regression-tests", "diff-simplification-review"]},
-    {"id": "S09", "title": "Run the complete packaged production chain on a GitHub-hosted ephemeral Windows runner", "prerequisites": ["S08"], "allowed_paths": [".github/workflows/**", "scripts/install_transaction_workflow.py", "scripts/windows_installer_transaction.py", "scripts/install_windows_transaction.py", "scripts/install_dashboard_shortcut_windows.ps1", "scripts/inspect_dashboard_shortcut_windows.ps1", "tests/**", "docs/defect-receipts/**", "docs/install-transaction/**", "docs/rehearsals/**", "docs/retrospectives/install-transaction-workflow.md", "docs/retrospectives/memory-wuxian-defect-workbook.md"], "required_evidence": ["packaged-chain-rehearsal", "rollback-and-idempotency-receipts", "assertion-diagnostic-receipt", "diagnostic-redaction-receipt"]},
-    {"id": "S10", "title": "Run the targeted Unicode, runtime, broker, rollback, and idempotency matrix", "prerequisites": ["S09"], "allowed_paths": ["tests/**", "docs/install-transaction/**"], "required_evidence": ["targeted-test-matrix", "exact-chain-coverage-proof"]},
-    {"id": "S11", "title": "Declare v2.20.0 identity, then run clean, v2.15.0 upgrade, repeat-install, and failure-rollback through the exact production chain", "prerequisites": ["S10"], "allowed_paths": ["pyproject.toml", "native-collector/Cargo.toml", "native-collector/Cargo.lock", "CHANGELOG.md", "README*.md", "docs/documentation-contract.json", "tests/test_v219_release_contract.py", "tests/test_v220_release_contract.py", "docs/install-transaction/**", "docs/rehearsals/**"], "required_evidence": ["release-metadata-declared", "exact-production-chain-windows-rehearsals"]},
-    {"id": "S12", "title": "Verify task, process, telemetry, watermark, shortcut, focus, and archive pointer effects", "prerequisites": ["S11"], "allowed_paths": ["docs/install-transaction/**", "docs/rehearsals/**"], "required_evidence": ["installed-runtime-effect-receipt"]},
-    {"id": "S13", "title": "Freeze committed candidate source and build one uniquely hashed CI installer", "prerequisites": ["S12"], "allowed_paths": [".github/workflows/**", "docs/install-transaction/**", "docs/promotion-reviews/**"], "required_evidence": ["cross-platform-ci", "full-relevant-tests", "independent-candidate-evaluation", "candidate-source-commit", "ci-artifact-sha256"]},
-    {"id": "S14", "title": "Install the exact CI artifact on the target Windows device", "prerequisites": ["S13"], "allowed_paths": ["docs/install-transaction/**", "docs/rehearsals/**"], "required_evidence": ["exact-ci-artifact-download", "real-target-upgrade-receipt"]},
-    {"id": "S15", "title": "Promote the same bytes to Release and reinstall the official asset", "prerequisites": ["S14"], "allowed_paths": ["CHANGELOG.md", "README*.md", "docs/**", "pyproject.toml"], "required_evidence": ["no-rebuild-proof", "release-asset-sha256-match", "official-asset-reinstall", "independent-final-evaluation", "defect-completion"]}
+    {
+      "id": "S01",
+      "title": "Adopt the corrected control plane and freeze the exact failed-candidate evidence",
+      "prerequisites": [],
+      "allowed_paths": ["AGENTS.md", "workflow-governance.json", "docs/capability-admission/v2.20.0-installer-workflow/**", "docs/defect-receipts/**", "docs/install-transaction/**", "docs/promotion-reviews/**", "docs/retrospectives/install-transaction-workflow.md", "docs/work-contracts/v2.20.0.json", "scripts/install_transaction_*.py", "scripts/platform_*.py", "tests/test_install_transaction_*.py", ".githooks/pre-commit"],
+      "required_evidence": ["defect-preflight", "workflow-governance-check", "capability-admission-receipt", "state-machine-tests", "project-hook-test", "failed-candidate-evidence-freeze"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S02",
+      "title": "Inventory every outer installer and the exact packaged production call chain",
+      "prerequisites": ["S01"],
+      "allowed_paths": ["docs/install-transaction/**"],
+      "required_evidence": ["entrypoint-inventory", "packaged-call-chain-map", "single-owner-decision"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S03",
+      "title": "Freeze recovery architecture, invariants, and evidence boundaries",
+      "prerequisites": ["S02"],
+      "allowed_paths": ["docs/install-transaction/**", "docs/module-architecture.json", "docs/promotion-reviews/**"],
+      "required_evidence": ["recovery-architecture-contract", "independent-architecture-evaluation"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S04",
+      "title": "Build a no-product-write diagnostic harness for the exact failed artifact",
+      "prerequisites": ["S03"],
+      "allowed_paths": ["scripts/install_transaction_diagnostic*.py", "tests/test_install_transaction_diagnostic*.py", "docs/install-transaction/**"],
+      "required_evidence": ["exact-artifact-diagnostic-harness", "no-product-write-proof"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S05",
+      "title": "Prove the exact broker-to-controller failure boundary with child diagnostics",
+      "prerequisites": ["S04"],
+      "allowed_paths": ["docs/install-transaction/**", "docs/rehearsals/**"],
+      "required_evidence": ["broker-controller-trace", "exact-root-cause-proof"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S06",
+      "title": "Freeze ownership, reachability, package membership, and redundancy decisions",
+      "prerequisites": ["S05"],
+      "allowed_paths": ["docs/install-transaction/**", "docs/promotion-reviews/**"],
+      "required_evidence": ["owner-reachability-audit", "package-membership-audit", "redundancy-disposition-table"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S07",
+      "title": "Apply the bounded shared-owner repair and delete only proven redundant paths",
+      "prerequisites": ["S06"],
+      "allowed_paths": ["scripts/**", "packaging/windows/**", ".github/workflows/**", "tests/**", "docs/install-transaction/**", "pyproject.toml"],
+      "required_evidence": ["minimal-root-cause-diff", "redundant-path-deletion-proof", "defect-rule-conformance"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S08",
+      "title": "Prove entrypoint equivalence and historical installer regressions before candidate construction",
+      "prerequisites": ["S07"],
+      "allowed_paths": ["tests/**", "docs/install-transaction/**"],
+      "required_evidence": ["entrypoint-equivalence-tests", "historical-regression-tests", "diff-simplification-review"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S09",
+      "title": "Commit source and build one immutable uniquely hashed Windows installer candidate",
+      "prerequisites": ["S08"],
+      "allowed_paths": ["docs/install-transaction/**", "docs/rehearsals/**", "docs/promotion-reviews/**"],
+      "required_evidence": ["candidate-source-commit", "ci-artifact-sha256", "immutable-candidate-build"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S10",
+      "title": "Run independent hosted packaged-chain and separately labelled rollback lanes against the frozen candidate",
+      "prerequisites": ["S09"],
+      "allowed_paths": ["docs/install-transaction/**", "docs/rehearsals/**"],
+      "required_evidence": ["packaged-chain-rehearsal", "direct-rollback-supplement", "assertion-diagnostic-receipt", "diagnostic-redaction-receipt"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S11",
+      "title": "Run clean, v2.15.0 upgrade, repeat-install, and controlled rollback scenarios against the same candidate",
+      "prerequisites": ["S10"],
+      "allowed_paths": ["docs/install-transaction/**", "docs/rehearsals/**"],
+      "required_evidence": ["clean-install-receipt", "upgrade-receipt", "repeat-install-receipt", "controlled-rollback-receipt"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S12",
+      "title": "Verify task, process, telemetry, watermark, shortcut, focus, and archive-pointer effects",
+      "prerequisites": ["S11"],
+      "allowed_paths": ["docs/install-transaction/**", "docs/rehearsals/**"],
+      "required_evidence": ["installed-runtime-effect-receipt"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S13",
+      "title": "Independently evaluate and formally promote the already hashed candidate without rebuilding",
+      "prerequisites": ["S12"],
+      "allowed_paths": ["docs/install-transaction/**", "docs/promotion-reviews/**"],
+      "required_evidence": ["cross-platform-ci", "full-relevant-tests", "independent-candidate-evaluation", "candidate-promotion"],
+      "authorization_scope": null
+    },
+    {
+      "id": "S14",
+      "title": "Install the exact promoted artifact on the target Windows device",
+      "prerequisites": ["S13"],
+      "allowed_paths": ["docs/install-transaction/**", "docs/rehearsals/**"],
+      "required_evidence": ["exact-ci-artifact-download", "real-target-upgrade-receipt"],
+      "authorization_scope": "target-windows-uac-install"
+    },
+    {
+      "id": "S15",
+      "title": "Publish the same bytes, reinstall the official asset, and close final quality gates",
+      "prerequisites": ["S14"],
+      "allowed_paths": ["docs/install-transaction/**", "docs/rehearsals/**", "docs/promotion-reviews/**", "docs/defect-receipts/**"],
+      "required_evidence": ["no-rebuild-proof", "release-asset-sha256-match", "official-asset-reinstall", "independent-final-evaluation", "defect-completion"],
+      "authorization_scope": "github-push-merge-release-and-official-asset-reinstall"
+    }
   ]
 }

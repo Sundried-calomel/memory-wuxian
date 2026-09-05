@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "workflow_id": "memory-wuxian-v2.20.0-unified-installer",
+  "epoch_id": "E001",
+  "step_id": "S03",
+  "attempt": 1,
+  "evidence_id": "independent-architecture-evaluation",
+  "authorization_receipt_sha256": "",
+  "producer": {
+    "kind": "evaluator",
+    "name": "agent-output-evaluator",
+    "version": "1"
+  },
+  "invocation": {
+    "argv": [
+      "agent-output-evaluator",
+      "docs/install-transaction/contract.json",
+      "docs/install-transaction/evidence/s03-recovery-architecture-contract-result.json"
+    ],
+    "cwd": ".",
+    "runner": "codex-subagent",
+    "exit_code": 0,
+    "source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "source_snapshot_sha256": "47a2886a1e723848fa33c96f53750a58d5721c4d01a2dfdfee60e4a02c212038"
+  },
+  "artifacts": [
+    {
+      "path": "docs/install-transaction/evidence/s03-independent-architecture-evaluation-report.json",
+      "sha256": "37afac9b652b6e9f09a1059401e7dd3b1f89144fb6eccf91484ee23d7fcdf4f9",
+      "role": "evaluation-report"
+    }
+  ],
+  "subjects": []
+}

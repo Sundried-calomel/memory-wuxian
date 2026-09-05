@@ -1,0 +1,22 @@
+{
+  "decision": "single-owner",
+  "transaction_owner": "scripts/windows_installer_transaction.py:WindowsInstallerTransaction",
+  "composition_owner": "scripts/install_windows_transaction.py:ProductInstallAdapter",
+  "caller_only_layers": [
+    "packaging/windows/MemoryWuxian.iss",
+    "packaging/windows/install.ps1",
+    "scripts/windows_installer_broker.py",
+    "scripts/auto_update.py"
+  ],
+  "competing_transaction_owner_count": 0,
+  "source_files": [
+    {
+      "path": "scripts/windows_installer_transaction.py",
+      "sha256": "33ffb5a084543a0bc4a7bf70b5f8a8a8064e8778c39050bf18f8835216bc7b74"
+    },
+    {
+      "path": "scripts/install_windows_transaction.py",
+      "sha256": "5b32ec449cc89c42af82779a003aeed42ae489670ab2529211f40daffb7f3028"
+    }
+  ]
+}

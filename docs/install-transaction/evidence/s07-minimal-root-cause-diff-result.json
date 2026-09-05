@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "scope_status": "bounded",
+  "reuse_decision": "reuse-existing-repair-without-new-production-edit",
+  "failed_source_commit": "319b1b23e90deaba92757da381de985e031b9853",
+  "repair_commit": "8dd7281",
+  "current_source_commit": "01b025c9dd500531f51349e3dca542cdf2b83da1",
+  "production_diff": {
+    "path": "scripts/windows_installer_broker.py",
+    "insertions": 8,
+    "deletions": 0,
+    "current_sha256": "ad71032d9097648ffc8a62f96f426db7c53ffbfb30ed1e3d57063139e49d4352",
+    "change": "Insert SCRIPT_DIR and PROJECT_ROOT into sys.path before project-local imports.",
+    "matches_proven_root_cause": true
+  },
+  "focused_test_diff": {
+    "path": "tests/test_windows_installer_runtime.py",
+    "insertions": 70,
+    "deletions": 0,
+    "current_sha256": "84f35d16b58c62cb3cd47bc1dd39b541af39ed247ce04f91de84e62700287e1d",
+    "coverage": "isolated broker entrypoint and production dispatch path"
+  },
+  "post_repair_path_drift": {
+    "range": "8dd7281..01b025c9dd500531f51349e3dca542cdf2b83da1",
+    "paths_checked": [
+      "scripts/windows_installer_broker.py",
+      "tests/test_windows_installer_runtime.py"
+    ],
+    "changed_path_count": 0
+  },
+  "forbidden_expansion_counts": {
+    "new_wrapper": 0,
+    "fallback_launcher": 0,
+    "alternate_manifest_parser": 0,
+    "new_state_machine": 0,
+    "new_owner": 0,
+    "weakened_security_check": 0
+  },
+  "production_code_changed_during_e001_s07": false
+}

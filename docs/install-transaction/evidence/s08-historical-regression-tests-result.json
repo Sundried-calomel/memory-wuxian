@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "tests_run": 88,
+  "failures": 0,
+  "errors": 0,
+  "duration_seconds": 3.838,
+  "historical_boundaries_covered": [
+    "isolated-runtime imports",
+    "closed broker request and nonce replay",
+    "hash, SID, path, and runtime drift failures",
+    "child exit propagation",
+    "three-entrypoint manifest equivalence",
+    "Inno and PowerShell wiring",
+    "seven-resource composition",
+    "Unicode paths",
+    "rollback and rollback verification",
+    "interrupted transaction recovery",
+    "idempotency",
+    "update approval and package hash drift",
+    "auto-update re-entry",
+    "structured assertion diagnostics"
+  ],
+  "scope": "focused affected-surface matrix",
+  "full_repository_suite_claimed": false
+}

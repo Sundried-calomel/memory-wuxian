@@ -1,0 +1,36 @@
+{
+  "complete": true,
+  "entrypoint_count": 3,
+  "source_snapshot_sha256": "6c61949017b66a27a9c8d509ca7a8f7ef5baf841e88b01f52d75812e737004ef",
+  "entrypoints": [
+    {
+      "id": "manual",
+      "outer_path": "packaging/windows/install.ps1",
+      "source_entrypoint": "manual"
+    },
+    {
+      "id": "inno",
+      "outer_path": "packaging/windows/MemoryWuxian.iss",
+      "source_entrypoint": "inno"
+    },
+    {
+      "id": "auto-update",
+      "outer_path": "scripts/auto_update.py",
+      "source_entrypoint": "auto-update"
+    }
+  ],
+  "source_files": [
+    {
+      "path": "packaging/windows/install.ps1",
+      "sha256": "3c75616bab77bdde5165005a47d59c1e22f06d398b17e7b76950120db9ee6577"
+    },
+    {
+      "path": "packaging/windows/MemoryWuxian.iss",
+      "sha256": "0d3d9e62a0c0b2fcbc56f0e238451d00ad4cfb22503581c6f268c7c7b25800b2"
+    },
+    {
+      "path": "scripts/auto_update.py",
+      "sha256": "9777b86239e864be30a516722c56ea61472c28a5be8967ec79f8a3a926a8bb30"
+    }
+  ]
+}
