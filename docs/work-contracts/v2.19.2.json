@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.19.2-integrity-isolation",
+  "candidate_id": "v2.19.2-frozen-summary-integrity-isolation",
+  "artifact_profile": "software-feature",
+  "classification": "repair",
+  "owner_id": "memory-maintenance-application-service",
+  "validation_profile": "targeted-patch",
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "bundled-native-version",
+    "v2192-integrity-isolation-contract",
+    "architecture-contract",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "target": "Allow existing source-hash-bound semantic jobs to drain independently while archive integrity debt remains visible and blocks creation of new summary work.",
+  "primary_semantics": "Archive-level integrity debt is an attention state and a scheduling barrier, not a global dispatch barrier for already frozen jobs.",
+  "invariants": [
+    "Raw history and completed summary Markdown remain immutable authorities.",
+    "Integrity debt remains visible and prevents creation of new summary jobs until repaired.",
+    "Every frozen job revalidates its source SHA-256 before ingestion.",
+    "A failed or quarantined job does not block an independent healthy sibling.",
+    "A quarantined job is never counted as completed or silently removed."
+  ],
+  "allowed_changes": [
+    "Remove the archive-wide semantic dispatch stop for already frozen jobs.",
+    "Report the integrity-debt dispatch policy in maintenance diagnostics.",
+    "Add focused regressions for mixed quarantined and healthy frozen jobs.",
+    "Update version metadata and three-locale release documentation."
+  ],
+  "prohibited_changes": [
+    "Rewrite, normalize, delete, or automatically repair Raw history.",
+    "Create new summary jobs from an archive with unresolved integrity or repairable drift.",
+    "Relax per-job source SHA-256 validation or summary ingestion validation.",
+    "Change archive schemas, summary formats, trigger thresholds, collector formats, cloud protocols, dashboard behavior, or Summary V2 behavior.",
+    "Treat an integrity warning, quarantined job, or incomplete source range as healthy or completed."
+  ],
+  "before_after_checks": [
+    "Reproduce archive integrity debt causing zero selected frozen jobs before the patch.",
+    "Require one bad job to remain quarantined while one healthy sibling completes in the same patched batch.",
+    "Require the installed Windows maintenance entrypoint to reduce pending summary debt without clearing the integrity warning or creating a new job."
+  ],
+  "required_evidence": [
+    "v2192-integrity-isolation-contract",
+    "installed-windows-semantic-waterline-decrease",
+    "bundled-native-version",
+    "architecture-contract",
+    "documentation-contract",
+    "python-compile",
+    "diff-check"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "governance/v2192-integrity-isolation-preflight.json",
+    "preflight_sha256": "1ceccf81d6ba6bb98078d093f5433122597fec2821fe833a31ad7572f542b227",
+    "completion_receipt": "governance/v2192-integrity-isolation-completion.json",
+    "completion_sha256": "28eef68703311fcb17cb82d446758363317b56cb66f555e9b09c9ddf1c94d89f",
+    "applicable_families": [
+      "G02",
+      "G03",
+      "G05",
+      "G07",
+      "G08",
+      "G09",
+      "G11",
+      "MW-R03",
+      "MW-R05",
+      "MW-R09"
+    ],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "Archive-level duplicate sequence and sequence-gap findings forced every frozen semantic job to remain unselected.",
+      "Malformed rollout isolation in Capture Core did not propagate to the semantic maintenance entrypoint.",
+      "A historical release-contract test asserted the obsolete global dispatch implementation token instead of the durable raw-authority invariant."
+    ]
+  },
+  "failure_escalation": {
+    "first_failure": "Keep the installed 2.19.1 hotfix and repair only the failing targeted scenario without touching raw history.",
+    "maximum_remediation_cycles": 1,
+    "after_limit": "Do not merge, tag, publish, or replace the installed candidate; preserve evidence for a new decision."
+  },
+  "rollback": "Restore the exact pre-hotfix semantic_backfill.py or install the previous verified 2.19.1 generation; raw history and completed summaries require no rollback.",
+  "lifecycle_state": "candidate"
+}

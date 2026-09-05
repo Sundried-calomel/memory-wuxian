@@ -1,5 +1,11 @@
 # Memory無限
 
+> **2.19.2:** archive integrity warning が存在しても、既存の semantic job 全体を
+> 停止しません。warning は可視のまま維持し、不完全な archive から新しい job は
+> 作成しません。一方、既に凍結され source hash に束縛された job は個別に検証して
+> 処理します。失敗 job は隔離したまま、正常な sibling が raw history を書き換えずに
+> backlog を減らし続けます。
+
 > **2.19.1:** semantic maintenance の throughput と cross-device cloud の
 > 完結性を修復します。1 maintenance batch は不変 source snapshot を一度だけ読み、
 > model 処理を並列実行し、失敗 job を隔離して、derived index を一度だけ commit

@@ -521,6 +521,29 @@
   不匹配候选仍由既有 typed failure 覆盖。
 - Families: `G03`, `G05`, `G06`, `G09`, `MW-R03`, `MW-R05`, `MW-R06`.
 
+### MW-REL-045：来源隔离没有贯通语义调度，单点完整性债务冻结全部摘要
+
+- 证据：`本机已核验`。Windows 2.19.1 在 2026-09-05 持续保留约 130 个待处理语义任务；
+  maintenance 每轮完成深度恢复检查后仍报告 `selected_jobs=0`、`finished_jobs=0` 和
+  `semantic_dispatch_seconds=0`。归档报告重复 raw sequence 与 sequence gap，同时已有一个
+  source-drift 任务处于 quarantine。
+- 根因：2.18/2.19.1 的 malformed-rollout 隔离只覆盖 Capture Core 来源同步；
+  `semantic_backfill.py` 仍继承 2.12.3 的归档级 `dispatch_blocked = bool(integrity_issues)`，
+  并由历史版本测试直接约束该实现文本。任一原始完整性问题因此在逐 job 来源哈希验证之前
+  清空整个 dispatch 选择集。
+- 逃逸边界：既有回归分别证明了 repairable projection drift 不阻塞 frozen jobs，以及一个
+  已 quarantine 的 semantic job 不阻塞下一个 job；没有把“归档存在完整性债务”和“多个独立
+  frozen jobs”放进同一生产调度场景，也没有要求健康 job 的实际水位继续下降。
+- 永久门禁：原始完整性债务始终可见并禁止创建新的 summary job，但不得阻止已经冻结、
+  source-hash-bound 的独立 job。每个 frozen job 继续通过既有 worker 与 ingestion 来源哈希复核；
+  失败项单独 retry/quarantine，成功 sibling 正常入库。不得改写、删除或自动修补 raw history，
+  也不得把隔离项计作完成。
+- 回归：同一批次注入 archive-level sequence gap、一个 quarantined job 和一个可成功 ingest 的
+  sibling；要求两项均被尝试、健康项完成、坏项仍隔离、新任务不生成、整体状态保持 attention。
+  安装后效果检查必须从真实维护入口证明 pending summary 数下降，同时完整性债务与原始归档
+  字节保持不变。
+- Families: `G02`, `G03`, `G05`, `G07`, `G08`, `G11`, `MW-R03`, `MW-R05`, `MW-R09`.
+
 ## 跨设备结论
 
 1. 跨平台需要“结果合同相同、平台实现分别验证”，不能要求实现文本相同。

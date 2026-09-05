@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.19.2 - 2026-09-06
+
+- Keep raw-integrity debt visible and block creation of new summary jobs while
+  allowing already frozen, source-hash-bound semantic jobs to continue.
+- Isolate a failing or quarantined summary job without blocking independent
+  siblings, preserving raw history and the unresolved recovery debt unchanged.
+- Add focused regressions and an installed Windows effect check proving that
+  semantic backlog decreases through the automatic maintenance entrypoint.
+
 ## 2.19.1 - 2026-08-28
 
 - Preserve `source_round_numbers` and `source_round_count` during deterministic
