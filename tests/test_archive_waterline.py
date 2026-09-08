@@ -61,6 +61,31 @@ class ArchiveWaterlineTest(unittest.TestCase):
             required - first,
         )
 
+    def test_each_physical_segment_requires_its_own_cursor(self):
+        self.source.unlink()
+        session_id = "01a041df-3694-7bd2-b9c6-d8c0c8e12f3f"
+        segment_id = "01a041e8-e542-7b80-a315-06a9a1c66cb8"
+        first = self.sessions / f"rollout-2026-08-27T15-19-02-{session_id}.jsonl"
+        continuation = self.sessions / (
+            f"rollout-2026-08-27T15-29-37-{session_id}_{segment_id}.jsonl"
+        )
+        payload = json.dumps(
+            {"timestamp": "2026-08-27T06:30:00Z", "type": "event_msg"}
+        ) + "\n"
+        first.write_text(payload, encoding="utf-8")
+        continuation.write_text(payload, encoding="utf-8")
+        for identity, source in ((session_id, first), (segment_id, continuation)):
+            (self.archive / "imports" / "codex" / f"{identity}.json").write_text(
+                json.dumps({"source_path": str(source), "source_size": source.stat().st_size}),
+                encoding="utf-8",
+            )
+        result = evaluate(
+            self.archive,
+            self.sessions,
+            datetime(2026, 8, 27, 7, tzinfo=timezone.utc),
+        )
+        self.assertEqual(result["status"], "covered")
+
 
 if __name__ == "__main__":
     unittest.main()

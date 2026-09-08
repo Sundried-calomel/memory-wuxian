@@ -11,7 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from token_usage import persist_token_usage  # noqa: E402
+from token_usage import (  # noqa: E402
+    aggregate_ledgers,
+    ledgers_by_conversation,
+    persist_token_usage,
+    token_usage_ledgers,
+)
 from tests.support.rollouts import event
 
 
@@ -114,6 +119,40 @@ class TokenUsageTests(unittest.TestCase):
         self.assertEqual(result["status"], "excluded")
         self.assertEqual(result["excluded_reason"], "subagent-session")
         self.assertFalse((self.root / "imports/codex/token-usage").exists())
+
+    def test_multi_segment_session_uses_independent_ledgers_and_one_conversation(self):
+        session_id = "01a041df-3694-7bd2-b9c6-d8c0c8e12f3f"
+        segment_id = "01a041e8-e542-7b80-a315-06a9a1c66cb8"
+        first = self.base / f"rollout-2026-08-27T15-19-02-{session_id}.jsonl"
+        continuation = self.base / (
+            f"rollout-2026-08-27T15-29-37-{session_id}_{segment_id}.jsonl"
+        )
+        first.write_text(
+            event("2026-08-27T06:19:02Z", "session_meta", {"id": session_id})
+            + token_event("2026-08-27T06:20:00Z", 100),
+            encoding="utf-8",
+        )
+        continuation.write_text(
+            event("2026-08-27T06:29:37Z", "session_meta", {"id": session_id})
+            + token_event("2026-08-27T06:30:00Z", 250),
+            encoding="utf-8",
+        )
+
+        first_result = persist_token_usage(self.root, first)
+        continuation_result = persist_token_usage(self.root, continuation)
+        self.assertEqual(first_result["segment_id"], session_id)
+        self.assertEqual(continuation_result["segment_id"], segment_id)
+        ledgers = token_usage_ledgers(self.root)
+        self.assertEqual(len(ledgers), 2)
+        aggregate = aggregate_ledgers(ledgers)
+        self.assertEqual(aggregate["measured_conversations"], 1)
+        self.assertEqual(aggregate["reported_usage"]["total_tokens"], 350)
+        grouped = ledgers_by_conversation(ledgers)
+        conversation = grouped[f"codex:{session_id}"]
+        self.assertEqual(conversation["segment_count"], 2)
+        self.assertEqual(conversation["reported_usage"]["total_tokens"], 350)
+        self.assertEqual(conversation["latest_request_usage"]["total_tokens"], 250)
+        self.assertEqual(persist_token_usage(self.root, continuation)["changed_events"], 0)
 
     def test_cli_backfill_previews_applies_and_is_idempotent(self):
         sessions = self.base / "sessions"

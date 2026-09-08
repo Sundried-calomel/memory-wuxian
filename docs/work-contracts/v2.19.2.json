@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2.19.2-multi-segment-capture",
+  "candidate_id": "v2.19.2-rollout-segment-and-visible-envelope-repair",
+  "artifact_profile": "software-feature",
+  "classification": "repair",
+  "owner_id": "capture-core",
+  "validation_profile": "full",
+  "target": "Archive every physical rollout segment of one top-level Codex conversation and recover the observed item_completed visible-message envelope without weakening exact historical waterlines.",
+  "invariants": [
+    "Raw Codex rollout files and existing archive records remain immutable.",
+    "All physical segments of one parent session remain one top-level conversation.",
+    "Legacy single-file message identities and cursor paths remain stable.",
+    "Subagent exclusion, summary triggers, cloud protocol, and daily-report content remain unchanged.",
+    "A freshness timestamp never substitutes for per-source coverage."
+  ],
+  "allowed_changes": [
+    "Key source cursors and token ledgers by physical rollout segment.",
+    "Normalize the observed item_completed UserMessage and AgentMessage envelope.",
+    "Backfill retained affected sources once using a persisted format marker.",
+    "Aggregate segment telemetry to one conversation for user-facing metrics.",
+    "Add multi-segment and envelope regression coverage."
+  ],
+  "prohibited_changes": [
+    "Rewrite or delete any rollout, raw archive record, or completed summary.",
+    "Split one parent session into multiple dashboard conversations.",
+    "Import hidden reasoning or unrestricted tool output.",
+    "Treat the latest archive timestamp as proof that every retained source is covered.",
+    "Manually patch a generated daily report instead of repairing Capture Core."
+  ],
+  "required_evidence": [
+    "legacy-single-file-compatibility",
+    "multi-segment-independent-cursors",
+    "segment-line-message-identity",
+    "item-completed-visible-message-backfill",
+    "subagent-exclusion",
+    "token-segment-aggregation",
+    "replay-idempotency",
+    "real-retained-source-rehearsal",
+    "complete-python-suite",
+    "complete-rust-suite",
+    "transactional-macos-install-and-live-self-check",
+    "exact-cutoff-waterline-covered"
+  ],
+  "defect_workbook": {
+    "preflight_receipt": "governance/v2192-multi-segment-preflight.json",
+    "preflight_sha256": "01be135768df3e1cb4ee726dbe2bffe34be50b0988a72df14fd2e02473485098",
+    "completion_receipt": "governance/v2192-multi-segment-completion.json",
+    "completion_sha256": "8573ac3e8ad63665b344e0cda728db0671e217e25d0b937d2395f1775f40bd3b",
+    "applicable_families": ["G03", "G05", "G09", "MW-R03", "MW-R06"],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "Continuation rollout filenames used a physical segment UUID distinct from parent session metadata.",
+      "The observed item_completed visible-message envelope was not normalized by the legacy adapter."
+    ]
+  },
+  "failure_escalation": {
+    "first_failure": "Stop the failing stage, preserve evidence, and repair only Capture Core or its shared cursor schema.",
+    "maximum_remediation_cycles": 1,
+    "after_limit": "Do not install or publish; report the remaining blocker."
+  },
+  "lifecycle_state": "qualified-local-install"
+}

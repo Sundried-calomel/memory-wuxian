@@ -470,6 +470,25 @@
   记录，以及事务安装效果探针在历史异常源存在时仍可闭环。
 - Families: `G03`, `G05`, `G09`, `MW-R03`, `MW-R06`.
 
+### MW-REL-039：同一顶层会话的多物理段被拒绝且新可见消息封装漏归档
+
+- 证据：`本机生产故障与真实保留来源彩排已核验`。同一顶层 session 在 2026-08-27 下午
+  生成 1 个原始 rollout 和 4 个 continuation rollout；continuation 文件名末尾使用新的物理
+  segment UUID，但 `session_meta.payload.id` 仍是父 session。旧采集器将两者不一致视为畸形，
+  4 段的归档游标保持为零。另有 7 个保留来源使用 `item_completed` 下的 `UserMessage` 与
+  `AgentMessage`，旧可见事件归一化器不会导入这些正文。
+- 根因：Capture Core 把“顶层对话身份”“物理来源身份”和“游标身份”合并成同一个 UUID，
+  同时只实现了旧的 `user_message` / `agent_message` 事件封装。
+- 逃逸边界：最近归档时间和单个父 session 游标仍可前进，因此普通状态页可能显示新鲜；只有
+  对截止时间内每个物理来源逐段验收，或直接核对正文，才能发现缺口。
+- 永久门槛：父 session 只负责对话归组；每个物理 segment 独立持久化游标、来源路径和 Token
+  账本。消息 ID 必须包含 segment 身份以避免相同行号碰撞。归一化器只接受明确的用户可见
+  `UserMessage`、`AgentMessage(commentary|final_answer)`，继续排除 Reasoning。格式回填只对
+  实际含新封装且缺少版本标记的来源执行一次；逐段水位不得由 freshness 替代。
+- 回归：覆盖旧单文件、父子双 UUID 文件名、相同行号、同一 transcript、旧游标回填、过程更新、
+  最终回答、隐藏推理排除、子代理排除、segment Token 汇总、真实 7 文件彩排和二次重放零新增。
+- Families: `G03`, `G05`, `G09`, `MW-R03`, `MW-R06`.
+
 ### MW-REL-036：中断恢复用目录替换覆盖非空活动 Skill
 
 - 证据：`本机事务失败与回归已核验`。上次切换中断后，活动候选目录因后续运行期状态与最初

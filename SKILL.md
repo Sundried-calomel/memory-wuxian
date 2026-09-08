@@ -21,13 +21,13 @@ Build effectively unbounded, retrievable conversation memory from immutable sour
 10. Rebuild only derived state and indexes; never repair integrity failures by rewriting history.
 11. When Codex integration is enabled, import user-visible dialogue, lightweight tool activity visible in the task timeline, and successful structured file-change events. Preserve file paths, change types, line ranges, addition/deletion counts, and exact unified diffs. Exclude general tool output and hidden reasoning.
 12. Complete the primary archive write before creating its external backup snapshot.
-13. Maintain one complete transcript per conversation; never place records from different conversation IDs in the same transcript.
+13. Maintain one complete transcript per top-level conversation; never place records from different conversation IDs in the same transcript. Treat each physical rollout segment as an independent capture cursor and token ledger, and import both legacy visible-message events and the observed `item_completed` `UserMessage`/`AgentMessage` envelope without importing hidden reasoning.
 14. Use the native event-driven collector for high-frequency Codex capture on macOS and Windows; keep Python outside the continuous capture loop.
 15. Preserve transaction consistency by holding `memory/.locks/archive.lock` for each native event batch and Python maintenance command.
 16. Keep summary source ranges, parent-child groups, and derived indexes scoped to one conversation ID.
 17. Exclude native Codex subagent sessions; archive only top-level user-visible conversations.
 18. Keep only the configured number of newest complete external snapshots; the default is one.
-19. Keep only the configured number of newest workspace recovery backups under `memory/archive/`; the default is one.
+19. Keep workspace recovery backups outside the live memory archive root so desktop snapshots never copy them recursively. Keep only the configured number of newest recovery backups; the default is one.
 20. Do not keep an AI conversation active. Let scripts detect completed-round or character thresholds, then run one ephemeral AI process only to generate the due semantic summary.
 21. Treat dashboard snapshots as disposable derived caches. Render the last persisted snapshot immediately, validate and rebuild it in a background thread for automatic refresh, and reserve synchronous validation for explicit manual refresh.
 22. Keep each node's local archive exclusively writable by that node. Store imported peer history only in read-only replicas under the federation cache.

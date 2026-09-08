@@ -1,5 +1,12 @@
 # Memory無限
 
+> **2.19.2:** 1 つの Codex 会話が複数の物理 rollout file に継続する形式を
+> サポートします。各 segment は独立した永続 capture cursor と token ledger を持ち、
+> 全 segment は同じ top-level conversation に属します。Capture Core は観測済みの
+> `item_completed` visible-message envelope も取り込み、この形式を実際に使う保持 source
+> だけを一度、有界かつ冪等に backfill します。archive waterline は全物理 segment の
+> coverage を要求し、freshness だけで completeness を証明しません。
+
 > **2.19.1:** semantic maintenance の throughput と cross-device cloud の
 > 完結性を修復します。1 maintenance batch は不変 source snapshot を一度だけ読み、
 > model 処理を並列実行し、失敗 job を隔離して、derived index を一度だけ commit
@@ -367,7 +374,7 @@ python scripts/install_codex_autosync_windows.py `
 
 既定設定では、ネイティブのメモリ変更ごとに主アーカイブ書込後、`pending/backup-debt.json`をアトミックに更新します。低頻度の保守タスクが保留中の変更を1件の完全な検証済みスナップショットとして`~/Desktop/Memory無限-记忆归档备份/`へまとめ、成功後だけ債務を消去して旧スナップショットを削除します。コレクターはアーカイブ全体のコピーで起動や収集を停止しません。バックアップルートには最新復旧コピー1件と追記専用`backup-log.jsonl`が残り、より新しいスナップショットが保留中の場合はステータス画面が警告します。
 
-適用型再構築コマンドは以前の派生ファイルを`memory/archive/`に保存できます。内部復旧コピーは`backup.workspace_retention_count`に従い、既定で最新1件だけ保持します。開発編集は置換可能なコードバックアップ1件を使い、ライブ会話アーカイブを追加複製しません。
+適用型再構築コマンドは以前の派生ファイルを外部の`backup.workspace_directory`に保存できます。未設定の場合は、ライブ`memory`ルートの隣にある`recovery-backups`を使用します。復旧コピーはライブアーカイブ内に保存されないため、デスクトップスナップショットが再びコピーすることはありません。復旧コピーは`backup.workspace_retention_count`に従い、既定で最新1件だけ保持します。開発編集は置換可能なコードバックアップ1件を使い、ライブ会話アーカイブを追加複製しません。
 
 ## メモリ階層
 

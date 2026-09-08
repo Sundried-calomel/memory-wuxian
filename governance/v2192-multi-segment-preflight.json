@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "receipt_type": "defect-workbook-preflight",
+  "created_at": "2026-08-28T00:00:00+09:00",
+  "target": "memory-wuxian-v2.19.2-multi-segment-capture",
+  "artifact_profile": "software-feature",
+  "change_kind": "repair",
+  "selected_families": ["G03", "G05", "G09", "MW-R03", "MW-R06"],
+  "original_triggers": [
+    "One top-level Codex session produced multiple physical rollout files whose terminal filename UUIDs differed from session metadata.",
+    "The existing session-keyed cursor contract rejected continuation files and left exact historical waterlines lagging.",
+    "Retained sources used an item_completed visible-message envelope that the legacy normalizer did not archive."
+  ],
+  "required_regressions": [
+    "multi-segment-independent-cursors",
+    "one-parent-conversation",
+    "completed-item-visible-message-backfill",
+    "legacy-cursor-compatibility",
+    "subagent-exclusion",
+    "segment-token-aggregation",
+    "second-replay-zero-new-records",
+    "real-retained-source-waterline"
+  ],
+  "status": "loaded"
+}

@@ -45,8 +45,10 @@ use telemetry::CollectorTelemetry;
 
 const RAW_MARKER: &str = "<!-- memory-wuxian-record -->";
 const TOKEN_USAGE_FORMAT_VERSION: u64 = 2;
+const VISIBLE_MESSAGE_FORMAT_VERSION: u64 = 1;
+const SOURCE_ADAPTER_FORMAT_VERSION: u64 = 2;
 const DAILY_USAGE_TIMEZONE: &str = "Asia/Tokyo";
-const ROLLOUT_BATCH_MAX_LINES: usize = 512;
+const ROLLOUT_BATCH_MAX_LINES: usize = 8192;
 const ROLLOUT_BATCH_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const RECOVERY_LOCK_YIELD: Duration = Duration::from_millis(150);
 const TOKEN_USAGE_FIELDS: [&str; 6] = [
@@ -334,6 +336,36 @@ fn summarize_file_change(payload: &Value) -> Option<String> {
         rendered.len(),
         rendered.join("\n\n")
     ))
+}
+
+fn summarize_completed_message(
+    payload: &Value,
+) -> Option<(&'static str, &'static str, bool, String)> {
+    if payload.get("type").and_then(Value::as_str) != Some("item_completed") {
+        return None;
+    }
+    let item = payload.get("item")?;
+    let item_type = item.get("type").and_then(Value::as_str)?;
+    let text = item
+        .get("content")?
+        .as_array()?
+        .iter()
+        .filter_map(|entry| entry.get("text").and_then(Value::as_str))
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if text.is_empty() {
+        return None;
+    }
+    match item_type {
+        "UserMessage" => Some(("user", "user", false, text)),
+        "AgentMessage" => match item.get("phase").and_then(Value::as_str) {
+            Some("commentary") => Some(("assistant", "commentary", false, text)),
+            Some("final_answer") => Some(("assistant", "final_answer", true, text)),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -632,9 +664,11 @@ struct RolloutBatch {
 #[derive(Debug)]
 struct PreparedSync {
     source_path: PathBuf,
+    segment_id: String,
     hinted_cursor: Value,
     last_line: u64,
     message_last_line: u64,
+    backfill_visible_messages: bool,
     backfill_file_changes: bool,
     backfill_token_usage: bool,
     resume_line: u64,
@@ -1339,17 +1373,28 @@ impl Store {
         Ok(records)
     }
 
-    fn archived_source_line_high_water(&self, session_id: &str) -> Result<u64> {
+    fn archived_source_line_high_water(
+        &self,
+        session_id: &str,
+        segment_id: &str,
+        source_path: &Path,
+    ) -> Result<u64> {
         let conversation_id = format!("codex:{session_id}");
+        let source_path = portable_path(source_path);
         Ok(self
             .read_records(&self.conversation_path(&conversation_id))?
             .into_iter()
             .filter(|record| {
-                record
-                    .get("source")
-                    .and_then(|source| source.get("session_id"))
-                    .and_then(Value::as_str)
-                    == Some(session_id)
+                let Some(source) = record.get("source") else {
+                    return false;
+                };
+                if source.get("session_id").and_then(Value::as_str) != Some(session_id) {
+                    return false;
+                }
+                source.get("segment_id").and_then(Value::as_str) == Some(segment_id)
+                    || (segment_id == session_id
+                        && source.get("segment_id").is_none()
+                        && source.get("path").and_then(Value::as_str) == Some(source_path.as_str()))
             })
             .filter_map(|record| {
                 record
@@ -1433,6 +1478,10 @@ impl Store {
         };
         record.get("source_path").and_then(Value::as_str)
             == Some(portable_path(source_path).as_str())
+            && record
+                .get("source_adapter_format_version")
+                .and_then(Value::as_u64)
+                == Some(SOURCE_ADAPTER_FORMAT_VERSION)
             && record.get("source_size").and_then(Value::as_u64) == Some(metadata.len())
             && record.get("source_mtime_ns").and_then(Value::as_str)
                 == source_mtime_ns(metadata).ok().as_deref()
@@ -1458,6 +1507,7 @@ impl Store {
             &path,
             &json!({
                 "format_version": 1,
+                "source_adapter_format_version": SOURCE_ADAPTER_FORMAT_VERSION,
                 "source_path": portable_path(source_path),
                 "source_size": metadata.len(),
                 "source_mtime_ns": source_mtime_ns(&metadata)?,
@@ -1551,6 +1601,7 @@ impl Store {
     fn update_token_usage(
         &self,
         session_id: &str,
+        segment_id: &str,
         source_path: &Path,
         lines: &[RolloutLine],
         committed_line: u64,
@@ -1558,13 +1609,14 @@ impl Store {
         let path = self
             .root
             .join("imports/codex/token-usage")
-            .join(format!("{}.json", Self::safe_session_id(session_id)));
+            .join(format!("{}.json", Self::safe_session_id(segment_id)));
         let new_ledger = || {
             json!({
                 "format_version": TOKEN_USAGE_FORMAT_VERSION,
                 "measurement": "codex-reported-model-usage",
                 "conversation_id": format!("codex:{session_id}"),
                 "session_id": session_id,
+                "segment_id": segment_id,
                 "source": {
                     "kind": "codex-rollout-token-count",
                     "path": portable_path(source_path),
@@ -1740,14 +1792,14 @@ impl Store {
     fn changed_rollouts(&self, paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
         let session_pattern =
             Regex::new(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$")?;
-        let changed = paths
+        let mut changed = paths
             .into_iter()
             .filter_map(|path| {
                 let metadata = match fs::metadata(&path) {
                     Ok(value) => value,
                     Err(error) => {
                         eprintln!("source metadata error ({}): {error}", path.display());
-                        return Some(path);
+                        return Some((0u8, 0u64, path));
                     }
                 };
                 if self.source_error_matches(&path, &metadata) {
@@ -1760,34 +1812,42 @@ impl Store {
                     .and_then(|captures| captures.get(1))
                     .map(|value| value.as_str());
                 let Some(session_id) = session_id else {
-                    return Some(path);
+                    return Some((0, metadata.len(), path));
                 };
                 let cursor_path = self.cursor_path(session_id);
                 let cursor = match read_json(&cursor_path) {
                     Ok(value) => value,
-                    Err(_) => return Some(path),
+                    Err(_) => return Some((0, metadata.len(), path)),
                 };
-                if cursor_requires_sync(&cursor, &path, &metadata) {
-                    Some(path)
+                let needs_visible_message_backfill = cursor
+                    .get("visible_message_format_version")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+                    < VISIBLE_MESSAGE_FORMAT_VERSION
+                    && rollout_uses_completed_items(&path).unwrap_or(false);
+                if needs_visible_message_backfill {
+                    Some((1, metadata.len(), path))
+                } else if cursor_requires_sync(&cursor, &path, &metadata) {
+                    Some((2, metadata.len(), path))
                 } else {
                     None
                 }
             })
             .collect::<Vec<_>>();
+        changed.sort_by(|left, right| (left.0, left.1, &left.2).cmp(&(right.0, right.1, &right.2)));
         eprintln!("memory-wuxian-collector startup: cursor comparison completed");
-        Ok(changed)
+        Ok(changed.into_iter().map(|(_, _, path)| path).collect())
     }
 
     fn prepare_sync_file(&self, source_path: &Path) -> Result<PreparedSync> {
         let source_path = source_path.canonicalize()?;
-        let hinted_session_id = resolve_rollout_session_id(&source_path)?;
-        let hinted_cursor = hinted_session_id
-            .as_ref()
-            .map(|session_id| self.cursor_path(session_id))
-            .filter(|path| path.exists())
-            .map(|path| read_json(&path))
-            .transpose()?
-            .unwrap_or_else(|| json!({}));
+        let (session_id, segment_id) = resolve_rollout_identity(&source_path)?;
+        let cursor_path = self.cursor_path(&segment_id);
+        let hinted_cursor = if cursor_path.exists() {
+            read_json(&cursor_path)?
+        } else {
+            json!({})
+        };
         let last_line = hinted_cursor
             .get("last_line")
             .and_then(Value::as_u64)
@@ -1796,13 +1856,13 @@ impl Store {
             .get("message_last_line")
             .and_then(Value::as_u64)
             .unwrap_or(last_line)
-            .max(
-                hinted_session_id
-                    .as_deref()
-                    .map(|session_id| self.archived_source_line_high_water(session_id))
-                    .transpose()?
-                    .unwrap_or(0),
-            );
+            .max(self.archived_source_line_high_water(&session_id, &segment_id, &source_path)?);
+        let backfill_visible_messages = hinted_cursor
+            .get("visible_message_format_version")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            < VISIBLE_MESSAGE_FORMAT_VERSION
+            && rollout_uses_completed_items(&source_path)?;
         let backfill_file_changes = hinted_cursor
             .get("file_change_format_version")
             .and_then(Value::as_u64)
@@ -1853,11 +1913,12 @@ impl Store {
                 source_byte_sha256 = Some(current_sha256);
             }
         }
-        let resume_line = if backfill_file_changes || backfill_token_usage {
-            0
-        } else {
-            last_line
-        };
+        let resume_line =
+            if backfill_visible_messages || backfill_file_changes || backfill_token_usage {
+                0
+            } else {
+                last_line
+            };
         let resume_offset = if resume_line == last_line && resume_line > 0 {
             hinted_cursor
                 .get("committed_byte_offset")
@@ -1869,21 +1930,19 @@ impl Store {
         if batch.complete && source_byte_sha256.is_none() {
             source_byte_sha256 = Some(file_sha256(&source_path)?);
         }
-        let session_id = batch.session_id.clone();
-        if hinted_session_id
-            .as_deref()
-            .is_some_and(|hint| hint != session_id)
-        {
+        if batch.session_id != session_id {
             bail!(
-                "rollout filename and session metadata IDs differ: {}",
+                "Codex session metadata changed while reading: {}",
                 source_path.display()
             );
         }
         Ok(PreparedSync {
             source_path,
+            segment_id,
             hinted_cursor,
             last_line,
             message_last_line,
+            backfill_visible_messages,
             backfill_file_changes,
             backfill_token_usage,
             resume_line,
@@ -1895,9 +1954,11 @@ impl Store {
     fn sync_prepared_file(&self, prepared: PreparedSync) -> Result<FileSyncResult> {
         let PreparedSync {
             source_path,
+            segment_id,
             hinted_cursor,
             last_line,
             message_last_line,
+            backfill_visible_messages,
             backfill_file_changes,
             backfill_token_usage,
             resume_line,
@@ -1906,7 +1967,7 @@ impl Store {
         } = prepared;
         let session_id = batch.session_id.clone();
         let excluded_reason = batch.excluded_reason.clone();
-        let cursor_path = self.cursor_path(&session_id);
+        let cursor_path = self.cursor_path(&segment_id);
         let current_cursor = if cursor_path.exists() {
             read_json(&cursor_path)?
         } else {
@@ -1923,7 +1984,11 @@ impl Store {
             .last()
             .map(|line| line.number)
             .unwrap_or(resume_line);
-        if committed_line < last_line && !backfill_file_changes && !backfill_token_usage {
+        if committed_line < last_line
+            && !backfill_visible_messages
+            && !backfill_file_changes
+            && !backfill_token_usage
+        {
             bail!(
                 "Codex session was truncated below its cursor: {} ({committed_line} < {last_line})",
                 source_path.display()
@@ -1946,9 +2011,11 @@ impl Store {
                 &json!({
                     "format_version": 1,
                     "session_id": session_id,
+                    "segment_id": segment_id,
                     "source_path": portable_path(&source_path),
                     "last_line": committed_line,
                     "message_last_line": message_last_line.max(committed_line),
+                    "visible_message_format_version": VISIBLE_MESSAGE_FORMAT_VERSION,
                     "file_change_format_version": 1,
                     "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
                     "source_size": batch.committed_byte_offset,
@@ -2006,7 +2073,15 @@ impl Store {
             } else {
                 None
             };
-            if line_number <= message_last_line && file_change.is_none() {
+            let completed_message = if outer_type == Some("event_msg") {
+                summarize_completed_message(payload)
+            } else {
+                None
+            };
+            if line_number <= message_last_line
+                && file_change.is_none()
+                && (!backfill_visible_messages || completed_message.is_none())
+            {
                 continue;
             }
             let (speaker, phase, complete_round, message) =
@@ -2017,6 +2092,7 @@ impl Store {
                     (_, _, _) if tool_activity.is_some() => {
                         ("tool", "tool_activity", false, tool_activity.unwrap())
                     }
+                    (_, _, _) if completed_message.is_some() => completed_message.unwrap(),
                     (Some("event_msg"), Some("user_message"), _) => (
                         "user",
                         "user",
@@ -2066,7 +2142,22 @@ impl Store {
                 "assistant" => "a",
                 _ => "t",
             };
-            let message_id = format!("codex-{session_id}-{line_number:08}-{suffix}");
+            let source_identity = if segment_id == session_id {
+                session_id.clone()
+            } else {
+                format!("{session_id}-{segment_id}")
+            };
+            let message_id = format!("codex-{source_identity}-{line_number:08}-{suffix}");
+            let mut source = json!({
+                "kind": "codex-rollout-jsonl",
+                "session_id": session_id,
+                "path": portable_path(&source_path),
+                "line": line_number,
+                "phase": phase,
+            });
+            if segment_id != session_id {
+                source["segment_id"] = json!(segment_id);
+            }
             let append = self.append_message(
                 speaker,
                 &message,
@@ -2074,13 +2165,7 @@ impl Store {
                 &format!("codex:{session_id}"),
                 &message_id,
                 complete_round,
-                json!({
-                    "kind": "codex-rollout-jsonl",
-                    "session_id": session_id,
-                    "path": portable_path(&source_path),
-                    "line": line_number,
-                    "phase": phase,
-                }),
+                source,
             )?;
             if append.appended {
                 result.imported_messages += 1;
@@ -2091,8 +2176,13 @@ impl Store {
                 result.repaired_transcripts += 1;
             }
         }
-        let token_usage =
-            self.update_token_usage(&session_id, &source_path, &batch.lines, committed_line)?;
+        let token_usage = self.update_token_usage(
+            &session_id,
+            &segment_id,
+            &source_path,
+            &batch.lines,
+            committed_line,
+        )?;
         result.token_usage_changed_events = token_usage.changed_events;
         result.reported_total_tokens = token_usage.reported_total_tokens;
         result.token_usage_ledger = token_usage.ledger_path;
@@ -2104,9 +2194,11 @@ impl Store {
             &json!({
                 "format_version": 1,
                 "session_id": session_id,
+                "segment_id": segment_id,
                 "source_path": portable_path(&source_path),
                 "last_line": committed_line,
                 "message_last_line": message_last_line.max(committed_line),
+                "visible_message_format_version": VISIBLE_MESSAGE_FORMAT_VERSION,
                 "file_change_format_version": 1,
                 "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
                 "source_size": batch.committed_byte_offset,
@@ -2895,17 +2987,18 @@ impl Store {
                 source_path.display()
             );
         }
-        loop {
-            let prepared = self.prepare_sync_file(&source_path)?;
-            let caught_up = prepared.batch.caught_up;
-            self.lock("archive.lock", || self.sync_batch_unlocked(vec![prepared]))?;
-            if caught_up {
-                break;
-            }
-            std::thread::sleep(RECOVERY_LOCK_YIELD);
-        }
         self.recover_capture_wal()?;
         let source_key = portable_path(&source_path);
+        let has_pending_source = self
+            .capture_wal_state()?
+            .pending
+            .values()
+            .any(|intent| intent.source_path == source_key);
+        if has_pending_source {
+            let prepared = self.prepare_sync_file(&source_path)?;
+            self.lock("archive.lock", || self.sync_batch_unlocked(vec![prepared]))?;
+        }
+        self.recover_capture_wal()?;
         if self
             .capture_wal_state()?
             .pending
@@ -3162,10 +3255,7 @@ fn rollout_session_id(path: &Path) -> Option<String> {
         .map(|value| value.as_str().to_owned())
 }
 
-fn resolve_rollout_session_id(path: &Path) -> Result<Option<String>> {
-    if let Some(session_id) = rollout_session_id(path) {
-        return Ok(Some(session_id));
-    }
+fn resolve_rollout_identity(path: &Path) -> Result<(String, String)> {
     let mut reader = BufReader::new(File::open(path)?);
     let mut buffer = Vec::new();
     for _ in 0..32 {
@@ -3178,10 +3268,39 @@ fn resolve_rollout_session_id(path: &Path) -> Result<Option<String>> {
         if let Ok(event) = serde_json::from_str::<Value>(text)
             && let Some((session_id, _)) = session_metadata(&event)
         {
-            return Ok(Some(session_id));
+            let Some(filename_id) = rollout_session_id(path) else {
+                return Ok((session_id.clone(), session_id));
+            };
+            if filename_id == session_id {
+                return Ok((session_id.clone(), session_id));
+            }
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("");
+            if name.contains(&format!("{session_id}_{filename_id}.jsonl")) {
+                return Ok((session_id, filename_id));
+            }
+            bail!(
+                "rollout filename and session metadata IDs differ: {}",
+                path.display()
+            );
         }
     }
-    Ok(None)
+    bail!(
+        "Codex session metadata is missing an ID: {}",
+        path.display()
+    )
+}
+
+fn rollout_uses_completed_items(path: &Path) -> Result<bool> {
+    const PROBE_BYTES: u64 = 1024 * 1024;
+    let mut reader = File::open(path)?.take(PROBE_BYTES);
+    let mut probe = Vec::new();
+    reader.read_to_end(&mut probe)?;
+    Ok(probe
+        .windows(b"\"type\":\"item_completed\"".len())
+        .any(|window| window == b"\"type\":\"item_completed\""))
 }
 
 fn recent_rollouts(
@@ -3958,6 +4077,126 @@ mod adaptive_fallback_tests {
         let retry = store.sync_batch(vec![malformed.clone()])?;
         assert_eq!(retry["status"], "synced");
         assert!(!store.source_error_path(&malformed).exists());
+        Ok(())
+    }
+
+    #[test]
+    fn multi_segment_rollout_uses_segment_cursors_and_one_conversation() -> Result<()> {
+        const SESSION_ID: &str = "01a041df-3694-7bd2-b9c6-d8c0c8e12f3f";
+        const SEGMENT_ID: &str = "01a041e8-e542-7b80-a315-06a9a1c66cb8";
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let first = sessions
+            .path()
+            .join(format!("rollout-2026-08-27T15-19-02-{SESSION_ID}.jsonl"));
+        let continuation = sessions.path().join(format!(
+            "rollout-2026-08-27T15-29-37-{SESSION_ID}_{SEGMENT_ID}.jsonl"
+        ));
+        let content = |message: &str| {
+            format!(
+                "{}\n{}\n",
+                json!({
+                    "timestamp": "2026-08-27T06:19:02Z",
+                    "type": "session_meta",
+                    "payload": {"id": SESSION_ID, "source": "user"}
+                }),
+                json!({
+                    "timestamp": "2026-08-27T06:19:03Z",
+                    "type": "event_msg",
+                    "payload": {"type": "user_message", "message": message}
+                }),
+            )
+        };
+        fs::write(&first, content("first segment"))?;
+        fs::write(&continuation, content("continued segment"))?;
+
+        let result = store.sync_batch(vec![first, continuation])?;
+        assert_eq!(result["status"], "synced");
+        assert_eq!(result["imported_messages"], 2);
+        assert!(store.cursor_path(SESSION_ID).is_file());
+        assert!(store.cursor_path(SEGMENT_ID).is_file());
+        let records =
+            store.read_records(&store.conversation_path(&format!("codex:{SESSION_ID}")))?;
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0]["conversation_id"], records[1]["conversation_id"]);
+        assert_ne!(records[0]["message_id"], records[1]["message_id"]);
+        assert_eq!(records[1]["source"]["segment_id"], SEGMENT_ID);
+
+        let repeated = store.sync_batch(vec![sessions.path().join(format!(
+            "rollout-2026-08-27T15-29-37-{SESSION_ID}_{SEGMENT_ID}.jsonl"
+        ))])?;
+        assert_eq!(repeated["imported_messages"], 0);
+        Ok(())
+    }
+
+    #[test]
+    fn completed_item_envelope_is_backfilled_once() -> Result<()> {
+        const SESSION_ID: &str = "01a041df-3694-7bd2-b9c6-d8c0c8e12f3f";
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let source = sessions
+            .path()
+            .join(format!("rollout-2026-08-27T15-19-02-{SESSION_ID}.jsonl"));
+        let content = [
+            json!({
+                "timestamp": "2026-08-27T06:19:02Z",
+                "type": "session_meta",
+                "payload": {"id": SESSION_ID, "source": "user"}
+            }),
+            json!({
+                "timestamp": "2026-08-27T06:19:03Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "item_completed",
+                    "item": {
+                        "id": "user-1",
+                        "type": "UserMessage",
+                        "content": [{"type": "text", "text": "new envelope user"}]
+                    }
+                }
+            }),
+            json!({
+                "timestamp": "2026-08-27T06:19:04Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "item_completed",
+                    "item": {
+                        "id": "agent-1",
+                        "type": "AgentMessage",
+                        "phase": "final_answer",
+                        "content": [{"type": "Text", "text": "new envelope answer"}]
+                    }
+                }
+            }),
+        ]
+        .into_iter()
+        .map(|value| format!("{value}\n"))
+        .collect::<String>();
+        fs::write(&source, content)?;
+        atomic_write_json(
+            &store.cursor_path(SESSION_ID),
+            &json!({"format_version": 1, "session_id": SESSION_ID, "last_line": 3}),
+        )?;
+
+        assert_eq!(
+            store.changed_rollouts(vec![source.clone()])?,
+            vec![source.clone()]
+        );
+        let first = store.sync_batch(vec![source.clone()])?;
+        let second = store.sync_batch(vec![source])?;
+        assert_eq!(first["imported_messages"], 2);
+        assert_eq!(second["imported_messages"], 0);
+        let records =
+            store.read_records(&store.conversation_path(&format!("codex:{SESSION_ID}")))?;
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0]["text"], "new envelope user");
+        assert_eq!(records[1]["text"], "new envelope answer");
+        assert_eq!(
+            read_json(&store.cursor_path(SESSION_ID))?["visible_message_format_version"],
+            1
+        );
         Ok(())
     }
 

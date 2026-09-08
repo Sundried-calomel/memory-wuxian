@@ -39,7 +39,7 @@ def _record_day(record: dict[str, Any]) -> str:
 
 
 def _latest_ledgers(paths: Iterable[Path]) -> list[dict[str, Any]]:
-    latest: dict[str, dict[str, Any]] = {}
+    latest: dict[tuple[str, str], tuple[tuple[Any, ...], dict[str, Any]]] = {}
     for path in paths:
         try:
             ledger = json.loads(path.read_text(encoding="utf-8"))
@@ -58,9 +58,11 @@ def _latest_ledgers(paths: Iterable[Path]) -> list[dict[str, Any]]:
             str(ledger.get("updated_at") or ""),
             int((normalize_usage(ledger.get("reported_usage")) or {}).get("total_tokens", 0)),
         )
-        previous = latest.get(session_id)
+        segment_id = str(ledger.get("segment_id") or session_id)
+        key = (session_id, segment_id)
+        previous = latest.get(key)
         if previous is None or rank > previous[0]:
-            latest[session_id] = (rank, ledger)
+            latest[key] = (rank, ledger)
     return [value[1] for value in latest.values()]
 
 
@@ -87,12 +89,12 @@ def _device_daily(
         days[day]["messages"] += 1
         days[day]["characters"] += len(str(record.get("text") or ""))
 
-    measured_sessions = 0
+    measured_conversations: set[str] = set()
     for ledger in ledgers:
         daily_usage = ledger.get("daily_usage")
         if not isinstance(daily_usage, dict):
             continue
-        measured_sessions += 1
+        measured_conversations.add(str(ledger.get("conversation_id") or ledger.get("session_id") or ""))
         for day, usage in daily_usage.items():
             normalized = normalize_usage(usage)
             if normalized is not None:
@@ -119,8 +121,8 @@ def _device_daily(
         "last_sync_at": last_sync_at,
         "freshness": freshness,
         "sync_age_seconds": age_seconds,
-        "token_telemetry_available": measured_sessions > 0,
-        "measured_sessions": measured_sessions,
+        "token_telemetry_available": bool(measured_conversations - {""}),
+        "measured_sessions": len(measured_conversations - {""}),
         "days": dict(days),
     }
 

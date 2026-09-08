@@ -46,7 +46,7 @@ Transcripts are derived files. `rebuild-conversations` compares them with author
 
 ## Codex import cursor
 
-Each imported session has one cursor under `memory/imports/codex/<session-id>.json`. The native collector and Python recovery adapter use the same cursor schema. It records the source path, last consumed complete JSONL line, source size and modification time. `file_change_format_version: 1` confirms that historical successful patch events were backfilled. Cursor writes occur only after all selected source lines are handled. Stable source-derived message IDs provide a second idempotency boundary if cursor recovery repeats a line.
+Each physical rollout segment has one cursor under `memory/imports/codex/<segment-id>.json`. A legacy single-file conversation uses its top-level session ID as the segment ID. A continuation file retains the parent `session_id` for conversation grouping and records its terminal filename UUID as `segment_id`. The native collector and Python recovery adapter use the same cursor schema. It records the source path, last consumed complete JSONL line, source size and modification time. `visible_message_format_version: 1` confirms that the observed `item_completed` visible-message envelope has been considered, and `file_change_format_version: 1` confirms that historical successful patch events were backfilled. Cursor writes occur only after all selected source lines are handled. Stable segment-and-line-derived message IDs provide a second idempotency boundary if cursor recovery repeats a line.
 
 ## Codex-reported Token usage ledger
 
