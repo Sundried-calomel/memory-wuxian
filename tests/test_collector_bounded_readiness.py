@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -37,8 +38,11 @@ class BoundedReadinessTest(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     transaction.verify_effect_probe_cursor(root, probe)
             path.write_text(json.dumps(cursor))
-            result = transaction.wait_for_collector(
-                root, previous_pid=None, effect_probe=probe, timeout_seconds=1,
-            )
+            # Process liveness is an OS boundary, independent of cursor validation.
+            with patch.object(transaction.os, "kill") as check_alive:
+                result = transaction.wait_for_collector(
+                    root, previous_pid=None, effect_probe=probe, timeout_seconds=1,
+                )
+            check_alive.assert_called_once_with(os.getpid(), 0)
             self.assertIsNone(result["archive_watermark"])
             self.assertTrue(result["ready"])
