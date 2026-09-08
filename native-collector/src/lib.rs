@@ -1472,6 +1472,9 @@ impl Store {
     }
 
     fn source_error_matches(&self, source_path: &Path, metadata: &fs::Metadata) -> bool {
+        if self.source_recovery_path(source_path).exists() {
+            return true;
+        }
         let path = self.source_error_path(source_path);
         let Ok(record) = read_json(&path) else {
             return false;
@@ -1841,6 +1844,9 @@ impl Store {
 
     fn prepare_sync_file(&self, source_path: &Path) -> Result<PreparedSync> {
         let source_path = source_path.canonicalize()?;
+        if self.source_recovery_path(&source_path).exists() {
+            bail!("Codex source has unresolved isolated recovery debt: {}", source_path.display());
+        }
         let (session_id, segment_id) = resolve_rollout_identity(&source_path)?;
         let cursor_path = self.cursor_path(&segment_id);
         let hinted_cursor = if cursor_path.exists() {
@@ -1926,6 +1932,9 @@ impl Store {
         } else {
             None
         };
+        if !Self::cursor_boundary_valid(&source_path, &hinted_cursor)? {
+            bail!("Codex source changed at its committed byte boundary: {}", source_path.display());
+        }
         let batch = read_rollout_batch(&source_path, resume_line, resume_offset)?;
         if batch.complete && source_byte_sha256.is_none() {
             source_byte_sha256 = Some(file_sha256(&source_path)?);
@@ -2969,6 +2978,25 @@ impl Store {
         self.sync_batch_mode(paths, true, true)
     }
 
+    fn source_recovery_path(&self, source_path: &Path) -> PathBuf {
+        self.source_error_path(source_path).with_extension("recovery.json")
+    }
+
+    fn cursor_boundary_valid(source_path: &Path, cursor: &Value) -> Result<bool> {
+        let offset = cursor.get("committed_byte_offset").and_then(Value::as_u64).unwrap_or(0);
+        if offset == 0 {
+            return Ok(true);
+        }
+        let mut file = File::open(source_path)?;
+        if offset > file.metadata()?.len() {
+            return Ok(false);
+        }
+        file.seek(SeekFrom::Start(offset - 1))?;
+        let mut preceding = [0];
+        file.read_exact(&mut preceding)?;
+        Ok(preceding[0] == b'\n')
+    }
+
     fn repair_native_recovery_debt(&self) -> Result<()> {
         let marker = self.root.join("pending/native-recovery-debt.json");
         if !marker.exists() {
@@ -2986,6 +3014,30 @@ impl Store {
                 "native recovery source is unavailable: {}",
                 source_path.display()
             );
+        }
+        let (_, segment_id) = resolve_rollout_identity(&source_path)?;
+        let cursor_path = self.cursor_path(&segment_id);
+        let cursor = if cursor_path.exists() { read_json(&cursor_path)? } else { json!({}) };
+        if !Self::cursor_boundary_valid(&source_path, &cursor)? {
+            return self.lock("archive.lock", || {
+                // Preserve unresolved WAL intents and partial raw writes. Isolation
+                // frees unrelated capture without claiming this transaction committed.
+                let destination = self.source_recovery_path(&source_path);
+                if !destination.exists() {
+                    atomic_write_json(&destination, &json!({
+                        "status": "unresolved-source-change",
+                        "created_at": now_iso(),
+                        "source_path": portable_path(&source_path),
+                        "recovery_debt": recovery_debt,
+                        "cursor": cursor,
+                        "wal_intents": self.capture_wal_state()?.pending,
+                    }))?;
+                }
+                self.record_source_error(&source_path, &anyhow!(
+                    "Source changed at committed byte boundary; recovery isolated, WAL retained"
+                ))?;
+                remove_file_if_present(&marker)
+            });
         }
         self.recover_capture_wal()?;
         let source_key = portable_path(&source_path);
@@ -4030,6 +4082,47 @@ mod adaptive_fallback_tests {
         finish_rollout_cycle(&store, &mut state, cycle, ACTIVE_FALLBACK);
         assert_eq!(state.known_stamps.len(), 1);
         assert!(state.known_stamps.contains_key(&sentinel));
+        Ok(())
+    }
+
+    #[test]
+    fn changed_source_recovery_preserves_debt_and_allows_healthy_capture() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let broken = sessions.path().join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a8.jsonl");
+        let healthy = sessions.path().join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        event_loop_rollout(&healthy)?;
+        event_loop_rollout(&broken)?;
+        fs::write(&broken, fs::read_to_string(&broken)?.replace(
+            "019fb8f2-9a67-7b03-9474-6f92cd6b21a7",
+            "019fb8f2-9a67-7b03-9474-6f92cd6b21a8",
+        ))?;
+        let broken = broken.canonicalize()?;
+        let (_, segment) = resolve_rollout_identity(&broken)?;
+        let cursor = json!({"committed_byte_offset": 2, "last_line": 1, "source_path": portable_path(&broken)});
+        atomic_write_json(&store.cursor_path(&segment), &cursor)?;
+        let intent = WalIntent {
+            transaction_id: "unresolved-test".into(), session_id: segment.clone(),
+            source_path: portable_path(&broken), cursor_before_line: 1,
+            cursor_after_line: 2, committed_byte_offset: 20,
+        };
+        store.capture_wal().begin(&intent)?;
+        let marker = store.root.join("pending/native-recovery-debt.json");
+        atomic_write_json(&marker, &json!({"source_path": portable_path(&broken)}))?;
+        let result = store.sync_startup_batch(vec![broken.clone(), healthy.clone()])?;
+        assert_eq!(result["status"], "partial");
+        assert!(result["imported_messages"].as_u64().unwrap() > 0);
+        assert!(!marker.exists());
+        assert!(store.source_recovery_path(&broken).exists());
+        assert_eq!(read_json(&store.cursor_path(&segment))?, cursor);
+        assert_eq!(store.capture_wal_state()?.pending.get("unresolved-test"), Some(&intent));
+        let resumed = initialized_store(archive.path())?;
+        assert!(resumed.changed_rollouts(vec![broken.clone()])?.is_empty());
+        assert!(resumed.prepare_sync_file(&broken).is_err());
+        assert_eq!(resumed.sync_startup_batch(vec![healthy])?["status"], "synced");
+        assert_eq!(resumed.capture_wal_state()?.pending.len(), 1);
+        assert!(Store::cursor_boundary_valid(&broken, &json!({"committed_byte_offset": 0}))?);
         Ok(())
     }
 
