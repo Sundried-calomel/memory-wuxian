@@ -41,6 +41,7 @@ class V217ReleaseContractTests(unittest.TestCase):
             implementation.count("rollouts_requiring_sync(store, &current_paths)?"),
             1,
         )
+        self.assertIn("sync_succeeded && caught_up", implementation)
         self.assertEqual(production.count("fn process_rollout_cycle("), 1)
         self.assertEqual(production.count("process_rollout_cycle("), 3)
         self.assertIn("refreshed_watcher_baseline_cannot_hide_cursor_debt", implementation)

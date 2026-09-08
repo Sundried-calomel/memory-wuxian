@@ -621,3 +621,34 @@
 
 两个收据必须存在且哈希匹配。修复类版本的 `project_workbook_updated` 必须为
 `true`。这样发布门禁读取机器证据，不依赖当前对话是否记得本文件。
+
+### MW-REL-047: Historical catch-up blocks readiness and audit repeats full lookups
+
+- Trigger: a large Mac archive repeatedly scanned the sequence maximum and
+  rebuilt global indexes while startup drained the entire history. Installation
+  treated this delay as failure and rolled back an otherwise running collector.
+- Escaped boundary: lifecycle-manifest persistence and repeat installation had
+  separate convergence checks. A first exact-probe fix missed the manifest gate;
+  the failed attempt and rollback evidence were retained, then all entrypoints
+  were covered by lagging-history fixtures.
+- Repair: bounded fair capture cycles, cached sequence maximum, scoped indexes
+  with durable interrupted-publication recovery, and exact source-cursor probes.
+  A full covered-source projection alone advances the historical watermark.
+- Adjacent trigger: the maintenance audit rebuilt the full raw ID map for each
+  summary while holding the archive lock. It now reuses its existing snapshot
+  map without changing any digest calculation.
+- Regressions: native scoped/full parity and bounded startup tests;
+  `test_collector_bounded_readiness.py`, macOS transaction fixtures with null
+  history watermarks, and `test_audit_source_map_reuse.py`.
+- Installed evidence: Mac transaction committed with exact-source-cursor
+  verification; 533 staged entries matched installed files. Additional live
+  files were Python bytecode caches only. Real message count advanced by 212;
+  pending bytes fell from 33,469,301 to 27,691,001. Remaining source-boundary
+  debt was retained, not claimed covered.
+- Isolated rehearsal: 500,000 synthetic records and 12 historical sources;
+  event-loop readiness 0.21 seconds and two exact new messages within 1.23
+  seconds. These are fixture results, not real-archive throughput promises.
+- Publication: all changes belong to the same 2.19.3 candidate, including
+  earlier Windows fixes. Cross-platform and package results are owned by the
+  final candidate CI and release workflow, not inferred from the Mac run.
+- Families: `MW-R03`, `MW-R05`, `MW-R06`, `MW-R07`, `MW-R11`.

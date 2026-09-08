@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
@@ -693,6 +693,8 @@ struct Store {
     root: PathBuf,
     config: Config,
     message_cache: RefCell<Option<HashMap<String, Value>>>,
+    max_raw_sequence: Cell<u64>,
+    cached_state_total: Cell<Option<u64>>,
 }
 
 fn session_metadata(event: &Value) -> Option<(String, Option<String>)> {
@@ -837,6 +839,8 @@ impl Store {
             root,
             config,
             message_cache: RefCell::new(None),
+            max_raw_sequence: Cell::new(0),
+            cached_state_total: Cell::new(None),
         };
         store.init()?;
         store.recover_source_relocations()?;
@@ -1255,15 +1259,7 @@ impl Store {
                 });
             }
 
-            let max_raw_sequence = self
-                .message_cache
-                .borrow()
-                .as_ref()
-                .into_iter()
-                .flat_map(|cache| cache.values())
-                .filter_map(|record| record.get("sequence").and_then(Value::as_u64))
-                .max()
-                .unwrap_or(0);
+            let max_raw_sequence = self.max_raw_sequence.get();
             let sequence = u64_field(&state, "total_messages")?.max(max_raw_sequence) + 1;
             let completed_rounds = u64_field(&state, "completed_rounds")?;
             let mut pending_rounds = state
@@ -1319,6 +1315,7 @@ impl Store {
             });
             let digest = raw_record_sha256(&record)?;
             record["content_sha256"] = json!(digest);
+            self.record_index_debt(conversation_id)?;
 
             let raw_path = self.raw_path(timestamp)?;
             let raw_lock = format!(
@@ -1390,6 +1387,8 @@ impl Store {
             state["pending_rounds"] = Value::Object(pending_rounds);
             self.save_state(&mut state)?;
             self.cache_message(&record)?;
+            self.cached_state_total
+                .set(state.get("total_messages").and_then(Value::as_u64));
             Ok(AppendResult {
                 appended: true,
                 transcript_repaired: false,
@@ -1475,14 +1474,7 @@ impl Store {
     }
 
     fn cached_message(&self, message_id: &str) -> Result<Option<Value>> {
-        if self.message_cache.borrow().is_none() {
-            let records = self.read_all_raw()?;
-            let mut cache = HashMap::with_capacity(records.len());
-            for record in records {
-                cache.insert(string_field(&record, "message_id")?.to_owned(), record);
-            }
-            *self.message_cache.borrow_mut() = Some(cache);
-        }
+        self.ensure_message_cache()?;
         Ok(self
             .message_cache
             .borrow()
@@ -1491,7 +1483,35 @@ impl Store {
             .cloned())
     }
 
+    fn ensure_message_cache(&self) -> Result<()> {
+        let total = self
+            .load_state()?
+            .get("total_messages")
+            .and_then(Value::as_u64);
+        if self.message_cache.borrow().is_none() || self.cached_state_total.get() != total {
+            let records = self.read_all_raw()?;
+            let mut cache = HashMap::with_capacity(records.len());
+            self.max_raw_sequence.set(0);
+            for record in records {
+                self.max_raw_sequence.set(
+                    self.max_raw_sequence
+                        .get()
+                        .max(record.get("sequence").and_then(Value::as_u64).unwrap_or(0)),
+                );
+                cache.insert(string_field(&record, "message_id")?.to_owned(), record);
+            }
+            *self.message_cache.borrow_mut() = Some(cache);
+            self.cached_state_total.set(total);
+        }
+        Ok(())
+    }
+
     fn cache_message(&self, record: &Value) -> Result<()> {
+        self.max_raw_sequence.set(
+            self.max_raw_sequence
+                .get()
+                .max(record.get("sequence").and_then(Value::as_u64).unwrap_or(0)),
+        );
         let message_id = string_field(record, "message_id")?.to_owned();
         if let Some(cache) = self.message_cache.borrow_mut().as_mut() {
             cache.insert(message_id, record.clone());
@@ -2454,8 +2474,54 @@ impl Store {
         }))
     }
 
+    fn index_debt(&self) -> Result<BTreeSet<String>> {
+        let path = self.root.join("pending/deterministic-index-debt.json");
+        if !path.exists() {
+            return Ok(BTreeSet::new());
+        }
+        Ok(serde_json::from_value(read_json(&path)?)?)
+    }
+
+    fn record_index_debt(&self, conversation_id: &str) -> Result<()> {
+        let mut debt = self.index_debt()?;
+        if debt.insert(conversation_id.to_owned()) {
+            atomic_write_json(
+                &self.root.join("pending/deterministic-index-debt.json"),
+                &json!(debt),
+            )?;
+        }
+        Ok(())
+    }
+
     fn refresh_deterministic_indexes(&self) -> Result<Value> {
-        let raw_records = self.read_all_raw()?;
+        self.refresh_deterministic_indexes_scoped(None)
+    }
+
+    fn refresh_deterministic_indexes_scoped(
+        &self,
+        scope: Option<&BTreeSet<String>>,
+    ) -> Result<Value> {
+        let directory = self.root.join("indexes/deterministic");
+        let rebuild_marker = self.root.join("pending/deterministic-index-rebuild.json");
+        let scope =
+            scope.filter(|_| directory.join("level-1.jsonl").exists() && !rebuild_marker.exists());
+        let raw_records = if let Some(ids) = scope {
+            self.ensure_message_cache()?;
+            self.message_cache
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .values()
+                .filter(|r| {
+                    r.get("conversation_id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| ids.contains(id))
+                })
+                .cloned()
+                .collect()
+        } else {
+            self.read_all_raw()?
+        };
         let mut grouped: BTreeMap<String, BTreeMap<u64, Vec<Value>>> = BTreeMap::new();
         for record in raw_records {
             let round_number = record
@@ -2562,8 +2628,37 @@ impl Store {
             current = next;
         }
 
-        let directory = self.root.join("indexes/deterministic");
         fs::create_dir_all(&directory)?;
+        if let Some(ids) = scope {
+            for entry in fs::read_dir(&directory)? {
+                let path = entry?.path();
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                let Some(level) = name
+                    .strip_prefix("level-")
+                    .and_then(|n| n.strip_suffix(".jsonl"))
+                    .and_then(|n| n.parse::<u64>().ok())
+                else {
+                    continue;
+                };
+                for line in BufReader::new(File::open(&path)?).lines() {
+                    let record: Value = serde_json::from_str(&line?)?;
+                    if !ids.contains(string_field(&record, "conversation_id")?) {
+                        levels.entry(level).or_default().push(record);
+                    }
+                }
+            }
+            for records in levels.values_mut() {
+                records.sort_by_key(|r| {
+                    (
+                        r["conversation_id"].as_str().unwrap_or("").to_owned(),
+                        r["source_start_sequence"].as_u64().unwrap_or(0),
+                    )
+                });
+            }
+        }
+        // An interrupted multi-file publication must fall back to a full rebuild.
+        atomic_write_json(&rebuild_marker, &json!({"started_at": now_iso()}))?;
+        levels.retain(|_, records| !records.is_empty());
         for entry in fs::read_dir(&directory)? {
             let path = entry?.path();
             if path
@@ -2596,6 +2691,15 @@ impl Store {
                 if !path.is_dir() {
                     continue;
                 }
+                if let Some(ids) = scope {
+                    let owned = ids
+                        .iter()
+                        .map(|id| self.conversation_index_dir(id))
+                        .collect::<Result<Vec<_>>>()?;
+                    if !owned.contains(&path) {
+                        continue;
+                    }
+                }
                 for child in fs::read_dir(path)? {
                     let child_path = child?.path();
                     if child_path
@@ -2621,6 +2725,9 @@ impl Store {
             })
             .collect();
         for conversation_id in conversation_ids {
+            if scope.is_some_and(|ids| !ids.contains(&conversation_id)) {
+                continue;
+            }
             let conversation_directory = self.ensure_conversation_indexes(&conversation_id)?;
             for (level, records) in &levels {
                 let selected: Vec<Value> = records
@@ -2644,6 +2751,8 @@ impl Store {
         for (level, records) in &levels {
             counts.insert(level.to_string(), json!(records.len()));
         }
+        remove_file_if_present(&self.root.join("pending/deterministic-index-debt.json"))?;
+        remove_file_if_present(&rebuild_marker)?;
         Ok(json!({
             "levels": counts,
             "level_1_round_trigger": self.config.summaries.level_1_trigger_rounds,
@@ -2954,8 +3063,9 @@ impl Store {
         Ok(Some(path))
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn sync_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        self.sync_batch_mode(paths, true, false)
+        self.sync_batch_mode(paths, true, false, false)
     }
 
     fn sync_batch_mode(
@@ -2963,6 +3073,7 @@ impl Store {
         paths: Vec<PathBuf>,
         isolate_source_errors: bool,
         isolate_missing_source_errors: bool,
+        bounded: bool,
     ) -> Result<Value> {
         self.recover_source_relocations()?;
         self.repair_native_recovery_debt()?;
@@ -2989,7 +3100,7 @@ impl Store {
                     } else {
                         accumulated_session = Some(session);
                     }
-                    if caught_up {
+                    if caught_up || bounded {
                         break;
                     }
                     // Give maintenance and backup workers a fair chance to acquire
@@ -3025,7 +3136,16 @@ impl Store {
         }
         let imported = result.imported_messages;
         let finalized = self.lock("archive.lock", || {
-            let deterministic_indexes = if imported > 0 {
+            let index_debt = self.index_debt()?;
+            let deterministic_indexes = if self
+                .root
+                .join("pending/deterministic-index-rebuild.json")
+                .exists()
+            {
+                Some(self.refresh_deterministic_indexes()?)
+            } else if !index_debt.is_empty() {
+                Some(self.refresh_deterministic_indexes_scoped(Some(&index_debt))?)
+            } else if imported > 0 {
                 Some(self.refresh_deterministic_indexes()?)
             } else {
                 None
@@ -3061,7 +3181,7 @@ impl Store {
     }
 
     fn sync_startup_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        self.sync_batch_mode(paths, true, true)
+        self.sync_batch_mode(paths, true, true, false)
     }
 
     fn source_recovery_path(&self, source_path: &Path) -> PathBuf {
@@ -3550,36 +3670,38 @@ fn emit(value: &Value) -> Result<()> {
 }
 
 fn sync_and_emit(store: &Store, paths: Vec<PathBuf>) -> bool {
-    let mut all_succeeded = true;
-    for path in paths {
-        match store.sync_batch(vec![path.clone()]) {
-            Ok(result) => {
-                let changed = result
-                    .get("imported_messages")
+    match store.sync_batch_mode(paths, true, true, true) {
+        Ok(result) => {
+            let all_succeeded = result
+                .get("source_error_count")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                == 0;
+            let changed = result
+                .get("imported_messages")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                > 0
+                || result
+                    .get("repaired_transcripts")
                     .and_then(Value::as_u64)
                     .unwrap_or(0)
                     > 0
-                    || result
-                        .get("repaired_transcripts")
-                        .and_then(Value::as_u64)
-                        .unwrap_or(0)
-                        > 0
-                    || result
-                        .get("token_usage_changed_events")
-                        .and_then(Value::as_u64)
-                        .unwrap_or(0)
-                        > 0;
-                if changed && let Err(error) = emit(&result) {
-                    eprintln!("output error: {error:#}");
-                }
+                || result
+                    .get("token_usage_changed_events")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+                    > 0;
+            if changed && let Err(error) = emit(&result) {
+                eprintln!("output error: {error:#}");
             }
-            Err(error) => {
-                all_succeeded = false;
-                eprintln!("source sync error ({}): {error:#}", path.display());
-            }
+            all_succeeded
+        }
+        Err(error) => {
+            eprintln!("source batch sync error: {error:#}");
+            false
         }
     }
-    all_succeeded
 }
 
 #[cfg(target_os = "macos")]
@@ -3750,6 +3872,8 @@ fn rollouts_requiring_sync(store: &Store, current_paths: &[PathBuf]) -> Result<V
 
 struct EventLoopState {
     known_stamps: HashMap<PathBuf, (u64, SystemTime)>,
+    last_served: HashMap<PathBuf, u64>,
+    service_tick: u64,
     last_activity: std::time::Instant,
     telemetry: CollectorTelemetry,
 }
@@ -3781,11 +3905,12 @@ fn initialize_event_loop_state(
     let known_stamps = rollout_stamps(&initial_paths)?;
     let initial_watermark = newest_source_watermark(&known_stamps);
     telemetry.record_source_watermark(initial_watermark.clone());
-    telemetry.record_archive(initial_watermark);
     telemetry.mark_ready();
     write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
     Ok(EventLoopState {
         known_stamps,
+        last_served: HashMap::new(),
+        service_tick: 0,
         last_activity: std::time::Instant::now(),
         telemetry,
     })
@@ -3816,10 +3941,25 @@ fn process_rollout_cycle(
     }
     candidates.extend(rollouts_requiring_sync(store, &current_paths)?);
     let had_pending_rollouts = !candidates.is_empty();
-    let sync_succeeded =
-        candidates.is_empty() || sync_and_emit(store, candidates.into_iter().collect());
+    let mut queued: Vec<_> = candidates.into_iter().collect();
+    queued.sort_by_key(|path| std::cmp::Reverse(current_stamps.get(path).map(|s| s.1)));
+    // Reserve half the batch for fresh traffic and half for fair historical progress.
+    let split = queued.len().min(4);
+    let mut historical = queued.split_off(split);
+    historical.sort_by_key(|path| state.last_served.get(path).copied().unwrap_or(0));
+    queued.extend(historical.into_iter().take(4));
+    for path in &queued {
+        state.service_tick += 1;
+        state.last_served.insert(path.clone(), state.service_tick);
+    }
+    let sync_succeeded = queued.is_empty() || sync_and_emit(store, queued);
     store.write_coverage_status(&current_paths)?;
-    if sync_succeeded && (had_pending_rollouts || state.known_stamps != current_stamps) {
+    let caught_up = read_json(&store.root.join("imports/codex/coverage-status.json"))?
+        .get("status")
+        .and_then(Value::as_str)
+        == Some("covered");
+    if sync_succeeded && caught_up && (had_pending_rollouts || state.known_stamps != current_stamps)
+    {
         state.telemetry.record_archive(source_watermark);
     }
     if received_event || had_pending_rollouts || state.known_stamps != current_stamps {
@@ -4131,6 +4271,107 @@ mod adaptive_fallback_tests {
     }
 
     #[test]
+    fn scoped_indexes_match_full_rebuild_and_recover_interrupted_publication() -> Result<()> {
+        let archive = tempfile::tempdir()?;
+        let mut store = initialized_store(archive.path())?;
+        store.config.summaries.level_1_trigger_rounds = 1;
+        store.config.summaries.higher_level_trigger_count = 2;
+        for conversation in ["first", "second"] {
+            for round in 0..2 {
+                for speaker in ["user", "assistant"] {
+                    store.append_message(
+                        speaker,
+                        "unchanged text",
+                        "2026-09-08T00:00:00Z",
+                        conversation,
+                        &format!("{conversation}-{round}-{speaker}"),
+                        speaker == "assistant",
+                        json!({}),
+                    )?;
+                }
+            }
+        }
+        store.refresh_deterministic_indexes()?;
+        let untouched = store
+            .conversation_index_dir("second")?
+            .join("deterministic-level-1.jsonl");
+        let stamp = fs::metadata(&untouched)?.modified()?;
+        store.append_message(
+            "user",
+            "new",
+            "2026-09-08T00:01:00Z",
+            "first",
+            "new-u",
+            false,
+            json!({}),
+        )?;
+        store.append_message(
+            "assistant",
+            "answer",
+            "2026-09-08T00:01:01Z",
+            "first",
+            "new-a",
+            true,
+            json!({}),
+        )?;
+        store.refresh_deterministic_indexes_scoped(Some(&store.index_debt()?))?;
+        assert_eq!(stamp, fs::metadata(&untouched)?.modified()?);
+        let directory = archive.path().join("indexes/deterministic");
+        let incremental = fs::read(directory.join("level-1.jsonl"))?;
+        let parents = fs::read(directory.join("level-2.jsonl"))?;
+        store.refresh_deterministic_indexes()?;
+        assert_eq!(incremental, fs::read(directory.join("level-1.jsonl"))?);
+        assert_eq!(parents, fs::read(directory.join("level-2.jsonl"))?);
+        atomic_write_json(
+            &archive
+                .path()
+                .join("pending/deterministic-index-rebuild.json"),
+            &json!({}),
+        )?;
+        fs::remove_file(directory.join("level-2.jsonl"))?;
+        store.refresh_deterministic_indexes_scoped(Some(&BTreeSet::from(["first".to_owned()])))?;
+        assert_eq!(parents, fs::read(directory.join("level-2.jsonl"))?);
+        assert!(store.index_debt()?.is_empty());
+        assert_eq!(store.max_raw_sequence.get(), 10);
+        Ok(())
+    }
+
+    #[test]
+    fn live_batch_yields_and_startup_does_not_claim_history_coverage() -> Result<()> {
+        let archive = tempfile::tempdir()?;
+        let sessions = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let path = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        event_loop_rollout(&path)?;
+        let mut file = fs::OpenOptions::new().append(true).open(&path)?;
+        for _ in 0..9000 {
+            writeln!(file, "{{\"type\":\"turn_context\",\"payload\":{{}}}}")?;
+        }
+        drop(file);
+        let _state =
+            initialize_event_loop_state(&store, sessions.path(), None, CollectorTelemetry::new())?;
+        let telemetry = read_json(
+            &archive
+                .path()
+                .join("imports/codex/collector-telemetry.json"),
+        )?;
+        assert_eq!(telemetry["ready"], true);
+        assert!(telemetry["archive_watermark"].is_null());
+        let first = store.sync_batch_mode(vec![path.clone()], true, true, true)?;
+        assert_eq!(first["sessions"][0]["caught_up"], false);
+        let offset = first["sessions"][0]["committed_byte_offset"]
+            .as_u64()
+            .unwrap();
+        assert!(offset < fs::metadata(&path)?.len());
+        let second = store.sync_startup_batch(vec![path])?;
+        assert_eq!(second["sessions"][0]["complete"], true);
+        assert_eq!(store.read_all_raw()?.len(), 1);
+        Ok(())
+    }
+
+    #[test]
     fn shared_event_cycle_advances_stamps_only_after_successful_finish() -> Result<()> {
         let sessions = tempfile::tempdir()?;
         let archive = tempfile::tempdir()?;
@@ -4177,6 +4418,8 @@ mod adaptive_fallback_tests {
         let store = initialized_store(archive.path())?;
         let sentinel = sessions.path().join("sentinel.jsonl");
         let mut state = EventLoopState {
+            last_served: HashMap::new(),
+            service_tick: 0,
             known_stamps: HashMap::from([(
                 sentinel.clone(),
                 (7, SystemTime::UNIX_EPOCH + Duration::from_secs(7)),
@@ -5152,21 +5395,16 @@ fn run() -> Result<()> {
     eprintln!("memory-wuxian-collector startup: synchronization started");
     // Startup and explicit recovery must never block exact capture on a model.
     // The maintenance supervisor drains any summary job created by this pass.
-    let initial = store.sync_startup_batch(initial_paths)?;
-    store.write_coverage_status(&scoped_paths)?;
-    eprintln!("memory-wuxian-collector startup: synchronization completed");
     if args.once {
+        let initial = store.sync_startup_batch(initial_paths)?;
+        store.write_coverage_status(&scoped_paths)?;
+        eprintln!("memory-wuxian-collector startup: synchronization completed");
         emit(&initial)?;
         return Ok(());
     }
-    if initial
-        .get("imported_messages")
-        .and_then(Value::as_u64)
-        .unwrap_or(0)
-        > 0
-    {
-        emit(&initial)?;
-    }
+    eprintln!(
+        "memory-wuxian-collector startup: history catch-up delegated to bounded event cycles"
+    );
 
     run_event_loop(
         &store,

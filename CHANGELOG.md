@@ -2,6 +2,16 @@
 
 ## 2.19.3 - 2026-09-08
 
+- Bound continuous catch-up to one chunk per source and eight sources per cycle,
+  reserving capacity for fresh traffic and historical progress. Explicit once-mode
+  still drains its requested scope.
+- Cache the maximum raw sequence and rebuild deterministic indexes only for
+  changed conversations, with durable recovery markers for interrupted writes.
+- Verify macOS installation and lifecycle activation with an exact hash-matched
+  probe cursor instead of requiring all historical backlog to finish first.
+  Historical coverage remains a separate gate and is never marked complete early.
+- Reuse the audit's raw-message map for summary source hashing rather than
+  rebuilding that map for every summary. Raw bytes and digest semantics are unchanged.
 - Integrate the Mac multi-segment and item_completed capture changes with the
   published Windows semantic-integrity isolation patch under one version.
 - Isolate changed-source startup recovery without deleting raw records or

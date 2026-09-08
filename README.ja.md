@@ -1,5 +1,9 @@
 # Memory無限
 
+> **2.19.3 収集性能：** 履歴の追補を有界バッチで実行し、新規メッセージの処理枠を確保します。
+> 変更された会話の索引のみ更新し、macOS のインストールは正確なプローブカーソルで検証します。
+> 履歴の完全性は別に確認し、要約監査では原文の検索表を再利用します。ハッシュ規則は変わりません。
+
 > **2.19.3:** Mac の複数セグメント・item_completed 収集と Windows の意味要約ジョブ分離を統合します。変更されたソースの復旧エラーを分離し、除外されたサブエージェントの内容を取り込まずにカーソルを更新します。`source_reconcile.py --root ARCHIVE --source ROLLOUT` で原文検証付きの末尾一致を確認し、検証済みの場合のみ `--apply` で適用します。新規レコードはソース世代別 ID を使用します。履歴欠落、曖昧な一致、未解決 WAL は引き続き停止し、既存の原文は保持します.
 
 > **2.19.2:** archive integrity warning が存在しても、既存の semantic job 全体を
@@ -320,7 +324,7 @@ LaunchAgentは最適化されたRustプロセスを維持し、OSのファイル
 
 保護された`Documents`や`Desktop`にアーカイブまたはバックアップを置く場合、macOSで`bin/memory-wuxian-collector`にフルディスクアクセスを付与します。自動収集が有効と判断する前に、生成plist内の実行ファイルを確認してください。バックグラウンド定義は`/opt/homebrew/bin/python3`のような安定したPythonエントリを保持し、バージョン固有のHomebrew Cellarパスへ解決しません。通常のPython更新で新しいプライバシーIDが作られ、DesktopやDocumentsの許可が繰り返し要求されることを防ぎます。
 
-コレクターは`imports/codex/collector-telemetry.json`へ軽量テレメトリーを公開します。コンソールはactive、idle、deep-idle、補助確認間隔、最新ファイルイベント、最新アーカイブ書込、1時間の起動回数、CPU/メモリを表示します。新しいプロセスはまず`phase=starting`と`ready=false`を報告し、初期同期が成功した後だけ`phase=ready`になります。アイドル中も各監視間隔で更新し、source watermarkとarchive watermarkを別々に保持します。起動処理中、テレメトリーの期限切れ、コレクター停止、またはsourceがarchiveより先行した場合、コンソールが警告します。
+コレクターは`imports/codex/collector-telemetry.json`へ軽量テレメトリーを公開します。コンソールはactive、idle、deep-idle、補助確認間隔、最新ファイルイベント、最新アーカイブ書込、1時間の起動回数、CPU/メモリを表示します。新しいプロセスはまず`phase=starting`と`ready=false`を報告し、イベントループが利用可能になると`phase=ready`になります。履歴の追補は有界バッチで継続し、ready は履歴の完全な収集を意味しません。監視周期でテレメトリーを更新し、source watermarkとarchive watermarkを別々に保持します。全ソースの検証が covered の場合のみ archive watermark を進めます。起動未完了、期限切れ、停止、履歴の遅延は引き続き警告します。
 
 既存のmacOSインストールは`scripts/install_macos_transaction.py`で更新します。候補をステージし、隔離アーカイブで合成ユーザー/assistantメッセージを正確に取得できることを証明してから切り替えます。切替後は新しいコレクターPID、新鮮なテレメトリー、現行ダッシュボードの自己診断を確認します。切替後の失敗では旧Skill、LaunchAgent、コレクターを復元します。通常更新はこのユーザー空間トランザクションを使い、完全インストーラーや管理者パスワードを必要としません。
 

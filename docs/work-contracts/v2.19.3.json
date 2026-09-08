@@ -16,7 +16,7 @@
     "project_workbook_updated": true,
     "original_triggers": ["Startup recovery debt bypassed per-source isolation; changed source offsets were no longer line boundaries."]
   },
-  "target": "Integrate published Windows maintenance fixes and local multi-segment capture, then recover verifiable source rewrites without losing raw authority.",
+  "target": "Publish the unified Windows and Mac capture repairs, bounded continuous catch-up, conversation-scoped indexes, exact installation probes and audit lookup reuse without losing raw authority.",
   "invariants": [
     "Raw records and completed summaries remain unchanged.",
     "Unresolved WAL transactions are never reported committed.",
@@ -24,7 +24,9 @@
     "New source generations preserve old IDs and use distinct new IDs.",
     "A relocation requires exact unambiguous retained-suffix and token-anchor evidence.",
     "All interrupted relocation writes recover before capture begins.",
-    "Cloud ACK, publication, import, and source waterlines remain distinct."
+    "Cloud ACK, publication, import, and source waterlines remain distinct.",
+    "Service readiness never claims complete historical coverage.",
+    "Summary-source digests remain byte-for-byte equivalent when reusing the audit lookup."
   ],
   "prohibited_changes": [
     "Reset source cursors without a hash-bound verification receipt.",
@@ -38,6 +40,9 @@
     "Run source-change isolation, excluded-source shrink, generation-tail and restart regressions.",
     "Run frozen semantic job integrity isolation tests inherited from v2.19.2.",
     "Run the full candidate workflow on macOS, Windows and Ubuntu.",
-    "Rehearse the current desktop launcher against the preserved active root before local release completion."
+    "Rehearse the current desktop launcher against the preserved active root before local release completion.",
+    "Verify scoped/full index parity, interrupted publication recovery, bounded continuation, and exact canary capture amid historical backlog.",
+    "Exercise first installation, repeated installation and lifecycle persistence with lagging historical telemetry.",
+    "Verify audit lookup reuse produces identical source digests and does not rescan the complete raw snapshot."
   ]
 }

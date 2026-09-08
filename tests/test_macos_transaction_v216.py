@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import plistlib
 import subprocess
 import unittest
@@ -99,12 +100,25 @@ class MacosTransactionV216Test(unittest.TestCase):
             "archive_watermark": "2026-08-18T00:00:00Z",
             "last_archive_update": "2026-08-18T00:00:00Z",
         }
+        def ready_result(*args, **kwargs):
+            if probe := kwargs.get("effect_probe"):
+                payload = Path(probe["path"]).read_bytes()
+                cursor_path = self.archive / "imports" / "codex" / f"{probe['probe_id']}.json"
+                cursor_path.parent.mkdir(parents=True, exist_ok=True)
+                cursor_path.write_text(json.dumps({
+                    "session_id": probe["probe_id"], "source_path": probe["path"],
+                    "source_byte_sha256": hashlib.sha256(payload).hexdigest(),
+                    "complete": True, "committed_byte_offset": len(payload),
+                    "observed_source_size": len(payload), "updated_at": probe["watermark"],
+                }), encoding="utf-8")
+            return telemetry
+
         with (
             patch("pathlib.Path.home", return_value=self.home),
             patch.object(transaction.os, "getuid", create=True, return_value=501),
             patch.object(transaction, "probe_candidate", return_value={"status": "passed"}),
             patch.object(transaction, "quiesce_collector_for_cutover", quiesced),
-            patch.object(transaction, "wait_for_collector", return_value=telemetry),
+            patch.object(transaction, "wait_for_collector", side_effect=ready_result),
             patch.object(
                 transaction,
                 "validate_installed_launch_contract",

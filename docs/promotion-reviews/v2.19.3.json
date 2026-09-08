@@ -1,0 +1,6 @@
+{
+  "candidate_id": "v2.19.3",
+  "decision": "no-new-global-rule",
+  "reason": "Existing bounded-release and installed-effect owners already require whole-entrypoint verification. This repair adds concrete product regressions rather than duplicating global governance.",
+  "product_evidence": "docs/retrospectives/memory-wuxian-defect-workbook.md#mw-rel-047-historical-catch-up-blocks-readiness-and-audit-repeats-full-lookups"
+}

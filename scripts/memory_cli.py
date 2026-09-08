@@ -2958,12 +2958,14 @@ class MemoryStore:
         summary: Dict[str, Any],
         raw_records: Optional[List[Dict[str, Any]]] = None,
         summaries_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
+        raw_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Optional[str]:
         if int(summary["level"]) == 1:
             source_message_ids = list(summary.get("source_message_ids", []))
             raw_records = raw_records if raw_records is not None else self.read_all_raw()
             if source_message_ids:
-                raw_by_id = {record["message_id"]: record for record in raw_records}
+                if raw_by_id is None:
+                    raw_by_id = {record["message_id"]: record for record in raw_records}
                 if any(message_id not in raw_by_id for message_id in source_message_ids):
                     return None
                 return raw_source_sha256(
@@ -3419,7 +3421,7 @@ class MemoryStore:
                         f"summary source file missing: {summary['summary_id']} -> {source}"
                     )
             actual_source_sha = self.actual_summary_source_sha256(
-                summary, raw_records, summaries_by_file_id
+                summary, raw_records, summaries_by_file_id, raw_by_id=raw_by_id
             )
             expected_source_sha = summary.get("source_sha256")
             if expected_source_sha and actual_source_sha != expected_source_sha:
