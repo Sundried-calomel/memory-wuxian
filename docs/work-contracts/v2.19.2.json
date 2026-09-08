@@ -52,9 +52,9 @@
   ],
   "defect_workbook": {
     "preflight_receipt": "governance/v2192-integrity-isolation-preflight.json",
-    "preflight_sha256": "1ceccf81d6ba6bb98078d093f5433122597fec2821fe833a31ad7572f542b227",
+    "preflight_sha256": "11e28c4ae62ae4fccf1ed15b4f102587723348cf09f7920d47b7db705c171a29",
     "completion_receipt": "governance/v2192-integrity-isolation-completion.json",
-    "completion_sha256": "28eef68703311fcb17cb82d446758363317b56cb66f555e9b09c9ddf1c94d89f",
+    "completion_sha256": "9822ab22a4c68be0d1a0cbc612716b071c40ee44d3d79ff83e0adca3f5ec9c89",
     "applicable_families": [
       "G02",
       "G03",

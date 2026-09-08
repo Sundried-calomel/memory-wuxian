@@ -70,6 +70,7 @@ from token_usage import (
     discover_rollouts,
     empty_usage,
     persist_token_usage,
+    rollout_segment_id,
     token_usage_ledgers,
 )
 
@@ -949,6 +950,23 @@ class MemoryStore:
             raise ValueError("backup.workspace_retention_count must be at least 1")
         return count
 
+    def configured_workspace_backup_root(self) -> Path:
+        configured = str(
+            nested_get(self.config, ["backup", "workspace_directory"], "")
+        ).strip()
+        path = (
+            Path(configured).expanduser().resolve()
+            if configured
+            else (self.root.parent / "recovery-backups").resolve()
+        )
+        try:
+            path.relative_to(self.root)
+        except ValueError:
+            return path
+        raise ValueError(
+            "Workspace recovery backup directory must be outside the memory archive root"
+        )
+
     def prune_backup_snapshots(self, backup_root: Path, keep: Iterable[Path]) -> List[str]:
         keep_paths = {path.resolve() for path in keep}
         snapshot_pattern = re.compile(
@@ -1100,8 +1118,8 @@ class MemoryStore:
                     }
         raise ValueError(f"Codex session metadata is missing an ID: {path}")
 
-    def codex_cursor_path(self, session_id: str) -> Path:
-        safe_id = re.sub(r"[^A-Za-z0-9._-]", "_", session_id)
+    def codex_cursor_path(self, segment_id: str) -> Path:
+        safe_id = re.sub(r"[^A-Za-z0-9._-]", "_", segment_id)
         return self.codex_import_dir / f"{safe_id}.json"
 
     @staticmethod
@@ -1143,15 +1161,56 @@ class MemoryStore:
             + "\n\n".join(rendered)
         )
 
+    @staticmethod
+    def rollout_uses_completed_items(source_path: Path) -> bool:
+        with source_path.open("rb") as handle:
+            return b'"type":"item_completed"' in handle.read(1024 * 1024)
+
+    @staticmethod
+    def summarize_completed_message(
+        payload: Dict[str, Any],
+    ) -> Optional[tuple[str, str, bool, str]]:
+        if payload.get("type") != "item_completed":
+            return None
+        item = payload.get("item")
+        if not isinstance(item, dict):
+            return None
+        content = item.get("content")
+        if not isinstance(content, list):
+            return None
+        text = "\n".join(
+            str(entry.get("text"))
+            for entry in content
+            if isinstance(entry, dict) and isinstance(entry.get("text"), str) and entry.get("text")
+        )
+        if not text:
+            return None
+        if item.get("type") == "UserMessage":
+            return "user", "user", False, text
+        if item.get("type") == "AgentMessage" and item.get("phase") in {
+            "commentary",
+            "final_answer",
+        }:
+            phase = str(item["phase"])
+            return "assistant", phase, phase == "final_answer", text
+        return None
+
     def sync_codex_file(self, source_path: Path) -> Dict[str, Any]:
         source_path = source_path.expanduser().resolve()
         if not source_path.is_file():
             raise FileNotFoundError(f"Codex session does not exist: {source_path}")
         session_metadata = self.codex_session_metadata(source_path)
         session_id = session_metadata["session_id"]
-        cursor_path = self.codex_cursor_path(session_id)
+        segment_id = rollout_segment_id(source_path, session_id)
+        cursor_path = self.codex_cursor_path(segment_id)
         cursor = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
+        if cursor.get("source_generation"):
+            raise ValueError("Reconciled source generations require the native collector")
         last_line = int(cursor.get("last_line", 0))
+        backfill_visible_messages = (
+            int(cursor.get("visible_message_format_version", 0)) < 1
+            and self.rollout_uses_completed_items(source_path)
+        )
         backfill_file_changes = int(cursor.get("file_change_format_version", 0)) < 1
         backfill_token_usage = int(cursor.get("token_usage_format_version", 0)) < 2
         imported = 0
@@ -1172,8 +1231,10 @@ class MemoryStore:
                 {
                     "format_version": 1,
                     "session_id": session_id,
+                    "segment_id": segment_id,
                     "source_path": str(source_path),
                     "last_line": total_lines,
+                    "visible_message_format_version": 1,
                     "file_change_format_version": 1,
                     "token_usage_format_version": 2,
                     "excluded_reason": excluded_reason,
@@ -1196,7 +1257,9 @@ class MemoryStore:
         with source_path.open("r", encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, 1):
                 total_lines = line_number
-                if line_number <= last_line and not backfill_file_changes:
+                if line_number <= last_line and not (
+                    backfill_visible_messages or backfill_file_changes
+                ):
                     continue
                 try:
                     event = json.loads(line)
@@ -1207,7 +1270,14 @@ class MemoryStore:
                 event_type = payload.get("type")
                 phase = payload.get("phase")
                 file_change = self.summarize_file_change(payload) if outer_type == "event_msg" else None
-                if line_number <= last_line and not file_change:
+                completed_message = (
+                    self.summarize_completed_message(payload)
+                    if outer_type == "event_msg"
+                    else None
+                )
+                if line_number <= last_line and not file_change and not (
+                    backfill_visible_messages and completed_message
+                ):
                     continue
                 if file_change:
                     speaker = "tool"
@@ -1241,6 +1311,8 @@ class MemoryStore:
                         text = f"Called tool: {tool_name}"
                         if nested_tools:
                             text += " (invokes " + ", ".join(nested_tools) + ")"
+                elif completed_message:
+                    speaker, phase, complete_round, text = completed_message
                 elif outer_type == "event_msg" and event_type == "user_message":
                     speaker = "user"
                     text = payload.get("message")
@@ -1259,7 +1331,19 @@ class MemoryStore:
                 if timestamp.endswith("Z"):
                     timestamp = timestamp[:-1] + "+00:00"
                 suffix = {"user": "u", "assistant": "a", "tool": "t"}[speaker]
-                message_id = f"codex-{session_id}-{line_number:08d}-{suffix}"
+                source_identity = (
+                    session_id if segment_id == session_id else f"{session_id}-{segment_id}"
+                )
+                message_id = f"codex-{source_identity}-{line_number:08d}-{suffix}"
+                source = {
+                    "kind": "codex-rollout-jsonl",
+                    "session_id": session_id,
+                    "path": str(source_path),
+                    "line": line_number,
+                    "phase": phase,
+                }
+                if segment_id != session_id:
+                    source["segment_id"] = segment_id
                 result = self.append_message(
                     speaker=speaker,
                     text=text,
@@ -1269,13 +1353,7 @@ class MemoryStore:
                     reply_to=None,
                     allow_secrets=False,
                     complete_round=complete_round,
-                    source={
-                        "kind": "codex-rollout-jsonl",
-                        "session_id": session_id,
-                        "path": str(source_path),
-                        "line": line_number,
-                        "phase": phase,
-                    },
+                    source=source,
                 )
                 if result.get("status") == "duplicate":
                     duplicates += 1
@@ -1293,6 +1371,7 @@ class MemoryStore:
             self.root,
             source_path,
             session_id=session_id,
+            segment_id=segment_id,
             start_line=0 if backfill_token_usage else last_line,
         )
         atomic_write_json(
@@ -1300,8 +1379,10 @@ class MemoryStore:
             {
                 "format_version": 1,
                 "session_id": session_id,
+                "segment_id": segment_id,
                 "source_path": str(source_path),
                 "last_line": total_lines,
+                "visible_message_format_version": 1,
                 "file_change_format_version": 1,
                 "token_usage_format_version": 2,
                 "source_size": source_path.stat().st_size,
@@ -1314,6 +1395,7 @@ class MemoryStore:
         )
         return {
             "session_id": session_id,
+            "segment_id": segment_id,
             "source_path": str(source_path),
             "last_line": total_lines,
             "visible_events": visible_events,
@@ -1387,10 +1469,11 @@ class MemoryStore:
         elif not self.root.exists():
             raise FileNotFoundError(f"Memory archive does not exist: {self.root}")
         discovered = discover_rollouts(session_roots)
-        selected_by_session: Dict[str, Path] = {}
+        selected_by_segment: Dict[str, Path] = {}
         for path in discovered:
             session_id = str(self.codex_session_metadata(path)["session_id"])
-            existing = selected_by_session.get(session_id)
+            segment_id = rollout_segment_id(path, session_id)
+            existing = selected_by_segment.get(segment_id)
             if existing is None or (
                 path.stat().st_size,
                 path.stat().st_mtime_ns,
@@ -1400,8 +1483,8 @@ class MemoryStore:
                 existing.stat().st_mtime_ns,
                 str(existing),
             ):
-                selected_by_session[session_id] = path
-        rollouts = sorted(selected_by_session.values())
+                selected_by_segment[segment_id] = path
+        rollouts = sorted(selected_by_segment.values())
         results = [
             persist_token_usage(self.root, path, write=apply)
             for path in rollouts
@@ -1415,9 +1498,10 @@ class MemoryStore:
             "status": "applied" if apply else "preview",
             "session_roots": [str(path.expanduser().resolve()) for path in session_roots],
             "rollout_files": len(discovered),
-            "unique_sessions": len(rollouts),
+            "unique_sessions": len({str(item.get("session_id")) for item in results}),
+            "rollout_segments": len(rollouts),
             "duplicate_session_files": len(discovered) - len(rollouts),
-            "measured_conversations": len(measured),
+            "measured_conversations": len({str(item.get("session_id")) for item in measured}),
             "excluded_sessions": sum(
                 item.get("status") == "excluded" for item in results
             ),
@@ -2874,12 +2958,14 @@ class MemoryStore:
         summary: Dict[str, Any],
         raw_records: Optional[List[Dict[str, Any]]] = None,
         summaries_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
+        raw_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Optional[str]:
         if int(summary["level"]) == 1:
             source_message_ids = list(summary.get("source_message_ids", []))
             raw_records = raw_records if raw_records is not None else self.read_all_raw()
             if source_message_ids:
-                raw_by_id = {record["message_id"]: record for record in raw_records}
+                if raw_by_id is None:
+                    raw_by_id = {record["message_id"]: record for record in raw_records}
                 if any(message_id not in raw_by_id for message_id in source_message_ids):
                     return None
                 return raw_source_sha256(
@@ -2917,29 +3003,62 @@ class MemoryStore:
 
     def backup_derived_files(self, label: str, paths: Iterable[Path]) -> Path:
         stamp = dt.datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f")
-        backup_dir = self.archive_dir / f"{label}-{stamp}"
+        backup_root = self.configured_workspace_backup_root()
+        backup_root.mkdir(parents=True, exist_ok=True)
+        backup_dir = backup_root / f"{label}-{stamp}"
+        copied_paths = []
         for path in paths:
             if not path.exists():
                 continue
-            destination = backup_dir / self.relative(path)
+            relative = self.relative(path)
+            destination = backup_dir / relative
             if path.is_dir():
                 shutil.copytree(path, destination)
             else:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, destination)
-        self.prune_workspace_backups(keep=[backup_dir])
+            copied_paths.append(relative)
+        atomic_write_json(
+            backup_dir / "recovery-backup-manifest.json",
+            {
+                "format_version": 1,
+                "created_at": now_iso(),
+                "source_root": str(self.root),
+                "label": label,
+                "paths": copied_paths,
+            },
+        )
+        self.prune_workspace_backups(backup_root, keep=[backup_dir])
         return backup_dir
 
-    def prune_workspace_backups(self, keep: Iterable[Path]) -> List[str]:
+    def prune_workspace_backups(
+        self,
+        backup_root: Path,
+        keep: Iterable[Path],
+    ) -> List[str]:
         keep_paths = {path.resolve() for path in keep if path.exists()}
-        backup_pattern = re.compile(
-            r"^(?:state|conversation|index)-rebuild-\d{8}_\d{6}_\d{6}$"
-        )
+        backup_pattern = re.compile(r"^.+-\d{8}_\d{6}_\d{6}$")
+
+        def is_owned_backup(path: Path) -> bool:
+            if not path.is_dir() or not backup_pattern.fullmatch(path.name):
+                return False
+            manifest_path = path / "recovery-backup-manifest.json"
+            if not manifest_path.is_file():
+                return False
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return False
+            return (
+                manifest.get("format_version") == 1
+                and manifest.get("source_root") == str(self.root)
+            )
+
         backups = sorted(
             (
                 path
-                for path in self.archive_dir.iterdir()
-                if path.is_dir() and backup_pattern.fullmatch(path.name)
+                for path in backup_root.iterdir()
+                if is_owned_backup(path)
             ),
             key=lambda path: (path.stat().st_mtime_ns, path.name),
         )
@@ -3302,7 +3421,7 @@ class MemoryStore:
                         f"summary source file missing: {summary['summary_id']} -> {source}"
                     )
             actual_source_sha = self.actual_summary_source_sha256(
-                summary, raw_records, summaries_by_file_id
+                summary, raw_records, summaries_by_file_id, raw_by_id=raw_by_id
             )
             expected_source_sha = summary.get("source_sha256")
             if expected_source_sha and actual_source_sha != expected_source_sha:

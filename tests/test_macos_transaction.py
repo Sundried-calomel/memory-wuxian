@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import plistlib
 import subprocess
@@ -172,6 +173,15 @@ class MacosTransactionTest(unittest.TestCase):
 
     def invoke(self, runner, ready_probe=None):
         def ready_result(*_args, **kwargs):
+            if probe := kwargs.get("effect_probe"):
+                payload = Path(probe["path"]).read_bytes()
+                cursor_path = self.archive / "imports" / "codex" / f"{probe['probe_id']}.json"
+                cursor_path.write_text(json.dumps({
+                    "session_id": probe["probe_id"], "source_path": probe["path"],
+                    "source_byte_sha256": hashlib.sha256(payload).hexdigest(),
+                    "complete": True, "committed_byte_offset": len(payload),
+                    "observed_source_size": len(payload), "updated_at": probe["watermark"],
+                }), encoding="utf-8")
             if ready_probe is not None:
                 ready_probe()
             self.assertIn(
@@ -186,7 +196,7 @@ class MacosTransactionTest(unittest.TestCase):
                 "updated_at": "2026-07-30T00:00:00Z",
                 "last_archive_update": "2026-07-30T00:00:00Z",
                 "source_watermark": watermark,
-                "archive_watermark": watermark,
+                "archive_watermark": None,
             }
 
         with (

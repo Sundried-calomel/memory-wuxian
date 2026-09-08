@@ -10,6 +10,9 @@ from platform_atomic import atomic_replace_bytes
 
 
 FORMAT_VERSION = 2
+ROLLOUT_UUID_PATTERN = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+)
 DAILY_USAGE_TIMEZONE = "Asia/Tokyo"
 DAILY_USAGE_TZINFO = dt.timezone(dt.timedelta(hours=9), name="JST")
 USAGE_FIELDS = (
@@ -79,8 +82,20 @@ def usage_signature(value: Optional[Dict[str, int]]) -> tuple[int, ...]:
     return tuple(int(value.get(field, 0)) for field in USAGE_FIELDS)
 
 
-def token_usage_path(root: Path, session_id: str) -> Path:
-    return root / "imports" / "codex" / "token-usage" / f"{safe_session_id(session_id)}.json"
+def rollout_segment_id(path: Path, session_id: str) -> str:
+    identifiers = ROLLOUT_UUID_PATTERN.findall(path.stem)
+    if not identifiers:
+        return session_id
+    terminal = identifiers[-1]
+    if terminal == session_id:
+        return session_id
+    if len(identifiers) >= 2 and identifiers[-2] == session_id:
+        return terminal
+    raise ValueError(f"rollout filename and session metadata IDs differ: {path}")
+
+
+def token_usage_path(root: Path, segment_id: str) -> Path:
+    return root / "imports" / "codex" / "token-usage" / f"{safe_session_id(segment_id)}.json"
 
 
 def load_token_usage(path: Path) -> Optional[Dict[str, Any]]:
@@ -100,12 +115,13 @@ def atomic_write_json(path: Path, value: Dict[str, Any]) -> None:
     atomic_replace_bytes(path, payload)
 
 
-def new_ledger(session_id: str, source_path: Path) -> Dict[str, Any]:
+def new_ledger(session_id: str, segment_id: str, source_path: Path) -> Dict[str, Any]:
     return {
         "format_version": FORMAT_VERSION,
         "measurement": "codex-reported-model-usage",
         "conversation_id": f"codex:{session_id}",
         "session_id": session_id,
+        "segment_id": segment_id,
         "source": {
             "kind": "codex-rollout-token-count",
             "path": str(source_path),
@@ -240,12 +256,14 @@ def persist_token_usage(
     source_path: Path,
     *,
     session_id: Optional[str] = None,
+    segment_id: Optional[str] = None,
     start_line: Optional[int] = None,
     write: bool = True,
 ) -> Dict[str, Any]:
     source_path = source_path.expanduser().resolve()
     metadata = read_session_metadata(source_path)
     session_id = session_id or metadata["session_id"]
+    segment_id = segment_id or rollout_segment_id(source_path, session_id)
     if metadata["excluded_reason"]:
         return {
             "status": "excluded",
@@ -254,11 +272,11 @@ def persist_token_usage(
             "changed_events": 0,
             "ledger": None,
         }
-    destination = token_usage_path(root, session_id)
-    ledger = load_token_usage(destination) or new_ledger(session_id, source_path)
+    destination = token_usage_path(root, segment_id)
+    ledger = load_token_usage(destination) or new_ledger(session_id, segment_id, source_path)
     rebuilt_daily_usage = "daily_usage" not in ledger
     if rebuilt_daily_usage:
-        ledger = new_ledger(session_id, source_path)
+        ledger = new_ledger(session_id, segment_id, source_path)
     ledger_line = int(ledger.get("scanned_through_line") or 0)
     effective_start = max(ledger_line, int(start_line or 0))
     events = []
@@ -296,6 +314,7 @@ def persist_token_usage(
             else ("would-update" if changed_events else "unchanged")
         ),
         "session_id": session_id,
+        "segment_id": segment_id,
         "changed_events": changed_events,
         "rebuilt_daily_usage": rebuilt_daily_usage,
         "has_measurement": has_measurement,
@@ -342,22 +361,59 @@ def token_usage_ledgers(root: Path) -> list[Dict[str, Any]]:
     return ledgers
 
 
+def ledgers_by_conversation(
+    ledgers: Iterable[Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for ledger in ledgers:
+        conversation_id = str(
+            ledger.get("conversation_id") or f"codex:{ledger.get('session_id', '')}"
+        )
+        usage = normalize_usage(ledger.get("reported_usage"))
+        if not conversation_id or usage is None:
+            continue
+        current = grouped.get(conversation_id)
+        if current is None:
+            current = dict(ledger)
+            current["reported_usage"] = usage
+            current["segment_count"] = 1
+            grouped[conversation_id] = current
+            continue
+        current["reported_usage"] = add_usage(current["reported_usage"], usage)
+        current["model_request_count"] = int(current.get("model_request_count") or 0) + int(
+            ledger.get("model_request_count") or 0
+        )
+        current["counter_reset_count"] = int(current.get("counter_reset_count") or 0) + int(
+            ledger.get("counter_reset_count") or 0
+        )
+        current["segment_count"] = int(current.get("segment_count") or 1) + 1
+        if str(ledger.get("updated_at") or "") >= str(current.get("updated_at") or ""):
+            for key in (
+                "latest_request_usage",
+                "model_context_window",
+                "last_token_event",
+                "updated_at",
+            ):
+                current[key] = ledger.get(key)
+    return grouped
+
+
 def aggregate_ledgers(ledgers: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     total = empty_usage()
-    conversations = 0
+    conversation_ids: set[str] = set()
     requests = 0
     resets = 0
     for ledger in ledgers:
         usage = normalize_usage(ledger.get("reported_usage"))
         if usage is None:
             continue
-        conversations += 1
+        conversation_ids.add(str(ledger.get("conversation_id") or ledger.get("session_id") or ""))
         total = add_usage(total, usage)
         requests += int(ledger.get("model_request_count") or 0)
         resets += int(ledger.get("counter_reset_count") or 0)
     return {
         "measurement": "codex-reported-model-usage",
-        "measured_conversations": conversations,
+        "measured_conversations": len(conversation_ids - {""}),
         "model_request_count": requests,
         "counter_reset_count": resets,
         "reported_usage": total,

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2193-source-recovery-integration",
+  "candidate_id": "v2.19.3",
+  "artifact_profile": "software-feature",
+  "classification": "repair",
+  "owner_id": "capture-core",
+  "validation_profile": "full",
+  "lifecycle_state": "candidate",
+  "defect_workbook": {
+    "preflight_receipt": "governance/v2193-source-recovery-preflight.json",
+    "preflight_sha256": "37a5b8685f6a7a52c2a8c9e604579360e09e083f58e0508e07f1c0268741ad05",
+    "completion_receipt": "governance/v2193-source-recovery-completion.json",
+    "completion_sha256": "99bcd8f3acd21f64bd2845c70019ed1ffed3fba60e6efdc865824a11756cb600",
+    "applicable_families": ["MW-R03", "MW-R05", "MW-R06", "MW-R07", "MW-R11"],
+    "project_workbook_updated": true,
+    "original_triggers": ["Startup recovery debt bypassed per-source isolation; changed source offsets were no longer line boundaries."]
+  },
+  "target": "Publish the unified Windows and Mac capture repairs, bounded continuous catch-up, conversation-scoped indexes, exact installation probes and audit lookup reuse without losing raw authority.",
+  "invariants": [
+    "Raw records and completed summaries remain unchanged.",
+    "Unresolved WAL transactions are never reported committed.",
+    "Excluded subagents never contribute visible dialogue.",
+    "New source generations preserve old IDs and use distinct new IDs.",
+    "A relocation requires exact unambiguous retained-suffix and token-anchor evidence.",
+    "All interrupted relocation writes recover before capture begins.",
+    "Cloud ACK, publication, import, and source waterlines remain distinct.",
+    "Service readiness never claims complete historical coverage.",
+    "Summary-source digests remain byte-for-byte equivalent when reusing the audit lookup."
+  ],
+  "prohibited_changes": [
+    "Reset source cursors without a hash-bound verification receipt.",
+    "Silently remove unavailable historical records or unresolved transactions.",
+    "Overwrite unrelated local work or publish a version before its validation gates pass."
+  ],
+  "required_rehearsal_scenarios": [
+    "native-tests", "python-compile", "architecture-contract", "documentation-contract"
+  ],
+  "before_after_checks": [
+    "Run source-change isolation, excluded-source shrink, generation-tail and restart regressions.",
+    "Run frozen semantic job integrity isolation tests inherited from v2.19.2.",
+    "Run the full candidate workflow on macOS, Windows and Ubuntu.",
+    "Rehearse the current desktop launcher against the preserved active root before local release completion.",
+    "Verify scoped/full index parity, interrupted publication recovery, bounded continuation, and exact canary capture amid historical backlog.",
+    "Exercise first installation, repeated installation and lifecycle persistence with lagging historical telemetry.",
+    "Verify audit lookup reuse produces identical source digests and does not rescan the complete raw snapshot."
+  ]
+}

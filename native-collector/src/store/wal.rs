@@ -16,6 +16,8 @@ pub(crate) struct WalIntent {
     pub(crate) transaction_id: String,
     pub(crate) session_id: String,
     pub(crate) source_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) source_generation: Option<String>,
     pub(crate) cursor_before_line: u64,
     pub(crate) cursor_after_line: u64,
     pub(crate) committed_byte_offset: u64,
@@ -209,6 +211,7 @@ mod tests {
             transaction_id: "tx-1".to_owned(),
             session_id: "session-1".to_owned(),
             source_path: "C:/sessions/rollout.jsonl".to_owned(),
+            source_generation: None,
             cursor_before_line: 1,
             cursor_after_line: 2,
             committed_byte_offset: 128,

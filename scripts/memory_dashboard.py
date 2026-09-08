@@ -51,7 +51,12 @@ from memory_project_evidence import ProjectEvidenceStore
 from memory_readonly_service import ReadOnlyMemoryService
 from platform_lock import exclusive_lock
 from platform_process import no_window_kwargs
-from token_usage import aggregate_ledgers, normalize_usage, token_usage_ledgers
+from token_usage import (
+    aggregate_ledgers,
+    ledgers_by_conversation,
+    normalize_usage,
+    token_usage_ledgers,
+)
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -877,11 +882,7 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
 
     summary_counts: dict[str, Counter[int]] = defaultdict(Counter)
     usage_ledgers = token_usage_ledgers(store.root)
-    usage_by_conversation = {
-        str(ledger.get("conversation_id")): ledger
-        for ledger in usage_ledgers
-        if ledger.get("conversation_id")
-    }
+    usage_by_conversation = ledgers_by_conversation(usage_ledgers)
     reported_usage = aggregate_ledgers(usage_ledgers)
     titles = codex_thread_titles()
     thread_metadata = codex_thread_metadata()

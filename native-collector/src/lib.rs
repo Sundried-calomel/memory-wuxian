@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
@@ -45,8 +45,10 @@ use telemetry::CollectorTelemetry;
 
 const RAW_MARKER: &str = "<!-- memory-wuxian-record -->";
 const TOKEN_USAGE_FORMAT_VERSION: u64 = 2;
+const VISIBLE_MESSAGE_FORMAT_VERSION: u64 = 1;
+const SOURCE_ADAPTER_FORMAT_VERSION: u64 = 3;
 const DAILY_USAGE_TIMEZONE: &str = "Asia/Tokyo";
-const ROLLOUT_BATCH_MAX_LINES: usize = 512;
+const ROLLOUT_BATCH_MAX_LINES: usize = 8192;
 const ROLLOUT_BATCH_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const RECOVERY_LOCK_YIELD: Duration = Duration::from_millis(150);
 const TOKEN_USAGE_FIELDS: [&str; 6] = [
@@ -334,6 +336,36 @@ fn summarize_file_change(payload: &Value) -> Option<String> {
         rendered.len(),
         rendered.join("\n\n")
     ))
+}
+
+fn summarize_completed_message(
+    payload: &Value,
+) -> Option<(&'static str, &'static str, bool, String)> {
+    if payload.get("type").and_then(Value::as_str) != Some("item_completed") {
+        return None;
+    }
+    let item = payload.get("item")?;
+    let item_type = item.get("type").and_then(Value::as_str)?;
+    let text = item
+        .get("content")?
+        .as_array()?
+        .iter()
+        .filter_map(|entry| entry.get("text").and_then(Value::as_str))
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if text.is_empty() {
+        return None;
+    }
+    match item_type {
+        "UserMessage" => Some(("user", "user", false, text)),
+        "AgentMessage" => match item.get("phase").and_then(Value::as_str) {
+            Some("commentary") => Some(("assistant", "commentary", false, text)),
+            Some("final_answer") => Some(("assistant", "final_answer", true, text)),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -632,9 +664,11 @@ struct RolloutBatch {
 #[derive(Debug)]
 struct PreparedSync {
     source_path: PathBuf,
+    segment_id: String,
     hinted_cursor: Value,
     last_line: u64,
     message_last_line: u64,
+    backfill_visible_messages: bool,
     backfill_file_changes: bool,
     backfill_token_usage: bool,
     resume_line: u64,
@@ -659,6 +693,8 @@ struct Store {
     root: PathBuf,
     config: Config,
     message_cache: RefCell<Option<HashMap<String, Value>>>,
+    max_raw_sequence: Cell<u64>,
+    cached_state_total: Cell<Option<u64>>,
 }
 
 fn session_metadata(event: &Value) -> Option<(String, Option<String>)> {
@@ -803,8 +839,11 @@ impl Store {
             root,
             config,
             message_cache: RefCell::new(None),
+            max_raw_sequence: Cell::new(0),
+            cached_state_total: Cell::new(None),
         };
         store.init()?;
+        store.recover_source_relocations()?;
         store.recover_capture_wal()?;
         Ok(store)
     }
@@ -834,6 +873,40 @@ impl Store {
         CaptureWal::new(&self.root)
     }
 
+    fn recover_source_relocations(&self) -> Result<()> {
+        let directory = self.root.join("imports/codex/source-reconciliations");
+        if !directory.exists() {
+            return Ok(());
+        }
+        self.lock("archive.lock", || {
+            for entry in fs::read_dir(&directory)? {
+                let path = entry?.path();
+                if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                    continue;
+                }
+                let mut receipt = read_json(&path)?;
+                if receipt.get("status").and_then(Value::as_str) != Some("prepared") {
+                    continue;
+                }
+                let cursor_path = PathBuf::from(string_field(&receipt, "cursor_path")?);
+                let token_path = PathBuf::from(string_field(&receipt, "token_path")?);
+                if cursor_path.parent() != Some(self.root.join("imports/codex").as_path())
+                    || token_path.parent()
+                        != Some(self.root.join("imports/codex/token-usage").as_path())
+                {
+                    bail!("source relocation receipt paths escape cursor ownership");
+                }
+                atomic_write_json(&cursor_path, &receipt["old_cursor"])?;
+                if receipt.get("old_ledger").is_some_and(|v| !v.is_null()) {
+                    atomic_write_json(&token_path, &receipt["old_ledger"])?;
+                }
+                receipt["status"] = json!("rolled-back");
+                atomic_write_json(&path, &receipt)?;
+            }
+            Ok(())
+        })
+    }
+
     fn capture_wal_state(&self) -> Result<WalState> {
         self.capture_wal().state()
     }
@@ -847,6 +920,12 @@ impl Store {
                 continue;
             }
             let cursor = read_json(&cursor_path)?;
+            if cursor.get("source_generation").and_then(Value::as_str)
+                != intent.source_generation.as_deref()
+            {
+                // Historical WAL offsets must never be compared across source generations.
+                continue;
+            }
             let same_source = cursor.get("source_path").and_then(Value::as_str)
                 == Some(intent.source_path.as_str());
             let durable_offset = cursor
@@ -1180,15 +1259,7 @@ impl Store {
                 });
             }
 
-            let max_raw_sequence = self
-                .message_cache
-                .borrow()
-                .as_ref()
-                .into_iter()
-                .flat_map(|cache| cache.values())
-                .filter_map(|record| record.get("sequence").and_then(Value::as_u64))
-                .max()
-                .unwrap_or(0);
+            let max_raw_sequence = self.max_raw_sequence.get();
             let sequence = u64_field(&state, "total_messages")?.max(max_raw_sequence) + 1;
             let completed_rounds = u64_field(&state, "completed_rounds")?;
             let mut pending_rounds = state
@@ -1244,6 +1315,7 @@ impl Store {
             });
             let digest = raw_record_sha256(&record)?;
             record["content_sha256"] = json!(digest);
+            self.record_index_debt(conversation_id)?;
 
             let raw_path = self.raw_path(timestamp)?;
             let raw_lock = format!(
@@ -1315,6 +1387,8 @@ impl Store {
             state["pending_rounds"] = Value::Object(pending_rounds);
             self.save_state(&mut state)?;
             self.cache_message(&record)?;
+            self.cached_state_total
+                .set(state.get("total_messages").and_then(Value::as_u64));
             Ok(AppendResult {
                 appended: true,
                 transcript_repaired: false,
@@ -1339,17 +1413,28 @@ impl Store {
         Ok(records)
     }
 
-    fn archived_source_line_high_water(&self, session_id: &str) -> Result<u64> {
+    fn archived_source_line_high_water(
+        &self,
+        session_id: &str,
+        segment_id: &str,
+        source_path: &Path,
+    ) -> Result<u64> {
         let conversation_id = format!("codex:{session_id}");
+        let source_path = portable_path(source_path);
         Ok(self
             .read_records(&self.conversation_path(&conversation_id))?
             .into_iter()
             .filter(|record| {
-                record
-                    .get("source")
-                    .and_then(|source| source.get("session_id"))
-                    .and_then(Value::as_str)
-                    == Some(session_id)
+                let Some(source) = record.get("source") else {
+                    return false;
+                };
+                if source.get("session_id").and_then(Value::as_str) != Some(session_id) {
+                    return false;
+                }
+                source.get("segment_id").and_then(Value::as_str) == Some(segment_id)
+                    || (segment_id == session_id
+                        && source.get("segment_id").is_none()
+                        && source.get("path").and_then(Value::as_str) == Some(source_path.as_str()))
             })
             .filter_map(|record| {
                 record
@@ -1389,14 +1474,7 @@ impl Store {
     }
 
     fn cached_message(&self, message_id: &str) -> Result<Option<Value>> {
-        if self.message_cache.borrow().is_none() {
-            let records = self.read_all_raw()?;
-            let mut cache = HashMap::with_capacity(records.len());
-            for record in records {
-                cache.insert(string_field(&record, "message_id")?.to_owned(), record);
-            }
-            *self.message_cache.borrow_mut() = Some(cache);
-        }
+        self.ensure_message_cache()?;
         Ok(self
             .message_cache
             .borrow()
@@ -1405,7 +1483,35 @@ impl Store {
             .cloned())
     }
 
+    fn ensure_message_cache(&self) -> Result<()> {
+        let total = self
+            .load_state()?
+            .get("total_messages")
+            .and_then(Value::as_u64);
+        if self.message_cache.borrow().is_none() || self.cached_state_total.get() != total {
+            let records = self.read_all_raw()?;
+            let mut cache = HashMap::with_capacity(records.len());
+            self.max_raw_sequence.set(0);
+            for record in records {
+                self.max_raw_sequence.set(
+                    self.max_raw_sequence
+                        .get()
+                        .max(record.get("sequence").and_then(Value::as_u64).unwrap_or(0)),
+                );
+                cache.insert(string_field(&record, "message_id")?.to_owned(), record);
+            }
+            *self.message_cache.borrow_mut() = Some(cache);
+            self.cached_state_total.set(total);
+        }
+        Ok(())
+    }
+
     fn cache_message(&self, record: &Value) -> Result<()> {
+        self.max_raw_sequence.set(
+            self.max_raw_sequence
+                .get()
+                .max(record.get("sequence").and_then(Value::as_u64).unwrap_or(0)),
+        );
         let message_id = string_field(record, "message_id")?.to_owned();
         if let Some(cache) = self.message_cache.borrow_mut().as_mut() {
             cache.insert(message_id, record.clone());
@@ -1427,12 +1533,19 @@ impl Store {
     }
 
     fn source_error_matches(&self, source_path: &Path, metadata: &fs::Metadata) -> bool {
+        if self.source_recovery_path(source_path).exists() {
+            return true;
+        }
         let path = self.source_error_path(source_path);
         let Ok(record) = read_json(&path) else {
             return false;
         };
         record.get("source_path").and_then(Value::as_str)
             == Some(portable_path(source_path).as_str())
+            && record
+                .get("source_adapter_format_version")
+                .and_then(Value::as_u64)
+                == Some(SOURCE_ADAPTER_FORMAT_VERSION)
             && record.get("source_size").and_then(Value::as_u64) == Some(metadata.len())
             && record.get("source_mtime_ns").and_then(Value::as_str)
                 == source_mtime_ns(metadata).ok().as_deref()
@@ -1458,6 +1571,7 @@ impl Store {
             &path,
             &json!({
                 "format_version": 1,
+                "source_adapter_format_version": SOURCE_ADAPTER_FORMAT_VERSION,
                 "source_path": portable_path(source_path),
                 "source_size": metadata.len(),
                 "source_mtime_ns": source_mtime_ns(&metadata)?,
@@ -1551,6 +1665,7 @@ impl Store {
     fn update_token_usage(
         &self,
         session_id: &str,
+        segment_id: &str,
         source_path: &Path,
         lines: &[RolloutLine],
         committed_line: u64,
@@ -1558,13 +1673,14 @@ impl Store {
         let path = self
             .root
             .join("imports/codex/token-usage")
-            .join(format!("{}.json", Self::safe_session_id(session_id)));
+            .join(format!("{}.json", Self::safe_session_id(segment_id)));
         let new_ledger = || {
             json!({
                 "format_version": TOKEN_USAGE_FORMAT_VERSION,
                 "measurement": "codex-reported-model-usage",
                 "conversation_id": format!("codex:{session_id}"),
                 "session_id": session_id,
+                "segment_id": segment_id,
                 "source": {
                     "kind": "codex-rollout-token-count",
                     "path": portable_path(source_path),
@@ -1740,14 +1856,14 @@ impl Store {
     fn changed_rollouts(&self, paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
         let session_pattern =
             Regex::new(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$")?;
-        let changed = paths
+        let mut changed = paths
             .into_iter()
             .filter_map(|path| {
                 let metadata = match fs::metadata(&path) {
                     Ok(value) => value,
                     Err(error) => {
                         eprintln!("source metadata error ({}): {error}", path.display());
-                        return Some(path);
+                        return Some((0u8, 0u64, path));
                     }
                 };
                 if self.source_error_matches(&path, &metadata) {
@@ -1760,49 +1876,90 @@ impl Store {
                     .and_then(|captures| captures.get(1))
                     .map(|value| value.as_str());
                 let Some(session_id) = session_id else {
-                    return Some(path);
+                    return Some((0, metadata.len(), path));
                 };
                 let cursor_path = self.cursor_path(session_id);
                 let cursor = match read_json(&cursor_path) {
                     Ok(value) => value,
-                    Err(_) => return Some(path),
+                    Err(_) => return Some((0, metadata.len(), path)),
                 };
-                if cursor_requires_sync(&cursor, &path, &metadata) {
-                    Some(path)
+                let needs_visible_message_backfill = cursor
+                    .get("visible_message_format_version")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+                    < VISIBLE_MESSAGE_FORMAT_VERSION
+                    && rollout_uses_completed_items(&path).unwrap_or(false);
+                if needs_visible_message_backfill {
+                    Some((1, metadata.len(), path))
+                } else if cursor_requires_sync(&cursor, &path, &metadata) {
+                    Some((2, metadata.len(), path))
                 } else {
                     None
                 }
             })
             .collect::<Vec<_>>();
+        changed.sort_by(|left, right| (left.0, left.1, &left.2).cmp(&(right.0, right.1, &right.2)));
         eprintln!("memory-wuxian-collector startup: cursor comparison completed");
-        Ok(changed)
+        Ok(changed.into_iter().map(|(_, _, path)| path).collect())
     }
 
     fn prepare_sync_file(&self, source_path: &Path) -> Result<PreparedSync> {
         let source_path = source_path.canonicalize()?;
-        let hinted_session_id = resolve_rollout_session_id(&source_path)?;
-        let hinted_cursor = hinted_session_id
-            .as_ref()
-            .map(|session_id| self.cursor_path(session_id))
-            .filter(|path| path.exists())
-            .map(|path| read_json(&path))
-            .transpose()?
-            .unwrap_or_else(|| json!({}));
+        if self.source_recovery_path(&source_path).exists() {
+            bail!(
+                "Codex source has unresolved isolated recovery debt: {}",
+                source_path.display()
+            );
+        }
+        let (session_id, segment_id) = resolve_rollout_identity(&source_path)?;
+        let cursor_path = self.cursor_path(&segment_id);
+        let hinted_cursor = if cursor_path.exists() {
+            read_json(&cursor_path)?
+        } else {
+            json!({})
+        };
         let last_line = hinted_cursor
             .get("last_line")
             .and_then(Value::as_u64)
             .unwrap_or(0);
+        if hinted_cursor
+            .get("excluded_reason")
+            .is_some_and(|v| !v.is_null())
+            && !Self::cursor_boundary_valid(&source_path, &hinted_cursor)?
+        {
+            let batch = read_rollout_batch(&source_path, 0, None)?;
+            if batch.excluded_reason.is_some() {
+                return Ok(PreparedSync {
+                    source_path,
+                    segment_id,
+                    hinted_cursor,
+                    last_line,
+                    message_last_line: 0,
+                    backfill_visible_messages: true,
+                    backfill_file_changes: true,
+                    backfill_token_usage: true,
+                    resume_line: 0,
+                    source_byte_sha256: None,
+                    batch,
+                });
+            }
+        }
+        let archived_high_water = if hinted_cursor.get("source_generation").is_some() {
+            0
+        } else {
+            self.archived_source_line_high_water(&session_id, &segment_id, &source_path)?
+        };
         let message_last_line = hinted_cursor
             .get("message_last_line")
             .and_then(Value::as_u64)
             .unwrap_or(last_line)
-            .max(
-                hinted_session_id
-                    .as_deref()
-                    .map(|session_id| self.archived_source_line_high_water(session_id))
-                    .transpose()?
-                    .unwrap_or(0),
-            );
+            .max(archived_high_water);
+        let backfill_visible_messages = hinted_cursor
+            .get("visible_message_format_version")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            < VISIBLE_MESSAGE_FORMAT_VERSION
+            && rollout_uses_completed_items(&source_path)?;
         let backfill_file_changes = hinted_cursor
             .get("file_change_format_version")
             .and_then(Value::as_u64)
@@ -1853,11 +2010,12 @@ impl Store {
                 source_byte_sha256 = Some(current_sha256);
             }
         }
-        let resume_line = if backfill_file_changes || backfill_token_usage {
-            0
-        } else {
-            last_line
-        };
+        let resume_line =
+            if backfill_visible_messages || backfill_file_changes || backfill_token_usage {
+                0
+            } else {
+                last_line
+            };
         let resume_offset = if resume_line == last_line && resume_line > 0 {
             hinted_cursor
                 .get("committed_byte_offset")
@@ -1865,25 +2023,29 @@ impl Store {
         } else {
             None
         };
+        if !Self::cursor_boundary_valid(&source_path, &hinted_cursor)? {
+            bail!(
+                "Codex source changed at its committed byte boundary: {}",
+                source_path.display()
+            );
+        }
         let batch = read_rollout_batch(&source_path, resume_line, resume_offset)?;
         if batch.complete && source_byte_sha256.is_none() {
             source_byte_sha256 = Some(file_sha256(&source_path)?);
         }
-        let session_id = batch.session_id.clone();
-        if hinted_session_id
-            .as_deref()
-            .is_some_and(|hint| hint != session_id)
-        {
+        if batch.session_id != session_id {
             bail!(
-                "rollout filename and session metadata IDs differ: {}",
+                "Codex session metadata changed while reading: {}",
                 source_path.display()
             );
         }
         Ok(PreparedSync {
             source_path,
+            segment_id,
             hinted_cursor,
             last_line,
             message_last_line,
+            backfill_visible_messages,
             backfill_file_changes,
             backfill_token_usage,
             resume_line,
@@ -1895,9 +2057,11 @@ impl Store {
     fn sync_prepared_file(&self, prepared: PreparedSync) -> Result<FileSyncResult> {
         let PreparedSync {
             source_path,
+            segment_id,
             hinted_cursor,
             last_line,
             message_last_line,
+            backfill_visible_messages,
             backfill_file_changes,
             backfill_token_usage,
             resume_line,
@@ -1906,7 +2070,7 @@ impl Store {
         } = prepared;
         let session_id = batch.session_id.clone();
         let excluded_reason = batch.excluded_reason.clone();
-        let cursor_path = self.cursor_path(&session_id);
+        let cursor_path = self.cursor_path(&segment_id);
         let current_cursor = if cursor_path.exists() {
             read_json(&cursor_path)?
         } else {
@@ -1923,7 +2087,11 @@ impl Store {
             .last()
             .map(|line| line.number)
             .unwrap_or(resume_line);
-        if committed_line < last_line && !backfill_file_changes && !backfill_token_usage {
+        if committed_line < last_line
+            && !backfill_visible_messages
+            && !backfill_file_changes
+            && !backfill_token_usage
+        {
             bail!(
                 "Codex session was truncated below its cursor: {} ({committed_line} < {last_line})",
                 source_path.display()
@@ -1946,9 +2114,11 @@ impl Store {
                 &json!({
                     "format_version": 1,
                     "session_id": session_id,
+                    "segment_id": segment_id,
                     "source_path": portable_path(&source_path),
                     "last_line": committed_line,
                     "message_last_line": message_last_line.max(committed_line),
+                    "visible_message_format_version": VISIBLE_MESSAGE_FORMAT_VERSION,
                     "file_change_format_version": 1,
                     "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
                     "source_size": batch.committed_byte_offset,
@@ -2006,7 +2176,15 @@ impl Store {
             } else {
                 None
             };
-            if line_number <= message_last_line && file_change.is_none() {
+            let completed_message = if outer_type == Some("event_msg") {
+                summarize_completed_message(payload)
+            } else {
+                None
+            };
+            if line_number <= message_last_line
+                && file_change.is_none()
+                && (!backfill_visible_messages || completed_message.is_none())
+            {
                 continue;
             }
             let (speaker, phase, complete_round, message) =
@@ -2017,6 +2195,7 @@ impl Store {
                     (_, _, _) if tool_activity.is_some() => {
                         ("tool", "tool_activity", false, tool_activity.unwrap())
                     }
+                    (_, _, _) if completed_message.is_some() => completed_message.unwrap(),
                     (Some("event_msg"), Some("user_message"), _) => (
                         "user",
                         "user",
@@ -2066,7 +2245,32 @@ impl Store {
                 "assistant" => "a",
                 _ => "t",
             };
-            let message_id = format!("codex-{session_id}-{line_number:08}-{suffix}");
+            let source_identity = if segment_id == session_id {
+                session_id.clone()
+            } else {
+                format!("{session_id}-{segment_id}")
+            };
+            let source_identity = match hinted_cursor
+                .get("source_generation")
+                .and_then(Value::as_str)
+            {
+                Some(generation) => format!("{source_identity}-g{generation}"),
+                None => source_identity,
+            };
+            let message_id = format!("codex-{source_identity}-{line_number:08}-{suffix}");
+            let mut source = json!({
+                "kind": "codex-rollout-jsonl",
+                "session_id": session_id,
+                "path": portable_path(&source_path),
+                "line": line_number,
+                "phase": phase,
+            });
+            if segment_id != session_id {
+                source["segment_id"] = json!(segment_id);
+            }
+            if let Some(generation) = hinted_cursor.get("source_generation") {
+                source["source_generation"] = generation.clone();
+            }
             let append = self.append_message(
                 speaker,
                 &message,
@@ -2074,13 +2278,7 @@ impl Store {
                 &format!("codex:{session_id}"),
                 &message_id,
                 complete_round,
-                json!({
-                    "kind": "codex-rollout-jsonl",
-                    "session_id": session_id,
-                    "path": portable_path(&source_path),
-                    "line": line_number,
-                    "phase": phase,
-                }),
+                source,
             )?;
             if append.appended {
                 result.imported_messages += 1;
@@ -2091,33 +2289,41 @@ impl Store {
                 result.repaired_transcripts += 1;
             }
         }
-        let token_usage =
-            self.update_token_usage(&session_id, &source_path, &batch.lines, committed_line)?;
+        let token_usage = self.update_token_usage(
+            &session_id,
+            &segment_id,
+            &source_path,
+            &batch.lines,
+            committed_line,
+        )?;
         result.token_usage_changed_events = token_usage.changed_events;
         result.reported_total_tokens = token_usage.reported_total_tokens;
         result.token_usage_ledger = token_usage.ledger_path;
         // A successful verification also converges legacy or path-drifted cursor
         // metadata even when no source line was newly appended.
         let modified: DateTime<Utc> = batch.observed_source_mtime.into();
-        atomic_write_json(
-            &cursor_path,
-            &json!({
-                "format_version": 1,
-                "session_id": session_id,
-                "source_path": portable_path(&source_path),
-                "last_line": committed_line,
-                "message_last_line": message_last_line.max(committed_line),
-                "file_change_format_version": 1,
-                "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
-                "source_size": batch.committed_byte_offset,
-                "committed_byte_offset": batch.committed_byte_offset,
-                "observed_source_size": batch.observed_source_size,
-                "complete": batch.complete,
-                "source_mtime": modified.to_rfc3339(),
-                "source_byte_sha256": source_byte_sha256,
-                "updated_at": now_iso(),
-            }),
-        )?;
+        let mut next_cursor = json!({
+            "format_version": 1,
+            "session_id": session_id,
+            "segment_id": segment_id,
+            "source_path": portable_path(&source_path),
+            "last_line": committed_line,
+            "message_last_line": message_last_line.max(committed_line),
+            "visible_message_format_version": VISIBLE_MESSAGE_FORMAT_VERSION,
+            "file_change_format_version": 1,
+            "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
+            "source_size": batch.committed_byte_offset,
+            "committed_byte_offset": batch.committed_byte_offset,
+            "observed_source_size": batch.observed_source_size,
+            "complete": batch.complete,
+            "source_mtime": modified.to_rfc3339(),
+            "source_byte_sha256": source_byte_sha256,
+            "updated_at": now_iso(),
+        });
+        if let Some(generation) = hinted_cursor.get("source_generation") {
+            next_cursor["source_generation"] = generation.clone();
+        }
+        atomic_write_json(&cursor_path, &next_cursor)?;
         Ok(result)
     }
 
@@ -2268,8 +2474,54 @@ impl Store {
         }))
     }
 
+    fn index_debt(&self) -> Result<BTreeSet<String>> {
+        let path = self.root.join("pending/deterministic-index-debt.json");
+        if !path.exists() {
+            return Ok(BTreeSet::new());
+        }
+        Ok(serde_json::from_value(read_json(&path)?)?)
+    }
+
+    fn record_index_debt(&self, conversation_id: &str) -> Result<()> {
+        let mut debt = self.index_debt()?;
+        if debt.insert(conversation_id.to_owned()) {
+            atomic_write_json(
+                &self.root.join("pending/deterministic-index-debt.json"),
+                &json!(debt),
+            )?;
+        }
+        Ok(())
+    }
+
     fn refresh_deterministic_indexes(&self) -> Result<Value> {
-        let raw_records = self.read_all_raw()?;
+        self.refresh_deterministic_indexes_scoped(None)
+    }
+
+    fn refresh_deterministic_indexes_scoped(
+        &self,
+        scope: Option<&BTreeSet<String>>,
+    ) -> Result<Value> {
+        let directory = self.root.join("indexes/deterministic");
+        let rebuild_marker = self.root.join("pending/deterministic-index-rebuild.json");
+        let scope =
+            scope.filter(|_| directory.join("level-1.jsonl").exists() && !rebuild_marker.exists());
+        let raw_records = if let Some(ids) = scope {
+            self.ensure_message_cache()?;
+            self.message_cache
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .values()
+                .filter(|r| {
+                    r.get("conversation_id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| ids.contains(id))
+                })
+                .cloned()
+                .collect()
+        } else {
+            self.read_all_raw()?
+        };
         let mut grouped: BTreeMap<String, BTreeMap<u64, Vec<Value>>> = BTreeMap::new();
         for record in raw_records {
             let round_number = record
@@ -2376,8 +2628,37 @@ impl Store {
             current = next;
         }
 
-        let directory = self.root.join("indexes/deterministic");
         fs::create_dir_all(&directory)?;
+        if let Some(ids) = scope {
+            for entry in fs::read_dir(&directory)? {
+                let path = entry?.path();
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                let Some(level) = name
+                    .strip_prefix("level-")
+                    .and_then(|n| n.strip_suffix(".jsonl"))
+                    .and_then(|n| n.parse::<u64>().ok())
+                else {
+                    continue;
+                };
+                for line in BufReader::new(File::open(&path)?).lines() {
+                    let record: Value = serde_json::from_str(&line?)?;
+                    if !ids.contains(string_field(&record, "conversation_id")?) {
+                        levels.entry(level).or_default().push(record);
+                    }
+                }
+            }
+            for records in levels.values_mut() {
+                records.sort_by_key(|r| {
+                    (
+                        r["conversation_id"].as_str().unwrap_or("").to_owned(),
+                        r["source_start_sequence"].as_u64().unwrap_or(0),
+                    )
+                });
+            }
+        }
+        // An interrupted multi-file publication must fall back to a full rebuild.
+        atomic_write_json(&rebuild_marker, &json!({"started_at": now_iso()}))?;
+        levels.retain(|_, records| !records.is_empty());
         for entry in fs::read_dir(&directory)? {
             let path = entry?.path();
             if path
@@ -2410,6 +2691,15 @@ impl Store {
                 if !path.is_dir() {
                     continue;
                 }
+                if let Some(ids) = scope {
+                    let owned = ids
+                        .iter()
+                        .map(|id| self.conversation_index_dir(id))
+                        .collect::<Result<Vec<_>>>()?;
+                    if !owned.contains(&path) {
+                        continue;
+                    }
+                }
                 for child in fs::read_dir(path)? {
                     let child_path = child?.path();
                     if child_path
@@ -2435,6 +2725,9 @@ impl Store {
             })
             .collect();
         for conversation_id in conversation_ids {
+            if scope.is_some_and(|ids| !ids.contains(&conversation_id)) {
+                continue;
+            }
             let conversation_directory = self.ensure_conversation_indexes(&conversation_id)?;
             for (level, records) in &levels {
                 let selected: Vec<Value> = records
@@ -2458,6 +2751,8 @@ impl Store {
         for (level, records) in &levels {
             counts.insert(level.to_string(), json!(records.len()));
         }
+        remove_file_if_present(&self.root.join("pending/deterministic-index-debt.json"))?;
+        remove_file_if_present(&rebuild_marker)?;
         Ok(json!({
             "levels": counts,
             "level_1_round_trigger": self.config.summaries.level_1_trigger_rounds,
@@ -2768,8 +3063,9 @@ impl Store {
         Ok(Some(path))
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn sync_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        self.sync_batch_mode(paths, true, false)
+        self.sync_batch_mode(paths, true, false, false)
     }
 
     fn sync_batch_mode(
@@ -2777,7 +3073,9 @@ impl Store {
         paths: Vec<PathBuf>,
         isolate_source_errors: bool,
         isolate_missing_source_errors: bool,
+        bounded: bool,
     ) -> Result<Value> {
+        self.recover_source_relocations()?;
         self.repair_native_recovery_debt()?;
         let path_count = paths.len();
         let completed_before = self.lock("archive.lock", || {
@@ -2802,7 +3100,7 @@ impl Store {
                     } else {
                         accumulated_session = Some(session);
                     }
-                    if caught_up {
+                    if caught_up || bounded {
                         break;
                     }
                     // Give maintenance and backup workers a fair chance to acquire
@@ -2838,7 +3136,16 @@ impl Store {
         }
         let imported = result.imported_messages;
         let finalized = self.lock("archive.lock", || {
-            let deterministic_indexes = if imported > 0 {
+            let index_debt = self.index_debt()?;
+            let deterministic_indexes = if self
+                .root
+                .join("pending/deterministic-index-rebuild.json")
+                .exists()
+            {
+                Some(self.refresh_deterministic_indexes()?)
+            } else if !index_debt.is_empty() {
+                Some(self.refresh_deterministic_indexes_scoped(Some(&index_debt))?)
+            } else if imported > 0 {
                 Some(self.refresh_deterministic_indexes()?)
             } else {
                 None
@@ -2874,7 +3181,30 @@ impl Store {
     }
 
     fn sync_startup_batch(&self, paths: Vec<PathBuf>) -> Result<Value> {
-        self.sync_batch_mode(paths, true, true)
+        self.sync_batch_mode(paths, true, true, false)
+    }
+
+    fn source_recovery_path(&self, source_path: &Path) -> PathBuf {
+        self.source_error_path(source_path)
+            .with_extension("recovery.json")
+    }
+
+    fn cursor_boundary_valid(source_path: &Path, cursor: &Value) -> Result<bool> {
+        let offset = cursor
+            .get("committed_byte_offset")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        if offset == 0 {
+            return Ok(true);
+        }
+        let mut file = File::open(source_path)?;
+        if offset > file.metadata()?.len() {
+            return Ok(false);
+        }
+        file.seek(SeekFrom::Start(offset - 1))?;
+        let mut preceding = [0];
+        file.read_exact(&mut preceding)?;
+        Ok(preceding[0] == b'\n')
     }
 
     fn repair_native_recovery_debt(&self) -> Result<()> {
@@ -2895,17 +3225,52 @@ impl Store {
                 source_path.display()
             );
         }
-        loop {
-            let prepared = self.prepare_sync_file(&source_path)?;
-            let caught_up = prepared.batch.caught_up;
-            self.lock("archive.lock", || self.sync_batch_unlocked(vec![prepared]))?;
-            if caught_up {
-                break;
-            }
-            std::thread::sleep(RECOVERY_LOCK_YIELD);
+        let (_, segment_id) = resolve_rollout_identity(&source_path)?;
+        let cursor_path = self.cursor_path(&segment_id);
+        let cursor = if cursor_path.exists() {
+            read_json(&cursor_path)?
+        } else {
+            json!({})
+        };
+        if !Self::cursor_boundary_valid(&source_path, &cursor)? {
+            return self.lock("archive.lock", || {
+                // Preserve unresolved WAL intents and partial raw writes. Isolation
+                // frees unrelated capture without claiming this transaction committed.
+                let destination = self.source_recovery_path(&source_path);
+                if !destination.exists() {
+                    atomic_write_json(
+                        &destination,
+                        &json!({
+                            "status": "unresolved-source-change",
+                            "created_at": now_iso(),
+                            "source_path": portable_path(&source_path),
+                            "recovery_debt": recovery_debt,
+                            "cursor": cursor,
+                            "wal_intents": self.capture_wal_state()?.pending,
+                        }),
+                    )?;
+                }
+                self.record_source_error(
+                    &source_path,
+                    &anyhow!(
+                        "Source changed at committed byte boundary; recovery isolated, WAL retained"
+                    ),
+                )?;
+                remove_file_if_present(&marker)
+            });
         }
         self.recover_capture_wal()?;
         let source_key = portable_path(&source_path);
+        let has_pending_source = self
+            .capture_wal_state()?
+            .pending
+            .values()
+            .any(|intent| intent.source_path == source_key);
+        if has_pending_source {
+            let prepared = self.prepare_sync_file(&source_path)?;
+            self.lock("archive.lock", || self.sync_batch_unlocked(vec![prepared]))?;
+        }
+        self.recover_capture_wal()?;
         if self
             .capture_wal_state()?
             .pending
@@ -2948,6 +3313,11 @@ impl Store {
                 transaction_id: transaction_id.clone(),
                 session_id: prepared.batch.session_id.clone(),
                 source_path: portable_path(&prepared.source_path),
+                source_generation: prepared
+                    .hinted_cursor
+                    .get("source_generation")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
                 cursor_before_line: prepared.last_line,
                 cursor_after_line: prepared
                     .batch
@@ -3162,10 +3532,7 @@ fn rollout_session_id(path: &Path) -> Option<String> {
         .map(|value| value.as_str().to_owned())
 }
 
-fn resolve_rollout_session_id(path: &Path) -> Result<Option<String>> {
-    if let Some(session_id) = rollout_session_id(path) {
-        return Ok(Some(session_id));
-    }
+fn resolve_rollout_identity(path: &Path) -> Result<(String, String)> {
     let mut reader = BufReader::new(File::open(path)?);
     let mut buffer = Vec::new();
     for _ in 0..32 {
@@ -3178,10 +3545,39 @@ fn resolve_rollout_session_id(path: &Path) -> Result<Option<String>> {
         if let Ok(event) = serde_json::from_str::<Value>(text)
             && let Some((session_id, _)) = session_metadata(&event)
         {
-            return Ok(Some(session_id));
+            let Some(filename_id) = rollout_session_id(path) else {
+                return Ok((session_id.clone(), session_id));
+            };
+            if filename_id == session_id {
+                return Ok((session_id.clone(), session_id));
+            }
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("");
+            if name.contains(&format!("{session_id}_{filename_id}.jsonl")) {
+                return Ok((session_id, filename_id));
+            }
+            bail!(
+                "rollout filename and session metadata IDs differ: {}",
+                path.display()
+            );
         }
     }
-    Ok(None)
+    bail!(
+        "Codex session metadata is missing an ID: {}",
+        path.display()
+    )
+}
+
+fn rollout_uses_completed_items(path: &Path) -> Result<bool> {
+    const PROBE_BYTES: u64 = 1024 * 1024;
+    let mut reader = File::open(path)?.take(PROBE_BYTES);
+    let mut probe = Vec::new();
+    reader.read_to_end(&mut probe)?;
+    Ok(probe
+        .windows(b"\"type\":\"item_completed\"".len())
+        .any(|window| window == b"\"type\":\"item_completed\""))
 }
 
 fn recent_rollouts(
@@ -3274,36 +3670,38 @@ fn emit(value: &Value) -> Result<()> {
 }
 
 fn sync_and_emit(store: &Store, paths: Vec<PathBuf>) -> bool {
-    let mut all_succeeded = true;
-    for path in paths {
-        match store.sync_batch(vec![path.clone()]) {
-            Ok(result) => {
-                let changed = result
-                    .get("imported_messages")
+    match store.sync_batch_mode(paths, true, true, true) {
+        Ok(result) => {
+            let all_succeeded = result
+                .get("source_error_count")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                == 0;
+            let changed = result
+                .get("imported_messages")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                > 0
+                || result
+                    .get("repaired_transcripts")
                     .and_then(Value::as_u64)
                     .unwrap_or(0)
                     > 0
-                    || result
-                        .get("repaired_transcripts")
-                        .and_then(Value::as_u64)
-                        .unwrap_or(0)
-                        > 0
-                    || result
-                        .get("token_usage_changed_events")
-                        .and_then(Value::as_u64)
-                        .unwrap_or(0)
-                        > 0;
-                if changed && let Err(error) = emit(&result) {
-                    eprintln!("output error: {error:#}");
-                }
+                || result
+                    .get("token_usage_changed_events")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0)
+                    > 0;
+            if changed && let Err(error) = emit(&result) {
+                eprintln!("output error: {error:#}");
             }
-            Err(error) => {
-                all_succeeded = false;
-                eprintln!("source sync error ({}): {error:#}", path.display());
-            }
+            all_succeeded
+        }
+        Err(error) => {
+            eprintln!("source batch sync error: {error:#}");
+            false
         }
     }
-    all_succeeded
 }
 
 #[cfg(target_os = "macos")]
@@ -3314,6 +3712,9 @@ struct KqueueWatcher {
 
 #[cfg(target_os = "macos")]
 const MAX_KQUEUE_ROLLOUT_WATCHES: usize = 64;
+
+#[cfg(target_os = "macos")]
+const MAX_KQUEUE_DIRECTORY_WATCHES: usize = 32;
 
 #[cfg(target_os = "macos")]
 impl KqueueWatcher {
@@ -3340,6 +3741,9 @@ impl KqueueWatcher {
         rollout_files
             .sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
         rollout_files.truncate(MAX_KQUEUE_ROLLOUT_WATCHES);
+        // Directory history grows indefinitely; fallback scanning covers entries
+        // outside this bound. Leave headroom for constructing the next watcher.
+        directories.truncate(MAX_KQUEUE_DIRECTORY_WATCHES);
 
         let mut watched = Vec::new();
         for watch_path in directories
@@ -3349,8 +3753,14 @@ impl KqueueWatcher {
             let path = CString::new(watch_path.as_os_str().as_bytes())?;
             let fd = unsafe { libc::open(path.as_ptr(), libc::O_EVTONLY | libc::O_CLOEXEC) };
             if fd < 0 {
-                return Err(std::io::Error::last_os_error())
-                    .with_context(|| format!("watch {}", watch_path.display()));
+                let error = std::io::Error::last_os_error();
+                if matches!(error.raw_os_error(), Some(libc::EMFILE | libc::ENFILE))
+                    && !watched.is_empty()
+                {
+                    eprintln!("watch capacity exhausted; remaining sources use metadata fallback");
+                    break;
+                }
+                return Err(error).with_context(|| format!("watch {}", watch_path.display()));
             }
             let file = unsafe { File::from_raw_fd(fd) };
             let change = libc::kevent {
@@ -3462,6 +3872,8 @@ fn rollouts_requiring_sync(store: &Store, current_paths: &[PathBuf]) -> Result<V
 
 struct EventLoopState {
     known_stamps: HashMap<PathBuf, (u64, SystemTime)>,
+    last_served: HashMap<PathBuf, u64>,
+    service_tick: u64,
     last_activity: std::time::Instant,
     telemetry: CollectorTelemetry,
 }
@@ -3493,11 +3905,12 @@ fn initialize_event_loop_state(
     let known_stamps = rollout_stamps(&initial_paths)?;
     let initial_watermark = newest_source_watermark(&known_stamps);
     telemetry.record_source_watermark(initial_watermark.clone());
-    telemetry.record_archive(initial_watermark);
     telemetry.mark_ready();
     write_collector_telemetry(&mut telemetry, store, ACTIVE_FALLBACK);
     Ok(EventLoopState {
         known_stamps,
+        last_served: HashMap::new(),
+        service_tick: 0,
         last_activity: std::time::Instant::now(),
         telemetry,
     })
@@ -3528,10 +3941,25 @@ fn process_rollout_cycle(
     }
     candidates.extend(rollouts_requiring_sync(store, &current_paths)?);
     let had_pending_rollouts = !candidates.is_empty();
-    let sync_succeeded =
-        candidates.is_empty() || sync_and_emit(store, candidates.into_iter().collect());
+    let mut queued: Vec<_> = candidates.into_iter().collect();
+    queued.sort_by_key(|path| std::cmp::Reverse(current_stamps.get(path).map(|s| s.1)));
+    // Reserve half the batch for fresh traffic and half for fair historical progress.
+    let split = queued.len().min(4);
+    let mut historical = queued.split_off(split);
+    historical.sort_by_key(|path| state.last_served.get(path).copied().unwrap_or(0));
+    queued.extend(historical.into_iter().take(4));
+    for path in &queued {
+        state.service_tick += 1;
+        state.last_served.insert(path.clone(), state.service_tick);
+    }
+    let sync_succeeded = queued.is_empty() || sync_and_emit(store, queued);
     store.write_coverage_status(&current_paths)?;
-    if sync_succeeded && (had_pending_rollouts || state.known_stamps != current_stamps) {
+    let caught_up = read_json(&store.root.join("imports/codex/coverage-status.json"))?
+        .get("status")
+        .and_then(Value::as_str)
+        == Some("covered");
+    if sync_succeeded && caught_up && (had_pending_rollouts || state.known_stamps != current_stamps)
+    {
         state.telemetry.record_archive(source_watermark);
     }
     if received_event || had_pending_rollouts || state.known_stamps != current_stamps {
@@ -3843,6 +4271,107 @@ mod adaptive_fallback_tests {
     }
 
     #[test]
+    fn scoped_indexes_match_full_rebuild_and_recover_interrupted_publication() -> Result<()> {
+        let archive = tempfile::tempdir()?;
+        let mut store = initialized_store(archive.path())?;
+        store.config.summaries.level_1_trigger_rounds = 1;
+        store.config.summaries.higher_level_trigger_count = 2;
+        for conversation in ["first", "second"] {
+            for round in 0..2 {
+                for speaker in ["user", "assistant"] {
+                    store.append_message(
+                        speaker,
+                        "unchanged text",
+                        "2026-09-08T00:00:00Z",
+                        conversation,
+                        &format!("{conversation}-{round}-{speaker}"),
+                        speaker == "assistant",
+                        json!({}),
+                    )?;
+                }
+            }
+        }
+        store.refresh_deterministic_indexes()?;
+        let untouched = store
+            .conversation_index_dir("second")?
+            .join("deterministic-level-1.jsonl");
+        let stamp = fs::metadata(&untouched)?.modified()?;
+        store.append_message(
+            "user",
+            "new",
+            "2026-09-08T00:01:00Z",
+            "first",
+            "new-u",
+            false,
+            json!({}),
+        )?;
+        store.append_message(
+            "assistant",
+            "answer",
+            "2026-09-08T00:01:01Z",
+            "first",
+            "new-a",
+            true,
+            json!({}),
+        )?;
+        store.refresh_deterministic_indexes_scoped(Some(&store.index_debt()?))?;
+        assert_eq!(stamp, fs::metadata(&untouched)?.modified()?);
+        let directory = archive.path().join("indexes/deterministic");
+        let incremental = fs::read(directory.join("level-1.jsonl"))?;
+        let parents = fs::read(directory.join("level-2.jsonl"))?;
+        store.refresh_deterministic_indexes()?;
+        assert_eq!(incremental, fs::read(directory.join("level-1.jsonl"))?);
+        assert_eq!(parents, fs::read(directory.join("level-2.jsonl"))?);
+        atomic_write_json(
+            &archive
+                .path()
+                .join("pending/deterministic-index-rebuild.json"),
+            &json!({}),
+        )?;
+        fs::remove_file(directory.join("level-2.jsonl"))?;
+        store.refresh_deterministic_indexes_scoped(Some(&BTreeSet::from(["first".to_owned()])))?;
+        assert_eq!(parents, fs::read(directory.join("level-2.jsonl"))?);
+        assert!(store.index_debt()?.is_empty());
+        assert_eq!(store.max_raw_sequence.get(), 10);
+        Ok(())
+    }
+
+    #[test]
+    fn live_batch_yields_and_startup_does_not_claim_history_coverage() -> Result<()> {
+        let archive = tempfile::tempdir()?;
+        let sessions = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let path = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        event_loop_rollout(&path)?;
+        let mut file = fs::OpenOptions::new().append(true).open(&path)?;
+        for _ in 0..9000 {
+            writeln!(file, "{{\"type\":\"turn_context\",\"payload\":{{}}}}")?;
+        }
+        drop(file);
+        let _state =
+            initialize_event_loop_state(&store, sessions.path(), None, CollectorTelemetry::new())?;
+        let telemetry = read_json(
+            &archive
+                .path()
+                .join("imports/codex/collector-telemetry.json"),
+        )?;
+        assert_eq!(telemetry["ready"], true);
+        assert!(telemetry["archive_watermark"].is_null());
+        let first = store.sync_batch_mode(vec![path.clone()], true, true, true)?;
+        assert_eq!(first["sessions"][0]["caught_up"], false);
+        let offset = first["sessions"][0]["committed_byte_offset"]
+            .as_u64()
+            .unwrap();
+        assert!(offset < fs::metadata(&path)?.len());
+        let second = store.sync_startup_batch(vec![path])?;
+        assert_eq!(second["sessions"][0]["complete"], true);
+        assert_eq!(store.read_all_raw()?.len(), 1);
+        Ok(())
+    }
+
+    #[test]
     fn shared_event_cycle_advances_stamps_only_after_successful_finish() -> Result<()> {
         let sessions = tempfile::tempdir()?;
         let archive = tempfile::tempdir()?;
@@ -3889,6 +4418,8 @@ mod adaptive_fallback_tests {
         let store = initialized_store(archive.path())?;
         let sentinel = sessions.path().join("sentinel.jsonl");
         let mut state = EventLoopState {
+            last_served: HashMap::new(),
+            service_tick: 0,
             known_stamps: HashMap::from([(
                 sentinel.clone(),
                 (7, SystemTime::UNIX_EPOCH + Duration::from_secs(7)),
@@ -3911,6 +4442,170 @@ mod adaptive_fallback_tests {
         finish_rollout_cycle(&store, &mut state, cycle, ACTIVE_FALLBACK);
         assert_eq!(state.known_stamps.len(), 1);
         assert!(state.known_stamps.contains_key(&sentinel));
+        Ok(())
+    }
+
+    #[test]
+    fn changed_source_recovery_preserves_debt_and_allows_healthy_capture() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let broken = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a8.jsonl");
+        let healthy = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        event_loop_rollout(&healthy)?;
+        event_loop_rollout(&broken)?;
+        fs::write(
+            &broken,
+            fs::read_to_string(&broken)?.replace(
+                "019fb8f2-9a67-7b03-9474-6f92cd6b21a7",
+                "019fb8f2-9a67-7b03-9474-6f92cd6b21a8",
+            ),
+        )?;
+        let broken = broken.canonicalize()?;
+        let (_, segment) = resolve_rollout_identity(&broken)?;
+        let cursor = json!({"committed_byte_offset": 2, "last_line": 1, "source_path": portable_path(&broken)});
+        atomic_write_json(&store.cursor_path(&segment), &cursor)?;
+        let intent = WalIntent {
+            transaction_id: "unresolved-test".into(),
+            session_id: segment.clone(),
+            source_path: portable_path(&broken),
+            source_generation: None,
+            cursor_before_line: 1,
+            cursor_after_line: 2,
+            committed_byte_offset: 20,
+        };
+        store.capture_wal().begin(&intent)?;
+        let marker = store.root.join("pending/native-recovery-debt.json");
+        atomic_write_json(&marker, &json!({"source_path": portable_path(&broken)}))?;
+        let result = store.sync_startup_batch(vec![broken.clone(), healthy.clone()])?;
+        assert_eq!(result["status"], "partial");
+        assert!(result["imported_messages"].as_u64().unwrap() > 0);
+        assert!(!marker.exists());
+        assert!(store.source_recovery_path(&broken).exists());
+        assert_eq!(read_json(&store.cursor_path(&segment))?, cursor);
+        assert_eq!(
+            store.capture_wal_state()?.pending.get("unresolved-test"),
+            Some(&intent)
+        );
+        let resumed = initialized_store(archive.path())?;
+        assert!(resumed.changed_rollouts(vec![broken.clone()])?.is_empty());
+        assert!(resumed.prepare_sync_file(&broken).is_err());
+        assert_eq!(
+            resumed.sync_startup_batch(vec![healthy])?["status"],
+            "synced"
+        );
+        assert_eq!(resumed.capture_wal_state()?.pending.len(), 1);
+        assert!(Store::cursor_boundary_valid(
+            &broken,
+            &json!({"committed_byte_offset": 0})
+        )?);
+        Ok(())
+    }
+
+    #[test]
+    fn reconciled_generation_captures_only_new_tail_and_survives_restart() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let path = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        event_loop_rollout(&path)?;
+        assert_eq!(
+            store.sync_startup_batch(vec![path.clone()])?["imported_messages"],
+            1
+        );
+        let old = fs::read_to_string(&path)?;
+        let (meta, message) = old.split_once('\n').unwrap();
+        let prefix = format!("{meta}\n{{\"type\":\"ignored\"}}\n{message}");
+        let tail = json!({"timestamp":"2026-08-18T00:00:02Z", "type":"event_msg",
+            "payload":{"type":"agent_message","phase":"final_answer","message":"new tail"}});
+        fs::write(&path, format!("{prefix}{tail}\n"))?;
+        let (_, segment) = resolve_rollout_identity(&path)?;
+        let cursor_path = store.cursor_path(&segment);
+        let mut cursor = read_json(&cursor_path)?;
+        cursor["source_generation"] = json!("fixture");
+        cursor["last_line"] = json!(3);
+        cursor["message_last_line"] = json!(3);
+        cursor["committed_byte_offset"] = json!(prefix.len());
+        atomic_write_json(&cursor_path, &cursor)?;
+        assert_eq!(
+            store.sync_startup_batch(vec![path.clone()])?["imported_messages"],
+            1
+        );
+        assert_eq!(read_json(&cursor_path)?["source_generation"], "fixture");
+        let resumed = initialized_store(archive.path())?;
+        assert_eq!(
+            resumed.sync_startup_batch(vec![path])?["imported_messages"],
+            0
+        );
+        let raw = resumed.read_all_raw()?;
+        assert_eq!(raw.len(), 2);
+        assert!(
+            raw[1]["message_id"]
+                .as_str()
+                .unwrap()
+                .contains("-gfixture-")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn interrupted_source_relocation_rolls_back_before_capture() -> Result<()> {
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let cursor = store.cursor_path("fixture");
+        let token = store.root.join("imports/codex/token-usage/fixture.json");
+        atomic_write_json(&cursor, &json!({"last_line": 9}))?;
+        atomic_write_json(&token, &json!({"scanned_through_line": 9}))?;
+        let receipt = store
+            .root
+            .join("imports/codex/source-reconciliations/fixture.json");
+        atomic_write_json(
+            &receipt,
+            &json!({"status":"prepared", "cursor_path":cursor,
+            "token_path":token,"old_cursor":{"last_line":2},"old_ledger":{"scanned_through_line":2}}),
+        )?;
+        store.recover_source_relocations()?;
+        assert_eq!(read_json(&cursor)?["last_line"], 2);
+        assert_eq!(read_json(&token)?["scanned_through_line"], 2);
+        assert_eq!(read_json(&receipt)?["status"], "rolled-back");
+        Ok(())
+    }
+
+    #[test]
+    fn excluded_source_shrink_refreshes_cursor_without_archiving_hidden_data() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let path = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        let meta = json!({"type":"session_meta","payload":{
+            "id":"019fb8f2-9a67-7b03-9474-6f92cd6b21a7", "source":{"subagent":{"thread_spawn":{}}}}});
+        let prefix = format!("{meta}\n");
+        fs::write(
+            &path,
+            format!(
+                "{prefix}{{\"type\":\"ignored\",\"payload\":\"{}\"}}\n",
+                "x".repeat(1000)
+            ),
+        )?;
+        store.sync_startup_batch(vec![path.clone()])?;
+        fs::write(&path, &prefix)?;
+        let result = store.sync_startup_batch(vec![path.clone()])?;
+        assert_eq!(result["status"], "synced");
+        assert_eq!(result["imported_messages"], 0);
+        assert!(store.read_all_raw()?.is_empty());
+        let (_, segment) = resolve_rollout_identity(&path)?;
+        assert_eq!(
+            read_json(&store.cursor_path(&segment))?["committed_byte_offset"],
+            prefix.len()
+        );
         Ok(())
     }
 
@@ -3958,6 +4653,126 @@ mod adaptive_fallback_tests {
         let retry = store.sync_batch(vec![malformed.clone()])?;
         assert_eq!(retry["status"], "synced");
         assert!(!store.source_error_path(&malformed).exists());
+        Ok(())
+    }
+
+    #[test]
+    fn multi_segment_rollout_uses_segment_cursors_and_one_conversation() -> Result<()> {
+        const SESSION_ID: &str = "01a041df-3694-7bd2-b9c6-d8c0c8e12f3f";
+        const SEGMENT_ID: &str = "01a041e8-e542-7b80-a315-06a9a1c66cb8";
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let first = sessions
+            .path()
+            .join(format!("rollout-2026-08-27T15-19-02-{SESSION_ID}.jsonl"));
+        let continuation = sessions.path().join(format!(
+            "rollout-2026-08-27T15-29-37-{SESSION_ID}_{SEGMENT_ID}.jsonl"
+        ));
+        let content = |message: &str| {
+            format!(
+                "{}\n{}\n",
+                json!({
+                    "timestamp": "2026-08-27T06:19:02Z",
+                    "type": "session_meta",
+                    "payload": {"id": SESSION_ID, "source": "user"}
+                }),
+                json!({
+                    "timestamp": "2026-08-27T06:19:03Z",
+                    "type": "event_msg",
+                    "payload": {"type": "user_message", "message": message}
+                }),
+            )
+        };
+        fs::write(&first, content("first segment"))?;
+        fs::write(&continuation, content("continued segment"))?;
+
+        let result = store.sync_batch(vec![first, continuation])?;
+        assert_eq!(result["status"], "synced");
+        assert_eq!(result["imported_messages"], 2);
+        assert!(store.cursor_path(SESSION_ID).is_file());
+        assert!(store.cursor_path(SEGMENT_ID).is_file());
+        let records =
+            store.read_records(&store.conversation_path(&format!("codex:{SESSION_ID}")))?;
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0]["conversation_id"], records[1]["conversation_id"]);
+        assert_ne!(records[0]["message_id"], records[1]["message_id"]);
+        assert_eq!(records[1]["source"]["segment_id"], SEGMENT_ID);
+
+        let repeated = store.sync_batch(vec![sessions.path().join(format!(
+            "rollout-2026-08-27T15-29-37-{SESSION_ID}_{SEGMENT_ID}.jsonl"
+        ))])?;
+        assert_eq!(repeated["imported_messages"], 0);
+        Ok(())
+    }
+
+    #[test]
+    fn completed_item_envelope_is_backfilled_once() -> Result<()> {
+        const SESSION_ID: &str = "01a041df-3694-7bd2-b9c6-d8c0c8e12f3f";
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let source = sessions
+            .path()
+            .join(format!("rollout-2026-08-27T15-19-02-{SESSION_ID}.jsonl"));
+        let content = [
+            json!({
+                "timestamp": "2026-08-27T06:19:02Z",
+                "type": "session_meta",
+                "payload": {"id": SESSION_ID, "source": "user"}
+            }),
+            json!({
+                "timestamp": "2026-08-27T06:19:03Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "item_completed",
+                    "item": {
+                        "id": "user-1",
+                        "type": "UserMessage",
+                        "content": [{"type": "text", "text": "new envelope user"}]
+                    }
+                }
+            }),
+            json!({
+                "timestamp": "2026-08-27T06:19:04Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "item_completed",
+                    "item": {
+                        "id": "agent-1",
+                        "type": "AgentMessage",
+                        "phase": "final_answer",
+                        "content": [{"type": "Text", "text": "new envelope answer"}]
+                    }
+                }
+            }),
+        ]
+        .into_iter()
+        .map(|value| format!("{value}\n"))
+        .collect::<String>();
+        fs::write(&source, content)?;
+        atomic_write_json(
+            &store.cursor_path(SESSION_ID),
+            &json!({"format_version": 1, "session_id": SESSION_ID, "last_line": 3}),
+        )?;
+
+        assert_eq!(
+            store.changed_rollouts(vec![source.clone()])?,
+            vec![source.clone()]
+        );
+        let first = store.sync_batch(vec![source.clone()])?;
+        let second = store.sync_batch(vec![source])?;
+        assert_eq!(first["imported_messages"], 2);
+        assert_eq!(second["imported_messages"], 0);
+        let records =
+            store.read_records(&store.conversation_path(&format!("codex:{SESSION_ID}")))?;
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0]["text"], "new envelope user");
+        assert_eq!(records[1]["text"], "new envelope answer");
+        assert_eq!(
+            read_json(&store.cursor_path(SESSION_ID))?["visible_message_format_version"],
+            1
+        );
         Ok(())
     }
 
@@ -4141,6 +4956,7 @@ ai_summary:
             transaction_id: "durable-tx".to_owned(),
             session_id: SESSION_ID.to_owned(),
             source_path: source_path.to_owned(),
+            source_generation: None,
             cursor_before_line: 2,
             cursor_after_line: 3,
             committed_byte_offset: 512,
@@ -4180,6 +4996,32 @@ ai_summary:
     }
 
     #[test]
+    fn wal_recovery_requires_matching_source_generation() -> Result<()> {
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let intent = WalIntent {
+            transaction_id: "generation-tx".into(),
+            session_id: "fixture".into(),
+            source_path: "fixture.jsonl".into(),
+            source_generation: Some("new".into()),
+            cursor_before_line: 1,
+            cursor_after_line: 2,
+            committed_byte_offset: 64,
+        };
+        store.capture_wal().begin(&intent)?;
+        let mut cursor = json!({"source_path":"fixture.jsonl", "source_generation":"old",
+            "last_line":2, "committed_byte_offset":64});
+        atomic_write_json(&store.cursor_path("fixture"), &cursor)?;
+        store.recover_capture_wal()?;
+        assert_eq!(store.capture_wal_state()?.pending.len(), 1);
+        cursor["source_generation"] = json!("new");
+        atomic_write_json(&store.cursor_path("fixture"), &cursor)?;
+        let restarted = initialized_store(archive.path())?;
+        assert!(restarted.capture_wal_state()?.pending.is_empty());
+        Ok(())
+    }
+
+    #[test]
     fn telemetry_refreshes_wal_state_on_every_write() -> Result<()> {
         let archive = tempfile::tempdir()?;
         let config = archive.path().join("config.yaml");
@@ -4189,6 +5031,7 @@ ai_summary:
             transaction_id: "telemetry-tx".to_owned(),
             session_id: "telemetry-session".to_owned(),
             source_path: "/tmp/telemetry-rollout.jsonl".to_owned(),
+            source_generation: None,
             cursor_before_line: 0,
             cursor_after_line: 1,
             committed_byte_offset: 128,
@@ -4235,6 +5078,24 @@ ai_summary:
             watcher._watched.len(),
             directory_count + MAX_KQUEUE_ROLLOUT_WATCHES
         );
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn kqueue_directory_history_and_replacement_are_bounded() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        for index in 0..300 {
+            let day = temporary.path().join(format!("day-{index:03}"));
+            fs::create_dir(&day)?;
+            fs::write(day.join(format!("rollout-{index:03}.jsonl")), b"{}\n")?;
+        }
+        let old = KqueueWatcher::new(temporary.path(), None)?;
+        let replacement = KqueueWatcher::new(temporary.path(), None)?;
+        let limit = MAX_KQUEUE_DIRECTORY_WATCHES + MAX_KQUEUE_ROLLOUT_WATCHES;
+        assert!(old._watched.len() <= limit);
+        assert!(replacement._watched.len() <= limit);
+        assert!(!replacement._watched.is_empty());
         Ok(())
     }
 }
@@ -4534,21 +5395,16 @@ fn run() -> Result<()> {
     eprintln!("memory-wuxian-collector startup: synchronization started");
     // Startup and explicit recovery must never block exact capture on a model.
     // The maintenance supervisor drains any summary job created by this pass.
-    let initial = store.sync_startup_batch(initial_paths)?;
-    store.write_coverage_status(&scoped_paths)?;
-    eprintln!("memory-wuxian-collector startup: synchronization completed");
     if args.once {
+        let initial = store.sync_startup_batch(initial_paths)?;
+        store.write_coverage_status(&scoped_paths)?;
+        eprintln!("memory-wuxian-collector startup: synchronization completed");
         emit(&initial)?;
         return Ok(());
     }
-    if initial
-        .get("imported_messages")
-        .and_then(Value::as_u64)
-        .unwrap_or(0)
-        > 0
-    {
-        emit(&initial)?;
-    }
+    eprintln!(
+        "memory-wuxian-collector startup: history catch-up delegated to bounded event cycles"
+    );
 
     run_event_loop(
         &store,

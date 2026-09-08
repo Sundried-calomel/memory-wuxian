@@ -86,6 +86,14 @@ single-writer locking, runtime readiness, mechanical telemetry, and an atomic
 backup-debt handoff. It consumes only stable source and storage contracts and
 Platform Foundation primitives.
 
+One top-level Codex conversation may span multiple physical rollout files.
+Capture Core keeps the parent session ID as the conversation identity while
+assigning each physical segment its own durable source cursor and token ledger.
+Visible-event normalization accepts both the legacy event envelope and the
+observed `item_completed` user/assistant envelope; hidden reasoning remains
+outside the archive. Historical waterlines require coverage of every retained
+physical segment rather than relying on a latest-update timestamp.
+
 The Memory Plane owns the meaning and schema of source events and raw history,
 transcripts, summary jobs, summaries, indexes, retrieval, context capsules, and
 token telemetry. It may consume Capture Core outputs but cannot inject summary,

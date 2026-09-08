@@ -129,6 +129,7 @@
       "properties": {
         "enabled": {"type": "boolean"},
         "directory": {"type": "string"},
+        "workspace_directory": {"type": "string"},
         "retention_count": {"type": "integer", "minimum": 1},
         "workspace_retention_count": {"type": "integer", "minimum": 1}
       }

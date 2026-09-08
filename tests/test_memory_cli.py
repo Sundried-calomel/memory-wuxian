@@ -1578,9 +1578,17 @@ summaries:
         self.assertEqual(repaired["status"], "ok")
         self.assertTrue(repaired["repairs"])
         self.assertIn("恢复测试", self.run_cli("retrieve", "--query", "恢复测试", expect_json=False))
-        workspace_backups = [path for path in (self.root / "archive").iterdir() if path.is_dir()]
+        workspace_root = self.base / "recovery-backups"
+        workspace_backups = [path for path in workspace_root.iterdir() if path.is_dir()]
         self.assertEqual(len(workspace_backups), 1)
         self.assertTrue(workspace_backups[0].name.startswith("index-rebuild-"))
+        self.assertTrue(
+            workspace_backups[0].joinpath("recovery-backup-manifest.json").is_file()
+        )
+        self.assertEqual(
+            [path for path in (self.root / "archive").iterdir() if path.is_dir()],
+            [],
+        )
 
     def test_index_generation_cli_is_preview_first_for_activation(self):
         self.append_round(1)
@@ -1627,6 +1635,22 @@ summaries:
         result = self.run_cli("rebuild-indexes", "--apply")
         self.assertTrue(result["changed"])
         self.assertTrue(Path(result["desktop_backup"]).is_dir())
+        self.assertTrue(any((self.base / "recovery-backups").iterdir()))
+        self.assertFalse(
+            any(Path(result["desktop_backup"]).joinpath("archive").glob("*-rebuild-*"))
+        )
+
+    def test_workspace_recovery_backup_root_must_be_outside_live_archive(self):
+        from memory_cli import load_simple_yaml
+
+        with self.config.open("a", encoding="utf-8") as handle:
+            handle.write(
+                f'backup:\n  workspace_directory: "{self.root / "archive/recovery"}"\n'
+            )
+        store = MemoryStore(self.root, load_simple_yaml(self.config))
+
+        with self.assertRaisesRegex(ValueError, "outside the memory archive root"):
+            store.backup_derived_files("index-rebuild", [self.root / "indexes"])
 
     def test_maintenance_cli_is_bounded_model_free_and_redacted(self):
         payload = self.base / "semantic-eligibility.json"
@@ -1919,6 +1943,112 @@ summaries:
         snapshots = [path for path in backup_root.iterdir() if path.is_dir()]
         self.assertEqual(len(snapshots), 1)
         self.assertEqual(snapshots[0].name, Path(manual["backup"]).name)
+
+    def test_codex_multi_segment_session_keeps_one_conversation_and_distinct_ids(self):
+        session_id = "01a041df-3694-7bd2-b9c6-d8c0c8e12f3f"
+        segment_id = "01a041e8-e542-7b80-a315-06a9a1c66cb8"
+        first = self.base / f"rollout-2026-08-27T15-19-02-{session_id}.jsonl"
+        continuation = self.base / (
+            f"rollout-2026-08-27T15-29-37-{session_id}_{segment_id}.jsonl"
+        )
+        first.write_text(
+            event("2026-08-27T06:19:02Z", "session_meta", {"id": session_id})
+            + event(
+                "2026-08-27T06:19:03Z",
+                "event_msg",
+                {"type": "user_message", "message": "first segment"},
+            ),
+            encoding="utf-8",
+        )
+        continuation.write_text(
+            event("2026-08-27T06:29:37Z", "session_meta", {"id": session_id})
+            + event(
+                "2026-08-27T06:29:38Z",
+                "event_msg",
+                {"type": "user_message", "message": "continued segment"},
+            ),
+            encoding="utf-8",
+        )
+
+        first_result = self.run_cli("sync-codex", "--session-file", str(first))
+        continuation_result = self.run_cli(
+            "sync-codex", "--session-file", str(continuation)
+        )
+        self.assertEqual(first_result["imported_messages"], 1)
+        self.assertEqual(continuation_result["imported_messages"], 1)
+        self.assertEqual(continuation_result["sessions"][0]["segment_id"], segment_id)
+        cursors = self.root / "imports" / "codex"
+        self.assertTrue((cursors / f"{session_id}.json").is_file())
+        self.assertTrue((cursors / f"{segment_id}.json").is_file())
+        transcripts = [
+            path
+            for path in (self.root / "conversations").glob("*.md")
+            if path.name != "README.md"
+        ]
+        self.assertEqual(len(transcripts), 1)
+        transcript = transcripts[0].read_text(encoding="utf-8")
+        self.assertIn("first segment", transcript)
+        self.assertIn("continued segment", transcript)
+        self.assertIn(f"codex-{session_id}-00000002-u", transcript)
+        self.assertIn(
+            f"codex-{session_id}-{segment_id}-00000002-u",
+            transcript,
+        )
+        repeated = self.run_cli("sync-codex", "--session-file", str(continuation))
+        self.assertEqual(repeated["imported_messages"], 0)
+
+    def test_sync_backfills_completed_item_visible_messages_once(self):
+        session_id = "01a041df-3694-7bd2-b9c6-d8c0c8e12f3f"
+        session = self.base / f"rollout-2026-08-27T15-19-02-{session_id}.jsonl"
+        events = [
+            {"timestamp": "2026-08-27T06:19:02Z", "type": "session_meta", "payload": {"id": session_id}},
+            {
+                "timestamp": "2026-08-27T06:19:03Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "item_completed",
+                    "item": {
+                        "id": "user-1",
+                        "type": "UserMessage",
+                        "content": [{"type": "text", "text": "new envelope user"}],
+                    },
+                },
+            },
+            {
+                "timestamp": "2026-08-27T06:19:04Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "item_completed",
+                    "item": {
+                        "id": "agent-1",
+                        "type": "AgentMessage",
+                        "phase": "final_answer",
+                        "content": [{"type": "Text", "text": "new envelope answer"}],
+                    },
+                },
+            },
+        ]
+        session.write_text(
+            "".join(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n" for item in events),
+            encoding="utf-8",
+        )
+        cursor = self.root / "imports" / "codex" / f"{session_id}.json"
+        cursor.write_text(
+            json.dumps({"format_version": 1, "session_id": session_id, "last_line": len(events)}),
+            encoding="utf-8",
+        )
+
+        first = self.run_cli("sync-codex", "--session-file", str(session))
+        second = self.run_cli("sync-codex", "--session-file", str(session))
+        self.assertEqual(first["imported_messages"], 2)
+        self.assertEqual(second["imported_messages"], 0)
+        self.assertEqual(
+            json.loads(cursor.read_text(encoding="utf-8"))["visible_message_format_version"],
+            1,
+        )
+        transcript = (self.root / f"conversations/codex-{session_id}.md").read_text(encoding="utf-8")
+        self.assertIn("new envelope user", transcript)
+        self.assertIn("new envelope answer", transcript)
 
     def test_codex_subagent_sessions_are_excluded(self):
         session = self.base / "rollout-guardian.jsonl"

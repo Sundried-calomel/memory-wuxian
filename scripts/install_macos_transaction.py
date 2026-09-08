@@ -62,7 +62,7 @@ except ModuleNotFoundError:
 
 
 COLLECTOR_LABEL = "com.memorywuxian.codex-sync"
-COLLECTOR_READY_TIMEOUT_SECONDS = 900
+COLLECTOR_READY_TIMEOUT_SECONDS = 300
 Runner = Callable[..., subprocess.CompletedProcess]
 
 
@@ -266,6 +266,27 @@ def launchctl_pid(label: str, runner: Runner = subprocess.run) -> int | None:
     return None
 
 
+def verify_effect_probe_cursor(archive_root: Path, probe: dict[str, Any]) -> dict[str, Any]:
+    probe_id = probe["probe_id"]
+    if not isinstance(probe_id, str) or not probe_id.startswith("memory-wuxian-install-effect-") or not all(
+        character.isascii() and (character.isalnum() or character == "-") for character in probe_id
+    ):
+        raise ValueError("invalid installed effect probe identity")
+    cursor = read_json(archive_root / "imports" / "codex" / f"{probe_id}.json")
+    if (
+        cursor.get("session_id") != probe_id
+        or cursor.get("source_path") != probe["path"]
+        or cursor.get("source_byte_sha256") != probe["payload_sha256"]
+        or cursor.get("complete") is not True
+        or not isinstance(cursor.get("committed_byte_offset"), int)
+        or cursor["committed_byte_offset"] <= 0
+        or cursor["committed_byte_offset"] != cursor.get("observed_source_size")
+        or not watermark_reached(cursor.get("updated_at"), probe["watermark"])
+    ):
+        raise RuntimeError("installed effect probe has no complete hash-matched source cursor")
+    return cursor
+
+
 def wait_for_collector(
     archive_root: Path,
     *,
@@ -273,6 +294,7 @@ def wait_for_collector(
     minimum_watermark: str | None = None,
     effect_started_at: datetime | None = None,
     timeout_seconds: float = 300,
+    effect_probe: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     telemetry_path = archive_root / "imports" / "codex" / "collector-telemetry.json"
     deadline = time.monotonic() + timeout_seconds
@@ -294,13 +316,16 @@ def wait_for_collector(
                 last_error = "collector is alive and still completing startup synchronization"
             elif age > 30:
                 last_error = f"collector telemetry is stale by {age:.1f} seconds"
+            elif effect_probe is not None:
+                verify_effect_probe_cursor(archive_root, effect_probe)
+                return telemetry
             elif minimum_watermark is not None and not watermark_reached(
                 telemetry.get("archive_watermark"), minimum_watermark
             ):
                 last_error = "collector archive watermark has not reached the installed effect probe"
             else:
                 return telemetry
-        except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+        except (OSError, ValueError, KeyError, RuntimeError, json.JSONDecodeError) as error:
             last_error = str(error)
         time.sleep(0.5)
     raise RuntimeError(last_error)
@@ -562,6 +587,7 @@ def collector_lifecycle_manifest(
     expected_command: list[str],
     telemetry: dict[str, Any],
     launchd_pid: int,
+    effect_probe: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     telemetry_pid = telemetry.get("pid")
     if telemetry_pid != launchd_pid:
@@ -570,7 +596,9 @@ def collector_lifecycle_manifest(
         raise RuntimeError("lifecycle manifest requires ready collector telemetry")
     source = _watermark(telemetry.get("source_watermark"))
     archived = _watermark(telemetry.get("archive_watermark"))
-    if source is None or source != archived:
+    if effect_probe is not None:
+        verify_effect_probe_cursor(archive_root, effect_probe)
+    elif source is None or source != archived:
         raise RuntimeError("lifecycle manifest requires converged telemetry watermarks")
     live_generation = telemetry.get("lifecycle_generation")
     if live_generation is not None and live_generation != generation:
@@ -596,6 +624,8 @@ def collector_lifecycle_manifest(
             "updated_at": telemetry.get("updated_at"),
             "source_watermark": source,
             "archive_watermark": archived,
+            "effect_probe": effect_probe,
+            "history_caught_up": bool(source and source == archived),
         },
     }
 
@@ -608,6 +638,7 @@ def persist_collector_lifecycle(
     expected_command: list[str],
     telemetry: dict[str, Any],
     launchd_pid: int,
+    effect_probe: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     manifest = collector_lifecycle_manifest(
         generation=generation,
@@ -615,6 +646,7 @@ def persist_collector_lifecycle(
         expected_command=expected_command,
         telemetry=telemetry,
         launchd_pid=launchd_pid,
+        effect_probe=effect_probe,
     )
     atomic_json(path, manifest)
     if read_json(path) != manifest:
@@ -630,6 +662,7 @@ def verify_collector_lifecycle_alignment(
     expected_command: list[str],
     telemetry: dict[str, Any],
     launchd_pid: int,
+    effect_probe: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     expected = collector_lifecycle_manifest(
         generation=generation,
@@ -637,6 +670,7 @@ def verify_collector_lifecycle_alignment(
         expected_command=expected_command,
         telemetry=telemetry,
         launchd_pid=launchd_pid,
+        effect_probe=effect_probe,
     )
     observed = read_json(path)
     for field in (
@@ -664,6 +698,7 @@ def validate_installed_launch_contract(
     previous_archive_watermark: str | None,
     required_effect_watermark: str | None = None,
     effect_started_at: datetime | None = None,
+    effect_probe: dict[str, Any] | None = None,
     runner: Runner,
 ) -> dict[str, Any]:
     activation = read_json(archive_root / "imports" / "codex" / "collector-activation.json")
@@ -705,11 +740,13 @@ def validate_installed_launch_contract(
         raise RuntimeError("launchd PID does not match collector telemetry")
     source = _watermark(telemetry.get("source_watermark"))
     archived = _watermark(telemetry.get("archive_watermark"))
-    if telemetry.get("source_watermark") != telemetry.get("archive_watermark"):
+    if effect_probe is not None:
+        verify_effect_probe_cursor(archive_root, effect_probe)
+    if effect_probe is None and telemetry.get("source_watermark") != telemetry.get("archive_watermark"):
         raise RuntimeError("collector source and archive watermarks did not converge")
-    if not isinstance(telemetry.get("last_archive_update"), str):
+    if effect_probe is None and not isinstance(telemetry.get("last_archive_update"), str):
         raise RuntimeError("collector did not publish a bounded archive effect")
-    if required_effect_watermark is not None and not watermark_reached(
+    if effect_probe is None and required_effect_watermark is not None and not watermark_reached(
         archived, required_effect_watermark
     ):
         raise RuntimeError("collector did not reach the installed effect probe watermark")
@@ -724,6 +761,8 @@ def validate_installed_launch_contract(
         "expected_command": expected_arguments,
         "source_watermark": source,
         "archive_watermark": archived,
+        "effect_verification": "exact-source-cursor" if effect_probe is not None else "converged-watermark",
+        "history_caught_up": bool(source and source == archived),
     }
 
 
@@ -772,6 +811,7 @@ def verify_restored_collector_effect(
             archive_root,
             previous_pid=previous_pid,
             minimum_watermark=probe["watermark"],
+            effect_probe=probe,
             timeout_seconds=timeout_seconds,
         )
     finally:
@@ -787,6 +827,7 @@ def verify_restored_collector_effect(
         telemetry=telemetry,
         previous_archive_watermark=previous_watermark,
         required_effect_watermark=probe["watermark"],
+        effect_probe=probe,
         runner=runner,
     )
     if effect["expected_command"] != expected_command:
@@ -1098,6 +1139,7 @@ def install(
                 minimum_watermark=effect_probe["watermark"],
                 effect_started_at=effect_started_at,
                 timeout_seconds=30,
+                effect_probe=effect_probe,
             )
         finally:
             remove_installed_effect_probe(effect_probe)
@@ -1113,6 +1155,7 @@ def install(
             previous_archive_watermark=previous_archive_watermark,
             required_effect_watermark=effect_probe["watermark"],
             effect_started_at=effect_started_at,
+            effect_probe=effect_probe,
             runner=runner,
         )
         verify_collector_lifecycle_alignment(
@@ -1122,6 +1165,7 @@ def install(
             expected_command=effect["expected_command"],
             telemetry=telemetry,
             launchd_pid=effect["launchd_pid"],
+            effect_probe=effect_probe,
         )
         persist_collector_lifecycle(
             lifecycle_path,
@@ -1130,6 +1174,7 @@ def install(
             expected_command=effect["expected_command"],
             telemetry=telemetry,
             launchd_pid=effect["launchd_pid"],
+            effect_probe=effect_probe,
         )
         if candidate.exists():
             shutil.rmtree(candidate)
@@ -1242,6 +1287,7 @@ def install(
                 minimum_watermark=effect_probe["watermark"],
                 effect_started_at=effect_started_at,
                 timeout_seconds=COLLECTOR_READY_TIMEOUT_SECONDS,
+                effect_probe=effect_probe,
             )
         finally:
             remove_installed_effect_probe(effect_probe)
@@ -1257,6 +1303,7 @@ def install(
             previous_archive_watermark=previous_archive_watermark,
             required_effect_watermark=effect_probe["watermark"],
             effect_started_at=effect_started_at,
+            effect_probe=effect_probe,
             runner=runner,
         )
         lifecycle = persist_collector_lifecycle(
@@ -1266,6 +1313,7 @@ def install(
             expected_command=effect["expected_command"],
             telemetry=telemetry,
             launchd_pid=effect["launchd_pid"],
+            effect_probe=effect_probe,
         )
         transition(
             journal_path,

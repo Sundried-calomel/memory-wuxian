@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "receipt_type": "defect-workbook-completion",
+  "created_at": "2026-08-28T18:18:00+09:00",
+  "target": "memory-wuxian-v2.19.2-multi-segment-capture",
+  "change_kind": "repair",
+  "preflight_path": "governance/v2192-multi-segment-preflight.json",
+  "preflight_sha256": "01be135768df3e1cb4ee726dbe2bffe34be50b0988a72df14fd2e02473485098",
+  "selected_families": ["G03", "G05", "G09", "MW-R03", "MW-R06"],
+  "changed_workbook_entries": ["MW-REL-039"],
+  "changed_catalog_entries": [],
+  "verification": {
+    "python_suite": "801 tests executed; four platform-conditioned skips; all remaining tests passed with bounded localhost permission",
+    "native": "32 collector tests and 13 envelope tests passed",
+    "real_source_rehearsal": "7 retained item_completed sources imported into a disposable archive; 5 physical files remained one parent conversation and second replay added zero records",
+    "installation": "Installed Skill files, Python adapters, and native binaries report 2.19.2 with exact candidate binary hash; the prior interrupted transaction journal remains in prepare and the final file-level convergence is recorded as qualified rather than a committed transactional release",
+    "production_waterline": "2026-08-27T23:00:00Z cutoff is covered across 591 retained sources with zero lagging physical segments",
+    "runtime": "LaunchAgent is running the 2.19.2 collector; post-cutoff startup backlog remains, so runtime ready is not yet claimed"
+  },
+  "status": "qualified-local-install"
+}

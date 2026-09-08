@@ -1,5 +1,12 @@
 # Memory無限
 
+> **2.19.3 capture performance:** Continuous catch-up yields after bounded batches,
+> prioritizes fresh traffic, and updates indexes for changed conversations only.
+> macOS installation verifies an exact probe cursor independently of historical
+> coverage. Summary audits reuse the raw-message lookup without changing hashes.
+
+> **2.19.3:** Unifies Mac multi-segment/item_completed capture and Windows semantic-job isolation. Changed-source recovery is isolated; excluded subagent cursors can converge without importing their content. `source_reconcile.py --root ARCHIVE --source ROLLOUT` previews exact raw-backed suffix alignment; add `--apply` only for a verified relocation. New tails use generation-qualified IDs. Missing or ambiguous history and unresolved WAL transactions remain blocked. Older archived records remain intact.
+
 > **2.19.2:** An archive integrity warning no longer freezes every existing
 > semantic job. Memory Wuxian keeps the warning visible and creates no new job
 > from the incomplete archive, while each already frozen source-hash-bound job
@@ -357,7 +364,7 @@ Every imported conversation is also written to its own file under `memory/conver
 
 On macOS, grant Full Disk Access to `bin/memory-wuxian-collector` when the archive or backup is stored under protected `Documents` or `Desktop` locations. Verify the exact executable in the generated plist before claiming automatic capture is active. Background definitions preserve a stable Python entry path such as `/opt/homebrew/bin/python3`; they do not resolve it to a version-specific Homebrew Cellar path, so a routine Python upgrade does not create a new privacy identity and repeat Desktop or Documents permission prompts.
 
-The collector publishes lightweight runtime telemetry under `imports/codex/collector-telemetry.json`. The status console shows its active, idle, or deep-idle mode, current safety interval, latest filesystem event, latest archive write, wakeups during the last hour, and CPU/memory use. A new process first reports `phase=starting` and `ready=false`; it becomes `phase=ready` only after initial synchronization succeeds. Telemetry renews on every monitoring interval, including idle intervals, and carries independent source and archive watermarks. The dashboard warns when startup is still pending, telemetry is stale, the collector is stopped, or the source watermark is ahead of the archive watermark.
+The collector publishes lightweight runtime telemetry under `imports/codex/collector-telemetry.json`. The status console shows its active, idle, or deep-idle mode, current safety interval, latest filesystem event, latest archive write, wakeups during the last hour, and CPU/memory use. A new process first reports `phase=starting` and `ready=false`; it becomes `phase=ready` when its event loop is available. Historical catch-up continues in bounded cycles; readiness does not mean history is complete. Telemetry renews on monitoring cycles and carries independent source and archive watermarks. Only a covered full-source projection advances the archive watermark. The dashboard warns when startup is still pending, telemetry is stale, the collector is stopped, or history remains behind.
 
 Existing macOS installations update through `scripts/install_macos_transaction.py`. It stages a candidate, runs an isolated candidate probe that must capture exact synthetic user and assistant messages, and cuts over only after that proof passes. It then verifies a replacement collector PID, fresh telemetry, and the current dashboard. Any post-switch failure restores the previous Skill, LaunchAgent, and collector. Routine updates use this user-space transaction and do not require the full installer or an administrator password.
 

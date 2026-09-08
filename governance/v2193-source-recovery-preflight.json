@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "receipt_type": "local-defect-review",
+  "status": "reviewed",
+  "target": "v2.19.3 source-recovery integration candidate",
+  "owner": "capture-core",
+  "workbook": "docs/retrospectives/memory-wuxian-defect-workbook.md",
+  "applicable_families": ["MW-R03", "MW-R05", "MW-R06", "MW-R07", "MW-R11"],
+  "observations": [
+    "Startup recovery debt bypasses the existing per-source error isolation.",
+    "Old byte offsets can fall inside rewritten rollout lines.",
+    "Excluded subagent rollouts can shrink without containing user-visible history."
+  ],
+  "required_checks": ["native recovery and restart fixtures", "exact source and token alignment", "cross-platform CI", "installed runtime effects"],
+  "registered_gate": "unavailable: local defect-workbooks.json is absent",
+  "release_authorized_by_receipt": false
+}
