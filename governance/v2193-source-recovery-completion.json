@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "receipt_type": "candidate-completion-status",
+  "status": "pending",
+  "target": "v2.19.3 source-recovery integration candidate",
+  "remaining_gates": ["full validation", "cross-platform CI", "installed runtime effects"],
+  "release_eligible": false
+}

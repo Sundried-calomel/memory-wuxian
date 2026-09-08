@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.19.3 - 2026-09-08
+
+- Integrate the Mac multi-segment and item_completed capture changes with the
+  published Windows semantic-integrity isolation patch under one version.
+- Isolate changed-source startup recovery without deleting raw records or
+  treating pending WAL transactions as committed.
+- Refresh invalid cursors for still-excluded subagent sources without importing
+  their content; retry prior diagnostics once under the new adapter version.
+- Add preview-first source_reconcile.py: verify retained visible history against
+  raw authority, relocate only an unambiguous matching suffix, and preserve
+  generation-qualified IDs so new tails cannot collide with old line IDs.
+- Revalidate source, transcript, cursor, and token hashes before applying a
+  relocation. Missing history, ambiguous anchors, and unresolved WAL debt remain
+  blocked. Interrupted relocation rolls back before native capture starts.
+- Keep segment-level token ledgers and require all physical segments in report
+  waterline checks. Preserve unresolved historical coverage warnings.
+
 ## 2.19.2 - 2026-09-06
 
 - Keep raw-integrity debt visible and block creation of new summary jobs while

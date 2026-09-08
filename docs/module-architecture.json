@@ -66,6 +66,7 @@
         "scripts/install_maintenance_supervisor.py",
         "scripts/migrate_config.py",
         "scripts/memory_cli.py",
+        "scripts/source_reconcile.py",
         "scripts/memory_cli_contract.py",
         "scripts/memory_cli_parser.py",
         "scripts/memory_cli_runtime.py",

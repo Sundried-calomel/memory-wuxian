@@ -46,7 +46,7 @@ use telemetry::CollectorTelemetry;
 const RAW_MARKER: &str = "<!-- memory-wuxian-record -->";
 const TOKEN_USAGE_FORMAT_VERSION: u64 = 2;
 const VISIBLE_MESSAGE_FORMAT_VERSION: u64 = 1;
-const SOURCE_ADAPTER_FORMAT_VERSION: u64 = 2;
+const SOURCE_ADAPTER_FORMAT_VERSION: u64 = 3;
 const DAILY_USAGE_TIMEZONE: &str = "Asia/Tokyo";
 const ROLLOUT_BATCH_MAX_LINES: usize = 8192;
 const ROLLOUT_BATCH_MAX_BYTES: u64 = 4 * 1024 * 1024;
@@ -839,6 +839,7 @@ impl Store {
             message_cache: RefCell::new(None),
         };
         store.init()?;
+        store.recover_source_relocations()?;
         store.recover_capture_wal()?;
         Ok(store)
     }
@@ -868,6 +869,40 @@ impl Store {
         CaptureWal::new(&self.root)
     }
 
+    fn recover_source_relocations(&self) -> Result<()> {
+        let directory = self.root.join("imports/codex/source-reconciliations");
+        if !directory.exists() {
+            return Ok(());
+        }
+        self.lock("archive.lock", || {
+            for entry in fs::read_dir(&directory)? {
+                let path = entry?.path();
+                if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                    continue;
+                }
+                let mut receipt = read_json(&path)?;
+                if receipt.get("status").and_then(Value::as_str) != Some("prepared") {
+                    continue;
+                }
+                let cursor_path = PathBuf::from(string_field(&receipt, "cursor_path")?);
+                let token_path = PathBuf::from(string_field(&receipt, "token_path")?);
+                if cursor_path.parent() != Some(self.root.join("imports/codex").as_path())
+                    || token_path.parent()
+                        != Some(self.root.join("imports/codex/token-usage").as_path())
+                {
+                    bail!("source relocation receipt paths escape cursor ownership");
+                }
+                atomic_write_json(&cursor_path, &receipt["old_cursor"])?;
+                if receipt.get("old_ledger").is_some_and(|v| !v.is_null()) {
+                    atomic_write_json(&token_path, &receipt["old_ledger"])?;
+                }
+                receipt["status"] = json!("rolled-back");
+                atomic_write_json(&path, &receipt)?;
+            }
+            Ok(())
+        })
+    }
+
     fn capture_wal_state(&self) -> Result<WalState> {
         self.capture_wal().state()
     }
@@ -881,6 +916,12 @@ impl Store {
                 continue;
             }
             let cursor = read_json(&cursor_path)?;
+            if cursor.get("source_generation").and_then(Value::as_str)
+                != intent.source_generation.as_deref()
+            {
+                // Historical WAL offsets must never be compared across source generations.
+                continue;
+            }
             let same_source = cursor.get("source_path").and_then(Value::as_str)
                 == Some(intent.source_path.as_str());
             let durable_offset = cursor
@@ -1845,7 +1886,10 @@ impl Store {
     fn prepare_sync_file(&self, source_path: &Path) -> Result<PreparedSync> {
         let source_path = source_path.canonicalize()?;
         if self.source_recovery_path(&source_path).exists() {
-            bail!("Codex source has unresolved isolated recovery debt: {}", source_path.display());
+            bail!(
+                "Codex source has unresolved isolated recovery debt: {}",
+                source_path.display()
+            );
         }
         let (session_id, segment_id) = resolve_rollout_identity(&source_path)?;
         let cursor_path = self.cursor_path(&segment_id);
@@ -1858,11 +1902,38 @@ impl Store {
             .get("last_line")
             .and_then(Value::as_u64)
             .unwrap_or(0);
+        if hinted_cursor
+            .get("excluded_reason")
+            .is_some_and(|v| !v.is_null())
+            && !Self::cursor_boundary_valid(&source_path, &hinted_cursor)?
+        {
+            let batch = read_rollout_batch(&source_path, 0, None)?;
+            if batch.excluded_reason.is_some() {
+                return Ok(PreparedSync {
+                    source_path,
+                    segment_id,
+                    hinted_cursor,
+                    last_line,
+                    message_last_line: 0,
+                    backfill_visible_messages: true,
+                    backfill_file_changes: true,
+                    backfill_token_usage: true,
+                    resume_line: 0,
+                    source_byte_sha256: None,
+                    batch,
+                });
+            }
+        }
+        let archived_high_water = if hinted_cursor.get("source_generation").is_some() {
+            0
+        } else {
+            self.archived_source_line_high_water(&session_id, &segment_id, &source_path)?
+        };
         let message_last_line = hinted_cursor
             .get("message_last_line")
             .and_then(Value::as_u64)
             .unwrap_or(last_line)
-            .max(self.archived_source_line_high_water(&session_id, &segment_id, &source_path)?);
+            .max(archived_high_water);
         let backfill_visible_messages = hinted_cursor
             .get("visible_message_format_version")
             .and_then(Value::as_u64)
@@ -1933,7 +2004,10 @@ impl Store {
             None
         };
         if !Self::cursor_boundary_valid(&source_path, &hinted_cursor)? {
-            bail!("Codex source changed at its committed byte boundary: {}", source_path.display());
+            bail!(
+                "Codex source changed at its committed byte boundary: {}",
+                source_path.display()
+            );
         }
         let batch = read_rollout_batch(&source_path, resume_line, resume_offset)?;
         if batch.complete && source_byte_sha256.is_none() {
@@ -2156,6 +2230,13 @@ impl Store {
             } else {
                 format!("{session_id}-{segment_id}")
             };
+            let source_identity = match hinted_cursor
+                .get("source_generation")
+                .and_then(Value::as_str)
+            {
+                Some(generation) => format!("{source_identity}-g{generation}"),
+                None => source_identity,
+            };
             let message_id = format!("codex-{source_identity}-{line_number:08}-{suffix}");
             let mut source = json!({
                 "kind": "codex-rollout-jsonl",
@@ -2166,6 +2247,9 @@ impl Store {
             });
             if segment_id != session_id {
                 source["segment_id"] = json!(segment_id);
+            }
+            if let Some(generation) = hinted_cursor.get("source_generation") {
+                source["source_generation"] = generation.clone();
             }
             let append = self.append_message(
                 speaker,
@@ -2198,27 +2282,28 @@ impl Store {
         // A successful verification also converges legacy or path-drifted cursor
         // metadata even when no source line was newly appended.
         let modified: DateTime<Utc> = batch.observed_source_mtime.into();
-        atomic_write_json(
-            &cursor_path,
-            &json!({
-                "format_version": 1,
-                "session_id": session_id,
-                "segment_id": segment_id,
-                "source_path": portable_path(&source_path),
-                "last_line": committed_line,
-                "message_last_line": message_last_line.max(committed_line),
-                "visible_message_format_version": VISIBLE_MESSAGE_FORMAT_VERSION,
-                "file_change_format_version": 1,
-                "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
-                "source_size": batch.committed_byte_offset,
-                "committed_byte_offset": batch.committed_byte_offset,
-                "observed_source_size": batch.observed_source_size,
-                "complete": batch.complete,
-                "source_mtime": modified.to_rfc3339(),
-                "source_byte_sha256": source_byte_sha256,
-                "updated_at": now_iso(),
-            }),
-        )?;
+        let mut next_cursor = json!({
+            "format_version": 1,
+            "session_id": session_id,
+            "segment_id": segment_id,
+            "source_path": portable_path(&source_path),
+            "last_line": committed_line,
+            "message_last_line": message_last_line.max(committed_line),
+            "visible_message_format_version": VISIBLE_MESSAGE_FORMAT_VERSION,
+            "file_change_format_version": 1,
+            "token_usage_format_version": TOKEN_USAGE_FORMAT_VERSION,
+            "source_size": batch.committed_byte_offset,
+            "committed_byte_offset": batch.committed_byte_offset,
+            "observed_source_size": batch.observed_source_size,
+            "complete": batch.complete,
+            "source_mtime": modified.to_rfc3339(),
+            "source_byte_sha256": source_byte_sha256,
+            "updated_at": now_iso(),
+        });
+        if let Some(generation) = hinted_cursor.get("source_generation") {
+            next_cursor["source_generation"] = generation.clone();
+        }
+        atomic_write_json(&cursor_path, &next_cursor)?;
         Ok(result)
     }
 
@@ -2879,6 +2964,7 @@ impl Store {
         isolate_source_errors: bool,
         isolate_missing_source_errors: bool,
     ) -> Result<Value> {
+        self.recover_source_relocations()?;
         self.repair_native_recovery_debt()?;
         let path_count = paths.len();
         let completed_before = self.lock("archive.lock", || {
@@ -2979,11 +3065,15 @@ impl Store {
     }
 
     fn source_recovery_path(&self, source_path: &Path) -> PathBuf {
-        self.source_error_path(source_path).with_extension("recovery.json")
+        self.source_error_path(source_path)
+            .with_extension("recovery.json")
     }
 
     fn cursor_boundary_valid(source_path: &Path, cursor: &Value) -> Result<bool> {
-        let offset = cursor.get("committed_byte_offset").and_then(Value::as_u64).unwrap_or(0);
+        let offset = cursor
+            .get("committed_byte_offset")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         if offset == 0 {
             return Ok(true);
         }
@@ -3017,25 +3107,35 @@ impl Store {
         }
         let (_, segment_id) = resolve_rollout_identity(&source_path)?;
         let cursor_path = self.cursor_path(&segment_id);
-        let cursor = if cursor_path.exists() { read_json(&cursor_path)? } else { json!({}) };
+        let cursor = if cursor_path.exists() {
+            read_json(&cursor_path)?
+        } else {
+            json!({})
+        };
         if !Self::cursor_boundary_valid(&source_path, &cursor)? {
             return self.lock("archive.lock", || {
                 // Preserve unresolved WAL intents and partial raw writes. Isolation
                 // frees unrelated capture without claiming this transaction committed.
                 let destination = self.source_recovery_path(&source_path);
                 if !destination.exists() {
-                    atomic_write_json(&destination, &json!({
-                        "status": "unresolved-source-change",
-                        "created_at": now_iso(),
-                        "source_path": portable_path(&source_path),
-                        "recovery_debt": recovery_debt,
-                        "cursor": cursor,
-                        "wal_intents": self.capture_wal_state()?.pending,
-                    }))?;
+                    atomic_write_json(
+                        &destination,
+                        &json!({
+                            "status": "unresolved-source-change",
+                            "created_at": now_iso(),
+                            "source_path": portable_path(&source_path),
+                            "recovery_debt": recovery_debt,
+                            "cursor": cursor,
+                            "wal_intents": self.capture_wal_state()?.pending,
+                        }),
+                    )?;
                 }
-                self.record_source_error(&source_path, &anyhow!(
-                    "Source changed at committed byte boundary; recovery isolated, WAL retained"
-                ))?;
+                self.record_source_error(
+                    &source_path,
+                    &anyhow!(
+                        "Source changed at committed byte boundary; recovery isolated, WAL retained"
+                    ),
+                )?;
                 remove_file_if_present(&marker)
             });
         }
@@ -3093,6 +3193,11 @@ impl Store {
                 transaction_id: transaction_id.clone(),
                 session_id: prepared.batch.session_id.clone(),
                 source_path: portable_path(&prepared.source_path),
+                source_generation: prepared
+                    .hinted_cursor
+                    .get("source_generation")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
                 cursor_before_line: prepared.last_line,
                 cursor_after_line: prepared
                     .batch
@@ -3487,6 +3592,9 @@ struct KqueueWatcher {
 const MAX_KQUEUE_ROLLOUT_WATCHES: usize = 64;
 
 #[cfg(target_os = "macos")]
+const MAX_KQUEUE_DIRECTORY_WATCHES: usize = 32;
+
+#[cfg(target_os = "macos")]
 impl KqueueWatcher {
     fn new(root: &Path, _since: Option<DateTime<FixedOffset>>) -> Result<Self> {
         let queue_fd = unsafe { libc::kqueue() };
@@ -3511,6 +3619,9 @@ impl KqueueWatcher {
         rollout_files
             .sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
         rollout_files.truncate(MAX_KQUEUE_ROLLOUT_WATCHES);
+        // Directory history grows indefinitely; fallback scanning covers entries
+        // outside this bound. Leave headroom for constructing the next watcher.
+        directories.truncate(MAX_KQUEUE_DIRECTORY_WATCHES);
 
         let mut watched = Vec::new();
         for watch_path in directories
@@ -3520,8 +3631,14 @@ impl KqueueWatcher {
             let path = CString::new(watch_path.as_os_str().as_bytes())?;
             let fd = unsafe { libc::open(path.as_ptr(), libc::O_EVTONLY | libc::O_CLOEXEC) };
             if fd < 0 {
-                return Err(std::io::Error::last_os_error())
-                    .with_context(|| format!("watch {}", watch_path.display()));
+                let error = std::io::Error::last_os_error();
+                if matches!(error.raw_os_error(), Some(libc::EMFILE | libc::ENFILE))
+                    && !watched.is_empty()
+                {
+                    eprintln!("watch capacity exhausted; remaining sources use metadata fallback");
+                    break;
+                }
+                return Err(error).with_context(|| format!("watch {}", watch_path.display()));
             }
             let file = unsafe { File::from_raw_fd(fd) };
             let change = libc::kevent {
@@ -4090,22 +4207,33 @@ mod adaptive_fallback_tests {
         let sessions = tempfile::tempdir()?;
         let archive = tempfile::tempdir()?;
         let store = initialized_store(archive.path())?;
-        let broken = sessions.path().join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a8.jsonl");
-        let healthy = sessions.path().join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        let broken = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a8.jsonl");
+        let healthy = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
         event_loop_rollout(&healthy)?;
         event_loop_rollout(&broken)?;
-        fs::write(&broken, fs::read_to_string(&broken)?.replace(
-            "019fb8f2-9a67-7b03-9474-6f92cd6b21a7",
-            "019fb8f2-9a67-7b03-9474-6f92cd6b21a8",
-        ))?;
+        fs::write(
+            &broken,
+            fs::read_to_string(&broken)?.replace(
+                "019fb8f2-9a67-7b03-9474-6f92cd6b21a7",
+                "019fb8f2-9a67-7b03-9474-6f92cd6b21a8",
+            ),
+        )?;
         let broken = broken.canonicalize()?;
         let (_, segment) = resolve_rollout_identity(&broken)?;
         let cursor = json!({"committed_byte_offset": 2, "last_line": 1, "source_path": portable_path(&broken)});
         atomic_write_json(&store.cursor_path(&segment), &cursor)?;
         let intent = WalIntent {
-            transaction_id: "unresolved-test".into(), session_id: segment.clone(),
-            source_path: portable_path(&broken), cursor_before_line: 1,
-            cursor_after_line: 2, committed_byte_offset: 20,
+            transaction_id: "unresolved-test".into(),
+            session_id: segment.clone(),
+            source_path: portable_path(&broken),
+            source_generation: None,
+            cursor_before_line: 1,
+            cursor_after_line: 2,
+            committed_byte_offset: 20,
         };
         store.capture_wal().begin(&intent)?;
         let marker = store.root.join("pending/native-recovery-debt.json");
@@ -4116,13 +4244,125 @@ mod adaptive_fallback_tests {
         assert!(!marker.exists());
         assert!(store.source_recovery_path(&broken).exists());
         assert_eq!(read_json(&store.cursor_path(&segment))?, cursor);
-        assert_eq!(store.capture_wal_state()?.pending.get("unresolved-test"), Some(&intent));
+        assert_eq!(
+            store.capture_wal_state()?.pending.get("unresolved-test"),
+            Some(&intent)
+        );
         let resumed = initialized_store(archive.path())?;
         assert!(resumed.changed_rollouts(vec![broken.clone()])?.is_empty());
         assert!(resumed.prepare_sync_file(&broken).is_err());
-        assert_eq!(resumed.sync_startup_batch(vec![healthy])?["status"], "synced");
+        assert_eq!(
+            resumed.sync_startup_batch(vec![healthy])?["status"],
+            "synced"
+        );
         assert_eq!(resumed.capture_wal_state()?.pending.len(), 1);
-        assert!(Store::cursor_boundary_valid(&broken, &json!({"committed_byte_offset": 0}))?);
+        assert!(Store::cursor_boundary_valid(
+            &broken,
+            &json!({"committed_byte_offset": 0})
+        )?);
+        Ok(())
+    }
+
+    #[test]
+    fn reconciled_generation_captures_only_new_tail_and_survives_restart() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let path = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        event_loop_rollout(&path)?;
+        assert_eq!(
+            store.sync_startup_batch(vec![path.clone()])?["imported_messages"],
+            1
+        );
+        let old = fs::read_to_string(&path)?;
+        let (meta, message) = old.split_once('\n').unwrap();
+        let prefix = format!("{meta}\n{{\"type\":\"ignored\"}}\n{message}");
+        let tail = json!({"timestamp":"2026-08-18T00:00:02Z", "type":"event_msg",
+            "payload":{"type":"agent_message","phase":"final_answer","message":"new tail"}});
+        fs::write(&path, format!("{prefix}{tail}\n"))?;
+        let (_, segment) = resolve_rollout_identity(&path)?;
+        let cursor_path = store.cursor_path(&segment);
+        let mut cursor = read_json(&cursor_path)?;
+        cursor["source_generation"] = json!("fixture");
+        cursor["last_line"] = json!(3);
+        cursor["message_last_line"] = json!(3);
+        cursor["committed_byte_offset"] = json!(prefix.len());
+        atomic_write_json(&cursor_path, &cursor)?;
+        assert_eq!(
+            store.sync_startup_batch(vec![path.clone()])?["imported_messages"],
+            1
+        );
+        assert_eq!(read_json(&cursor_path)?["source_generation"], "fixture");
+        let resumed = initialized_store(archive.path())?;
+        assert_eq!(
+            resumed.sync_startup_batch(vec![path])?["imported_messages"],
+            0
+        );
+        let raw = resumed.read_all_raw()?;
+        assert_eq!(raw.len(), 2);
+        assert!(
+            raw[1]["message_id"]
+                .as_str()
+                .unwrap()
+                .contains("-gfixture-")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn interrupted_source_relocation_rolls_back_before_capture() -> Result<()> {
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let cursor = store.cursor_path("fixture");
+        let token = store.root.join("imports/codex/token-usage/fixture.json");
+        atomic_write_json(&cursor, &json!({"last_line": 9}))?;
+        atomic_write_json(&token, &json!({"scanned_through_line": 9}))?;
+        let receipt = store
+            .root
+            .join("imports/codex/source-reconciliations/fixture.json");
+        atomic_write_json(
+            &receipt,
+            &json!({"status":"prepared", "cursor_path":cursor,
+            "token_path":token,"old_cursor":{"last_line":2},"old_ledger":{"scanned_through_line":2}}),
+        )?;
+        store.recover_source_relocations()?;
+        assert_eq!(read_json(&cursor)?["last_line"], 2);
+        assert_eq!(read_json(&token)?["scanned_through_line"], 2);
+        assert_eq!(read_json(&receipt)?["status"], "rolled-back");
+        Ok(())
+    }
+
+    #[test]
+    fn excluded_source_shrink_refreshes_cursor_without_archiving_hidden_data() -> Result<()> {
+        let sessions = tempfile::tempdir()?;
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let path = sessions
+            .path()
+            .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+        let meta = json!({"type":"session_meta","payload":{
+            "id":"019fb8f2-9a67-7b03-9474-6f92cd6b21a7", "source":{"subagent":{"thread_spawn":{}}}}});
+        let prefix = format!("{meta}\n");
+        fs::write(
+            &path,
+            format!(
+                "{prefix}{{\"type\":\"ignored\",\"payload\":\"{}\"}}\n",
+                "x".repeat(1000)
+            ),
+        )?;
+        store.sync_startup_batch(vec![path.clone()])?;
+        fs::write(&path, &prefix)?;
+        let result = store.sync_startup_batch(vec![path.clone()])?;
+        assert_eq!(result["status"], "synced");
+        assert_eq!(result["imported_messages"], 0);
+        assert!(store.read_all_raw()?.is_empty());
+        let (_, segment) = resolve_rollout_identity(&path)?;
+        assert_eq!(
+            read_json(&store.cursor_path(&segment))?["committed_byte_offset"],
+            prefix.len()
+        );
         Ok(())
     }
 
@@ -4473,6 +4713,7 @@ ai_summary:
             transaction_id: "durable-tx".to_owned(),
             session_id: SESSION_ID.to_owned(),
             source_path: source_path.to_owned(),
+            source_generation: None,
             cursor_before_line: 2,
             cursor_after_line: 3,
             committed_byte_offset: 512,
@@ -4512,6 +4753,32 @@ ai_summary:
     }
 
     #[test]
+    fn wal_recovery_requires_matching_source_generation() -> Result<()> {
+        let archive = tempfile::tempdir()?;
+        let store = initialized_store(archive.path())?;
+        let intent = WalIntent {
+            transaction_id: "generation-tx".into(),
+            session_id: "fixture".into(),
+            source_path: "fixture.jsonl".into(),
+            source_generation: Some("new".into()),
+            cursor_before_line: 1,
+            cursor_after_line: 2,
+            committed_byte_offset: 64,
+        };
+        store.capture_wal().begin(&intent)?;
+        let mut cursor = json!({"source_path":"fixture.jsonl", "source_generation":"old",
+            "last_line":2, "committed_byte_offset":64});
+        atomic_write_json(&store.cursor_path("fixture"), &cursor)?;
+        store.recover_capture_wal()?;
+        assert_eq!(store.capture_wal_state()?.pending.len(), 1);
+        cursor["source_generation"] = json!("new");
+        atomic_write_json(&store.cursor_path("fixture"), &cursor)?;
+        let restarted = initialized_store(archive.path())?;
+        assert!(restarted.capture_wal_state()?.pending.is_empty());
+        Ok(())
+    }
+
+    #[test]
     fn telemetry_refreshes_wal_state_on_every_write() -> Result<()> {
         let archive = tempfile::tempdir()?;
         let config = archive.path().join("config.yaml");
@@ -4521,6 +4788,7 @@ ai_summary:
             transaction_id: "telemetry-tx".to_owned(),
             session_id: "telemetry-session".to_owned(),
             source_path: "/tmp/telemetry-rollout.jsonl".to_owned(),
+            source_generation: None,
             cursor_before_line: 0,
             cursor_after_line: 1,
             committed_byte_offset: 128,
@@ -4567,6 +4835,24 @@ ai_summary:
             watcher._watched.len(),
             directory_count + MAX_KQUEUE_ROLLOUT_WATCHES
         );
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn kqueue_directory_history_and_replacement_are_bounded() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        for index in 0..300 {
+            let day = temporary.path().join(format!("day-{index:03}"));
+            fs::create_dir(&day)?;
+            fs::write(day.join(format!("rollout-{index:03}.jsonl")), b"{}\n")?;
+        }
+        let old = KqueueWatcher::new(temporary.path(), None)?;
+        let replacement = KqueueWatcher::new(temporary.path(), None)?;
+        let limit = MAX_KQUEUE_DIRECTORY_WATCHES + MAX_KQUEUE_ROLLOUT_WATCHES;
+        assert!(old._watched.len() <= limit);
+        assert!(replacement._watched.len() <= limit);
+        assert!(!replacement._watched.is_empty());
         Ok(())
     }
 }

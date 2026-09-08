@@ -1,5 +1,7 @@
 # Memory無限
 
+> **2.19.3:** Mac の複数セグメント・item_completed 収集と Windows の意味要約ジョブ分離を統合します。変更されたソースの復旧エラーを分離し、除外されたサブエージェントの内容を取り込まずにカーソルを更新します。`source_reconcile.py --root ARCHIVE --source ROLLOUT` で原文検証付きの末尾一致を確認し、検証済みの場合のみ `--apply` で適用します。新規レコードはソース世代別 ID を使用します。履歴欠落、曖昧な一致、未解決 WAL は引き続き停止し、既存の原文は保持します.
+
 > **2.19.2:** archive integrity warning が存在しても、既存の semantic job 全体を
 > 停止しません。warning は可視のまま維持し、不完全な archive から新しい job は
 > 作成しません。一方、既に凍結され source hash に束縛された job は個別に検証して

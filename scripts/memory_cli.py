@@ -1204,6 +1204,8 @@ class MemoryStore:
         segment_id = rollout_segment_id(source_path, session_id)
         cursor_path = self.codex_cursor_path(segment_id)
         cursor = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
+        if cursor.get("source_generation"):
+            raise ValueError("Reconciled source generations require the native collector")
         last_line = int(cursor.get("last_line", 0))
         backfill_visible_messages = (
             int(cursor.get("visible_message_format_version", 0)) < 1

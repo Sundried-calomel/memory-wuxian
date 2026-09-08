@@ -15,10 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 class V2192ReleaseContractTests(unittest.TestCase):
     def test_exact_patch_version_and_documentation_are_synchronized(self):
         version = project_version(ROOT)
-        self.assertEqual(version, "2.19.2")
+        self.assertEqual(version, "2.19.3")
         self.assertEqual(
             (ROOT / "native-collector/Cargo.toml").read_text(encoding="utf-8").count(
-                'version = "2.19.2"'
+                'version = "2.19.3"'
             ),
             1,
         )

@@ -1,5 +1,7 @@
 # Memory無限
 
+> **2.19.3:** Unifies Mac multi-segment/item_completed capture and Windows semantic-job isolation. Changed-source recovery is isolated; excluded subagent cursors can converge without importing their content. `source_reconcile.py --root ARCHIVE --source ROLLOUT` previews exact raw-backed suffix alignment; add `--apply` only for a verified relocation. New tails use generation-qualified IDs. Missing or ambiguous history and unresolved WAL transactions remain blocked. Older archived records remain intact.
+
 > **2.19.2:** An archive integrity warning no longer freezes every existing
 > semantic job. Memory Wuxian keeps the warning visible and creates no new job
 > from the incomplete archive, while each already frozen source-hash-bound job

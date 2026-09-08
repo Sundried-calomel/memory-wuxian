@@ -602,5 +602,22 @@
 - `project_workbook_updated` 布尔值；
 - `original_triggers`，说明继承了哪些历史触发器。
 
+### MW-REL-046: Recovery debt bypasses source isolation
+
+- Observed on macOS on 2026-09-08: a rewritten rollout left a committed
+  byte offset inside a line. Startup debt recovery failed before the existing
+  per-source isolation loop. Excluded subagent source shrink also retried.
+- Repair: isolate the source debt while retaining unresolved WAL intents;
+  validate byte boundaries; permit metadata-only excluded-source refresh.
+- Reconciliation is preview-first and requires unchanged raw authority, a
+  unique retained visible suffix, and an exact token anchor. New generations
+  retain old message IDs and use distinct IDs for subsequent messages.
+- Regressions cover sibling capture, pending WAL preservation, restart,
+  interrupted relocation rollback, excluded shrink, and ambiguous anchors.
+- Installed initial isolation resumed normal capture. The integrated candidate's
+  platform CI and installation effects remain pending; unresolved source debt
+  does not constitute complete historical coverage.
+- Families: `MW-R03`, `MW-R05`, `MW-R06`, `MW-R07`, `MW-R11`.
+
 两个收据必须存在且哈希匹配。修复类版本的 `project_workbook_updated` 必须为
 `true`。这样发布门禁读取机器证据，不依赖当前对话是否记得本文件。

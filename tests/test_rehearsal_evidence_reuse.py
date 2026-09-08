@@ -49,7 +49,7 @@ class RehearsalEvidenceReuseTests(unittest.TestCase):
                 capture_output=True,
                 check=False,
             )
-            self.assertEqual(0, completed.returncode, completed.stderr)
+            self.assertEqual(0, completed.returncode, completed.stderr + completed.stdout)
             report = json.loads((output / "report.json").read_text(encoding="utf-8"))
             reused = [
                 item
