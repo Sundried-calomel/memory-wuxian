@@ -391,7 +391,11 @@ class SemanticBackfillV211Tests(unittest.TestCase):
         self.assertTrue(result["integrity_issues"])
         self.assertEqual(result["native_recovery"]["repairs"], [])
         self.assertEqual(raw_path.read_bytes(), before)
-        self.assertIn("integrity-failure", [item["reason"] for item in result["skipped"]])
+        marker = next(
+            item for item in result["skipped"]
+            if item["reason"] == "integrity-debt"
+        )
+        self.assertEqual(marker["dispatch_policy"], "frozen-jobs-continue")
 
     def test_mw2123_repairable_projection_drift_does_not_block_frozen_jobs(self):
         job = self.job("job-000011.json", "conversation:test:rounds:5-6", boundary=6)
@@ -440,7 +444,7 @@ class SemanticBackfillV211Tests(unittest.TestCase):
         self.assertEqual(cached["repairs"], [])
         self.assertEqual(cached["repairable_issues"], state["result"]["native_recovery"]["repairable_issues"])
 
-    def test_mw2123_recovery_debt_marker_forces_fresh_audit(self):
+    def test_mw2192_recovery_debt_audits_but_does_not_block_frozen_job(self):
         job = self.job("job-000012.json", "conversation:test:rounds:7-8", boundary=8)
         marker = self.root / "pending/native-recovery-debt.json"
         marker.write_text('{"format_version": 1}', encoding="utf-8")
@@ -452,14 +456,50 @@ class SemanticBackfillV211Tests(unittest.TestCase):
         }
 
         with patch.object(MemoryStore, "heartbeat", return_value=recovery) as heartbeat:
-            with patch("semantic_backfill.dispatch_job") as dispatch:
+            with patch(
+                "semantic_backfill.dispatch_job",
+                return_value={"status": "deferred", "job_id": job.stem},
+            ) as dispatch:
                 result = run_backfill(self.root, self.config, max_jobs=1, dry_run=False)
 
         heartbeat.assert_called_once_with(create_jobs=False, repair=True)
-        dispatch.assert_not_called()
+        dispatch.assert_called_once()
         self.assertTrue(job.exists())
         self.assertTrue(marker.exists())
         self.assertEqual(result["status"], "attention")
+        self.assertEqual(result["scheduled_summary_jobs"], [])
+        self.assertIn("integrity-debt", [item["reason"] for item in result["skipped"]])
+
+    def test_mw2192_integrity_debt_isolates_failed_job_and_completes_sibling(self):
+        first = self.job("job-000013.json", "conversation:test:rounds:1-2", boundary=2)
+        second = self.job("job-000014.json", "conversation:test:rounds:3-4", boundary=4)
+        recovery = {
+            "status": "attention",
+            "integrity_issues": ["raw message sequence gap"],
+            "repairable_issues": [],
+            "repairs": [],
+        }
+
+        def dispatch(_root, _config, job_path, **_kwargs):
+            if job_path.name == first.name:
+                return {"status": "quarantined", "job_id": job_path.stem}
+            job_path.unlink()
+            return {"status": "ingested", "job_id": job_path.stem}
+
+        with patch.object(MemoryStore, "heartbeat", return_value=recovery):
+            with patch("semantic_backfill.dispatch_job", side_effect=dispatch) as invoked:
+                result = run_backfill(self.root, self.config, max_jobs=2, dry_run=False)
+
+        self.assertEqual(invoked.call_count, 2)
+        self.assertTrue(first.exists())
+        self.assertFalse(second.exists())
+        self.assertEqual(result["attempted_jobs"], 2)
+        self.assertEqual(result["completed_jobs"], 1)
+        self.assertEqual(result["scheduled_summary_jobs"], [])
+        self.assertEqual(result["status"], "attention")
+        reasons = [item["reason"] for item in result["skipped"]]
+        self.assertIn("integrity-debt", reasons)
+        self.assertIn("quarantined", reasons)
 
     def test_mw2115_status_004_partial_or_permanent_debt_never_reports_completed(self):
         with patch(

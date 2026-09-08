@@ -1,26 +1,13 @@
 # Changelog
 
-## 2.19.2 - 2026-08-28
+## 2.19.2 - 2026-09-06
 
-- Treat each physical Codex rollout segment as an independent capture and token
-  cursor while preserving one top-level conversation identity.
-- Accept the observed `item_completed` user and assistant message envelope,
-  including commentary and final-answer phases, without importing hidden reasoning.
-- Backfill only retained sources that actually use the new visible-message
-  envelope, then keep later collector starts incremental and idempotent.
-- Require archive-waterline coverage for every physical rollout segment;
-  freshness cannot substitute for a missing segment cursor.
-- Aggregate segment token ledgers back to one conversation for dashboard and
-  daily metrics without losing segment-level provenance.
-- Prioritize uncovered segments ahead of format backfills and ordinary live
-  growth, and retain a 4 MiB byte ceiling while enlarging the line ceiling so
-  compact active rollouts cannot starve historical coverage repair.
-- Limit native recovery debt to the interrupted WAL transaction instead of
-  forcing recovery to chase the moving end of an active rollout.
-- Version malformed-source fingerprints by source-adapter format so a parser
-  upgrade retries previously quarantined bytes exactly once.
-- Preserve the exact legacy single-file message source shape; add `segment_id`
-  only to true continuation records.
+- Keep raw-integrity debt visible and block creation of new summary jobs while
+  allowing already frozen, source-hash-bound semantic jobs to continue.
+- Isolate a failing or quarantined summary job without blocking independent
+  siblings, preserving raw history and the unresolved recovery debt unchanged.
+- Add focused regressions and an installed Windows effect check proving that
+  semantic backlog decreases through the automatic maintenance entrypoint.
 
 ## 2.19.1 - 2026-08-28
 

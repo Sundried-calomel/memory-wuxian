@@ -1,0 +1,22 @@
+{
+  "change_kind": "repair",
+  "changed_catalog_entries": [],
+  "changed_workbook_entries": [],
+  "created_at": "2026-09-05T16:20:16+00:00",
+  "no_applicable_family_reason": null,
+  "preflight_path": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v2192-integrity-isolation\\governance\\v2192-integrity-isolation-preflight.json",
+  "preflight_sha256": "1ceccf81d6ba6bb98078d093f5433122597fec2821fe833a31ad7572f542b227",
+  "receipt_sha256": "289ff777992f0631f73fdc63d3ee6483d7666ed8647993c9a3c884a12fc6ced3",
+  "receipt_type": "defect-workbook-completion",
+  "schema_version": 1,
+  "selected_families": [
+    "G03",
+    "G04",
+    "G05",
+    "G07",
+    "G09",
+    "G11"
+  ],
+  "status": "passed",
+  "target": "C:\\Users\\56453\\Documents\\ChatGPT\\memory无限\\memory-wuxian-v2192-integrity-isolation"
+}

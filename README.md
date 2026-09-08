@@ -1,12 +1,10 @@
 # Memory無限
 
-> **2.19.2:** Supports Codex conversations that continue across multiple
-> physical rollout files. Each segment now has an independent durable cursor
-> and token ledger while all segments remain one top-level conversation.
-> Capture Core also imports the observed `item_completed` visible-message
-> envelope and performs one bounded, idempotent backfill for affected retained
-> sources. Archive waterlines require every physical segment to be covered;
-> freshness alone never proves completeness.
+> **2.19.2:** An archive integrity warning no longer freezes every existing
+> semantic job. Memory Wuxian keeps the warning visible and creates no new job
+> from the incomplete archive, while each already frozen source-hash-bound job
+> is validated and processed independently. A failed job remains quarantined;
+> healthy siblings continue reducing the backlog without rewriting raw history.
 
 > **2.19.1:** Repairs semantic maintenance and cross-device cloud closure.
 > One maintenance batch now reads one immutable source snapshot, runs model
@@ -427,7 +425,7 @@ The collector uses an explicit 16 MiB worker stack so a fresh full-history impor
 
 With the default configuration, every successful native memory mutation atomically updates `pending/backup-debt.json` after the primary archive write. The low-frequency maintenance worker coalesces all pending mutations into one complete verified snapshot under `~/Desktop/Memory無限-记忆归档备份/`, then clears the debt only after success and removes older snapshot directories. The collector never blocks startup or capture by copying the complete archive. The backup root therefore contains one latest recovery copy plus the append-only `backup-log.jsonl` operation history, while the dashboard warns whenever a newer snapshot is pending.
 
-Applied reconstruction commands may first preserve the previous derived files under the external `backup.workspace_directory`. When unset, it defaults to the `recovery-backups` directory beside the live `memory` root. Recovery copies are never stored inside the live archive, so desktop snapshots do not copy them again. They use `backup.workspace_retention_count` and retain only the newest one by default. Development edits use one replaceable code backup; they do not create additional copies of the live conversation archive.
+Applied reconstruction commands may first preserve the previous derived files under `memory/archive/`. These internal recovery copies use `backup.workspace_retention_count` and also retain only the newest one by default. Development edits use one replaceable code backup; they do not create additional copies of the live conversation archive.
 
 ## Memory hierarchy
 
