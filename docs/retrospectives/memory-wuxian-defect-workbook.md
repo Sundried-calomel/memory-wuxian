@@ -1,5 +1,15 @@
 # Memory 无限项目错题本
 
+## MW-REL-048: Completed file-change omission and reconciled-prefix replay
+
+- Trigger: completed FileChange envelopes were not rendered; rescan format backfill could replay an already reconciled prefix under new generation IDs.
+- Escaped boundary: Python projection and native capture must accept the same visible event contract, and a verified message boundary must override legacy backfill markers.
+- Repair: normalize only successful well-formed FileChange events through the legacy renderer; preserve reconciled prefixes; exact occurrence-based history plans retain all old IDs and reject ordinary apply for gaps or WAL.
+- Regression: tests/test_source_reconcile.py exercises the actual native binary, failed/malformed events, restart, repeated events and fail-closed WAL. Native reconciled_prefix_blocks_file_and_completed_replay_during_rescan covers both marker states.
+- Installed effect: the prior bounded local recovery preserved all 23,748 old IDs and the exact old transcript prefix; a frozen second pass imported zero records and three historical cutoffs were covered. These local observations are not cross-platform release evidence; no private records are included.
+- Publication evidence: the 2.19.4 candidate and installer workflows own same-SHA platform and package results. Existing live installation is not changed by publishing.
+- Families: MW-R03, MW-R05, MW-R06, MW-R07. Existing owners suffice; no global rule promotion.
+
 本文件是 Memory 无限重复缺陷的跨设备、追加式项目错题本。原始对话、提交、发布证据和
 运行日志仍是权威来源；本文件负责把分散事件聚成复发链，防止后来的功能绕开旧修复。
 

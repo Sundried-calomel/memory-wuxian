@@ -138,6 +138,7 @@ def main() -> int:
     python = sys.executable
     scenarios = [
         ("python-compile", [python, "-m", "compileall", "-q", "scripts"]),
+        ("capture-history-compatibility", [python, "-m", "unittest", "-v", "tests.test_source_reconcile", "tests.test_archive_waterline"]),
         (
             "native-format",
             ["cargo", "fmt", "--check", "--manifest-path", "native-collector/Cargo.toml"],

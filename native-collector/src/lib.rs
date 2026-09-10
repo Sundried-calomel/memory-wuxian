@@ -283,6 +283,33 @@ fn summarize_tool_activity(payload: &Value) -> Option<String> {
 }
 
 fn summarize_file_change(payload: &Value) -> Option<String> {
+    let normalized;
+    let payload = if payload.get("type").and_then(Value::as_str) == Some("item_completed") {
+        let item = payload.get("item")?;
+        if item.get("type").and_then(Value::as_str) != Some("FileChange")
+            || item.get("status").and_then(Value::as_str) != Some("completed")
+        {
+            return None;
+        }
+        let changes = item.get("changes")?.as_object()?;
+        if changes.is_empty() {
+            return None;
+        }
+        for change in changes.values() {
+            let change = change.as_object()?;
+            for field in ["type", "unified_diff", "content", "move_path"] {
+                if let Some(value) = change.get(field) {
+                    if !value.is_string() && !(field == "move_path" && value.is_null()) {
+                        return None;
+                    }
+                }
+            }
+        }
+        normalized = json!({"type": "patch_apply_end", "success": true, "changes": changes});
+        &normalized
+    } else {
+        payload
+    };
     if payload.get("type").and_then(Value::as_str) != Some("patch_apply_end")
         || payload.get("success").and_then(Value::as_bool) != Some(true)
     {
@@ -2182,8 +2209,9 @@ impl Store {
                 None
             };
             if line_number <= message_last_line
-                && file_change.is_none()
-                && (!backfill_visible_messages || completed_message.is_none())
+                && (hinted_cursor.get("source_generation").is_some()
+                    || (file_change.is_none()
+                        && (!backfill_visible_messages || completed_message.is_none())))
             {
                 continue;
             }
@@ -4551,6 +4579,67 @@ mod adaptive_fallback_tests {
                 .unwrap()
                 .contains("-gfixture-")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn reconciled_prefix_blocks_file_and_completed_replay_during_rescan() -> Result<()> {
+        for legacy_markers in [false, true] {
+            let sessions = tempfile::tempdir()?;
+            let archive = tempfile::tempdir()?;
+            let store = initialized_store(archive.path())?;
+            let path = sessions
+                .path()
+                .join("rollout-2026-08-18T00-00-00-019fb8f2-9a67-7b03-9474-6f92cd6b21a7.jsonl");
+            let events = [
+                json!({"type":"session_meta","payload":{"id":"019fb8f2-9a67-7b03-9474-6f92cd6b21a7","source":"cli"}}),
+                json!({"timestamp":"2026-08-18T00:00:01Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","content":[{"text":"question"}]}}}),
+                json!({"timestamp":"2026-08-18T00:00:02Z","type":"event_msg","payload":{"type":"patch_apply_end","success":true,"changes":{"x":{"type":"update","unified_diff":"-old\n+new"}}}}),
+                json!({"timestamp":"2026-08-18T00:00:03Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"AgentMessage","phase":"final_answer","content":[{"text":"answer"}]}}}),
+            ];
+            let prefix = events.iter().map(|e| format!("{e}\n")).collect::<String>();
+            fs::write(&path, &prefix)?;
+            assert_eq!(
+                store.sync_startup_batch(vec![path.clone()])?["imported_messages"],
+                3
+            );
+            let original = store.read_all_raw()?;
+            let tail = json!({"timestamp":"2026-08-18T00:00:04Z","type":"event_msg","payload":{"type":"user_message","message":"next"}});
+            fs::write(&path, format!("{prefix}{tail}\n"))?;
+            let (_, segment) = resolve_rollout_identity(&path)?;
+            let cursor_path = store.cursor_path(&segment);
+            let mut cursor = read_json(&cursor_path)?;
+            cursor["source_generation"] = json!("fixture");
+            cursor["last_line"] = json!(0);
+            cursor["message_last_line"] = json!(4);
+            cursor["committed_byte_offset"] = json!(0);
+            cursor["source_size"] = json!(0);
+            cursor["complete"] = json!(false);
+            if legacy_markers {
+                cursor
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("visible_message_format_version");
+                cursor
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("file_change_format_version");
+            }
+            atomic_write_json(&cursor_path, &cursor)?;
+            assert_eq!(
+                store.sync_startup_batch(vec![path.clone()])?["imported_messages"],
+                1
+            );
+            let resumed = initialized_store(archive.path())?;
+            assert_eq!(
+                resumed.sync_startup_batch(vec![path])?["imported_messages"],
+                0
+            );
+            let raw = resumed.read_all_raw()?;
+            assert_eq!(raw.len(), 4);
+            assert_eq!(&raw[..3], &original[..]);
+            assert_eq!(raw[3]["text"], "next");
+        }
         Ok(())
     }
 

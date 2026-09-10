@@ -1124,6 +1124,21 @@ class MemoryStore:
 
     @staticmethod
     def summarize_file_change(payload: Dict[str, Any]) -> Optional[str]:
+        if payload.get("type") == "item_completed":
+            item = payload.get("item")
+            if not isinstance(item, dict) or item.get("type") != "FileChange" or item.get("status") != "completed":
+                return None
+            changes = item.get("changes")
+            if not isinstance(changes, dict) or not changes:
+                return None
+            for change in changes.values():
+                if not isinstance(change, dict):
+                    return None
+                for field in ("type", "unified_diff", "content", "move_path"):
+                    if field in change and not isinstance(change[field], str):
+                        if field != "move_path" or change[field] is not None:
+                            return None
+            payload = {"type": "patch_apply_end", "success": True, "changes": changes}
         if payload.get("type") != "patch_apply_end" or payload.get("success") is not True:
             return None
         changes = payload.get("changes")

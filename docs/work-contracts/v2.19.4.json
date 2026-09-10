@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "work_item_id": "memory-wuxian-v2194-capture-history-compatibility",
+  "candidate_id": "v2.19.4",
+  "artifact_profile": "software-feature",
+  "classification": "repair",
+  "owner_id": "capture-core",
+  "validation_profile": "targeted-patch",
+  "lifecycle_state": "candidate",
+  "target": "Publish the locally exercised FileChange compatibility, reconciled-prefix replay guard and evidence-bound history planning corrections on the released 2.19.3 baseline.",
+  "invariants": [
+    "Append-only raw authority and existing IDs are preserved",
+    "Repeated identical events remain separate occurrences",
+    "Unmatched historical user/final records require separate review",
+    "History gaps and unresolved WAL cannot be applied by ordinary relocation",
+    "Python and Rust event projection agree",
+    "No private archives, credentials or device configuration are published"
+  ],
+  "prohibited_changes": [
+    "Automatic historical repair or summary regeneration",
+    "Cloud or device trust changes",
+    "Overwriting the unrelated dirty development checkout",
+    "Publishing before same-SHA platform and package gates pass"
+  ],
+  "required_rehearsal_scenarios": [
+    "python-compile",
+    "native-format",
+    "native-check",
+    "native-tests",
+    "candidate-native-version",
+    "bundled-native-version",
+    "capture-history-compatibility",
+    "architecture-contract",
+    "documentation-contract",
+    "diff-check"
+  ],
+  "before_after_checks": [
+    "New/legacy FileChange parity and malformed rejection",
+    "Reconciled prefix stays unchanged after native restart with legacy format markers",
+    "Exact occurrence matching retains missing historical IDs",
+    "Ordinary apply refuses history gaps and WAL",
+    "Source and archive hashes guard plan/apply",
+    "Three-platform same-SHA CI and installer package verification"
+  ],
+  "rollback": "Unpublished isolated branch may be discarded; live installation remains untouched during publication. Existing local repair rollback evidence is retained outside this repository.",
+  "promotion_review": "Existing MW-R05, MW-R06 and MW-R07 cover these defects; no new global rule or capability.",
+  "defect_workbook": {
+    "preflight_receipt": "governance/v2194-preflight.json",
+    "preflight_sha256": "00461bd4cdf01e2f7f3702d4d4f8966034679bd4e1095f3b9d0d4f34d31f3b95",
+    "completion_receipt": "governance/v2194-completion.json",
+    "completion_sha256": "99af73f83dcd382b273e939b3f7a1999c4ac0ce57386d3594aaa0be2d7ba4a2e",
+    "applicable_families": [
+      "MW-R03",
+      "MW-R05",
+      "MW-R06",
+      "MW-R07"
+    ],
+    "project_workbook_updated": true,
+    "original_triggers": [
+      "Completed FileChange envelopes were omitted and a reconciled prefix could replay under new generation IDs."
+    ]
+  }
+}

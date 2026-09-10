@@ -1,5 +1,7 @@
 # Memory無限
 
+> **2.19.4 capture compatibility:** Successful `item_completed/FileChange` events use legacy patch rendering; malformed or failed events are rejected. Reconciled source prefixes are not replayed under new IDs. Exact occurrence-based history planning retains old records and refuses ordinary apply when gaps or unresolved WAL require separately reviewed recovery. No automatic personal-history repair or summary regeneration.
+
 > **2.19.3 capture performance:** Continuous catch-up yields after bounded batches,
 > prioritizes fresh traffic, and updates indexes for changed conversations only.
 > macOS installation verifies an exact probe cursor independently of historical
