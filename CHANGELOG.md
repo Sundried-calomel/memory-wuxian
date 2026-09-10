@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.19.4 - 2026-09-10
+
+- Capture completed FileChange envelopes with Python/Rust legacy parity and malformed-field rejection.
+- Prevent reconciled prefixes replaying visible/file-change events under new IDs during rescans and restarts.
+- Preserve exact occurrence multiplicity and retained-only records in explicitly requested history plans, guarded by cursor, transcript and token hashes.
+- Ordinary relocation still rejects historical gaps and unresolved WAL. No automatic history repair, summary regeneration, cloud or trust change.
+- Add portable synthetic regressions. Private recovery artifacts are excluded.
+
 ## 2.19.3 - 2026-09-08
 
 - Bound continuous catch-up to one chunk per source and eight sources per cycle,

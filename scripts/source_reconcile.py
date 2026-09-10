@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Preview or apply an evidence-bound cursor relocation after a source rewrite."""
 import argparse
+from collections import defaultdict, deque
 import datetime as dt
 import hashlib
 import json
@@ -46,7 +47,10 @@ def align(archived, current):
 
 class ProjectionStore(MemoryStore):
     def append_message(self, **record):
-        record['text'] = redact_secrets(record['text'])[0] if self.config.get('safety', {}).get('redact_secrets', True) else record['text']
+        if self.config.get('safety', {}).get('redact_secrets', True):
+            record['text'], record['redacted'] = redact_secrets(record['text'])
+        else:
+            record['redacted'] = False
         self.projected.append(record)
         return {'status': 'duplicate'}
 
@@ -67,7 +71,29 @@ def pending_for_source(root, source):
     return [v for v in pending.values() if v['source_path'] == str(source)]
 
 
-def plan(root, source, config):
+def inventory_alignment(archived, current):
+    """Exact occurrence matching; never collapse identical repeated events."""
+    queues = defaultdict(deque)
+    for record in archived:
+        queues[signature(record)].append(record)
+    pairs, missing = [], []
+    for record in current:
+        queue = queues[signature(record)]
+        if queue:
+            pairs.append((record, queue.popleft()))
+        else:
+            missing.append(record)
+    if not pairs:
+        raise ValueError('No exact archived source anchor')
+    anchor = max(record['source']['line'] for record, _ in pairs)
+    gaps = [record for record in missing if record['source']['line'] <= anchor]
+    if any(record['speaker'] != 'tool' or record['source']['phase'] != 'tool_activity' for record in gaps):
+        raise ValueError('Unmatched non-tool historical event requires separate review')
+    retained = [record for queue in queues.values() for record in queue]
+    return anchor, pairs, gaps, retained
+
+
+def plan(root, source, config, *, reconcile_history=False):
     root, source = root.resolve(), source.resolve()
     before = sha(source)
     store = MemoryStore(root, config)
@@ -80,8 +106,10 @@ def plan(root, source, config):
             raise ValueError('Excluded session does not require visible-history relocation')
         session_id, segment_id = result['session_id'], result['segment_id']
         cursor_path = store.codex_cursor_path(segment_id)
+        cursor_digest = sha(cursor_path)
         cursor = json.loads(cursor_path.read_text())
         transcript = store.conversation_transcript_path('codex:' + session_id)
+        transcript_digest = sha(transcript)
         archived = [r for r in store.read_raw_file(transcript)
                     if r.get('source', {}).get('path') == str(source)]
         archived.sort(key=lambda r: r['sequence'])
@@ -98,11 +126,17 @@ def plan(root, source, config):
                 raise ValueError('Archived record hash mismatch')
             if raw_by_id.get(record['message_id']) != record:
                 raise ValueError('Transcript differs from raw authority')
-        anchor = align(archived, projected.projected)
+        pairs, gaps, retained = [], [], []
+        if reconcile_history:
+            anchor, pairs, gaps, retained = inventory_alignment(archived, projected.projected)
+        else:
+            anchor = align(archived, projected.projected)
         matched_count = next(i + 1 for i, r in enumerate(projected.projected) if r['source']['line'] == anchor)
-        if pending_for_source(root, source):
+        pending_wal = pending_for_source(root, source)
+        if pending_wal and not (reconcile_history and not gaps and len(pairs) == len(projected.projected)):
             raise ValueError('Unresolved WAL transaction requires separate transaction reconciliation')
         token_path = root / 'imports/codex/token-usage' / (segment_id + '.json')
+        token_digest = sha(token_path) if token_path.exists() else None
         ledger = json.loads(token_path.read_text()) if token_path.exists() else None
         token_anchor = 0
         byte_offsets = {0: 0}
@@ -129,6 +163,10 @@ def plan(root, source, config):
         start = min(anchor, token_anchor) if last_marker else anchor
         generation = before[:24]
         next_cursor = dict(cursor, source_generation=generation, last_line=start,
+                           # The full visible projection above has already been
+                           # aligned with raw authority. Do not replay that prefix
+                           # as a legacy completed-item backfill under new IDs.
+                           visible_message_format_version=1,
                            message_last_line=anchor, committed_byte_offset=byte_offsets[start],
                            source_size=byte_offsets[start], observed_source_size=source.stat().st_size,
                            complete=False, source_byte_sha256=None, updated_at=now_iso())
@@ -140,18 +178,29 @@ def plan(root, source, config):
                 next_ledger['last_token_event'] = dict(last_marker, line=token_anchor)
         if sha(source) != before:
             raise ValueError('Source changed during reconciliation; retry after a stable boundary')
+        if (sha(cursor_path) != cursor_digest or sha(transcript) != transcript_digest
+                or (sha(token_path) if token_path.exists() else None) != token_digest):
+            raise ValueError('Archive changed during reconciliation; retry at a stable boundary')
         return {'status': 'ready', 'source': str(source), 'source_sha256': before,
-                'cursor_path': str(cursor_path), 'cursor_sha256': sha(cursor_path),
+                'cursor_path': str(cursor_path), 'cursor_sha256': cursor_digest,
                 'old_cursor': cursor, 'new_cursor': next_cursor,
-                'token_path': str(token_path), 'token_sha256': sha(token_path) if ledger else None,
+                'token_path': str(token_path), 'token_sha256': token_digest,
                 'old_ledger': ledger, 'new_ledger': next_ledger,
-                'transcript_path': str(transcript), 'transcript_sha256': sha(transcript),
+                'transcript_path': str(transcript), 'transcript_sha256': transcript_digest,
                 'raw_hashes': raw_hashes,
                 'verified_records': len(archived), 'matched_retained_records': matched_count,
-                'pending_source_records': len(projected.projected) - matched_count}
+                'pending_source_records': len(projected.projected) - matched_count,
+                'historical_gaps': gaps,
+                'retained_only_ids': [r['message_id'] for r in retained],
+                'source_message_map': [{'line': current['source']['line'], 'message_id': old['message_id'],
+                                        'round_number': old['round_number']} for current, old in pairs],
+                'pending_wal_for_verified_coverage': pending_wal,
+                'reconcile_history': reconcile_history}
 
 
 def apply(root, proposal):
+    if proposal.get('historical_gaps') or proposal.get('pending_wal_for_verified_coverage'):
+        raise ValueError('History gaps or WAL need the reviewed transactional recovery adapter')
     root = root.resolve()
     source = Path(proposal['source'])
     with exclusive_lock(root / '.locks/archive.lock'):
