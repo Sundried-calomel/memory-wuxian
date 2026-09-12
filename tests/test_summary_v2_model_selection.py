@@ -1,5 +1,6 @@
 """Check the real isolated command owner without invoking a cloud model."""
 import json
+import hashlib
 import subprocess
 import sys
 import unittest
@@ -21,6 +22,14 @@ print(json.dumps(values))
 
 
 class SummaryV2ModelSelectionTest(unittest.TestCase):
+    def test_checkout_contains_exact_engine_closure_and_operator_reference(self):
+        manifest = json.loads((VENDOR / 'runtime-manifest.json').read_bytes())
+        for item in manifest['files']:
+            path = VENDOR / item['path']
+            self.assertTrue(path.is_file(), item['path'])
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), item['sha256'], item['path'])
+        self.assertTrue((ROOT / 'references/summary-v2-runtime-integration.md').is_file())
+
     def commands(self, config):
         result = subprocess.run([sys.executable, '-I', '-B', '-X', 'utf8', '-c', PROGRAM,
                                  str(VENDOR / 'scripts'), json.dumps(config)],
