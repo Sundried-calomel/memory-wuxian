@@ -213,6 +213,8 @@ def run_backfill(
     repairable_issues = list((recovery or {}).get("repairable_issues") or [])
     scheduling_blocked = bool(integrity_issues or repairable_issues)
     queue = MaintenanceQueue(root)
+    from memory_summary_v2_links import SummaryV2Links
+    recovered_commits = [] if dry_run else SummaryV2Links(store).reconcile_queue(queue)
     scheduled = []
     if not scheduling_blocked:
         due_job = store.make_summary_job()
@@ -220,7 +222,7 @@ def run_backfill(
             scheduled.append(str(due_job))
     reconciliation = reconcile_pending_debt(root, queue)
     queue.mark_semantic_ready_bulk(maximum_jobs=10000)
-    completed: list[dict] = []
+    completed: list[dict] = list(recovered_commits)
     skipped = []
     pending = ordered_pending_jobs(store)
     maintenance_by_path = {
@@ -239,6 +241,9 @@ def run_backfill(
             "dispatch_policy": "frozen-jobs-continue",
         })
     selected: list[Path] = []
+    from summary_v2_runtime import enabled as v2_enabled
+    if v2_enabled(config):
+        limit = min(limit, 1)
     for job_path in pending:
         if len(selected) >= limit:
             break
@@ -332,11 +337,13 @@ def run_backfill(
                 "error": redact_error(str(result.get("reason") or "Codex runtime is unavailable")),
             })
             continue
-        if result.get("status") in {"deferred", "quarantined"}:
+        if result.get("status") in {"deferred", "quarantined", "yielded"}:
             skipped.append({
                 "job": str(job_path),
                 "reason": str(result["status"]),
                 **({"error": redact_error(result["error"])} if result.get("error") else {}),
+                **({key: result[key] for key in ('reason_code', 'requires_attention') if key in result}),
+                **({'detail': result['reason']} if result.get('reason') else {}),
             })
             continue
         completed.append(result)
@@ -378,6 +385,13 @@ def run_backfill(
     backup_debt_drained = False
     backup_started = time.monotonic()
     if not dry_run:
+        if v2_enabled(config):
+            # Commit changes the debt generation after the one pending-source scan.
+            current_debt = read_backup_debt_generation(root)
+            if current_debt is not None:
+                queue.enqueue('backup-debt', f"backup:{current_debt['debt_sha256']}",
+                              {key: current_debt[key] for key in ('debt_sha256', 'mutation_count')},
+                              max_attempts=4)
         owner = f"semantic-backfill-backup:{os.getpid()}"
         for _ in range(100):
             backup_job = queue.claim(owner, kinds={"backup-debt"})
@@ -417,7 +431,7 @@ def run_backfill(
     permanent_failures = queue_status["quarantined"]
     if dry_run:
         status = "dry-run"
-    elif integrity_issues or repairable_issues or reconciliation["invalid"] or permanent_failures:
+    elif integrity_issues or repairable_issues or reconciliation["invalid"] or permanent_failures or any(r.get('requires_attention') for r in skipped):
         status = "attention"
     elif skipped or remaining_pending_jobs or read_backup_debt_generation(root) is not None:
         status = "catching-up"
@@ -432,7 +446,7 @@ def run_backfill(
         stage="completed",
         selected_jobs=len(selected),
         finished_jobs=len(completed),
-        failed_jobs=len(selected) - len(completed),
+        failed_jobs=(dispatch_failures + sum(isinstance(r, dict) and r.get('requires_attention', False) for r in results_by_path.values())) if v2_enabled(config) else len(selected) - len(completed),
         timing={**stage_timing, "batch_seconds": batch_seconds},
     )
     return {
@@ -440,7 +454,11 @@ def run_backfill(
         "timestamp": now_iso(),
         "completed_jobs": len(completed),
         "attempted_jobs": len(selected),
-        "parallel_model_limit": _bounded_parallelism(config, max(1, len(selected)), dry_run),
+        "parallel_model_limit": _bounded_parallelism(config, 3 if v2_enabled(config) else max(1, len(selected)), dry_run),
+        **({'yielded_jobs': sum(isinstance(r, dict) and r.get('status') == 'yielded' for r in results_by_path.values()),
+            'deferred_jobs': sum(isinstance(r, dict) and r.get('status') == 'deferred' for r in results_by_path.values()),
+            'ai_invocations': sum(r.get('ai_invocations', 0) for r in results_by_path.values() if isinstance(r, dict)),
+            'ai_invocations_complete': not dispatch_failures} if v2_enabled(config) else {}),
         "job_ids": [item["job_id"] for item in completed],
         "batch_id": batch_id,
         "source_snapshot_built": source_snapshot is not None,

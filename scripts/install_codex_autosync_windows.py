@@ -7,6 +7,7 @@ import argparse
 import base64
 import hashlib
 import json
+import locale
 import os
 import shutil
 import subprocess
@@ -19,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
 try:
-    from platform_process import _unique_command_argument, no_window_kwargs
+    from platform_process import _unique_command_argument, no_window_kwargs, windows_command_argv, wait_windows_startup_exit, windows_task_present
     from collector_activation import resolve_activation_since
     from collector_lifecycle import (
         create_installed_effect_probe,
@@ -29,7 +30,7 @@ try:
     )
     from platform_paths import active_root_pointer
 except ModuleNotFoundError:
-    from scripts.platform_process import _unique_command_argument, no_window_kwargs
+    from scripts.platform_process import _unique_command_argument, no_window_kwargs, windows_command_argv, wait_windows_startup_exit, windows_task_present
     from scripts.collector_activation import resolve_activation_since
     from scripts.collector_lifecycle import (
         create_installed_effect_probe,
@@ -105,14 +106,25 @@ def command_generation(command: Sequence[str]) -> str:
     return f"windows-task-{digest}"
 
 
+def task_user_id() -> str:
+    username = (os.environ.get("USERNAME") or os.environ.get("USER") or "").strip()
+    if not username:
+        raise RuntimeError("current Windows user identity is unavailable")
+    domain = (os.environ.get("USERDOMAIN") or "").strip()
+    return f"{domain}\\{username}" if domain else username
+
+
 def task_xml(command: Sequence[str]) -> bytes:
+    user_id = task_user_id()
     ET.register_namespace("", TASK_NAMESPACE)
     task = ET.Element(f"{{{TASK_NAMESPACE}}}Task", {"version": "1.4"})
     triggers = ET.SubElement(task, f"{{{TASK_NAMESPACE}}}Triggers")
     logon = ET.SubElement(triggers, f"{{{TASK_NAMESPACE}}}LogonTrigger")
+    ET.SubElement(logon, f"{{{TASK_NAMESPACE}}}UserId").text = user_id
     ET.SubElement(logon, f"{{{TASK_NAMESPACE}}}Enabled").text = "true"
     principals = ET.SubElement(task, f"{{{TASK_NAMESPACE}}}Principals")
     principal = ET.SubElement(principals, f"{{{TASK_NAMESPACE}}}Principal", {"id": "Author"})
+    ET.SubElement(principal, f"{{{TASK_NAMESPACE}}}UserId").text = user_id
     ET.SubElement(principal, f"{{{TASK_NAMESPACE}}}LogonType").text = "InteractiveToken"
     ET.SubElement(principal, f"{{{TASK_NAMESPACE}}}RunLevel").text = "LeastPrivilege"
     settings = ET.SubElement(task, f"{{{TASK_NAMESPACE}}}Settings")
@@ -126,7 +138,8 @@ def task_xml(command: Sequence[str]) -> bytes:
     ):
         ET.SubElement(settings, f"{{{TASK_NAMESPACE}}}{name}").text = value
     restart = ET.SubElement(settings, f"{{{TASK_NAMESPACE}}}RestartOnFailure")
-    ET.SubElement(restart, f"{{{TASK_NAMESPACE}}}Interval").text = "PT30S"
+    # Task Scheduler rejects restart intervals shorter than one minute.
+    ET.SubElement(restart, f"{{{TASK_NAMESPACE}}}Interval").text = "PT1M"
     ET.SubElement(restart, f"{{{TASK_NAMESPACE}}}Count").text = "5"
     actions = ET.SubElement(task, f"{{{TASK_NAMESPACE}}}Actions", {"Context": "Author"})
     execute = ET.SubElement(actions, f"{{{TASK_NAMESPACE}}}Exec")
@@ -162,6 +175,45 @@ def verify_task_definition(payload: bytes, command: Sequence[str]) -> dict[str, 
     return actual
 
 
+def _xml_structure(payload: bytes):
+    def node(element):
+        return [element.tag, sorted(element.attrib.items()), (element.text or '').strip(), [node(child) for child in element]]
+    return node(ET.fromstring(payload))
+
+
+def verify_startup_binding(payload: bytes, command: Sequence[str], binding: dict[str, Any]) -> dict[str, Any]:
+    """Preserve a previously reviewed scheduler wrapper without changing native identity."""
+    expected = base64.b64decode(binding['task_xml'], validate=True)
+    if hashlib.sha256(expected).hexdigest() != binding['task_xml_sha256'] or _xml_structure(payload) != _xml_structure(expected):
+        raise RuntimeError('Bound startup task changed')
+    for key in ('wrapper', 'launch', 'pythonw'):
+        item = binding[key]
+        if hashlib.sha256(Path(item['path']).read_bytes()).hexdigest() != item['sha256']:
+            raise RuntimeError('Bound startup file changed: ' + key)
+    launch = json.loads(Path(binding['launch']['path']).read_text('utf-8-sig'))
+    launched = windows_command_argv(subprocess.list2cmdline([launch['executable']]) + ' ' + launch['arguments'])
+    if launched != list(command) or launch['sha256'].lower() != binding['collector_sha256']:
+        raise RuntimeError('Diagnostic wrapper no longer launches the bound native collector command')
+    if hashlib.sha256(Path(command[0]).read_bytes()).hexdigest() != binding['collector_sha256']:
+        raise RuntimeError('Diagnostic wrapper collector bytes changed')
+    root = ET.fromstring(payload)
+    ns = {'t': TASK_NAMESPACE}
+    actions = root.find('t:Actions', ns)
+    if actions is None or len(actions) != 1 or actions[0].tag != f'{{{TASK_NAMESPACE}}}Exec':
+        raise RuntimeError('Bound task requires exactly one Exec action')
+    action = actions[0]
+    actual = windows_command_argv(subprocess.list2cmdline([action.findtext('t:Command', namespaces=ns)]) + ' ' + (action.findtext('t:Arguments', namespaces=ns) or ''))
+    if actual != [binding['pythonw']['path'], '-B', binding['wrapper']['path']]:
+        raise RuntimeError('Bound task does not execute the admitted diagnostic wrapper')
+    if root.findtext('t:Settings/t:MultipleInstancesPolicy', namespaces=ns) != 'IgnoreNew':
+        raise RuntimeError('Bound self-healing task must retain IgnoreNew')
+    return {'startup_binding_sha256': hashlib.sha256(canonical_json(binding)).hexdigest(),
+            'command': command[0], 'wrapper_command': actual,
+            'restart_interval': root.findtext('t:Settings/t:RestartOnFailure/t:Interval', namespaces=ns),
+            'repeat_intervals': [e.text for e in root.findall('t:Triggers/*/t:Repetition/t:Interval', ns)],
+            'task_structure_sha256': hashlib.sha256(canonical_json(_xml_structure(payload))).hexdigest()}
+
+
 def _completed_bytes(value: Any) -> bytes:
     if value is None:
         return b""
@@ -191,8 +243,28 @@ def query_task_xml(task_name: str, runner: Runner = subprocess.run) -> bytes | N
     if result.returncode != 0:
         return None
     if isinstance(result.stdout, str):
-        return result.stdout.encode("utf-8")
-    return _completed_bytes(result.stdout)
+        text = result.stdout
+    else:
+        payload = _completed_bytes(result.stdout)
+        if payload.startswith((b"\xff\xfe", b"\xfe\xff")):
+            text = payload.decode("utf-16", errors="strict")
+        else:
+            decode_error: UnicodeDecodeError | None = None
+            text = ""
+            for encoding in dict.fromkeys(("utf-8", locale.getencoding(), locale.getpreferredencoding(False))):
+                try:
+                    text = payload.decode(encoding, errors="strict")
+                    break
+                except UnicodeDecodeError as error:
+                    decode_error = error
+            else:
+                assert decode_error is not None
+                raise decode_error
+    # schtasks emits UTF-8 bytes while retaining an UTF-16 XML declaration.
+    # Normalize the declaration before handing the bytes to ElementTree.
+    text = text.replace('encoding="UTF-16"', 'encoding="UTF-8"', 1)
+    text = text.replace("encoding='utf-16'", "encoding='utf-8'", 1)
+    return text.encode("utf-8")
 
 
 def _task_command(arguments: list[str], runner: Runner, *, check: bool) -> Any:
@@ -301,28 +373,72 @@ def _restore_generation(journal: dict[str, Any]) -> None:
     skill_root = Path(generation["skill_root"])
     previous = Path(generation["previous_root"])
     failed = Path(generation["failed_root"])
-    if skill_root.exists():
-        _move_directory(skill_root, failed)
     if previous.exists():
+        if skill_root.exists():
+            _move_directory(skill_root, failed)
         _move_directory(previous, skill_root)
+    elif 'staged_root' in generation:
+        staged = Path(generation['staged_root'])
+        if generation['had_previous']:
+            if not skill_root.exists() or not (staged.exists() or failed.exists()):
+                raise RuntimeError('Previous generation cannot be identified for restoration')
+        elif skill_root.exists():
+            if staged.exists() or failed.exists():
+                raise RuntimeError('Unexpected generation state during restoration')
+            _move_directory(skill_root, failed)
+    elif skill_root.exists():
+        _move_directory(skill_root, failed)
     generation["switched"] = False
 
 
-def _restore_transaction(journal: dict[str, Any], runner: Runner) -> None:
+def _quiesce_startup(journal, quiescence_probe=None):
+    result = (quiescence_probe or wait_windows_startup_exit)(journal['startup_binding'], journal['command'])
+    journal['quiescence'] = result or {'status': 'quiescent', 'scope': 'injected probe'}
+
+
+def _disabled_task(payload):
+    root = ET.fromstring(payload)
+    settings = root.find(f'{{{TASK_NAMESPACE}}}Settings')
+    enabled = settings.find(f'{{{TASK_NAMESPACE}}}Enabled')
+    if enabled is None:
+        enabled = ET.SubElement(settings, f'{{{TASK_NAMESPACE}}}Enabled')
+    enabled.text = 'false'
+    return ET.tostring(root, encoding='utf-16', xml_declaration=True)
+
+
+def _restore_transaction(journal: dict[str, Any], runner: Runner, quiescence_probe=None) -> None:
     task_name = str(journal["task_name"])
     rollback = journal["rollback"]
-    _task_command(["schtasks.exe", "/End", "/TN", task_name], runner, check=False)
-    remove_task(task_name, runner)
+    if journal.get('startup_binding'):
+        disabled = _task_command(['schtasks.exe', '/Change', '/TN', task_name, '/Disable'], runner, check=False)
+        _task_command(['schtasks.exe', '/End', '/TN', task_name], runner, check=False)
+        removed = _task_command(['schtasks.exe', '/Delete', '/TN', task_name, '/F'], runner, check=False)
+        if disabled.returncode != 0 and removed.returncode != 0:
+            if query_task_xml(task_name, runner) is not None or windows_task_present(task_name, runner=runner):
+                raise RuntimeError('Startup task could not be disabled or removed for rollback')
+    else:
+        _task_command(["schtasks.exe", "/End", "/TN", task_name], runner, check=False)
+        remove_task(task_name, runner)
+    if journal.get('startup_binding'):
+        try:
+            _quiesce_startup(journal, quiescence_probe)
+        except BaseException:
+            # A live child may still own archive/installed files. Keep the task
+            # disabled and leave the transaction resumable; never start a peer.
+            old_task = rollback.get('task_xml')
+            if old_task is not None:
+                register_task(task_name, _disabled_task(base64.b64decode(old_task)), runner)
+            raise
     # The restored task must never start against the failed generation.
     _restore_generation(journal)
-    old_task = rollback.get("task_xml")
-    if old_task is not None:
-        register_task(task_name, base64.b64decode(old_task), runner)
-        _task_command(["schtasks.exe", "/Run", "/TN", task_name], runner, check=False)
     _restore_file(Path(journal["command_manifest"]), _decoded(rollback.get("command_manifest")))
     _restore_file(Path(journal["active_root_pointer"]), _decoded(rollback.get("active_root_pointer")))
     _restore_file(Path(journal["lifecycle_manifest"]), _decoded(rollback.get("lifecycle_manifest")))
     restore_run_key(rollback.get("run_key"), runner)
+    old_task = rollback.get("task_xml")
+    if old_task is not None:
+        register_task(task_name, base64.b64decode(old_task), runner)
+        _task_command(["schtasks.exe", "/Run", "/TN", task_name], runner, check=False)
 
 
 def _decoded(value: str | None) -> bytes | None:
@@ -346,6 +462,7 @@ def rollback_transaction(
     runner: Runner = subprocess.run,
     readiness_probe: Callable[..., dict[str, Any]] | None = None,
     error: str = "requested rollback",
+    quiescence_probe=None,
 ) -> dict[str, Any]:
     journal = json.loads(journal_path.read_text(encoding="utf-8"))
     if journal.get("phase") == "rollback":
@@ -358,6 +475,7 @@ def rollback_transaction(
         runner=runner,
         readiness_probe=readiness_probe or wait_for_watermark_progress,
         previous_pid=None,
+        quiescence_probe=quiescence_probe,
     )
     _journal_phase(journal_path, journal, "rollback", error=error)
     return journal
@@ -422,6 +540,7 @@ def _restore_and_verify_previous(
     runner: Runner,
     readiness_probe: Callable[..., dict[str, Any]],
     previous_pid: int | None,
+    quiescence_probe=None,
 ) -> dict[str, Any] | None:
     encoded_lifecycle = journal.get("rollback", {}).get("lifecycle_manifest")
     previous_owner = None
@@ -452,7 +571,12 @@ def _restore_and_verify_previous(
     except (OSError, ValueError, KeyError, json.JSONDecodeError):
         pass
 
-    _restore_transaction(journal, runner)
+    try:
+        _restore_transaction(journal, runner, quiescence_probe)
+    except BaseException as error:
+        journal['rollback_recovery'] = {'status': 'blocked-before-restoration', 'error': str(error)}
+        atomic_write_bytes(journal_path, canonical_json(journal))
+        raise
     journal["rollback_recovery"] = {
         "status": "restored-awaiting-verification",
         "candidate_pid": candidate_pid,
@@ -469,7 +593,8 @@ def _restore_and_verify_previous(
     task_xml_payload = query_task_xml(str(journal["task_name"]), runner)
     if task_xml_payload is None:
         raise RuntimeError("restored collector task is missing")
-    task = verify_task_definition(task_xml_payload, command)
+    task = (verify_startup_binding(task_xml_payload, command, journal['startup_binding'])
+            if journal.get('startup_binding') else verify_task_definition(task_xml_payload, command))
     probe = create_installed_effect_probe(
         sessions_root,
         previous_watermark=candidate_watermark,
@@ -518,6 +643,8 @@ def install_transaction(
     prepare_mutation: Callable[[dict[str, Any]], None] | None = None,
     defer_commit: bool = False,
     journal_extra: dict[str, Any] | None = None,
+    startup_binding: dict[str, Any] | None = None,
+    quiescence_probe=None,
 ) -> dict[str, Any]:
     intended_xml = task_xml(command)
     old_task_xml = query_task_xml(task_name, runner)
@@ -526,12 +653,23 @@ def install_transaction(
     lifecycle_manifest = archive_root / "imports" / "codex" / "collector-lifecycle.json"
     old_lifecycle = _read_optional(lifecycle_manifest)
     old_run_key = query_run_key(runner)
+    if startup_binding is None and old_task_xml is not None and inspect_task_xml(old_task_xml)['command'].lower().endswith('pythonw.exe'):
+        raise RuntimeError('Existing wrapper startup requires an explicit preserved startup binding')
+    if startup_binding is not None:
+        if old_task_xml is None:
+            raise RuntimeError('Bound startup task disappeared before installation')
+        verify_startup_binding(old_task_xml, command, startup_binding)
+        if hashlib.sha256(Path((candidate_probe_command or command)[0]).read_bytes()).hexdigest() != startup_binding['collector_sha256']:
+            raise RuntimeError('Candidate does not preserve the diagnostic collector binding')
+        intended_xml = base64.b64decode(startup_binding['task_xml'], validate=True)
     previous_pid = None
     telemetry_path = archive_root / "imports" / "codex" / "collector-telemetry.json"
     try:
         previous_pid = int(json.loads(telemetry_path.read_text(encoding="utf-8"))["pid"])
     except (OSError, ValueError, KeyError, json.JSONDecodeError):
         pass
+    if startup_binding is not None and (previous_pid is None or previous_pid != startup_binding.get('collector_pid')):
+        raise RuntimeError('Bound collector PID changed before installation')
     previous_archive_watermark = None
     try:
         previous_archive_watermark = json.loads(
@@ -561,14 +699,27 @@ def install_transaction(
     }
     if journal_extra:
         journal.update(journal_extra)
+    if startup_binding is not None:
+        journal['startup_binding'] = startup_binding
     _journal_phase(journal_path, journal, "prepare")
     mutated = False
     try:
-        verify_task_definition(intended_xml, command)
+        if startup_binding is None:
+            verify_task_definition(intended_xml, command)
+        else:
+            verify_startup_binding(intended_xml, command, startup_binding)
         probe_candidate(candidate_probe_command or command, runner)
         _journal_phase(journal_path, journal, "verify", candidate_runnable=True)
         started_at = datetime.now(timezone.utc)
         mutated = True
+        if startup_binding is not None:
+            _task_command(['schtasks.exe', '/Change', '/TN', task_name, '/Disable'], runner, check=True)
+            _task_command(['schtasks.exe', '/End', '/TN', task_name], runner, check=False)
+            _task_command(['schtasks.exe', '/Delete', '/TN', task_name, '/F'], runner, check=True)
+            if query_task_xml(task_name, runner) is not None:
+                raise RuntimeError('Previous startup task could not be removed before cutover')
+            _quiesce_startup(journal, quiescence_probe)
+            atomic_write_bytes(journal_path, canonical_json(journal))
         if prepare_mutation is not None:
             prepare_mutation(journal)
             atomic_write_bytes(journal_path, canonical_json(journal))
@@ -576,11 +727,6 @@ def install_transaction(
         if old_task_xml is not None:
             _task_command(["schtasks.exe", "/End", "/TN", task_name], runner, check=False)
         remove_task(task_name, runner)
-        register_task(task_name, intended_xml, runner)
-        actual_xml = query_task_xml(task_name, runner)
-        if actual_xml is None:
-            raise RuntimeError("scheduled task disappeared after registration")
-        actual_task = verify_task_definition(actual_xml, command)
         manifest = {
             "format_version": 2,
             "generation_id": journal["generation_id"],
@@ -608,6 +754,14 @@ def install_transaction(
             ],
         }
         atomic_write_bytes(lifecycle_manifest, canonical_json(lifecycle))
+        # Register only after control files are ready: a TimeTrigger may run
+        # immediately, before the explicit /Run below.
+        register_task(task_name, intended_xml, runner)
+        actual_xml = query_task_xml(task_name, runner)
+        if actual_xml is None:
+            raise RuntimeError("scheduled task disappeared after registration")
+        actual_task = (verify_startup_binding(actual_xml, command, startup_binding)
+                       if startup_binding is not None else verify_task_definition(actual_xml, command))
         _task_command(["schtasks.exe", "/Run", "/TN", task_name], runner, check=True)
         sessions_index = list(command).index("--sessions-root") + 1
         effect_probe = create_installed_effect_probe(
@@ -649,6 +803,7 @@ def install_transaction(
                 runner=runner,
                 readiness_probe=readiness_probe,
                 previous_pid=failed_pid,
+                quiescence_probe=quiescence_probe,
             )
             atomic_write_bytes(journal_path, canonical_json(journal))
         _journal_phase(journal_path, journal, "rollback", error=str(error))
@@ -669,6 +824,8 @@ def install_generation_transaction(
     runner: Runner = subprocess.run,
     readiness_probe: Callable[..., dict[str, Any]] = wait_for_watermark_progress,
     defer_commit: bool = False,
+    startup_binding: dict[str, Any] | None = None,
+    quiescence_probe=None,
 ) -> tuple[dict[str, Any], Path]:
     transaction_root = runtime_directory / "transactions" / uuid.uuid4().hex
     staged_root = transaction_root / "candidate"
@@ -692,6 +849,7 @@ def install_generation_transaction(
         # Record the rollback obligation before either rename. If the second
         # rename fails, the first one still has a durable restoration path.
         journal["generation"]["switched"] = True
+        atomic_write_bytes(journal_path, canonical_json(journal))
         if skill_root.exists():
             _move_directory(skill_root, previous_root)
         _move_directory(staged_root, skill_root)
@@ -708,11 +866,15 @@ def install_generation_transaction(
         candidate_probe_command=staged_command,
         prepare_mutation=switch_generation,
         defer_commit=defer_commit,
+        startup_binding=startup_binding,
+        quiescence_probe=quiescence_probe,
         journal_extra={
             "generation": {
                 "skill_root": str(skill_root),
                 "previous_root": str(previous_root),
                 "failed_root": str(failed_root),
+                "staged_root": str(staged_root),
+                "had_previous": skill_root.exists(),
                 "switched": False,
             }
         },

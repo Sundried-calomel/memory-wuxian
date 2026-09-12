@@ -504,6 +504,15 @@ def run_job(
     if job_path.parent != store.pending_dir.resolve() or not job_path.exists():
         raise ValueError("Job must be an existing pending Memory無限 job")
     job = json.loads(job_path.read_text(encoding="utf-8"))
+    from summary_v2_runtime import enabled as v2_enabled, execute_job as execute_v2_job
+    is_v2_job = job.get("summary_format") == 2 or (root / "summary-v2/routes" / (job["job_id"] + ".json")).exists()
+    if is_v2_job and not v2_enabled(config):
+        return {"status": "deferred", "summary_format": 2, "job_id": job["job_id"],
+                "reason": "V2 generation is disabled; the persisted V2 job remains paused", "ai_invocations": 0}
+    if v2_enabled(config):
+        return execute_v2_job(store, config_path, job_path, source_snapshot=source_snapshot,
+                              defer_derived_updates=defer_derived_updates,
+                              create_backup=create_backup, dry_run=dry_run)
     command, timeout_seconds = _codex_command(config)
     if dry_run:
         return {

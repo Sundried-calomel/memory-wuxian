@@ -662,3 +662,12 @@
   earlier Windows fixes. Cross-platform and package results are owned by the
   final candidate CI and release workflow, not inferred from the Mac run.
 - Families: `MW-R03`, `MW-R05`, `MW-R06`, `MW-R07`, `MW-R11`.
+
+### MW-REL-048: Preserve runtime and cost bindings when integrating Summary V2
+
+- Historical triggers: a closed timeout route omitted existing rescue handling; task interpreter identity differed from manual execution; an empty model choice delegated automatic summaries to a changing CLI default.
+- Boundaries: preserve the existing timeout predecessor, dispatch claims, exact configuration/source identities, and paused interrupted nodes. Never reset an ambiguous node or infer successful execution from process existence.
+- Integration retains the upstream frozen-job isolation and Mac capture/replay fixes; no old native binary replaces their source.
+- V2 now defaults explicitly to GPT-5.6-Terra and medium reasoning. Model selection and pause state remain separate from publication and cloud-content authorization.
+- Regressions: test_summary_v2_integration, test_memory_identity, test_windows_startup_binding, test_summary_v2_model_selection, and the retained v2.19.2–v2.19.4 capture/recovery tests. Installation effects of older local candidates are not represented as evidence for this release.
+- Families: G03, G04, G08, G09, MW-R03, MW-R05, MW-R06, MW-R11.

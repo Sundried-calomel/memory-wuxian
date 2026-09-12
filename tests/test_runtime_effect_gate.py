@@ -103,6 +103,19 @@ class RuntimeEffectGateTest(unittest.TestCase):
             {item["code"] for item in result["failures"]},
         )
 
+    def test_v2_missing_parent_is_not_hidden_by_another_conversation_pending(self):
+        with self.config.open('a', encoding='utf-8') as output:
+            output.write('summary_v2:\n  enabled: true\n')
+        (self.archive / 'pending/job-000001.json').write_text(json.dumps({
+            'job_id': 'job-000001', 'summary_level': 2, 'conversation_id': 'codex:B',
+            'source_signature': 'conversation:codex:B:v2-children:L1-3,L1-4',
+        }), encoding='utf-8')
+        with patch('runtime_effect_gate.semantic_parent_debt', return_value=[{
+            'conversation_id': 'codex:A', 'source_level': 1, 'child_count': 2,
+        }]):
+            result = check_runtime_effects(self.archive, self.config)
+        self.assertIn('semantic-parent-job-missing', {r['code'] for r in result['failures']})
+
     def test_windows_activation_fails_on_sandbox_profile_shortcut(self):
         skill = self.base / ".codex" / "skills" / "memory-wuxian"
         launcher = skill / "bin" / "memory-wuxian-dashboard-launcher.exe"

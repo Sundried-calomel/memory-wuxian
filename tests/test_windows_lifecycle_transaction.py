@@ -3,6 +3,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import os
+import xml.etree.ElementTree as ET
+from unittest.mock import patch
 from contextlib import redirect_stderr
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -125,9 +128,34 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
         self.assertIn(str(long_archive), definition["arguments"])
         self.assertTrue(definition["hidden"])
         self.assertEqual(definition["multiple_instances"], "IgnoreNew")
-        self.assertEqual(definition["restart_interval"], "PT30S")
+        self.assertEqual(definition["restart_interval"], "PT1M")
         self.assertEqual(definition["restart_count"], "5")
         self.assertNotIn("powershell", definition["command"].lower())
+
+    def test_task_binds_both_trigger_and_principal_to_explicit_user(self):
+        with patch.dict(os.environ, {"USERNAME": "测试 用户", "USERDOMAIN": "本机"}):
+            root = ET.fromstring(windows.task_xml(self.command))
+        ns = {"t": windows.TASK_NAMESPACE}
+        self.assertEqual(root.findtext("t:Triggers/t:LogonTrigger/t:UserId", namespaces=ns), "本机\\测试 用户")
+        self.assertEqual(root.findtext("t:Principals/t:Principal/t:UserId", namespaces=ns), "本机\\测试 用户")
+
+    def test_task_query_normalizes_real_schtasks_encoding_variants(self):
+        text = windows.task_xml(self.command).decode("utf-16")
+        for payload in (text, text.encode("utf-16"), text.encode("utf-8")):
+            with self.subTest(payload_type=type(payload).__name__, prefix=str(payload)[:30]):
+                result = windows.query_task_xml(windows.DEFAULT_TASK_NAME, FakeRunner(payload))
+                self.assertEqual(windows.inspect_task_xml(result), windows.inspect_task_xml(windows.task_xml(self.command)))
+
+    def test_task_query_rejects_invalid_protocol_bytes(self):
+        with patch.object(windows.locale, "getpreferredencoding", return_value="utf-8"):
+            with self.assertRaises(UnicodeDecodeError):
+                windows.query_task_xml(windows.DEFAULT_TASK_NAME, FakeRunner(b"\xffbroken"))
+
+    def test_task_query_keeps_windows_ansi_fallback_when_python_utf8_mode_is_enabled(self):
+        payload = windows.task_xml(['C:\\中文\\collector.exe', '--since', 'now']).decode('utf-16').encode('cp936')
+        with patch.object(windows.locale, 'getpreferredencoding', return_value='utf-8'), patch.object(windows.locale, 'getencoding', return_value='cp936'):
+            normalized = windows.query_task_xml(windows.DEFAULT_TASK_NAME, FakeRunner(payload))
+        self.assertEqual('C:\\中文\\collector.exe', windows.inspect_task_xml(normalized)['command'])
 
     def test_old_task_survives_until_candidate_verification_then_commits(self):
         old_command = [str(self.base / "old collector.exe"), "--archive-root", "old"]

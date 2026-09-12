@@ -6,7 +6,9 @@
     {"path": "packaging", "all_files": true},
     {"path": "dashboard", "extensions": [".html", ".css", ".js"]},
     {"path": "schemas", "extensions": [".json"]},
-    {"path": "contracts", "extensions": [".json"]}
+    {"path": "contracts", "extensions": [".json"]},
+    {"path": "vendor/summary_v2/scripts", "extensions": [".py"]},
+    {"path": "vendor/summary_v2/schemas", "extensions": [".json"]}
   ],
   "modules": [
     {
@@ -78,7 +80,10 @@
         "packaging/macos/scripts/postinstall",
         "packaging/windows/install.ps1",
         "packaging/windows/uninstall.ps1",
-        "native-collector/src/bin/memory-wuxian-dashboard-launcher.rs"
+        "native-collector/src/bin/memory-wuxian-dashboard-launcher.rs",
+        "vendor/summary_v2/scripts/memory_cli.py",
+        "vendor/summary_v2/scripts/memory_readonly_http.py",
+        "vendor/summary_v2/scripts/memory_readonly_mcp.py"
       ]
     },
     {
@@ -103,7 +108,20 @@
         "scripts/semantic_dispatch.py",
         "scripts/semantic_e5_worker.py",
         "scripts/semantic_plan.py",
-        "scripts/semantic_worker.py"
+        "scripts/semantic_worker.py",
+        "vendor/summary_v2/scripts/memory_configuration.py",
+        "vendor/summary_v2/scripts/memory_diagnostics.py",
+        "vendor/summary_v2/scripts/memory_jobs.py",
+        "vendor/summary_v2/scripts/memory_readonly_service.py",
+        "vendor/summary_v2/scripts/memory_service_state.py",
+        "vendor/summary_v2/scripts/memory_summary_budget.py",
+        "vendor/summary_v2/scripts/semantic_plan.py",
+        "vendor/summary_v2/scripts/summary_v2_backfill.py",
+        "vendor/summary_v2/scripts/summary_v2_worker.py",
+        "scripts/summary_v2_runtime.py",
+        "scripts/summary_v2_adoption.py",
+        "scripts/summary_v2_restore.py"
+        ,"scripts/summary_v2_identity_repair.py"
       ]
     },
     {
@@ -117,10 +135,19 @@
         "scripts/conversation_titles.py",
         "scripts/daily_metrics.py",
         "scripts/memory_indexing.py",
+        "scripts/memory_identity.py",
         "scripts/memory_content_store.py",
         "scripts/memory_guarded_features.py",
         "scripts/memory_retrieval_algorithms.py",
-        "scripts/token_usage.py"
+        "scripts/token_usage.py",
+        "vendor/summary_v2/scripts/conversation_titles.py",
+        "vendor/summary_v2/scripts/memory_atoms.py",
+        "vendor/summary_v2/scripts/memory_content_store.py",
+        "vendor/summary_v2/scripts/memory_guarded_features.py",
+        "vendor/summary_v2/scripts/memory_indexing.py",
+        "vendor/summary_v2/scripts/memory_summary_v2.py",
+        "vendor/summary_v2/scripts/token_usage.py",
+        "scripts/memory_summary_v2_links.py"
       ]
     },
     {
@@ -134,7 +161,21 @@
         "scripts/memory_environment*.py",
         "scripts/memory_governance_ai.py",
         "scripts/semantic_runtime_contract.py",
-        "contracts/**"
+        "contracts/**",
+        "vendor/summary_v2/scripts/memory_environment.py",
+        "vendor/summary_v2/scripts/memory_environment_bindings.py",
+        "vendor/summary_v2/scripts/memory_environment_capabilities.py",
+        "vendor/summary_v2/scripts/memory_environment_conflicts.py",
+        "vendor/summary_v2/scripts/memory_environment_evolution.py",
+        "vendor/summary_v2/scripts/memory_environment_exchange.py",
+        "vendor/summary_v2/scripts/memory_environment_governance.py",
+        "vendor/summary_v2/scripts/memory_environment_incoming.py",
+        "vendor/summary_v2/scripts/memory_environment_profiles.py",
+        "vendor/summary_v2/scripts/memory_environment_promotions.py",
+        "vendor/summary_v2/scripts/memory_environment_rules.py",
+        "vendor/summary_v2/scripts/memory_environment_skills.py",
+        "vendor/summary_v2/scripts/memory_governance_ai.py",
+        "vendor/summary_v2/scripts/semantic_runtime_contract.py"
       ]
     },
     {
@@ -146,7 +187,9 @@
       "forbidden_dependencies": ["capture-core", "product-shell"],
       "patterns": [
         "scripts/memory_project_evidence.py",
-        "scripts/memory_project_attachments.py"
+        "scripts/memory_project_attachments.py",
+        "vendor/summary_v2/scripts/memory_project_attachments.py",
+        "vendor/summary_v2/scripts/memory_project_evidence.py"
       ]
     },
     {
@@ -161,7 +204,10 @@
         "scripts/memory_cloud_transport.py",
         "scripts/memory_federation.py",
         "scripts/memory_resumable_sync.py",
-        "native-collector/src/bin/memory-wuxian-envelope.rs"
+        "native-collector/src/bin/memory-wuxian-envelope.rs",
+        "vendor/summary_v2/scripts/memory_cloud_transport.py",
+        "vendor/summary_v2/scripts/memory_federation.py",
+        "vendor/summary_v2/scripts/memory_resumable_sync.py"
       ]
     },
     {
@@ -190,7 +236,13 @@
         "scripts/collector_activation.py",
         "scripts/platform_transaction.py",
         "scripts/platform_*.py",
-        "schemas/**"
+        "schemas/**",
+        "vendor/summary_v2/scripts/console_encoding.py",
+        "vendor/summary_v2/scripts/platform_lock.py",
+        "vendor/summary_v2/scripts/platform_paths.py",
+        "vendor/summary_v2/scripts/platform_process.py",
+        "vendor/summary_v2/scripts/platform_transaction.py",
+        "vendor/summary_v2/schemas/**"
       ]
     },
     {

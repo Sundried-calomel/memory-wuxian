@@ -513,3 +513,7 @@ discovery, NAT traversal, or mobile access. The optional cloud-folder transport
 uses the user's existing filesystem synchronization client without receiving
 its account credentials. It signs and encrypts each target-specific envelope
 before publication and keeps the five-second local collector path unchanged.
+
+## Optional Summary V2
+
+For explicitly enabled local V2 generation, adoption, typed retrieval and backup/restore, read `references/summary-v2-runtime-integration.md`. The isolated worker defaults to `gpt-5.6-terra` with explicit `medium` reasoning. Preserve user pause settings and require separate history-processing authorization.

@@ -1,6 +1,6 @@
 # Memory無限
 
-> **2.19.4 capture compatibility:** Successful `item_completed/FileChange` events use legacy patch rendering; malformed or failed events are rejected. Reconciled source prefixes are not replayed under new IDs. Exact occurrence-based history planning retains old records and refuses ordinary apply when gaps or unresolved WAL require separately reviewed recovery. No automatic personal-history repair or summary regeneration.
+> **2.19.5 capture compatibility:** Successful `item_completed/FileChange` events use legacy patch rendering; malformed or failed events are rejected. Reconciled source prefixes are not replayed under new IDs. Exact occurrence-based history planning retains old records and refuses ordinary apply when gaps or unresolved WAL require separately reviewed recovery. No automatic personal-history repair or summary regeneration.
 
 > **2.19.3 capture performance:** Continuous catch-up yields after bounded batches,
 > prioritizes fresh traffic, and updates indexes for changed conversations only.
@@ -1082,3 +1082,7 @@ and installer entry point. Receiving or accepting it does not install or
 download anything. Each device must explicitly realize the accepted contract
 into its own compatible local runtime. Model files, virtual environments,
 credentials, and semantic indexes remain device-local.
+
+## Summary V2
+
+Summary V2 is an opt-in, device-local summary engine. It reuses the existing queue, source verification, retrieval, context capsules and backups. Raw history and Summary V1 remain immutable. The isolated worker defaults to `gpt-5.6-terra` with explicit `medium` reasoning; a non-empty `ai_summary.model` selects another model. Keep `ai_summary.enabled: false` to pause model work. Enabling V2 does not authorize sending history. Existing results require verified adoption; interrupted nodes keep their original configuration binding. V2 exchange between devices is not included. See [Summary V2](references/summary-v2-runtime-integration.md).
