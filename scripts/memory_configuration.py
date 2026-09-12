@@ -251,13 +251,16 @@ def _merge(
     origins: dict[str, dict[str, str]] = {}
 
     def visit(default_value: Any, source_value: Any, parts: Tuple[str, ...]) -> Any:
-        if type(default_value) is dict:
+        if type(default_value) is dict or (default_value is missing and type(source_value) is dict):
+            default_mapping = default_value if type(default_value) is dict else {}
             source_mapping = source_value if type(source_value) is dict else {}
             result = {}
-            for key in default_value:
+            # Source schema validation already rejected unknown fields. Optional
+            # source sections without defaults must retain their values/origins.
+            for key in dict.fromkeys([*default_mapping, *source_mapping]):
                 child_source = source_mapping.get(key, missing)
                 result[key] = visit(
-                    default_value[key], child_source, parts + (key,)
+                    default_mapping.get(key, missing), child_source, parts + (key,)
                 )
             return result
         pointer = _json_pointer(parts)

@@ -102,6 +102,35 @@ class MemoryConfigurationTests(unittest.TestCase):
             len(compiled["value_sources"]),
         )
 
+    def test_optional_summary_v2_preserves_values_origins_and_hash(self):
+        path = self.write_config("summary_v2:\n  enabled: true\n  tick_seconds: 960\n  bundle_roots:\n    legacy: '中文 日本語 😀'\n")
+        before = path.read_bytes()
+        compiled = self.compile(path)
+        self.assertEqual(yaml.safe_load(before)['summary_v2'], compiled['effective_configuration']['summary_v2'])
+        self.assertEqual('configuration-source', compiled['value_sources']['/summary_v2/bundle_roots/legacy']['layer'])
+        self.assertEqual(len(self.leaf_paths(compiled['effective_configuration'])), len(compiled['value_sources']))
+        self.assertNotEqual(self.REPOSITORY_EFFECTIVE_SHA256, compiled['effective_configuration_sha256'])
+        disabled = self.compile(self.write_config('summary_v2:\n  enabled: false\n'))
+        self.assertFalse(disabled['effective_configuration']['summary_v2']['enabled'])
+        self.assertNotEqual(disabled['effective_configuration_sha256'], compiled['effective_configuration_sha256'])
+
+    def test_optional_summary_v2_reaches_both_configuration_cli_owners(self):
+        path = self.write_config('summary_v2:\n  enabled: true\n')
+        for script, commands in [('memory_configuration.py', ('compile', 'explain')),
+                                 ('memory_cli.py', ('configuration-compile', 'configuration-explain'))]:
+            for command in commands:
+                with self.subTest(script=script, command=command):
+                    result = subprocess.run([sys.executable, '-B', '-X', 'utf8', str(SCRIPTS / script),
+                                             '--config', str(path), '--root', str(self.base / 'uncreated archive'), command],
+                                            capture_output=True, text=True, encoding='utf-8')
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    value = json.loads(result.stdout)
+                    self.assertEqual('configuration-source', value['value_sources']['/summary_v2/enabled']['layer'])
+                    self.assertNotEqual(self.REPOSITORY_EFFECTIVE_SHA256, value['effective_configuration_sha256'])
+                    if command.endswith('compile'):
+                        self.assertTrue(value['effective_configuration']['summary_v2']['enabled'])
+                    self.assertFalse((self.base / 'uncreated archive').exists())
+
     def test_canonical_hash_is_stable_across_mapping_order(self):
         left = {"z": [3, 2, 1], "a": {"β": True, "n": 4}}
         right = {"a": {"n": 4, "β": True}, "z": [3, 2, 1]}

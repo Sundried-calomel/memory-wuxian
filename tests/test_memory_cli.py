@@ -327,6 +327,13 @@ safety:
         ]
         self.assertEqual(len(MemoryStore.overlapping_ranges(level_one, "summary")), 1)
 
+        # Historical sequence envelopes can intersect even when exact sources do not.
+        level_one[0]["source_message_ids"] = ["a", "b"]
+        level_one[1]["source_message_ids"] = ["c", "d"]
+        self.assertEqual(MemoryStore.overlapping_ranges(level_one, "summary"), [])
+        level_one[1]["source_message_ids"] = ["b", "d"]
+        self.assertEqual(len(MemoryStore.overlapping_ranges(level_one, "summary")), 1)
+
         disjoint_children_with_overlapping_envelopes = [
             {
                 "summary_id": "L2-000001",

@@ -178,8 +178,20 @@ def dispatch_job(
         stop_renewal()
         if renewal_errors:
             raise RuntimeError(f"semantic lease renewal failed: {renewal_errors[0]}")
+        if result.get("summary_format") == 2 and result.get("status") == "yielded":
+            queue.defer_semantic(current["job_id"], owner, result["reason"], retry_delay_seconds=0)
+            return {**result, "maintenance_job_id": current["job_id"]}
+        if result.get("summary_format") == 2 and result.get("status") == "deferred":
+            queue.defer_semantic(current["job_id"], owner, result.get("reason", "V2 paused"), retry_delay_seconds=60)
+            return {**result, "maintenance_job_id": current["job_id"]}
+        if result.get("summary_format") == 2 and result.get("status") == "blocked":
+            failed = queue.fail_semantic(current["job_id"], owner, result.get("error", "V2 blocked"),
+                                          retry_delay_seconds=retry_delay_seconds)
+            return {**result, "status": "quarantined" if failed["state"] == "quarantined" else "deferred",
+                    "maintenance_job_id": current["job_id"]}
         queue.complete(current["job_id"], owner, result)
-        return {**result, "maintenance_job_id": current["job_id"], "ai_invocations": 1}
+        return {**result, "maintenance_job_id": current["job_id"],
+                "ai_invocations": result.get("ai_invocations", 0) if result.get("summary_format") == 2 else 1}
     except Exception as exc:
         stop_renewal()
         if check_availability:

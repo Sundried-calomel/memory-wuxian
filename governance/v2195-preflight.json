@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "receipt_type": "public-projection-of-defect-workbook-preflight",
+  "source_receipt_sha256": "46192f0fc0800c5df84c3a0d1357b7b3ae189d41722918362ab01db90d190363",
+  "source_receipt_internal_sha256": "f2bf79459634484f3b1d4a06d0bc3ded82b0e50e05f544ef2bac3844c3b7b711",
+  "status": "preflight-recorded",
+  "target": "Memory Wuxian v2.19.5 release source",
+  "applicable_families": [
+    "G03",
+    "G04",
+    "G08",
+    "G09",
+    "MW-R03",
+    "MW-R05",
+    "MW-R06",
+    "MW-R11"
+  ],
+  "private_device_paths_omitted": true,
+  "project_workbook_updated": false
+}

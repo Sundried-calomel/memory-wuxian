@@ -43,6 +43,8 @@ from memory_environment_skills import EnvironmentSkillInstaller
 from memory_federation import FederationManager
 from memory_guarded_features import GuardedFeatures, atomic_json, raw_record_sha256 as guarded_raw_record_sha256
 import memory_indexing
+from memory_summary_v2_links import SummaryV2Links
+from summary_v2_runtime import enabled as summary_v2_enabled
 from memory_content_store import ContentStore
 from memory_diagnostics import create_diagnostic_bundle
 from memory_jobs import KINDS as MAINTENANCE_JOB_KINDS, MaintenanceQueue, run_model_free_tick
@@ -1027,6 +1029,7 @@ class MemoryStore:
                     temporary_native,
                     ignore=shutil.ignore_patterns(".locks", ".DS_Store"),
                 )
+                SummaryV2Links(self).stage_backup(temporary_native)
                 copied_files = []
                 for path in sorted(temporary_native.rglob("*")):
                     if path.is_file():
@@ -1973,7 +1976,7 @@ class MemoryStore:
     def make_summary_job(self) -> Optional[Path]:
         self.init()
         with exclusive_lock(self.locks_dir / "summary-jobs.lock"):
-            state = self.load_state()
+            state = SummaryV2Links(self).merge_recovered_state(self.load_state())
             existing = self.pending_jobs()
             parent_job = self.build_due_parent_job(state, existing)
             if parent_job is not None:
@@ -2067,6 +2070,8 @@ class MemoryStore:
         state: Dict[str, Any],
         existing: List[Dict[str, Any]],
     ) -> Optional[Path]:
+        if summary_v2_enabled(self.config):
+            return SummaryV2Links(self).build_due_parent_job(state, existing)
         grouped_children = {
             entry["child_summary_id"]
             for entry in self.summary_registry()
@@ -2289,12 +2294,15 @@ class MemoryStore:
             for entry in self.pending_jobs()
             if entry.get("target_summary_id")
         }
+        used_summary_ids.update(r["target_summary_id"] for r in SummaryV2Links(self).read_completions(verify_bundles=False))
         summary_number = int(state["next_summary_ids"][str(level_number)])
         target_summary_id = f"L{level_number}-{summary_number:06d}"
         while target_summary_id in used_summary_ids:
             summary_number += 1
             target_summary_id = f"L{level_number}-{summary_number:06d}"
         job["target_summary_id"] = target_summary_id
+        if summary_v2_enabled(self.config):
+            job["summary_format"] = 2
         path = self.pending_dir / f"{job['job_id']}.json"
         atomic_write_json(path, job)
         state["next_job_id"] = int(state["next_job_id"]) + 1
@@ -2392,7 +2400,8 @@ class MemoryStore:
         """Read immutable summary sources once for one maintenance batch."""
         raw_records = self.read_all_raw()
         summaries = self.summary_records()
-        return {
+        snapshot = {
+            "raw_records": raw_records,
             "raw_by_id": {
                 str(record["message_id"]): record for record in raw_records
             },
@@ -2400,6 +2409,9 @@ class MemoryStore:
                 str(record["summary_id"]): record for record in summaries
             },
         }
+        if summary_v2_enabled(self.config) or SummaryV2Links(self).directory.exists():
+            SummaryV2Links(self).extend_snapshot(snapshot)
+        return snapshot
 
     def current_job_source_sha256(
         self,
@@ -2629,6 +2641,12 @@ class MemoryStore:
 
     def finalize_summary_batch(self, results: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
         """Apply deferred derived-index updates once after a semantic batch."""
+        results = list(results)
+        v2_results = [item for item in results if item.get("summary_format") == 2]
+        if v2_results:
+            if len(v2_results) != len(results):
+                raise ValueError("One batch must not mix V1 and V2 completion formats")
+            return SummaryV2Links(self).finalize_batch(v2_results)
         summary_paths = {
             str(item.get("summary"))
             for item in results
@@ -3130,7 +3148,7 @@ class MemoryStore:
             match = re.match(r"job-(\d+)", path.name)
             if match:
                 job_numbers.append(int(match.group(1)))
-        return {
+        return SummaryV2Links(self).merge_recovered_state({
             "format_version": 1,
             "total_messages": max((int(record["sequence"]) for record in raw_records), default=0),
             "completed_rounds": round_tracking["completed_rounds"],
@@ -3146,7 +3164,7 @@ class MemoryStore:
             "next_job_id": max(job_numbers, default=0) + 1,
             "next_summary_ids": next_summary_ids,
             "last_successful_memory_update": None,
-        }
+        })
 
     def rebuild_state(self, apply: bool) -> Dict[str, Any]:
         self.init()
@@ -3249,7 +3267,7 @@ class MemoryStore:
 
     @staticmethod
     def overlapping_ranges(records: Iterable[Dict[str, Any]], label: str) -> List[str]:
-        by_scope: Dict[Tuple[int, str], List[Tuple[int, int, str]]] = {}
+        by_scope: Dict[Tuple[int, str], list] = {}
         higher_level_children: Dict[
             Tuple[int, str], List[Tuple[str, set[str]]]
         ] = {}
@@ -3270,13 +3288,19 @@ class MemoryStore:
             if start is None or end is None:
                 continue
             by_scope.setdefault((level, conversation_id), []).append(
-                (int(start), int(end), identifier)
+                (int(start), int(end), identifier, set(record.get("source_message_ids") or []))
             )
         overlaps = []
         for (level, conversation_id), ranges in by_scope.items():
             ranges.sort()
-            for previous, current in zip(ranges, ranges[1:]):
-                if current[0] <= previous[1]:
+            for index, previous in enumerate(ranges):
+                for current in ranges[index + 1:]:
+                    if previous[3] and current[3]:
+                        overlap = bool(previous[3] & current[3])
+                    else:
+                        overlap = current[0] <= previous[1]
+                    if not overlap:
+                        continue
                     overlaps.append(
                         f"{label} level {level} overlap for {conversation_id}: "
                         f"{previous[2]} and {current[2]}"
@@ -3315,9 +3339,19 @@ class MemoryStore:
             repairable_issues.append("conversation transcripts differ from raw records")
 
         sequences = [int(record["sequence"]) for record in raw_records]
-        if len(sequences) != len(set(sequences)):
+        from memory_identity import verified_resolution
+        resolved_identity = None
+        try:
+            resolved_identity = verified_resolution(self, raw_records)
+        except (OSError, ValueError, KeyError) as exc:
+            integrity_issues.append("Historical source identity failure: " + str(exc))
+        if resolved_identity is not None:
+            warnings.append(f"verified historical identity collision groups={len(resolved_identity['groups'])}; physical raw retained")
+        if len(sequences) != len(set(sequences)) and resolved_identity is None:
             integrity_issues.append("duplicate raw message sequences")
-        if sequences and sequences != list(range(min(sequences), max(sequences) + 1)):
+        if len(raw_records) != len({r['message_id'] for r in raw_records}) and resolved_identity is None:
+            integrity_issues.append("duplicate raw message IDs")
+        if sequences and sorted(set(sequences)) != list(range(min(sequences), max(sequences) + 1)):
             integrity_issues.append("raw message sequence gap")
         legacy_raw = 0
         for record in raw_records:
@@ -3418,6 +3452,17 @@ class MemoryStore:
 
         summaries_by_file_id = {record["summary_id"]: record for record in summary_files}
         raw_by_id = {record["message_id"]: record for record in raw_records}
+        try:
+            links = SummaryV2Links(self)
+            v2_records = links.read_completions(verify_bundles=False)
+            for _, sidecar in links.collect_closure(v2_records).values():
+                for item in sidecar["source"]["raw_message_manifest"]:
+                    raw = raw_by_id.get(item["message_id"])
+                    if (raw is None or raw_record_sha256(raw) != item["content_sha256"] or
+                        raw["sequence"] != item["sequence"]):
+                        raise ValueError("V2 raw provenance changed: " + item["message_id"])
+        except (OSError, ValueError, KeyError) as exc:
+            integrity_issues.append("Summary V2 integrity failure: " + str(exc))
         for summary in summary_index:
             path = self.root / summary["path"]
             if not path.exists():
@@ -3607,6 +3652,8 @@ class MemoryStore:
         deterministic_hits = [item["record"] for item in deterministic_matches]
 
         all_raw = self.read_all_raw()
+        v2_result = (SummaryV2Links(self).retrieve(query, mode, raw_records=all_raw)
+                     if SummaryV2Links(self).directory.exists() else None)
         state = self.load_state()
         pending_rounds = {
             (str(conversation_id), int(details["number"]))
@@ -3733,7 +3780,7 @@ class MemoryStore:
                     selected.append(context_record)
         selected.sort(key=lambda record: int(record["sequence"]))
 
-        if selected:
+        if selected or v2_result is not None:
             confidence = "verified"
         elif summary_hits and min(int(summary["level"]) for summary in summary_hits) == 1:
             confidence = "summary-supported"
@@ -3794,7 +3841,7 @@ class MemoryStore:
             lines.extend(["## Summary Routes", ""])
             for summary in summary_hits:
                 lines.append(f"- `{summary['summary_id']}`: `{summary['path']}`")
-        else:
+        elif v2_result is None:
             lines.append("No persisted source matched the query.")
         output = "\n".join(lines).rstrip() + "\n"
         metadata = {
@@ -3827,6 +3874,15 @@ class MemoryStore:
                 for item in policy_history
             ],
         }
+        if v2_result is not None:
+            v2_text, v2_metadata = v2_result
+            output += "\n" + v2_text.replace("# Memory無限 Retrieval", "## Summary V2 Evidence", 1)
+            metadata['summary_format'] = 2
+            for key in ('summaries', 'raw_files'):
+                metadata[key] = list(dict.fromkeys([*metadata[key], *v2_metadata[key]]))
+            matched_ids = {item['message_id'] for item in metadata['raw_matches']}
+            metadata['raw_matches'].extend(item for item in v2_metadata['raw_matches']
+                                           if item['message_id'] not in matched_ids)
         try:
             (self.retrieval_dir / "last-query.md").write_text(output, encoding="utf-8")
             if bool(nested_get(self.config, ["retrieval", "log_queries"], True)):
@@ -3935,8 +3991,9 @@ class MemoryStore:
 
     def status(self) -> Dict[str, Any]:
         self.init()
-        state = self.load_state()
-        summaries = self.summary_records()
+        links = SummaryV2Links(self)
+        state = links.merge_recovered_state(self.load_state())
+        summaries = links.effective_summary_records(self.summary_records())
         completed_by_conversation = self.completed_rounds_by_conversation(
             self.read_all_raw()
         )
@@ -3970,6 +4027,7 @@ class MemoryStore:
                 for level in range(1, self.maximum_depth + 1)
             },
             "grouped_child_summaries": len(grouped),
+            **links.status_fields(self.summary_records(), grouped),
             "policy_events": len(self.policy_records()),
             "active_policies": sum(
                 1 for item in self.policy_view() if item["validity"] == "active"
@@ -4108,9 +4166,11 @@ class MemoryStore:
     def context_capsule(self, session_file: Optional[Path] = None) -> Tuple[str, Dict[str, Any]]:
         telemetry = self.context_refresh_telemetry(session_file)
         conversation_id = telemetry["conversation_id"]
+        v2_lines, v2_selected, v2_aliases = SummaryV2Links(self).capsule_section(conversation_id)
         summaries = [
             item for item in self.summary_records_from_files()
             if item.get("conversation_id") == conversation_id
+            and item["summary_id"] not in v2_aliases
         ]
         by_id = {item["summary_id"]: item for item in summaries}
         covered = set()
@@ -4136,10 +4196,11 @@ class MemoryStore:
             "- Reading this capsule is read-only and requires no acknowledgement.",
             "",
         ]
+        lines.extend(v2_lines)
         local_policy_records = [
             item
             for item in self.policy_records()
-            if item.get("conversation_id") == conversation_id
+            if item.get("conversation_id") == conversation_id and item.get("summary_id") not in v2_aliases
         ]
         local_policy_keys = {
             (
@@ -4165,7 +4226,7 @@ class MemoryStore:
             if item["validity"] in {"conflict", "unresolved", "uncertain"}
         ]
         lines.extend([
-            "## Current Policy View",
+            "## Legacy Policy View (uncovered V1 ranges)" if v2_lines else "## Current Policy View",
             "",
             "Use active policy events for current operational behavior. "
             "Summary conclusions below remain historical routing evidence.",
@@ -4206,6 +4267,7 @@ class MemoryStore:
             ])
         recent_count = self.context_refresh_setting("recent_rounds", 3)
         recent = self.completed_rounds_by_conversation().get(conversation_id, [])[-recent_count:]
+        history_line_count = len(lines)
         if recent:
             lines.extend(["## Recent Task State", ""])
             for round_records in recent:
@@ -4217,13 +4279,22 @@ class MemoryStore:
             lines.append("")
         max_characters = int(telemetry["capsule_token_budget"]) * 3
         capsule = "\n".join(lines).rstrip() + "\n"
-        if len(capsule) > max_characters:
+        if v2_lines:
+            # UTF-8 bytes are a conservative token upper bound, including the notice.
+            # Preserve the established V1-only projection when V2 has never been used.
+            byte_budget = int(telemetry["capsule_token_budget"])
+            if telemetry.get('model_context_window'):
+                byte_budget = min(byte_budget, max(1, int(telemetry['model_context_window']) // 100))
+            capsule = SummaryV2Links.budgeted_capsule('\n'.join(lines[:history_line_count]) + '\n',
+                                                     '\n'.join(lines[history_line_count:]) + '\n', byte_budget)
+            v2_selected = [alias for alias in v2_selected if f"## {alias} (Summary V2," in capsule]
+        elif len(capsule) > max_characters:
             capsule = capsule[:max_characters].rstrip() + "\n\n[Capsule truncated at configured budget.]\n"
         metadata = {
             **telemetry,
-            "summary_ids": [item["summary_id"] for item in selected],
+            "summary_ids": [*v2_selected, *[item["summary_id"] for item in selected]],
             "character_count": len(capsule),
-            "estimated_token_upper_budget": telemetry["capsule_token_budget"],
+            "estimated_token_upper_budget": byte_budget if v2_lines else telemetry["capsule_token_budget"],
         }
         return capsule, metadata
 

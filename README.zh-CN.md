@@ -1,6 +1,6 @@
 # Memory無限
 
-> **2.19.4 采集兼容修复：** 成功的 `item_completed/FileChange` 事件沿用旧补丁渲染，拒绝失败或畸形事件。已对齐前缀不再以新 ID 重复归档。历史规划按精确出现次数匹配并保留旧记录；历史缺口或未决 WAL 需要单独审查，普通 apply 不会处理。不自动修复个人历史或重新生成摘要。
+> **2.19.5 采集兼容修复：** 成功的 `item_completed/FileChange` 事件沿用旧补丁渲染，拒绝失败或畸形事件。已对齐前缀不再以新 ID 重复归档。历史规划按精确出现次数匹配并保留旧记录；历史缺口或未决 WAL 需要单独审查，普通 apply 不会处理。不自动修复个人历史或重新生成摘要。
 
 > **2.19.3 采集加速：** 历史补采采用有界批次，为新消息预留处理机会，只更新变动对话的索引。
 > macOS 安装通过精确探针游标验收，历史覆盖另行检查；摘要审计复用原文查找表，哈希规则不变。
@@ -886,3 +886,7 @@ python scripts/memory_cli.py environment-convergence-plan --peer-node-id node-ma
 相似度算法和安装入口。接收或接受合同不会自动安装或下载任何内容；每台设备
 都必须显式地在本机实现已接受的合同。模型文件、虚拟环境、凭据和语义索引
 始终保留在各自设备。
+
+## Summary V2
+
+Summary V2 是需明确启用的本机摘要引擎，复用现有队列、来源校验、检索、上下文胶囊与备份。原始历史和 Summary V1 保持不可变。隔离 worker 默认使用 `gpt-5.6-terra`，显式固定 `medium` 推理强度；非空 `ai_summary.model` 可指定其他模型。`ai_summary.enabled: false` 暂停模型任务。启用 V2 不代表授权发送历史内容。既有结果须验证后接纳，中断节点保留原配置绑定。本版不包含 V2 跨设备交换。详见 [Summary V2](references/summary-v2-runtime-integration.md)。

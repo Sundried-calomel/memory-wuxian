@@ -27,6 +27,12 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def semantic_parent_debt(store: MemoryStore) -> list[dict[str, Any]]:
+    from summary_v2_runtime import enabled
+    if enabled(store.config):
+        from memory_summary_v2_links import SummaryV2Links
+        return [{'conversation_id': conversation, 'source_level': level, 'child_count': len(children),
+                 'expected_signature': f'conversation:{conversation}:v2-children:' + ','.join(c['target_summary_id'] for c in children)}
+                for level, conversation, children in SummaryV2Links(store).due_parent_groups(store.pending_jobs())]
     trigger = int(store.config.get("summaries", {}).get("higher_level_trigger_count", 10))
     maximum_depth = int(store.config.get("summaries", {}).get("maximum_summary_depth", 4))
     summaries = store.summary_records()
@@ -143,7 +149,8 @@ def check_runtime_effects(
     ]
     observations["semantic_parent_debt"] = parent_debt
     observations["pending_parent_jobs"] = pending_parent_jobs
-    if parent_debt and not pending_parent_jobs:
+    from summary_v2_runtime import enabled
+    if parent_debt and (enabled(store.config) or not pending_parent_jobs):
         failures.append({"code": "semantic-parent-job-missing", "count": len(parent_debt)})
 
     semantic_manifest_path = store.index_dir / "semantic" / "manifest.json"

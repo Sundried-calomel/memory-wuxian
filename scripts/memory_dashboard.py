@@ -654,7 +654,7 @@ def debt_status_projection(root: Path) -> dict[str, Any]:
         runtime_failure = next(
             (
                 item for item in skipped
-                if isinstance(item, dict) and item.get("reason") == "runtime-unavailable"
+                if isinstance(item, dict) and (item.get("reason") == "runtime-unavailable" or item.get('requires_attention'))
             ),
             None,
         )
@@ -691,7 +691,7 @@ def debt_status_projection(root: Path) -> dict[str, Any]:
         if runtime_failure and semantic["count"] > 0 and not result.get("completed_jobs"):
             semantic["state"] = "blocked"
             semantic["last_error"] = str(
-                runtime_failure.get("error") or "Codex runtime is unavailable"
+                runtime_failure.get("error") or runtime_failure.get('detail') or runtime_failure.get('reason_code') or "Codex runtime is unavailable"
             )[:500]
     except FileNotFoundError:
         pass
@@ -869,7 +869,8 @@ def dashboard_data(store: MemoryStore) -> dict[str, Any]:
         record for record in all_records
         if str(record["conversation_id"]) not in hidden_conversations
     ]
-    summaries = store.summary_records()
+    from memory_summary_v2_links import SummaryV2Links
+    summaries = SummaryV2Links(store).effective_summary_records(store.summary_records())
     status = store.status()
     by_conversation: dict[str, list[dict[str, Any]]] = defaultdict(list)
     daily_messages: Counter[str] = Counter()
@@ -1121,6 +1122,10 @@ class DashboardSnapshotCache:
             self.store.root / "imports" / "codex" / "token-usage",
         )
         paths.extend(_bounded_archive_files([token_usage_dir]))
+        paths.extend((self.store.root / 'summary-v2/completions').glob('*.json'))
+        binding_path = self.store.root / 'summary-v2/restored-bindings.json'
+        if binding_path.exists():
+            paths.append(binding_path)
         paths.extend(self._federated_daily_sources())
         stamps = []
         for path in sorted(set(paths), key=str):

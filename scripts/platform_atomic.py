@@ -13,6 +13,14 @@ from pathlib import Path
 BeforeReplace = Callable[[Path, Path], None]
 
 
+def native_filesystem_path(path: Path) -> Path:
+    """Use extended Windows paths for file operations beyond MAX_PATH."""
+    value = str(path.resolve())
+    if os.name != 'nt' or value.startswith('\\\\?\\'):
+        return Path(value)
+    return Path('\\\\?\\UNC\\' + value[2:] if value.startswith('\\\\') else '\\\\?\\' + value)
+
+
 class ParentSync(str, Enum):
     """Durability policy for the destination parent directory."""
 

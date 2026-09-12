@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.19.5 - 2026-09-13
+
+- Integrate the isolated, opt-in Summary V2 engine with existing job leases, immutable completion links, typed local reads and bounded context capsules.
+- Support model-free adoption, physical-occurrence identity repair, exact backup closure and explicit restore previews without rewriting raw or V1 records.
+- Preserve all 2.19.2–2.19.4 capture, source reconciliation, replay safety and frozen-job isolation fixes.
+- Bound each V2 tick and retain exact timeout/rescue provenance; ambiguous or changed in-progress bindings stay blocked.
+- Default V2 calls to GPT-5.6-Terra with explicit medium reasoning; preserve paused settings and separate history-send authorization. No automatic historical backfill or V2 cross-device exchange.
+
 ## 2.19.4 - 2026-09-10
 
 - Capture completed FileChange envelopes with Python/Rust legacy parity and malformed-field rejection.

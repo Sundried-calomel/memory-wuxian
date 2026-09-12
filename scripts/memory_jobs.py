@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Optional
 
 from platform_lock import exclusive_lock
+from platform_atomic import native_filesystem_path
 from platform_transaction import atomic_write_canonical_json, read_canonical_json
 
 
@@ -380,6 +381,29 @@ class MaintenanceQueue:
             self._write(job)
             return job
 
+    def complete_semantic_commit(self, job_id: str, completion: Dict[str, Any], result: Dict[str, Any]):
+        """Close an expired/interrupted lease from a verified immutable summary commit."""
+        with exclusive_lock(self.lock):
+            job = self._read(self._path(job_id))
+            if job['state'] == 'completed':
+                return None
+            if job['state'] == 'running' and parse_iso(job['lease_expires_at']) > self.clock():
+                return None
+            payload = job['payload']
+            if (job['kind'] != 'semantic-summary-eligibility' or
+                payload['summary_job_id'] != completion['job_id'] or
+                payload['source_signature'] != completion['source_signature'] or
+                payload['conversation_id'] != completion['conversation_id']):
+                raise ValueError('Summary commit disagrees with its maintenance job')
+            if completion.get('completion_sha256') != canonical_hash({
+                k: v for k, v in completion.items() if k != 'completion_sha256'
+            }):
+                raise ValueError('Summary commit identity changed')
+            job.update(state='completed', result_sha256=canonical_hash(result),
+                       updated_at=iso(self.clock()), lease_owner=None, lease_expires_at=None, last_error=None)
+            self._write(job)
+            return job
+
     def fail(self, job_id: str, owner: str, error: BaseException | str, *, retry_delay_seconds: int = 0) -> Dict[str, Any]:
         with exclusive_lock(self.lock):
             job = self._read(self._path(job_id))
@@ -441,6 +465,39 @@ class MaintenanceQueue:
             job["lease_expires_at"] = None
             job["last_error"] = redact_error(reason)
             self._write(job)
+            return job
+
+    def verify_superseded(self, job_id: str, repair: Dict[str, Any]) -> Dict[str, Any]:
+        path = self._path(job_id)
+        destination = native_filesystem_path(self.archive_root / 'maintenance/superseded' / canonical_hash(repair) / path.name)
+        expected = next((r['sha256'] for r in repair.get('quarantined_owners', []) if r['job_id'] == job_id), None)
+        if (path.exists() or expected is None or hashlib.sha256(destination.read_bytes()).hexdigest() != expected
+            or json.loads((destination.parent / 'repair.json').read_text('utf-8')) != repair):
+            raise ValueError('Retained quarantine evidence changed')
+        return self._read(destination)
+
+    def supersede_quarantined(self, job_id: str, repair: Dict[str, Any]) -> Dict[str, Any]:
+        """Retire failed eligibility, without claiming that its summary completed."""
+        if repair.get('format') != 'memory-wuxian-summary-identity-repair-v1' or not repair.get('replacement_job_sha256'):
+            raise ValueError('Supersession requires an identity repair record')
+        with exclusive_lock(self.lock):
+            path = self._path(job_id)
+            destination = self.archive_root / 'maintenance/superseded' / canonical_hash(repair) / path.name
+            if not path.resolve().is_relative_to(self.archive_root.resolve()) or not destination.resolve().is_relative_to(self.archive_root.resolve()):
+                raise ValueError('Supersession path escapes archive')
+            path, destination = native_filesystem_path(path), native_filesystem_path(destination)
+            expected = next((r['sha256'] for r in repair.get('quarantined_owners', []) if r['job_id'] == job_id), None)
+            current_path = destination if destination.exists() else path
+            if expected is None or hashlib.sha256(current_path.read_bytes()).hexdigest() != expected:
+                raise ValueError('Supersession does not bind the exact original eligibility')
+            if destination.exists():
+                return self.verify_superseded(job_id, repair)
+            job = self._read(path)
+            if job['state'] != 'quarantined' or job['payload'].get('summary_job_id') != repair['original_job_id']:
+                raise ValueError('Only quarantined eligibility can be superseded by identity repair')
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_canonical_json(destination.parent / 'repair.json', repair)
+            path.rename(destination)
             return job
 
     def requeue_quarantined(self, job_id: str, reason: str) -> Dict[str, Any]:

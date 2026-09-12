@@ -1,12 +1,13 @@
 {
   "schema_version": 1,
-  "reviewed_version": "2.19.4",
+  "reviewed_version": "2.19.5",
   "readmes": [
     "README.md",
     "README.zh-CN.md",
     "README.ja.md"
   ],
   "features": [
+    {"id": "summary-v2-local-runtime", "required_tokens": ["Summary V2", "gpt-5.6-terra", "medium", "ai_summary.enabled"]},
     {
       "id": "immutable-archive",
       "required_tokens": ["append", "retrieve", "heartbeat"]

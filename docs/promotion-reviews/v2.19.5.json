@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "version": "2.19.5",
+  "decision": "project-only",
+  "reason": "Local Summary V2 integration and explicit model policy do not alter global rules or device trust."
+}
