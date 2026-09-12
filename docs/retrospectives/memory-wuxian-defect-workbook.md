@@ -689,3 +689,8 @@
 - Fix: restore the complete bundled App tree to the exact v2.19.4 Git bytes. The unchanged build_dashboard_app.sh writes the requested product version when rebuilding a release App, then signs and verifies that result.
 - Validation: the full assets/macos diff against v2.19.4 is empty; main CI must pass the existing codesign --verify --deep --strict gate before release. No signature check is bypassed.
 - Prevention: treat signed bundles as indivisible build outputs; update source version inputs, never sealed metadata in isolation.
+
+
+### MW-REL-050 follow-up: v2.19.4 already had the same sealed-metadata drift
+
+Main run 34714956789 passed all 876 macOS tests but reproduced `invalid Info.plist`; restoring v2.19.4 was insufficient. The unchanged bundled binary was last built at 5d2abcd (v2.19.3). Restore its matching Info.plist and verify that file against every embedded Mach-O CodeDirectory Info slot in both architectures before committing. The full bundled App tree then matches that original build commit. The release build still generates and signs a fresh v2.19.5 App; macOS strict codesign CI remains mandatory.
