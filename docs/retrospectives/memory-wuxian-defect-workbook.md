@@ -680,3 +680,12 @@
 - Fix: resolve both identity paths before normcase; explicitly bind both encoding providers in the invalid-byte fixture. Keep strict decoding and unknown-identity rejection.
 - Validation: 32 Windows lifecycle/startup tests passed locally, including a native GetShortPathNameW regression with synthetic files and both collector/wrapper identities. Full candidate CI must pass for the resulting commit before release.
 - Prevention: compare Windows filesystem identities with a consistent canonicalization and exercise native aliases; locale fallback tests must bind every permitted decoder.
+
+
+## MW-REL-050: Preserve the sealed macOS dashboard bundle
+
+- Evidence: main CI 34714545303 passed all 876 Python tests on macOS but failed the macos-bundled-dashboard-signature rehearsal.
+- Cause: the release version edit changed Info.plist inside an already signed bundled App without regenerating its signature.
+- Fix: restore the complete bundled App tree to the exact v2.19.4 Git bytes. The unchanged build_dashboard_app.sh writes the requested product version when rebuilding a release App, then signs and verifies that result.
+- Validation: the full assets/macos diff against v2.19.4 is empty; main CI must pass the existing codesign --verify --deep --strict gate before release. No signature check is bypassed.
+- Prevention: treat signed bundles as indivisible build outputs; update source version inputs, never sealed metadata in isolation.
