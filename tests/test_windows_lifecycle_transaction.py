@@ -147,7 +147,7 @@ class WindowsLifecycleTransactionTests(unittest.TestCase):
                 self.assertEqual(windows.inspect_task_xml(result), windows.inspect_task_xml(windows.task_xml(self.command)))
 
     def test_task_query_rejects_invalid_protocol_bytes(self):
-        with patch.object(windows.locale, "getpreferredencoding", return_value="utf-8"):
+        with patch.object(windows.locale, "getpreferredencoding", return_value="utf-8"), patch.object(windows.locale, "getencoding", return_value="utf-8"):
             with self.assertRaises(UnicodeDecodeError):
                 windows.query_task_xml(windows.DEFAULT_TASK_NAME, FakeRunner(b"\xffbroken"))
 

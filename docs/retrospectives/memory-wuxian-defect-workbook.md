@@ -671,3 +671,12 @@
 - V2 now defaults explicitly to GPT-5.6-Terra and medium reasoning. Model selection and pause state remain separate from publication and cloud-content authorization.
 - Regressions: test_summary_v2_integration, test_memory_identity, test_windows_startup_binding, test_summary_v2_model_selection, and the retained v2.19.2–v2.19.4 capture/recovery tests. Installation effects of older local candidates are not represented as evidence for this release.
 - Families: G03, G04, G08, G09, MW-R03, MW-R05, MW-R06, MW-R11.
+
+
+## MW-REL-049: Windows native path aliases and encoding fixtures
+
+- Evidence: PR #80 run 34712852943, Windows job 103604689205: 875 tests, two failures. Linux, macOS and documentation passed.
+- Cause: startup inventory resolved bound paths but only applied abspath to observed paths; Windows 8.3 aliases therefore failed identity comparison. The invalid-byte test mocked the preferred encoding but left the newly supported ANSI fallback dependent on the host locale.
+- Fix: resolve both identity paths before normcase; explicitly bind both encoding providers in the invalid-byte fixture. Keep strict decoding and unknown-identity rejection.
+- Validation: 32 Windows lifecycle/startup tests passed locally, including a native GetShortPathNameW regression with synthetic files and both collector/wrapper identities. Full candidate CI must pass for the resulting commit before release.
+- Prevention: compare Windows filesystem identities with a consistent canonicalization and exercise native aliases; locale fallback tests must bind every permitted decoder.

@@ -102,7 +102,9 @@ def windows_startup_processes(binding, command, *, runner=subprocess.run):
     if not isinstance(rows, list):
         raise RuntimeError('Invalid startup process inventory')
     matched = []
-    normalize = lambda p: os.path.normcase(os.path.abspath(p))
+    # CIM and a saved launch command may use different spellings of the same
+    # Windows path (for example RUNNER~1 versus runneradmin in hosted CI).
+    normalize = lambda p: os.path.normcase(str(Path(p).resolve()))
     for row in rows:
         if not row.get('ExecutablePath') or not row.get('CommandLine'):
             raise RuntimeError('Bound executable process identity is unavailable')

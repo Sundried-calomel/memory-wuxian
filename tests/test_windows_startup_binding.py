@@ -243,3 +243,26 @@ class WindowsStartupBindingTest(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             windows_startup_processes(self.binding, command,
                 runner=lambda *_a, **_k: (_ for _ in ()).throw(subprocess.CalledProcessError(1, 'CIM')))
+
+    def test_startup_inventory_matches_native_short_path_aliases(self):
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.GetShortPathNameW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        kernel.GetShortPathNameW.restype = wintypes.DWORD
+        def short_path(path):
+            buffer = ctypes.create_unicode_buffer(32768)
+            count = kernel.GetShortPathNameW(str(path), buffer, len(buffer))
+            if not count or count >= len(buffer):
+                raise ctypes.WinError(ctypes.get_last_error())
+            return buffer.value
+        collector = self.h.base / 'memory-wuxian-collector.exe'
+        collector.write_bytes(b'fixture, never executed')
+        short_collector = short_path(collector)
+        if os.path.normcase(short_collector) == os.path.normcase(str(collector.resolve())):
+            self.skipTest('8.3 aliases are disabled on this volume')
+        rows = [{'ProcessId': 20, 'ExecutablePath': short_collector, 'CommandLine': subprocess.list2cmdline([short_collector])},
+                {'ProcessId': 21, 'ExecutablePath': short_path(self.pythonw), 'CommandLine': subprocess.list2cmdline([short_path(self.pythonw), '-B', short_path(self.wrapper)])}]
+        runner = lambda *_a, **_k: subprocess.CompletedProcess([], 0, json.dumps(rows).encode('utf-8'), b'')
+        self.assertEqual([{'kind': 'collector', 'pid': 20}, {'kind': 'wrapper', 'pid': 21}],
+                         windows_startup_processes(self.binding, [str(collector.resolve())], runner=runner))
