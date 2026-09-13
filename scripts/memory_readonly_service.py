@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import json
+import heapq
+import hashlib
 import os
 from pathlib import Path
 from typing import Any
 
-from memory_guarded_features import GuardedFeatures, SemanticIndexStaleError
+from memory_guarded_features import GuardedFeatures, SemanticIndexStaleError, raw_record_sha256
 
 
 MODES = {"keyword", "semantic", "hybrid"}
@@ -44,8 +46,7 @@ class ReadOnlyMemoryService:
     def __init__(self, store: Any):
         self.store = store
 
-    def read_bounded_raw(self) -> list[dict[str, Any]]:
-        records = []
+    def iter_raw(self):
         scanned_bytes = 0
         paths = []
         entries = 0
@@ -99,7 +100,7 @@ class ReadOnlyMemoryService:
                     if not line:
                         break
                     scanned_bytes += len(line)
-                    if len(line) > MAX_RAW_RECORD_BYTES or scanned_bytes > MAX_SCAN_BYTES:
+                    if len(line) > MAX_RAW_RECORD_BYTES:
                         raise ReadRequestError("source-too-large", "raw source exceeds the byte query bound")
                     if line.rstrip(b"\r\n") != b"<!-- memory-wuxian-record -->":
                         continue
@@ -109,7 +110,6 @@ class ReadOnlyMemoryService:
                     scanned_bytes += len(fence) + len(payload) + len(closing)
                     if (
                         max(len(fence), len(payload), len(closing)) > MAX_RAW_RECORD_BYTES
-                        or scanned_bytes > MAX_SCAN_BYTES
                     ):
                         raise ReadRequestError("source-too-large", "raw record exceeds the byte query bound")
                     if fence.rstrip(b"\r\n") != b"```json" or closing.rstrip(b"\r\n") != b"```":
@@ -135,15 +135,12 @@ class ReadOnlyMemoryService:
                     ):
                         raise ReadRequestError("source-invalid", "raw record required fields are invalid")
                     record["_path"] = self.store.relative(path)
-                    records.append(record)
-                    if len(records) > MAX_SCAN_RECORDS:
-                        raise ReadRequestError(
-                            "source-too-large",
-                            f"raw source exceeds the {MAX_SCAN_RECORDS}-record query bound",
-                        )
-        return sorted(records, key=lambda record: int(record["sequence"]))
+                    yield record
 
-    def index_hashes(self) -> dict[str, str]:
+    def read_bounded_raw(self) -> list[dict[str, Any]]:
+        return sorted(self.iter_raw(), key=lambda record: int(record["sequence"]))
+
+    def index_hashes(self, wanted=None) -> dict[str, str]:
         path = self.store.index_dir / "conversations.jsonl"
         hashes = {}
         if not path.is_file():
@@ -155,17 +152,17 @@ class ReadOnlyMemoryService:
                 line = handle.readline(MAX_INDEX_LINE_BYTES + 1)
                 if not line:
                     break
-                if index >= MAX_SCAN_RECORDS:
-                    raise ReadRequestError("source-too-large", "conversation index exceeds the query bound")
                 index += 1
                 scanned_bytes += len(line)
-                if len(line) > MAX_INDEX_LINE_BYTES or scanned_bytes > MAX_SCAN_BYTES:
+                if len(line) > MAX_INDEX_LINE_BYTES:
                     raise ReadRequestError("source-too-large", "conversation index exceeds the byte query bound")
                 try:
                     item = json.loads(line.decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                     raise ReadRequestError("source-invalid", "conversation index JSON is invalid") from exc
                 if isinstance(item, dict) and item.get("message_id") and item.get("content_sha256"):
+                    if wanted is not None and str(item["message_id"]) not in wanted:
+                        continue
                     hashes[str(item["message_id"])] = str(item["content_sha256"])
         return hashes
 
@@ -222,23 +219,44 @@ class ReadOnlyMemoryService:
             total_messages = int(state.get("total_messages", 0))
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             raise ReadRequestError("source-invalid", "memory state is invalid") from exc
-        if total_messages > MAX_SCAN_RECORDS:
-            raise ReadRequestError(
-                "source-too-large",
-                f"raw source exceeds the {MAX_SCAN_RECORDS}-record query bound",
-            )
+        streaming = True
+        semantic_sources = []
+        identities = []
         try:
-            raw_records = self.read_bounded_raw()
+            if streaming:
+                normalized_query = self.store.normalize_search_text(query)
+                terms = normalized_query.split()
+                candidates = []
+                for ordinal, record in enumerate(self.iter_raw()):
+                    if mode != "keyword":
+                        digest = raw_record_sha256(record)
+                        semantic_sources.append({"message_id": record["message_id"], "content_sha256": digest})
+                        identities.append({"sequence": record["sequence"], "message_id": record["message_id"], "record_sha256": digest})
+                    normalized = self.store.normalize_search_text(record["text"])
+                    exact = normalized_query in normalized
+                    matched = sum(term in normalized for term in terms)
+                    if not exact and not matched:
+                        continue
+                    score = 1.0 if exact else matched / max(1, len(terms))
+                    if record.get("speaker") == "tool":
+                        score *= 0.72
+                    candidate = (score, str(record.get("timestamp") or ""), -ordinal, record)
+                    heapq.heappush(candidates, candidate)
+                    if len(candidates) > limit:
+                        heapq.heappop(candidates)
+                raw_records = [item[3] for item in sorted(candidates, reverse=True)]
+            else:
+                raw_records = self.read_bounded_raw()
         except ReadRequestError:
             raise
         except (FileNotFoundError, OSError, ValueError) as exc:
             raise ReadRequestError("source-unavailable", "raw memory source is unavailable") from exc
-        if not raw_records:
+        if not raw_records and not streaming:
             raise ReadRequestError("source-unavailable", "raw memory source is empty")
 
         raw_by_id = {str(item["message_id"]): item for item in raw_records}
         try:
-            index_hashes = self.index_hashes()
+            index_hashes = self.index_hashes(set(raw_by_id))
         except ReadRequestError:
             raise
         except (OSError, ValueError) as exc:
@@ -272,10 +290,19 @@ class ReadOnlyMemoryService:
         semantic_provider = None
         if mode in {"semantic", "hybrid"}:
             try:
+                identities.sort(key=lambda item: item["sequence"])
+                digest = hashlib.sha256(b"[")
+                for position, identity in enumerate(identities):
+                    if position:
+                        digest.update(b",")
+                    digest.update(json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+                digest.update(b"]")
+                source_snapshot = {"format": "memory-wuxian-raw-source-snapshot-v1", "record_count": len(identities), "high_watermark": identities[-1] if identities else None, "identity_sha256": digest.hexdigest()}
                 semantic = GuardedFeatures(self.store).semantic_retrieve(
                     query,
                     max(limit * 3, 30),
-                    raw_records=raw_records,
+                    raw_records=semantic_sources,
+                    source_snapshot=source_snapshot,
                 )
             except SemanticIndexStaleError as exc:
                 if mode == "semantic":
@@ -290,6 +317,13 @@ class ReadOnlyMemoryService:
                 warnings.append("semantic-index-unavailable-keyword-fallback")
             else:
                 semantic_provider = semantic["provider"]
+                wanted = {match["message_id"] for match in semantic["matches"]}
+                for record in self.iter_raw():
+                    if record["message_id"] in wanted:
+                        raw_by_id[record["message_id"]] = record
+                        conversation_id = record["conversation_id"]
+                        titles.setdefault(conversation_id, str(record.get("source", {}).get("conversation_title") or conversation_id))
+                index_hashes.update(self.index_hashes(wanted))
                 for position, match in enumerate(semantic["matches"]):
                     message_id = bounded_string(match["message_id"], MAX_ID_CHARACTERS, "message_id")
                     item = ranked.setdefault(message_id, {"keyword_score": None, "semantic_score": None})
