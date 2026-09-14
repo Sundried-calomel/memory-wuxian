@@ -1,5 +1,7 @@
 # Memory無限
 
+> **2.19.6 retrieval capacity:** Read-only keyword, semantic and hybrid queries no longer reject archives solely for exceeding 200,000 records. Raw text is streamed; source hashes and per-record safety checks remain enforced. Scanning time still grows with archive size, and semantic source metadata scales with record count. This does not rewrite history or regenerate summaries.
+
 > **2.19.5 capture compatibility:** Successful `item_completed/FileChange` events use legacy patch rendering; malformed or failed events are rejected. Reconciled source prefixes are not replayed under new IDs. Exact occurrence-based history planning retains old records and refuses ordinary apply when gaps or unresolved WAL require separately reviewed recovery. No automatic personal-history repair or summary regeneration.
 
 > **2.19.3 capture performance:** Continuous catch-up yields after bounded batches,
