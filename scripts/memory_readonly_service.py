@@ -222,12 +222,19 @@ class ReadOnlyMemoryService:
         streaming = True
         semantic_sources = []
         identities = []
+        titles: dict[str, str] = {}
         try:
             if streaming:
                 normalized_query = self.store.normalize_search_text(query)
                 terms = normalized_query.split()
                 candidates = []
                 for ordinal, record in enumerate(self.iter_raw()):
+                    conversation_id = record["conversation_id"]
+                    source_title = str(record.get("source", {}).get("conversation_title") or "").strip()
+                    if source_title:
+                        titles[conversation_id] = source_title
+                    elif conversation_id not in titles and record.get("speaker") == "user":
+                        titles[conversation_id] = record["text"].strip().replace("\n", " ")[:72]
                     if mode != "keyword":
                         digest = raw_record_sha256(record)
                         semantic_sources.append({"message_id": record["message_id"], "content_sha256": digest})
@@ -261,14 +268,6 @@ class ReadOnlyMemoryService:
             raise
         except (OSError, ValueError) as exc:
             raise ReadRequestError("source-unavailable", "conversation index is unavailable") from exc
-        titles: dict[str, str] = {}
-        for record in raw_records:
-            conversation_id = bounded_string(record.get("conversation_id"), MAX_ID_CHARACTERS, "conversation_id")
-            source_title = str(record.get("source", {}).get("conversation_title") or "").strip()
-            if source_title:
-                titles[conversation_id] = source_title
-            elif conversation_id not in titles and record.get("speaker") == "user":
-                titles[conversation_id] = str(record.get("text", "")).strip().replace("\n", " ")[:72]
         normalized_query = self.store.normalize_search_text(query)
         terms = [term for term in normalized_query.split() if term]
         ranked: dict[str, dict[str, Any]] = {}
@@ -321,6 +320,12 @@ class ReadOnlyMemoryService:
                 for record in self.iter_raw():
                     if record["message_id"] in wanted:
                         raw_by_id[record["message_id"]] = record
+                        if mode == "hybrid":
+                            normalized = self.store.normalize_search_text(record["text"])
+                            exact = normalized_query in normalized
+                            matched = sum(term in normalized for term in terms)
+                            if exact or matched:
+                                ranked.setdefault(record["message_id"], {"semantic_score": None})["keyword_score"] = 1.0 if exact else matched / max(1, len(terms))
                         conversation_id = record["conversation_id"]
                         titles.setdefault(conversation_id, str(record.get("source", {}).get("conversation_title") or conversation_id))
                 index_hashes.update(self.index_hashes(wanted))
