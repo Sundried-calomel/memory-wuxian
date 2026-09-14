@@ -47,6 +47,31 @@ class ReadOnlyInterfaceTests(unittest.TestCase):
                 digest.update(path.read_bytes())
         return digest.hexdigest()
 
+    def test_large_archive_streams_past_old_record_and_byte_limits(self):
+        self.store.append_message("assistant", "tail needle", "2026-08-02T00:00:00+09:00", "codex:test", "message-2", None, False)
+        before = self.raw_hash()
+        with mock.patch("memory_readonly_service.MAX_SCAN_RECORDS", 1), mock.patch("memory_readonly_service.MAX_SCAN_BYTES", 1):
+            for mode in ("keyword", "hybrid"):
+                result = self.service.query({"query": "tail needle", "mode": mode, "limit": 1})
+                self.assertEqual(result["results"][0]["message_id"], "message-2")
+                self.assertEqual(result["confidence"], "verified")
+            missing = self.service.query({"query": "absent-unique-phrase", "mode": "keyword", "limit": 1})
+            self.assertEqual(missing["count"], 0)
+        self.assertEqual(before, self.raw_hash())
+
+    def test_streaming_title_comes_from_unmatched_source(self):
+        self.store.append_message("assistant", "unique tail", "2026-08-02T00:00:00+09:00", "codex:test", "message-2", None, False)
+        result = self.service.query({"query": "unique tail", "mode": "keyword", "limit": 1})
+        self.assertEqual(result["results"][0]["conversation_title"], "后台刷新导致输入窗口失去焦点")
+
+    def test_semantic_archive_can_exceed_old_count_limit(self):
+        from memory_guarded_features import GuardedFeatures
+        GuardedFeatures(self.store).semantic_build("local-hash-v1")
+        with mock.patch("memory_guarded_features.MAX_SEMANTIC_RECORDS", 0), mock.patch("memory_readonly_service.MAX_SCAN_RECORDS", 0):
+            result = self.service.query({"query": "窗口", "mode": "semantic", "limit": 1})
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["confidence"], "verified")
+
     def test_mw29_parity_001_cli_http_and_mcp_share_payload(self):
         before = self.raw_hash()
         expected = self.service.query({"query": "窗口失去焦点", "mode": "keyword", "limit": 5})

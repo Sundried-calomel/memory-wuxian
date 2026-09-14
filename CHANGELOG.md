@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.19.6 - 2026-09-14
+
+- Remove the fixed 200,000-record rejection from read-only keyword, semantic and hybrid retrieval.
+- Stream raw text and retain bounded keyword candidates; verify matching source hashes without loading the complete raw text archive.
+- Preserve per-record safety validation and semantic source freshness checks. Semantic metadata and scan time still scale with archive size.
+- Add regression coverage for the former count/byte ceilings; preserve 2.19.5 capture and Summary V2 behavior.
+
 ## 2.19.5 - 2026-09-13
 
 - Integrate the isolated, opt-in Summary V2 engine with existing job leases, immutable completion links, typed local reads and bounded context capsules.

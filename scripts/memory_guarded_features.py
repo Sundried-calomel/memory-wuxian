@@ -873,6 +873,7 @@ class GuardedFeatures:
         top_k: int,
         *,
         raw_records: Optional[List[Dict[str, Any]]] = None,
+        source_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 1_000:
             raise ValueError("Semantic result limit is invalid")
@@ -909,7 +910,7 @@ class GuardedFeatures:
             or manifest.get("provider") not in {"local-hash-v1", E5_PROVIDER}
             or isinstance(manifest.get("record_count"), bool)
             or not isinstance(manifest.get("record_count"), int)
-            or not 0 <= manifest["record_count"] <= MAX_SEMANTIC_RECORDS
+            or manifest["record_count"] < 0
             or not isinstance(indexed_source, dict)
             or set(indexed_source) != raw_source_fields
             or indexed_source.get("format") != "memory-wuxian-raw-source-snapshot-v1"
@@ -938,7 +939,7 @@ class GuardedFeatures:
             or manifest.get("raw_archive_required_for_verification") is not True
         ):
             raise ValueError("Semantic index manifest is malformed")
-        current_source = raw_source_snapshot(raw.values())
+        current_source = source_snapshot if source_snapshot is not None else raw_source_snapshot(raw.values())
         if current_source != indexed_source:
             raise SemanticIndexStaleError(
                 "Semantic index does not cover the current raw archive"
@@ -970,11 +971,9 @@ class GuardedFeatures:
                 if not line:
                     break
                 scanned_bytes += len(line)
-                if len(line) > MAX_SEMANTIC_LINE_BYTES or scanned_bytes > MAX_SEMANTIC_INDEX_BYTES:
+                if len(line) > MAX_SEMANTIC_LINE_BYTES:
                     raise ValueError("Semantic index exceeds the query bound")
                 record_count += 1
-                if record_count > MAX_SEMANTIC_RECORDS:
-                    raise ValueError("Semantic index record count exceeds the query bound")
                 item = json.loads(line.decode("utf-8"))
                 required = allowed_fields - {"vector"}
                 if (
