@@ -1,0 +1,36 @@
+name: compact-core-release
+on:
+  push:
+    tags: ['v2.20.0-core.*']
+permissions:
+  contents: read
+jobs:
+  portable-checks:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - run: python -m unittest discover -s tests -v
+  publish:
+    needs: portable-checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Build explicit upgrade package
+        run: |
+          test "${GITHUB_REF_NAME}" = "v$(cat VERSION)"
+          python build_release.py
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt --verify-tag --prerelease --title "Memory Wuxian $GITHUB_REF_NAME — compact core preview" --notes-file RELEASE_NOTES.md

@@ -1,0 +1,48 @@
+{
+  "format": "memory-wuxian-environment-selection-v1",
+  "protocol": "memory-wuxian-core-v1",
+  "channel": "files",
+  "outer_kind": "bundle",
+  "items": {
+    "global-codex-agents": {
+      "artifact_id": "global-rule:codex-agents",
+      "binding_name": "global-codex-agents",
+      "strategy": "whole-file",
+      "files": ["AGENTS.md"],
+      "source": "explicit current global Codex AGENTS.md bytes",
+      "revision": "computed from portable relative filenames and bytes",
+      "receiver": "must bind the local global AGENTS.md target before apply"
+    },
+    "memory-wuxian-core": {
+      "artifact_id": "global-skill:memory-wuxian",
+      "binding_name": "global-memory-wuxian-skill",
+      "strategy": "skill-tree",
+      "files": {
+        "fixed": ["SKILL.md", "core/dashboard.html", "core/environment-selection.json"],
+        "include_direct_core_python_modules": "core/*.py",
+        "exclude": ["core/legacy_cloud.py", "core/transport.py"]
+      },
+      "source": "explicit finalized new-core package files",
+      "revision": "computed from portable relative filenames and bytes",
+      "receiver": "must bind the local Memory Wuxian skill directory before apply"
+    }
+  },
+  "small_files": [],
+  "excluded": {
+    "legacy-selected-governance-skills": "not included; current task explicitly retires this category",
+    "legacy-environment-items": "only items re-authorized for the new core are selected",
+    "local-live-config": "device-local runtime data; never package or publish",
+    "private-identities-and-keys": "never package or publish",
+    "old-scripts": "not part of the new-core Skill package",
+    "unfinished-installers": "old installers and old scripts are not part of the portable files channel; new core install.py transaction support remains a package dependency",
+    "diagnostics": "not part of the portable files channel",
+    "legacy_cloud.py": "excluded because it embeds a machine-specific absolute path and is not imported by the new core"
+  },
+  "constraints": [
+    "Payloads carry no local destination path; EnvironmentService bindings are local to each device.",
+    "Whole-file AGENTS.md application retains EnvironmentService baseline conflict checks.",
+    "Skill application retains EnvironmentService baseline checks and requires a local dependency checker.",
+    "The installed legacy envelope/protocol is not compatible with this new files channel.",
+    "The explicit source list is expected to be regenerated only after the final core package is stable."
+  ]
+}
