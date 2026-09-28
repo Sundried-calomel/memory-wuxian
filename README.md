@@ -1,6 +1,6 @@
-# Memory Wuxian — compact core preview
+# Memory Wuxian — compact core
 
-Version: **2.20.0-core.1**. This is a prerelease of the compact runtime, not a fresh-install wizard.
+Version: **2.20.0**. This is the formal release of the compact runtime, not a fresh-install wizard.
 
 The core covers conversation archival and summaries; dashboard, search and context recovery; memory synchronization and backups; selected rules, Skills and small-file synchronization; transactional file updates and recovery; and package creation. Runtime Python code has no third-party dependencies. Python 3.14 is the tested version.
 
@@ -17,7 +17,7 @@ The stable `main` branch and previous `v2.19.6` release remain available. This b
 
 ## Installation boundary
 
-This package upgrades an existing Memory Wuxian installation. Keep the existing native collector, native envelope executable, device identities and original archive. The native binaries are **not** bundled here; use the existing installation from [v2.19.6](https://github.com/Sundried-calomel/memory-wuxian/releases/tag/v2.19.6). New-device installation without these prerequisites is not provided by this preview.
+This package upgrades an existing Memory Wuxian installation. Keep the existing native collector, native envelope executable, device identities and original archive. The native binaries are **not** bundled here; use the existing installation from [v2.19.6](https://github.com/Sundried-calomel/memory-wuxian/releases/tag/v2.19.6). New-device installation without these prerequisites is not provided by this release.
 
 Both peers must activate this core to exchange `core-v1` data. The legacy `v1` queue is left unchanged. Windows live publication, scheduled maintenance, backup and MCP retrieval were exercised during the cutover. Mac live installation and a real Windows-to-Mac ACK were **not verified**. The CI matrix checks portable Python behavior; it is not proof of native collector installation or cross-device activation.
 
@@ -43,6 +43,6 @@ Default environment selections are the global `AGENTS.md` and the Memory Wuxian 
 
 ## Development and release
 
-Run `python -m unittest discover -s tests -v`. A single tag-triggered workflow runs the portable checks on Windows, macOS and Linux, then packages the explicit file list and publishes a prerelease with SHA-256 checksums. No developer archives, diagnostics, local paths, identities or credentials belong in this repository/package.
+Run `python -m unittest discover -s tests -v`. A single tag-triggered workflow runs the portable checks on Windows, macOS and Linux, then packages the explicit file list and publishes the release with SHA-256 checksums. No developer archives, diagnostics, local paths, identities or credentials belong in this repository/package.
 
 License: [MIT](LICENSE.txt).

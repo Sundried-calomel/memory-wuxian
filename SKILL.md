@@ -16,7 +16,7 @@ Use this Skill when earlier conversation evidence, memory maintenance or selecte
 - Treat queued publication, remote import and target application as separate facts. A new `core-v1` peer must be activated before it can understand new packages; old `v1` queues remain untouched.
 - Report historical confidence as verified, summary-supported, index-only or unverified. Capsules are derived context, not new source messages. Respect the configured context budget.
 
-Read `README.md` and `docs/PEER-SETUP.md` before first activation. This preview requires the native collector/envelope tools and paired identities from an existing installation; it contains no independent installer.
+Read `README.md` and `docs/PEER-SETUP.md` before first activation. This release requires the native collector/envelope tools and paired identities from an existing installation; it contains no independent installer.
 
 ## Entry points
 

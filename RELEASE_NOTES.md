@@ -1,6 +1,6 @@
-## Compact core preview
+## Compact core
 
-This prerelease replaces the old Python cloud-sync runtime with the direct core-v1 implementation and publishes the compact runtime source and an upgrade package.
+This release replaces the old Python cloud-sync runtime with the direct core-v1 implementation and publishes the compact runtime source and an upgrade package.
 
 Included: archival/summary services, dashboard and MCP retrieval, independent peer indexing, authenticated memory and environment exchange, explicit local bindings, backup/restore and changed-file update support. Large legacy summaries retain their exact content through bounded compression; file publications are ordered and acknowledged after application.
 

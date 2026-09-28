@@ -1,7 +1,7 @@
 name: compact-core-release
 on:
   push:
-    tags: ['v2.20.0-core.*']
+    tags: ['v2.20.0']
 permissions:
   contents: read
 jobs:
@@ -30,7 +30,7 @@ jobs:
         run: |
           test "${GITHUB_REF_NAME}" = "v$(cat VERSION)"
           python build_release.py
-      - name: Publish prerelease
+      - name: Publish formal release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt --verify-tag --prerelease --title "Memory Wuxian $GITHUB_REF_NAME — compact core preview" --notes-file RELEASE_NOTES.md
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt --verify-tag --latest --target "$GITHUB_SHA" --title "Memory Wuxian $GITHUB_REF_NAME — compact core" --notes-file RELEASE_NOTES.md
