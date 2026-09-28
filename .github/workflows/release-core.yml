@@ -51,6 +51,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test "${GITHUB_REF_NAME}" = "v$(cat VERSION)"
+          test "${GITHUB_REF_NAME}" = "v$(tr -d '\r\n' < VERSION)"
           cat dist/*.sha256 > dist/SHA256SUMS.txt
           gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt --verify-tag --latest --target "$GITHUB_SHA" --title "Memory Wuxian $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
