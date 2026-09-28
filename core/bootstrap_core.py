@@ -84,6 +84,7 @@ def build_live_config(*, new_root, native_source, old_archive_root, exchange_roo
     return {
         "root": str(archive_root),
         "source": str(source_root),
+        "sessions_root": str(codex_root / "sessions"),
         "auto_summary": False,
         "sync": {
             "exchange_root": str(exchange),

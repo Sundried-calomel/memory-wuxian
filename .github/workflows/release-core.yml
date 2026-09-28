@@ -1,36 +1,56 @@
-name: compact-core-release
+name: complete-core-release
 on:
   push:
-    tags: ['v2.20.0']
+    tags: ['v2.20.1']
 permissions:
   contents: read
 jobs:
-  portable-checks:
+  build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            platform: windows-x64
+            binary: native-envelope/target/release/memory-wuxian-envelope.exe
+          - os: ubuntu-latest
+            platform: linux-x64
+            binary: native-envelope/target/release/memory-wuxian-envelope
+          - os: macos-latest
+            platform: macos-arm64
+            binary: native-envelope/target/release/memory-wuxian-envelope
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
+      - run: rustup update stable --no-self-update
+      - run: cargo +stable build --locked --release --manifest-path native-envelope/Cargo.toml
       - run: python -m unittest discover -s tests -v
+      - run: python tests/smoke_native.py
+        env:
+          MW_ENVELOPE_BINARY: ${{ matrix.binary }}
+      - run: python build_release.py --platform ${{ matrix.platform }} --binary ${{ matrix.binary }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.platform }}
+          path: dist/*
   publish:
-    needs: portable-checks
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/download-artifact@v4
         with:
-          python-version: '3.14'
-      - name: Build explicit upgrade package
-        run: |
-          test "${GITHUB_REF_NAME}" = "v$(cat VERSION)"
-          python build_release.py
+          pattern: package-*
+          path: dist
+          merge-multiple: true
       - name: Publish formal release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt --verify-tag --latest --target "$GITHUB_SHA" --title "Memory Wuxian $GITHUB_REF_NAME — compact core" --notes-file RELEASE_NOTES.md
+        run: |
+          test "${GITHUB_REF_NAME}" = "v$(cat VERSION)"
+          cat dist/*.sha256 > dist/SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt --verify-tag --latest --target "$GITHUB_SHA" --title "Memory Wuxian $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md

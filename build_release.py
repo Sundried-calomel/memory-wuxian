@@ -2,27 +2,36 @@
 import hashlib
 import json
 import zipfile
+import argparse
+import platform
 from pathlib import Path
 
 root = Path(__file__).resolve().parent
+parser=argparse.ArgumentParser()
+parser.add_argument('--platform',required=True)
+parser.add_argument('--binary',required=True)
+args=parser.parse_args()
+if args.platform.startswith('macos'):
+    args.platform='macos-'+('arm64' if platform.machine().lower() in {'arm64','aarch64'} else 'x64')
 version = (root / 'VERSION').read_text('utf-8').strip()
 core_files = json.loads((root / 'release-files.json').read_text('utf-8'))
-files = ['README.md', 'SKILL.md', 'LICENSE.txt', 'VERSION', 'RELEASE_NOTES.md', 'docs/PEER-SETUP.md', *core_files]
+native_name='bin/memory-wuxian-envelope'+('.exe' if args.platform.startswith('windows') else '')
+files = ['README.md', 'SKILL.md', 'LICENSE.txt', 'VERSION', 'RELEASE_NOTES.md', 'docs/PEER-SETUP.md', *core_files,native_name]
 assert len(files) == len(set(files))
 dist = root / 'dist'
 dist.mkdir(exist_ok=True)
-archive = dist / f'memory-wuxian-{version}.zip'
+archive = dist / f'memory-wuxian-{version}-{args.platform}.zip'
 manifest = {}
 with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as bundle:
     for name in sorted(files):
-        source = root / name
-        if source.is_symlink() or not source.resolve().is_relative_to(root) or not source.is_file():
+        source = Path(args.binary).resolve() if name==native_name else root / name
+        if source.is_symlink() or (name!=native_name and not source.resolve().is_relative_to(root)) or not source.is_file():
             raise ValueError('invalid release source')
         data = source.read_bytes()
         manifest[name] = hashlib.sha256(data).hexdigest()
         entry = zipfile.ZipInfo(name, date_time=(2026, 9, 28, 0, 0, 0))
         entry.compress_type = zipfile.ZIP_DEFLATED
-        entry.external_attr = 0o100644 << 16
+        entry.external_attr = (0o100755 if name==native_name else 0o100644) << 16
         bundle.writestr(entry, data)
     entry = zipfile.ZipInfo('MANIFEST.json', date_time=(2026, 9, 28, 0, 0, 0))
     entry.compress_type = zipfile.ZIP_DEFLATED
@@ -32,5 +41,5 @@ with zipfile.ZipFile(archive) as bundle:
     assert bundle.testzip() is None
     assert set(bundle.namelist()) == {*files, 'MANIFEST.json'}
 checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
-(dist / 'SHA256SUMS.txt').write_text(f'{checksum}  {archive.name}\n', encoding='utf-8')
+(dist / (archive.name+'.sha256')).write_text(f'{checksum}  {archive.name}\n', encoding='utf-8')
 print(json.dumps({'package': archive.name, 'files': len(files) + 1, 'sha256': checksum}))

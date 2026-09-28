@@ -5,7 +5,7 @@ import json
 import time
 from pathlib import Path
 from runtime import MemoryRuntime
-from native_bridge import NativeArchiveBridge
+from collector import DirectCollector
 from storage import atomic_write_json, exclusive_lock
 from summary import CodexCLIModel
 
@@ -29,7 +29,7 @@ def run_tick(config_path):
         state.update(attempt_at=dt.datetime.now(dt.timezone.utc).isoformat(),status='running')
         atomic_write_json(state_path,state)
         try:
-            state['collection']=NativeArchiveBridge(root,config['source']).run_once()
+            state['collection']=DirectCollector(runtime.store,config['sessions_root']).run_once()
             state['summary_errors']={}
             if model:
                 with runtime.store.connection() as db:
@@ -68,7 +68,7 @@ def run_tick(config_path):
                 state['backed_up_generation']=generation
                 state['backup_at']=time.time()
                 state['backup_pending']=False
-            state.update(status='completed-with-errors' if state['summary_errors'] or state['sync'].get('status')=='error' or state.get('environment',{}).get('state') in {'error','partial'} else 'completed',
+            state.update(status='completed-with-errors' if state['collection']['errors'] or state['summary_errors'] or state['sync'].get('status')=='error' or state.get('environment',{}).get('state') in {'error','partial'} else 'completed',
                          completed_at=dt.datetime.now(dt.timezone.utc).isoformat())
             state.pop('error',None)
         except Exception as exc:

@@ -4,3 +4,5 @@ dist/
 demo-archive/
 core/live-config.json
 .venv/
+native-envelope/target/
+smoke-result.json

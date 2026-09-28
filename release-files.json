@@ -2,8 +2,12 @@
   "core/archive.py",
   "core/backup.py",
   "core/bootstrap_core.py",
+  "core/collector.py",
+  "core/configure.py",
   "core/core_sync.py",
+  "core/dashboard.html",
   "core/dashboard.py",
+  "core/environment-selection.json",
   "core/environment.py",
   "core/environment_sync.py",
   "core/exchange.py",
@@ -22,7 +26,5 @@
   "core/runtime.py",
   "core/storage.py",
   "core/summary.py",
-  "core/summary_migration.py",
-  "core/dashboard.html",
-  "core/environment-selection.json"
+  "core/summary_migration.py"
 ]

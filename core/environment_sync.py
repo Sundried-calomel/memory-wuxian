@@ -22,7 +22,7 @@ BY_ARTIFACT = {item["artifact_id"]: (name, item) for name, item in SELECTIONS.it
 CORE_EXCLUDED_MODULES = {"legacy_cloud.py", "transport.py"}
 CORE_REQUIRED_MODULES = {
     "archive.py", "backup.py", "core_sync.py", "environment.py",
-    "environment_sync.py", "install.py", "live.py", "storage.py", "bootstrap_core.py",
+    "environment_sync.py", "install.py", "live.py", "storage.py", "bootstrap_core.py", "collector.py",
 }
 CORE_REQUIRED_FILES = {"SKILL.md", "core/dashboard.html", "core/environment-selection.json"}
 MAX_FILES = 4096

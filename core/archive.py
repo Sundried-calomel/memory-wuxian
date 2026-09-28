@@ -15,7 +15,7 @@ def record_hash(record):
 
 def source_identity(source):
     if isinstance(source,dict) and source.get('kind')=='codex-session':
-        return {k:v for k,v in source.items() if k!='path'}
+        return {k:v for k,v in source.items() if k not in {'path','line'}}
     return source
 
 def tool_description(payload):
@@ -283,65 +283,5 @@ class ArchiveStore:
                 for p in sorted(directory.glob('*.json'))] if directory.exists() else []
 
     def collect_session(self, source_path):
-        """Incrementally consume visible top-level Codex events; never tool outputs/reasoning."""
-        source_path = Path(source_path).absolute()
-        key = bytes_sha256(str(source_path).encode())
-        cursor_path = safe_target(self.root, 'collectors/' + key + '.json')
-        with exclusive_lock(safe_target(self.root, 'collectors/' + key + '.lock')):
-            cursor = json.loads(cursor_path.read_text('utf-8')) if cursor_path.exists() else {'offset':0,'conversation':None}
-            appended, conversations = 0, set()
-            with source_path.open('rb') as handle:
-                size = os.fstat(handle.fileno()).st_size
-                position = cursor['offset']
-                if size < position:
-                    raise ValueError('session source was truncated; archive remains unchanged')
-                if position:
-                    handle.seek(max(0,position-256))
-                    if bytes_sha256(handle.read(min(256,position))) != cursor['anchor']:
-                        raise ValueError('session source changed at saved cursor; explicit recovery required')
-                handle.seek(position)
-                while True:
-                    start = handle.tell()
-                    line = handle.readline()
-                    if not line or not line.endswith(b'\n'):
-                        break
-                    event = json.loads(line)
-                    payload = event.get('payload',{})
-                    if not isinstance(payload,dict):
-                        raise ValueError('invalid session payload')
-                    kind = event.get('type')
-                    if kind == 'session_meta':
-                        origin = payload.get('source')
-                        if isinstance(origin,dict) and 'subagent' in origin:
-                            return {'status':'excluded-subagent','appended':0}
-                        identity = payload.get('id') or payload.get('session_id')
-                        if not isinstance(identity,str) or not identity:
-                            raise ValueError('session has no identity')
-                        conversation = 'codex:' + identity
-                        if cursor['conversation'] not in (None,conversation):
-                            raise ValueError('session identity changed')
-                        cursor['conversation'] = conversation
-                    speaker,text,complete = None,None,False
-                    if kind == 'event_msg' and payload.get('type') in {'user_message','agent_message'}:
-                        speaker = 'user' if payload['type']=='user_message' else 'assistant'
-                        text = payload.get('message')
-                        complete = speaker=='assistant' and payload.get('phase','final_answer')=='final_answer'
-                    elif kind == 'response_item' and payload.get('type') in {'function_call','custom_tool_call'}:
-                        speaker = 'tool'
-                        text = tool_description(payload)
-                    if speaker is not None:
-                        if not cursor['conversation'] or not isinstance(text,str):
-                            raise ValueError('visible event lacks conversation or text')
-                        identifier = cursor['conversation'] + ':' + str(start) + ':' + bytes_sha256(line)[:16]
-                        result = self.append_message(speaker,text,timestamp=event.get('timestamp'),
-                            conversation_id=cursor['conversation'],message_id=identifier,complete_round=complete,
-                            source={'kind':'codex-session','path':str(source_path),'offset':start})
-                        appended += result['status']=='appended'
-                        conversations.add(cursor['conversation'])
-                    cursor['offset'] = handle.tell()
-                position = cursor['offset']
-                handle.seek(max(0,position-256))
-                cursor['anchor'] = bytes_sha256(handle.read(min(256,position)))
-            atomic_write_json(cursor_path,cursor)
-            return {'status':'collected','appended':appended,'conversations':sorted(conversations),'offset':cursor['offset']}
-
+        from collector import DirectCollector
+        return DirectCollector(self, Path(source_path).resolve().parent).collect(source_path)
