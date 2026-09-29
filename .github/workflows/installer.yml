@@ -1,9 +1,9 @@
 name: installer-engine
 on:
   push:
-    paths: ['installer/**', 'tests/*installer.py', 'build_release.py', '.github/workflows/installer.yml']
+    paths: ['installer/**', 'tests/*installer.py', 'tests/test_updates.py', 'build_release.py', '.github/workflows/installer.yml']
   pull_request:
-    paths: ['installer/**', 'tests/*installer.py', 'build_release.py', '.github/workflows/installer.yml']
+    paths: ['installer/**', 'tests/*installer.py', 'tests/test_updates.py', 'build_release.py', '.github/workflows/installer.yml']
 permissions:
   contents: read
 jobs:
@@ -25,6 +25,7 @@ jobs:
         with:
           python-version: '3.14'
       - run: python -m unittest discover -s tests -p test_installer.py -v
+      - run: python -m unittest discover -s tests -p test_updates.py -v
       - name: Exercise current released package
         shell: bash
         env:

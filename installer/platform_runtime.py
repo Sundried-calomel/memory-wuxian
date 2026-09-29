@@ -30,7 +30,9 @@ class PlatformRuntime:
           $task=Get-ScheduledTask -TaskName $pair[0] -ErrorAction SilentlyContinue
           if($task) {
             $expected=Join-Path $env:MW_ROOT ('core\\'+$pair[1])
-            if($task.Actions.Count -ne 1 -or -not $task.Actions[0].Arguments.Contains($expected)) { throw 'Task belongs to another installation' }
+            $integrated=Join-Path $env:MW_ROOT ('installer\\'+$pair[1])
+            $owned=$task.Actions[0].Arguments.Contains($expected) -or ($pair[1] -eq 'dashboard.py' -and $task.Actions[0].Arguments.Contains($integrated))
+            if($task.Actions.Count -ne 1 -or -not $owned) { throw 'Task belongs to another installation' }
             $items+=@{name=$pair[0];enabled=[bool]$task.Settings.Enabled;running=($task.State -eq 'Running')}
           }
         }; ConvertTo-Json -Compress -InputObject @($items)

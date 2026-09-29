@@ -1,9 +1,25 @@
-# Memory Wuxian installer 1.0.0
+# Memory Wuxian installer
 
 Independent Python 3.10+ installer for the compact-core workflow. No extra Python
-dependencies. Keep these four Python files together and outside the product's
+dependencies. Keep these Python files together and outside the product's
 managed files. This installer does not install Python or Codex, create device keys,
 configure peers, or register first-install OS services.
+
+## On-demand updates and dashboard integration
+
+`python cli.py check --target PATH` checks the latest formal product release.
+`python cli.py update --target PATH --version 2.20.3` downloads that explicit release
+and applies it using the same transaction engine. Add `--offline` only after stopping
+all clients/services on platforms without live integration. No periodic checks occur.
+
+When the installer directory is located at `PRODUCT/installer`, point the existing
+dashboard task at `installer/dashboard.py` instead of `core/dashboard.py`, retaining
+its original Python executable and --root/--config/--port arguments. This adapter
+loads the product's dashboard and adds Check for updates / Upgrade controls to its
+System page. The adapter survives product replacements. Windows upgrades use the
+separate, on-demand MemoryWuxianManualUpdate task with no recurring trigger, so stopping
+the dashboard does not terminate the updater. No configuration or archives are sent
+to GitHub; only public release metadata and the selected package are downloaded.
 
 ## Normal update
 

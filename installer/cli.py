@@ -13,9 +13,10 @@ from platform_runtime import PlatformRuntime
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['apply','adopt','recover','rollback'])
+    parser.add_argument('action', choices=['apply','adopt','recover','rollback','check','update'])
     parser.add_argument('--target', required=True)
     parser.add_argument('--package')
+    parser.add_argument('--version', help='explicit product version; check defaults to latest formal product release')
     parser.add_argument('--sha256', help='digest from the trusted release channel')
     parser.add_argument('--offline', action='store_true', help='explicitly assert all target clients/services are stopped')
     parser.add_argument('--python', help='Python used to check the installed entry point')
@@ -24,6 +25,12 @@ def main():
     if args.accept_local and args.action != 'adopt': parser.error('--accept-local is only valid for adopt')
     installer = Installer(args.target)
     platform = PlatformRuntime(offline=args.offline, python=args.python)
+    if args.action in {'check','update'}:
+        from updates import check, update
+        if args.action=='update' and not args.version: parser.error('update requires an explicit --version')
+        result=check(args.target,args.version) if args.action=='check' else update(args.target,args.version,offline=args.offline)
+        print(json.dumps(result,ensure_ascii=False))
+        return
     if args.action in {'apply','adopt'}:
         if not args.package or not args.sha256: parser.error('--package and --sha256 required')
         package = read_package(args.package, args.sha256)
