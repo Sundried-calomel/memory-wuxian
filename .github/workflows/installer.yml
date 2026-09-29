@@ -1,0 +1,20 @@
+name: installer-engine
+on:
+  push:
+    paths: ['installer/**', 'tests/test_installer.py', 'build_release.py', '.github/workflows/installer.yml']
+  pull_request:
+    paths: ['installer/**', 'tests/test_installer.py', 'build_release.py', '.github/workflows/installer.yml']
+permissions:
+  contents: read
+jobs:
+  transaction:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - run: python -m unittest discover -s tests -p test_installer.py -v
