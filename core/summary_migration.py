@@ -57,8 +57,6 @@ def read_authorized_config(path: Path) -> dict[str, Any]:
             result["summary_v2"]["bundle_roots"][key] = _yaml_scalar(value)
         elif section == "summary_v2" and indent == 2:
             bundle_roots = False
-    if not result["summary_v2"].get("runtime_root"):
-        raise ValueError("authorized config does not define summary_v2.runtime_root")
     return result
 
 
@@ -239,10 +237,11 @@ def migrate_summaries(new_root: Path, *, config_path: Path = DEFAULT_CONFIG,
     new_root = new_root.resolve()
     if old_root == new_root or old_root.is_relative_to(new_root) or new_root.is_relative_to(old_root):
         raise ValueError("source and destination archive roots must be disjoint")
-    runtime_root = Path(config["summary_v2"]["runtime_root"]).expanduser().absolute()
-    _no_links(runtime_root)
-    runtime_root = runtime_root.resolve()
-    bindings = {"runtime": runtime_root}
+    bindings = {}
+    if config["summary_v2"].get("runtime_root"):
+        runtime_root = Path(config["summary_v2"]["runtime_root"]).expanduser().absolute()
+        _no_links(runtime_root)
+        bindings["runtime"] = runtime_root.resolve()
     for name, value in config["summary_v2"].get("bundle_roots", {}).items():
         if name == "runtime":
             raise ValueError("runtime binding cannot be overridden")
@@ -250,16 +249,27 @@ def migrate_summaries(new_root: Path, *, config_path: Path = DEFAULT_CONFIG,
         _no_links(binding)
         bindings[name] = binding.resolve()
     store = ArchiveStore(new_root)
-    raws = store.records()
+    raw_count = store.status()['total_messages']
     nodes, read_failures = _read_v1_files(old_root)
     v2_nodes, v2_failures = _read_v2_files(old_root, bindings)
     nodes.extend(v2_nodes)
     components = _component_groups(nodes)
+    def conversations(component):
+        return tuple(sorted({node.get('metadata', node.get('sidecar', {})).get('conversation_id', '')
+                             for node in component}))
+    components.sort(key=conversations)
+    previous_conversations, raws = None, []
     results = []
     for index, component in enumerate(components, 1):
         names = [name for node in component for name, _ in node["paths"]]
         inputs = [pair for node in component for pair in node["paths"]]
         try:
+            selected = conversations(component)
+            if not selected or any(not item for item in selected):
+                raise ValueError('summary has no explicit conversation identity')
+            if selected != previous_conversations:
+                raws = [row for conversation in selected for row in store.records(conversation)]
+                previous_conversations = selected
             converted = convert_files(inputs, raws)
             _publish_component(store, converted)
             results.append({"component": index, "status": "completed", "input_files": names,
@@ -275,7 +285,7 @@ def migrate_summaries(new_root: Path, *, config_path: Path = DEFAULT_CONFIG,
         overall = "no-input"
     report = {"format": "memory-wuxian-summary-migration-v1", "status": overall,
               "source_root": str(old_root), "destination_root": str(new_root),
-              "config_path": str(config_path), "raw_records_available": len(raws),
+              "config_path": str(config_path), "raw_records_available": raw_count,
               "components": results, "read_failures": failures,
               "completed_summary_count": sum(len(item.get("summary_ids", [])) for item in results if item["status"] == "completed"),
               "failed_component_count": sum(item["status"] == "failed" for item in results),

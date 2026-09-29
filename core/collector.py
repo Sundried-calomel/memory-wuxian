@@ -12,6 +12,32 @@ MAX_LINE = 16 * 1024 * 1024
 MAX_BATCH = 500
 
 
+def file_change_text(changes):
+    if not isinstance(changes, dict) or not changes:
+        raise ValueError('invalid file change map')
+    rendered, additions, deletions = [], 0, 0
+    for path, change in sorted(changes.items()):
+        if not isinstance(change, dict):
+            raise ValueError('invalid file change entry')
+        for field in ('type', 'unified_diff', 'content', 'move_path'):
+            value = change.get(field)
+            if value is not None and not isinstance(value, str):
+                raise ValueError('invalid file change ' + field)
+        diff = change.get('unified_diff') or ''
+        added = sum(line.startswith('+') and not line.startswith('+++') for line in diff.splitlines())
+        removed = sum(line.startswith('-') and not line.startswith('---') for line in diff.splitlines())
+        additions += added
+        deletions += removed
+        detail = f"File: {path} [{change.get('type') or 'update'}] (+{added} -{removed})"
+        if change.get('move_path'):
+            detail += f" -> {change['move_path']}"
+        if diff:
+            detail += f'\n```diff\n{diff.rstrip()}\n```'
+        rendered.append(detail)
+    noun = 'file' if len(rendered) == 1 else 'files'
+    return f'Edited {len(rendered)} {noun}: +{additions} -{deletions}\n\n' + '\n\n'.join(rendered)
+
+
 def session_identity(payload):
     identity = payload.get('id') or payload.get('session_id')
     if not isinstance(identity, str) or not identity:
@@ -73,12 +99,8 @@ def visible(event, session, line_number, layout, stream=None):
         text = tool_description(payload)
     elif outer == 'event_msg' and kind == 'patch_apply_end' and payload.get('success') is True:
         changes = payload.get('changes')
-        if not isinstance(changes, dict):
-            raise ValueError('invalid file change map')
         speaker, phase = 'tool', 'file_change'
-        text = '\n'.join(f"File: {path} [{change.get('type', 'update')}]" +
-                         (f" -> {change['move_path']}" if change.get('move_path') else '')
-                         for path, change in sorted(changes.items()))
+        text = file_change_text(changes)
     else:
         return None
     if not isinstance(text, str):
@@ -112,6 +134,8 @@ class DirectCollector:
         checkpoint = self.store.root / 'collectors' / (key + '.json')
         with exclusive_lock(checkpoint.with_suffix('.lock')):
             cursor = json.loads(checkpoint.read_text('utf-8')) if checkpoint.exists() else {'offset': 0, 'line': 0}
+            if cursor.get('legacy_error'):
+                raise ValueError(cursor['legacy_error'])
             count = 0
             with path.open('rb') as handle:
                 first = handle.readline(MAX_LINE + 1)
@@ -174,10 +198,10 @@ class DirectCollector:
                 handle.seek(max(0, offset - 256))
                 cursor['anchor'] = bytes_sha256(handle.read(min(offset, 256)))
             atomic_write_json(checkpoint, cursor)
-            return {'appended': count, 'offset': offset}
+            return {'appended': count, 'offset': offset, 'remaining_bytes': max(0, path.stat().st_size - offset)}
 
     def run_once(self):
-        result = {'appended': 0, 'files': 0, 'errors': {}}
+        result = {'appended': 0, 'files': 0, 'errors': {}, 'pending_files': 0, 'remaining_bytes': 0}
         for folder, directories, files in os.walk(self.sessions, followlinks=False):
             directories[:] = [d for d in directories if not (Path(folder) / d).is_symlink()]
             for name in sorted(files):
@@ -190,6 +214,8 @@ class DirectCollector:
                     item = self.collect(path)
                     result['appended'] += item['appended']
                     result['files'] += 1
+                    result['pending_files'] += int(item.get('remaining_bytes', 0) > 0)
+                    result['remaining_bytes'] += item.get('remaining_bytes', 0)
                 except (ValueError, OSError, KeyError, TypeError) as error:
                     result['errors'][str(path)] = str(error)
         return result

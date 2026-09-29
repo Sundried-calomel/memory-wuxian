@@ -18,6 +18,10 @@ encryption. Device keys, paths and local configuration remain local.
 
 `core/configure.py --help` configures a new device; existing local configuration and
 archive checkpoints require explicit migration, never silent resetting.
+For a 2.19.x upgrade, preview `core/migrate.py --old-root OLD --sessions SESSIONS`.
+Quiesce old writers before applying with `--new-root NEW --config OLD_CONFIG --apply`.
+Keep the old archive until raw, summary, capture and launcher checks pass. Do not run
+both capture schedulers against the new archive. File-change records retain full diffs.
 `core/runtime.py --root <archive> status|query|context|backup` is the local CLI.
 `core/mcp_server.py --root <archive>` provides read-only tools; recover only needed context.
 `core/dashboard.py --root <archive> --config <local-config> --port 8765` serves localhost.
