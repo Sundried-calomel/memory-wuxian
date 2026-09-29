@@ -14,7 +14,7 @@ parser.add_argument('--sha256',required=True)
 args=parser.parse_args()
 package=read_package(args.package,args.sha256)
 with tempfile.TemporaryDirectory() as directory:
-    installer=Installer(Path(directory)/'product')
+    installer=Installer(Path(directory).resolve()/'product')
     assert installer.apply(package,PlatformRuntime(offline=True))['status']=='applied'
     assert installer.apply(package,PlatformRuntime(offline=True))['status']=='unchanged'
 print('Published package installed; entry imports and native helper loaded; repeat changed zero files.')
