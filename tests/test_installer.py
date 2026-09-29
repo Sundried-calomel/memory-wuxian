@@ -118,5 +118,16 @@ class InstallerTests(unittest.TestCase):
             for n,v in files.items(): bundle.writestr(n,v)
         with self.assertRaisesRegex(ValueError,'compatibility'): read_package(path,digest(path.read_bytes()))
 
+    def test_local_adoption_preserves_unversioned_customization(self):
+        package = self.package()
+        for name, content in package['files'].items(): atomic(self.installer.root/name,content,package['modes'][name])
+        custom = self.installer.root/'core/live.py'; custom.write_bytes(b'custom live')
+        (self.installer.root/'VERSION').unlink()
+        result = self.installer.adopt(package,accept_local=True)
+        self.assertEqual(result['status'],'adopted-local')
+        self.assertEqual(self.installer.read_state()['version'],'0.0.0')
+        self.assertEqual(custom.read_bytes(),b'custom live')
+        self.assertFalse((self.installer.root/'VERSION').exists())
+
 
 if __name__=='__main__': unittest.main()

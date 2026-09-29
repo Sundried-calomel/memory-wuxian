@@ -27,6 +27,7 @@ jobs:
       - run: rustup update stable --no-self-update
       - run: cargo +stable build --locked --release --manifest-path native-envelope/Cargo.toml
       - run: python -m unittest discover -s tests -p test_release.py -v
+      - run: python -m unittest discover -s tests -p test_dashboard_data.py -v
       - run: python tests/smoke_native.py
         env:
           MW_ENVELOPE_BINARY: ${{ matrix.binary }}

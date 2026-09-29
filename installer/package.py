@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath
 ENGINE_PROTOCOL = 1
 CONTRACT = {'archive': 1, 'configuration': 1, 'sync': 'core-v1', 'layout': 'compact-core-v1'}
 MAX_PACKAGE = 64 * 1024 * 1024
-ROOT_FILES = {'README.md', 'SKILL.md', 'LICENSE.txt', 'VERSION', 'RELEASE_NOTES.md', 'docs/PEER-SETUP.md'}
+ROOT_FILES = {'README.md', 'README.zh-CN.md', 'README.ja.md', 'SKILL.md', 'LICENSE.txt', 'VERSION', 'RELEASE_NOTES.md', 'docs/PEER-SETUP.md', 'scripts/memory_dashboard.py'}
 
 
 def digest(data):
@@ -92,7 +92,7 @@ def read_package(path, expected_sha256, *, expected_platform=None):
             descriptor = parse(data.pop('INSTALL.json'))
         else:
             # One explicit adapter for the already published compact-core package.
-            if version != '2.20.1' or path.name != f'memory-wuxian-{version}-{selected_platform}.zip':
+            if version not in {'2.20.1', '2.20.3'} or path.name != f'memory-wuxian-{version}-{selected_platform}.zip':
                 raise ValueError('package has no supported installation contract')
             descriptor = {'installer_protocol': 1, 'version': version, 'platform': selected_platform,
                           'compatibility': CONTRACT}

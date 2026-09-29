@@ -17,8 +17,8 @@ class PlatformRuntime:
     def powershell(self, script, **values):
         env = dict(os.environ, **{'MW_' + k: str(v) for k,v in values.items()})
         result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
-                                 "$ErrorActionPreference='Stop'; " + script], env=env,
-                                capture_output=True, text=True, timeout=40, check=True)
+                                 "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); " + script], env=env,
+                                capture_output=True, text=True, encoding='utf-8', timeout=40, check=True)
         return result.stdout.strip()
 
     def snapshot(self, root):
@@ -54,7 +54,7 @@ class PlatformRuntime:
         if not self.locked:
             config = json.loads((root/'core/live-config.json').read_text('utf-8-sig'))
             from pathlib import Path
-            self.stack.enter_context(lock(Path(config['root'])/'.live-tick.lock'))
+            self.stack.enter_context(lock(Path(config['root'])/'.live-tick.lock', timeout=300))
             self.locked = True
         for item in snapshot['tasks']:
             self.task('Stop', item['name'])

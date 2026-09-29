@@ -114,20 +114,30 @@ class Installer:
                       'files': {n: {'sha256': digest(v), 'mode': package['modes'][n]} for n,v in package['files'].items()}}
         return state, next_state, changed
 
-    def adopt(self, package):
+    def adopt(self, package, *, accept_local=False):
         """Record ownership only after comparison with a trusted baseline package."""
         with lock(self.control / 'lock'):
             if self.state.exists() or self.journal.exists():
                 raise ValueError('installation already managed or awaiting recovery')
+            owned = {}
             for name, content in package['files'].items():
                 path = target_path(self.root, name)
+                if accept_local:
+                    if path.is_file():
+                        owned[name] = {'sha256':digest(path.read_bytes()), 'mode':stat.S_IMODE(path.stat().st_mode)}
+                    continue
                 if not path.is_file() or path.read_bytes() != content:
                     raise ValueError('baseline differs: ' + name)
+                owned[name] = {'sha256':digest(content), 'mode':package['modes'][name]}
+            if accept_local and not {'core/live.py','core/runtime.py','core/collector.py','SKILL.md'} <= set(owned):
+                raise ValueError('local installation lacks compact-core entry points')
             state = {'root': str(self.root), 'version': package['version'], 'compatibility': CONTRACT,
                      'package_sha256': package['package_sha256'], 'platform': package['platform'],
-                     'files': {n: {'sha256': digest(v), 'mode': package['modes'][n]} for n,v in package['files'].items()}}
+                     'files': owned}
+            if accept_local:
+                state.update(version='0.0.0', local_baseline=True, reference_version=package['version'])
             write_json(self.state, state)
-            return {'status':'adopted', 'version':state['version']}
+            return {'status':'adopted-local' if accept_local else 'adopted', 'version':state['version']}
 
     def apply(self, package, platform):
         with lock(self.control / 'lock'):

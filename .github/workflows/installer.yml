@@ -1,16 +1,22 @@
 name: installer-engine
 on:
   push:
-    paths: ['installer/**', 'tests/test_installer.py', 'build_release.py', '.github/workflows/installer.yml']
+    paths: ['installer/**', 'tests/*installer.py', 'build_release.py', '.github/workflows/installer.yml']
   pull_request:
-    paths: ['installer/**', 'tests/test_installer.py', 'build_release.py', '.github/workflows/installer.yml']
+    paths: ['installer/**', 'tests/*installer.py', 'build_release.py', '.github/workflows/installer.yml']
 permissions:
   contents: read
 jobs:
   transaction:
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-latest
+            platform: windows-x64
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: macos-latest
+            platform: macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -18,3 +24,12 @@ jobs:
         with:
           python-version: '3.14'
       - run: python -m unittest discover -s tests -p test_installer.py -v
+      - name: Exercise current released package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name=memory-wuxian-2.20.3-${{ matrix.platform }}.zip
+          gh release download v2.20.3 --pattern "$name" --dir installer-smoke
+          hash=$(gh release view v2.20.3 --json assets --jq ".assets[] | select(.name == \"$name\") | .digest" | sed 's/^sha256://')
+          python tests/smoke_installer.py --package "installer-smoke/$name" --sha256 "$hash"
