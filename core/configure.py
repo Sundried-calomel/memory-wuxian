@@ -15,6 +15,8 @@ def main():
     parser.add_argument('--backup',required=True)
     parser.add_argument('--config',default=str(Path(__file__).with_name('live-config.json')))
     parser.add_argument('--model',default='gpt-6-luna')
+    parser.add_argument('--interval-seconds',type=int,default=60,
+                        help='display the interval used by the operating-system scheduler')
     parser.add_argument('--node-id',required=True)
     parser.add_argument('--identity',required=True)
     parser.add_argument('--exchange')
@@ -34,7 +36,8 @@ def main():
     if local['node_id']!=args.node_id:raise ValueError('identity belongs to another node')
     config={'root':str(Path(args.root).resolve()),'sessions_root':str(sessions),
             'codex':str(codex),'model':args.model,'auto_summary':True,'summary_rounds':5,
-            'backup':str(Path(args.backup).resolve()),'retention':1,'backup_interval_seconds':900}
+            'backup':str(Path(args.backup).resolve()),'retention':1,'backup_interval_seconds':900,
+            'interval_seconds':args.interval_seconds}
     if bool(args.peer)!=bool(args.exchange):raise ValueError('peer and exchange must be supplied together')
     if args.peer:
         peer=json.loads(Path(args.peer).read_text('utf-8'))

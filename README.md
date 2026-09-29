@@ -1,4 +1,6 @@
-# Memory Wuxian 2.20.1
+# Memory Wuxian 2.20.3
+
+[中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 One runtime for conversation capture and summaries, dashboard/search/context recovery,
 memory backup and sync, selected rules/Skills/files sync, file update/recovery, and release packaging.
@@ -35,3 +37,19 @@ Do not reset an existing archive's capture checkpoints during an upgrade: old an
 event identities must be reconciled before direct capture starts.
 The experimental independent installer is excluded. Platform CI exercises local
 two-node encrypted exchange; it does not establish real remote-device activation.
+
+## Dashboard observations
+
+Summary levels come from completed summary files. Conversation titles, projects and
+archive status come from the local Codex state database, opened read-only. Missing
+metadata stays unknown. Completed rounds count actual completion records, not the
+largest legacy round ID. Text estimates are incremental and remain separate from
+Codex-reported usage. Existing token ledgers are shown with their observation date;
+this update does not add a new billing collector or promise complete live usage.
+
+The runtime publishes its PID, phase, capture backlog, summary progress/errors,
+backup and synchronization results during each tick. Active/idle describes the
+scheduled worker, not archive completeness. Configure `interval_seconds` to match
+your OS schedule. Delivery still requires a receiving-device ACK.
+The dashboard neither reimports messages nor generates summaries. Higher summary
+levels without records are hidden. Historical capture errors remain visible.

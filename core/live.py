@@ -3,6 +3,7 @@ import argparse
 import datetime as dt
 import json
 import time
+import os
 from pathlib import Path
 from runtime import MemoryRuntime
 from collector import DirectCollector
@@ -26,26 +27,42 @@ def run_tick(config_path):
     with exclusive_lock(root/'.live-tick.lock'):
         state_path=root/'live-status.json'
         state=json.loads(state_path.read_text('utf-8')) if state_path.exists() else {}
-        state.update(attempt_at=dt.datetime.now(dt.timezone.utc).isoformat(),status='running')
+        now = dt.datetime.now(dt.timezone.utc)
+        attempts = [stamp for stamp in state.get('attempts_last_hour', [])
+                    if (now - dt.datetime.fromisoformat(stamp)).total_seconds() < 3600]
+        attempts.append(now.isoformat())
+        state.update(attempt_at=now.isoformat(),status='running',pid=os.getpid(),
+                     phase='collection',attempts_last_hour=attempts)
         atomic_write_json(state_path,state)
         try:
             state['collection']=DirectCollector(runtime.store,config['sessions_root']).run_once()
+            state['collection_completed_at']=dt.datetime.now(dt.timezone.utc).isoformat()
             state['summary_errors']={}
+            state['auto_summary']=bool(model)
+            state['phase']='summaries'
+            state['summary_progress']={'checked':0,'remaining':0}
+            atomic_write_json(state_path,state)
             if model:
                 with runtime.store.connection() as db:
                     conversations=[row[0] for row in db.execute('SELECT DISTINCT conversation FROM messages WHERE sequence>?',
                         (state.get('summary_cursor',config.get('summary_start_sequence',0)),))]
+                excluded=runtime.store.excluded_conversations()
+                conversations=[conversation for conversation in conversations if conversation not in excluded]
+                state['summary_progress']['remaining']=len(conversations)
+                atomic_write_json(state_path,state)
                 for conversation in conversations:
-                    if conversation in runtime.store.excluded_conversations():
-                        continue
                     try:
                         runtime.summarize_due(conversation,config.get('summary_rounds',5),config.get('summary_start_sequence',0))
                         runtime.summarize_parents_due(conversation)
                     except Exception as exc:
                         state['summary_errors'][conversation]=str(exc)
+                    state['summary_progress']['checked']+=1
+                    state['summary_progress']['remaining']-=1
+                    atomic_write_json(state_path,state)
                 if not state['summary_errors']:
                     state['summary_cursor']=runtime.store.status()['last_sequence']
-            state['auto_summary']=bool(model)
+            state['phase']='sync'
+            atomic_write_json(state_path,state)
             if config.get('sync'):
                 from core_sync import CoreSyncService
                 service=CoreSyncService(runtime.store,**config['sync'])
@@ -63,13 +80,15 @@ def run_tick(config_path):
             summary_count=runtime.status()['summary_count']
             generation=[sequence,summary_count,state['sync'].get('received_batches',0)]
             state['backup_pending']=bool(config.get('backup') and state.get('backed_up_generation')!=generation)
+            state['phase']='backup'
+            atomic_write_json(state_path,state)
             if state['backup_pending'] and time.time()-state.get('backup_at',0)>=config.get('backup_interval_seconds',900):
                 state['backup']=runtime.backup.create(config['backup'],config.get('retention',1))
                 state['backed_up_generation']=generation
                 state['backup_at']=time.time()
                 state['backup_pending']=False
             state.update(status='completed-with-errors' if state['collection']['errors'] or state['summary_errors'] or state['sync'].get('status')=='error' or state.get('environment',{}).get('state') in {'error','partial'} else 'completed',
-                         completed_at=dt.datetime.now(dt.timezone.utc).isoformat())
+                         completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),phase='idle')
             state.pop('error',None)
         except Exception as exc:
             state.update(status='error',error=str(exc))

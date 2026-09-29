@@ -1,7 +1,7 @@
 name: complete-core-release
 on:
   push:
-    tags: ['v2.20.1']
+    tags: ['v2.20.*']
 permissions:
   contents: read
 jobs:

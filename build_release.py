@@ -19,7 +19,7 @@ if args.platform.startswith('macos'):
 version = (root / 'VERSION').read_text('utf-8').strip()
 core_files = json.loads((root / 'release-files.json').read_text('utf-8'))
 native_name='bin/memory-wuxian-envelope'+('.exe' if args.platform.startswith('windows') else '')
-files = ['README.md', 'SKILL.md', 'LICENSE.txt', 'VERSION', 'RELEASE_NOTES.md', 'docs/PEER-SETUP.md', *core_files,native_name]
+files = ['README.md', 'README.zh-CN.md', 'README.ja.md', 'SKILL.md', 'LICENSE.txt', 'VERSION', 'RELEASE_NOTES.md', 'docs/PEER-SETUP.md', *core_files,native_name]
 assert len(files) == len(set(files))
 dist = root / 'dist'
 dist.mkdir(exist_ok=True)

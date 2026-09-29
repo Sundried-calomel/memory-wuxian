@@ -6,68 +6,118 @@ import datetime as dt
 import json
 import platform
 import sys
+import time
+from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from runtime import MemoryRuntime
+from dashboard_data import DashboardData, thread_metadata, process_observation, archive_bytes
 
 MAX_PATH_CHARS = 8192
 MAX_BODY_BYTES = 65_536
 
 
 def status_payload(runtime: MemoryRuntime, config: dict | None = None) -> dict:
-    """Return only SQL-backed archive counts; unsupported observations stay null/unknown."""
-    excluded=runtime.store.excluded_conversations()
-    scope='conversation NOT IN ('+','.join('?' for _ in excluded)+')' if excluded else '1=1'
-    with runtime.store.connection() as db:
-        row = db.execute("SELECT COUNT(*), COUNT(DISTINCT conversation), COALESCE(SUM(CASE WHEN speaker='tool' THEN 1 ELSE 0 END),0), COALESCE(SUM(length(text)),0), MAX(timestamp) FROM messages WHERE "+scope,list(excluded)).fetchone()
-        pending = db.execute("SELECT COUNT(*) FROM rounds WHERE pending IS NOT NULL AND "+scope,list(excluded)).fetchone()[0]
-        summary_total = db.execute("SELECT COUNT(*) FROM summary_index WHERE "+scope,list(excluded)).fetchone()[0]
-        daily_rows = db.execute("SELECT substr(timestamp,1,10), COUNT(*), COALESCE(SUM(length(text)),0) FROM messages WHERE timestamp IS NOT NULL AND length(timestamp)>=10 AND "+scope+" GROUP BY substr(timestamp,1,10) ORDER BY substr(timestamp,1,10)",list(excluded)).fetchall()
-        conversation_rows = db.execute(
-            "SELECT conversation,COUNT(*),SUM(CASE WHEN speaker='tool' THEN 1 ELSE 0 END),MAX(timestamp) "
-            "FROM messages WHERE "+scope+" GROUP BY conversation ORDER BY MAX(timestamp) DESC",
-            list(excluded)).fetchall()
-    live = _live_status(runtime.store.root)
-    daily = [{"date": day, "messages": count, "all_devices": {"messages": count},
-              "local": {"messages": count}, "characters": characters,
-              "devices": [{"display_name": "local", "local": True, "messages": count,
-                           "characters": characters}]} for day, count, characters in daily_rows]
-    unknown_levels = {str(level): None for level in range(1, 9)}
-    # This index contains no title, lifecycle, telemetry, or per-level summary
-    # metadata. List available conversations without inventing those facts.
-    conversations = [{"conversation_id": identifier, "title": identifier,
-                      "project": None, "source_kind": None, "origin_node": "local",
-                      "message_count": count, "tool_activity_count": tools,
-                      "last_message_at": latest, "telemetry": None,
-                      "estimated_archive_tokens": None, "completed_rounds": None,
-                      "summary_counts": dict(unknown_levels), "archived": None}
-                     for identifier, count, tools, latest in conversation_rows]
-    unknown_debts = {name: {"state": "unavailable", "count": None, "in_progress": None, "retry": None,
-                            "quarantined": None, "permanent_failures": None}
-                     for name in ("coverage_debt", "mechanical_debt", "semantic_debt", "backup_debt")}
-    return {
-        "schema_version": 1, "health": "unavailable",
-        "conversations": conversations, "active_conversations": conversations,
-        "archived_conversations": [], "conversation_lifecycle_known": False,
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "totals": {
-            "active_conversations": row[1], "archived_conversations": None,
-            "messages": row[0], "tool_activities": row[2],
-            "summary_counts": unknown_levels, "reported_total_tokens": None,
-            "archived_days": len(daily_rows), "characters": row[3], "storage_bytes": None,
-            "estimated_tokens": None, "message_estimated_tokens": None,
-        },
-        "daily": daily, "daily_metrics": {"complete_token_coverage": False, "devices_included": 1, "stale_devices": []},
-        "collector": {"mode": "unavailable", "live_status": live},
-        "debt_status": {"debts": unknown_debts},
-        "pending_rounds": pending,
-        "summary_total": summary_total,
-        "sync": live.get("sync"),
-        "capabilities": {"collector": "unconfigured", "federation": "unconfigured",
-                         "environment_registry": "unavailable", "backup_health": "unavailable"},
-    }
+    """Observe current sources without collecting, summarizing or modifying history."""
+    if not hasattr(runtime, '_dashboard_data'):
+        runtime._dashboard_data = DashboardData()
+    data = runtime._dashboard_data
+    config = dict(config or {}, root=str(runtime.store.root))
+    with data.lock:
+        cached = getattr(data, 'payload', None)
+        if cached and time.monotonic() - data.built_at < 5:
+            return cached
+        excluded = runtime.store.excluded_conversations()
+        metrics = data.message_metrics(runtime.store, excluded)
+        levels, conversation_levels = data.summary_metrics(runtime.store, excluded)
+        metadata, metadata_source = thread_metadata(config)
+        usage, daily_usage = data.usage(config)
+        with runtime.store.connection() as db:
+            rounds = {row[0]: (row[1] - 1 - int(row[2] is not None), row[2])
+                      for row in db.execute('SELECT conversation,next_round,pending FROM rounds')}
+        conversations, totals, days = [], Counter(), {}
+        for identifier, item in metrics.items():
+            info = metadata.get(identifier, {})
+            telemetry = dict(usage[identifier]) if identifier in usage else None
+            if telemetry:
+                telemetry['historical'] = not telemetry['updated_at'] or dt.datetime.fromisoformat(telemetry['updated_at'].replace('Z', '+00:00')) < dt.datetime.fromisoformat(item['latest'])
+            conversations.append(dict(conversation_id=identifier, title=info.get('title') or identifier,
+                project=info.get('project'), archived=info.get('archived'), origin_node='local',
+                source_kind='codex' if identifier.startswith('codex:') else 'imported',
+                message_count=item['messages'], tool_activity_count=item['tools'],
+                last_message_at=item['latest'], estimated_archive_tokens=item['estimated_tokens'],
+                completed_rounds=len(data.completed[identifier]), telemetry=telemetry,
+                summary_counts=dict(conversation_levels.get(identifier, {}))))
+            for name in ('messages', 'tools', 'characters', 'estimated_tokens', 'message_tokens'):
+                totals[name] += item[name]
+        for (identifier, day), item in data.daily.items():
+            if identifier not in excluded:
+                days.setdefault(day, Counter()).update(item)
+        for (identifier, day), count in daily_usage.items():
+            if identifier in metrics:
+                days.setdefault(day, Counter())['reported_tokens'] += count
+        daily = [dict(date=day, **item, all_devices=dict(item), local=dict(item),
+                      devices=[dict(display_name='local', local=True, **item)])
+                 for day, item in sorted(days.items())]
+        conversations.sort(key=lambda item: item['last_message_at'], reverse=True)
+        active = [item for item in conversations if item['archived'] is not True]
+        archived = [item for item in conversations if item['archived'] is True]
+        live = _live_status(runtime.store.root)
+        process = process_observation(live.get('pid')) if live.get('status') == 'running' else {'process_running': False}
+        mode = ('active' if process.get('process_running') else 'idle') if live.get('attempt_at') else 'not-started'
+        if mode == 'idle':
+            process.update(cpu_percent=0, memory_bytes=0)
+        collection = live.get('collection') or {}
+        errors = len(collection.get('errors') or {})
+        summary_errors = len(live.get('summary_errors') or {})
+        backup_pending = live.get('backup_pending')
+        summary_progress = live.get('summary_progress') or {}
+        debts = {
+            'coverage_debt': dict(state='attention' if errors else 'ok' if collection else 'unknown',
+                count=collection.get('pending_files'), quarantined=errors),
+            'semantic_debt': dict(state='attention' if summary_errors else 'running' if live.get('phase') == 'summaries' and mode == 'active' else 'ok' if live.get('completed_at') else 'unknown',
+                count=summary_progress.get('remaining'), in_progress=int(mode == 'active' and live.get('phase') == 'summaries'),
+                retry=summary_errors, unit='conversations-to-check'),
+            'backup_debt': dict(state='pending' if backup_pending else 'ok' if live.get('backup') else 'unknown',
+                count=int(backup_pending) if backup_pending is not None else None),
+        }
+        sync = live.get('sync') or {}
+        health = ('error' if live.get('status') == 'error' else
+                  'attention' if errors or summary_errors or sync.get('status') == 'error' or
+                  (live.get('environment') or {}).get('state') in ('error', 'partial') else
+                  'catching-up' if mode == 'active' or collection.get('pending_files') or backup_pending else
+                  'ok' if live.get('completed_at') else 'unavailable')
+        observed = [item['telemetry'] for item in conversations if item['telemetry']]
+        payload = dict(schema_version=1, health=health, conversations=conversations,
+            active_conversations=active, archived_conversations=archived,
+            conversation_lifecycle_known=all(item['archived'] is not None for item in conversations),
+            metadata_source=metadata_source, generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+            totals=dict(active_conversations=len(active), archived_conversations=len(archived),
+                messages=totals['messages'], tool_activities=totals['tools'], summary_counts=levels,
+                reported_total_tokens=sum(item['reported_total_tokens'] for item in observed) if observed else None,
+                archived_days=len(days), characters=totals['characters'], storage_bytes=archive_bytes(runtime.store.root),
+                estimated_tokens=totals['estimated_tokens'], message_estimated_tokens=totals['message_tokens']),
+            token_usage=dict(source='persisted-token-count-ledgers', historical=any(item['historical'] for item in observed),
+                covered_conversations=len(observed), total_conversations=len(conversations),
+                updated_at=max((item['updated_at'] for item in observed), default=None)),
+            daily=daily, daily_metrics=dict(complete_token_coverage=bool(observed) and len(observed) == len(conversations)
+                and not any(item['historical'] for item in observed), devices_included=1, stale_devices=[]),
+            collector=dict(mode=mode, live_status=live, **process,
+                fallback_interval_seconds=config.get('interval_seconds'),
+                last_file_event=max((item['last_message_at'] for item in conversations), default=None),
+                last_archive_update=live.get('collection_completed_at') or live.get('completed_at'),
+                wakeups_last_hour=sum((dt.datetime.now(dt.timezone.utc)-dt.datetime.fromisoformat(stamp)).total_seconds()<3600
+                    for stamp in live['attempts_last_hour']) if isinstance(live.get('attempts_last_hour'), list) else None),
+            debt_status=dict(debts=debts), pending_rounds=sum(value[1] is not None for key, value in rounds.items() if key not in excluded),
+            summary_total=sum(levels.values()), sync=sync,
+            capabilities=dict(collector='direct-codex' if config.get('sessions_root') else 'unconfigured',
+                federation='core-v1' if config.get('sync') else 'unconfigured',
+                environment_registry='configured' if config.get('environment') else 'unconfigured',
+                backup_health=(live.get('backup') or {}).get('status', 'not-yet-observed')))
+        data.payload, data.built_at = payload, time.monotonic()
+        return payload
 
 
 def _live_status(root: Path) -> dict:
@@ -82,7 +132,9 @@ def _live_status(root: Path) -> dict:
             raise ValueError("status must be an object")
         # Allowlist operational facts only. Do not expose source paths, config, or error text.
         return {key: value.get(key) for key in
-                ("status", "completed_at", "collection", "backup", "sync", "auto_summary")}
+                ("status", "attempt_at", "completed_at", "collection_completed_at", "pid", "phase",
+                 "collection", "backup", "backup_pending", "sync", "auto_summary", "summary_errors",
+                 "summary_progress", "attempts_last_hour", "environment", "error")}
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
         return {"status": None, "completed_at": None, "collection": None,
                 "backup": None, "sync": None, "auto_summary": None}
@@ -219,7 +271,7 @@ def make_server(runtime: MemoryRuntime, *, host="127.0.0.1", port=8765, html_pat
                 elif request.path == "/api/environment":
                     result = _environment_payload(runtime, config)
                 elif request.path == "/api/system":
-                    result = {"schema_version": 1, "version": "assembly-six-paths candidate (unreleased)",
+                    result = {"schema_version": 1, "version": Path(__file__).resolve().parent.parent.joinpath('VERSION').read_text().strip(),
                               "platform": platform.system() or None, "python": sys.version.split()[0],
                               "archive_root": str(runtime.store.root), "health_scan": "not-performed"}
                 elif request.path == "/api/environment-profile":
