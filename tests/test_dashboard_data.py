@@ -1,4 +1,5 @@
 import json
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import sys
@@ -26,7 +27,7 @@ class DashboardChecks(unittest.TestCase):
             with runtime.store.connection() as db:
                 db.execute('UPDATE rounds SET next_round=20001 WHERE conversation=?', ('codex:a',))
             (base / 'sessions').mkdir()
-            with sqlite3.connect(base / 'state_1.sqlite') as db:
+            with closing(sqlite3.connect(base / 'state_1.sqlite')) as db, db:
                 db.execute('CREATE TABLE threads(id,title,cwd,archived)')
                 db.execute('INSERT INTO threads VALUES(?,?,?,?)', ('a', 'Actual title', '/project', 1))
             config = dict(sessions_root=str(base / 'sessions'))

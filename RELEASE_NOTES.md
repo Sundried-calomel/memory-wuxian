@@ -1,4 +1,7 @@
-# v2.20.2
+# v2.20.3
+
+Closes the read-only Codex SQLite connection explicitly on all platforms. The
+v2.20.2 tag did not produce a formal release after Windows detected an open handle.
 
 - Restore dashboard summary-level counts, actual completed-round counts, storage and incremental text estimates.
 - Read local Codex titles, projects and archived status without changing the Codex database.

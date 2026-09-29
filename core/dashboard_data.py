@@ -1,6 +1,6 @@
 """Read-only, incremental observations for the local dashboard."""
 from collections import Counter, defaultdict
-from contextlib import ExitStack
+from contextlib import ExitStack, closing
 import datetime as dt
 import json
 import os
@@ -122,7 +122,7 @@ def thread_metadata(config):
                        reverse=True)
     for path in databases:
         try:
-            with sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=1) as db:
+            with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=1)) as db:
                 columns = {row[1] for row in db.execute('PRAGMA table_info(threads)')}
                 if not {'id', 'title', 'cwd', 'archived'} <= columns:
                     continue
