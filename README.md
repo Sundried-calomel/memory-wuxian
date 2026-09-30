@@ -1,4 +1,4 @@
-# Memory Wuxian 2.20.3
+# Memory Wuxian 2.20.4
 
 [中文](README.zh-CN.md) | [日本語](README.ja.md)
 
@@ -18,7 +18,7 @@ another selected shared folder is required for cross-device exchange.
 
 ## Start
 
-Extract the archive for your platform. On Unix, ensure the bundled helper is executable:
+Download and extract the `-complete.zip` for your platform. It includes installer 1.1.0 and the dashboard update controls; no separate installer download is needed. The shorter ZIP name is the compatible program payload used by existing updaters. On Unix, ensure the bundled helper is executable:
 `chmod +x bin/memory-wuxian-envelope`.
 Use `python core/configure.py --help` to create a device-local configuration and identity.
 Pass an explicitly trusted peer public identity with `--peer` and a shared folder with
@@ -35,7 +35,7 @@ See [peer setup](docs/PEER-SETUP.md).
 Legacy archive readers remain available for explicit historical conversion only.
 Do not reset an existing archive's capture checkpoints during an upgrade: old and new
 event identities must be reconciled before direct capture starts.
-The experimental independent installer is excluded. Platform CI exercises local
+The stable installer is bundled and versioned separately. The normal dashboard command automatically enables System → Check for updates / Upgrade. Checks run only when requested; unchanged installer files are not part of program updates. On Windows, live upgrades use the existing CoreMaintenance and CoreDashboard tasks. On macOS/Linux, stop services and use the installer CLI with `--offline`. Platform CI exercises local
 two-node encrypted exchange; it does not establish real remote-device activation.
 
 ## Dashboard observations

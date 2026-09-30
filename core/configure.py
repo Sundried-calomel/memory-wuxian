@@ -3,9 +3,37 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from archive import ArchiveStore
 from storage import atomic_write_json
+
+
+def register_bundled_installation(root):
+    """Enroll an untouched extracted complete package once, without network access."""
+    root=Path(root).resolve()
+    if not (root/'BUNDLE.json').is_file(): return
+    sys.path.insert(0,str(root/'installer'))
+    from package import CONTRACT, ENGINE_PROTOCOL, digest, host_platform, parse
+    from transaction import Installer, lock, target_path, write_json
+    installer=Installer(root)
+    with lock(installer.control/'lock'):
+        if installer.state.exists(): return
+        if installer.journal.exists(): raise ValueError('recover interrupted installation before enrollment')
+        manifest=parse((root/'MANIFEST.json').read_bytes())
+        descriptor=parse((root/'INSTALL.json').read_bytes())
+        version=(root/'VERSION').read_text('utf-8').strip()
+        if descriptor!={'installer_protocol':ENGINE_PROTOCOL,'version':version,'platform':host_platform(),'compatibility':CONTRACT}:
+            raise ValueError('complete package is not compatible with this device')
+        owned={}
+        for name,expected in manifest.items():
+            path=root/name if name=='INSTALL.json' else target_path(root,name)
+            if digest(path.read_bytes())!=expected: raise ValueError('extracted program differs: '+name)
+            if name!='INSTALL.json': owned[name]={'sha256':expected,'mode':0o755 if name.startswith('bin/') else 0o644}
+        bundle=parse((root/'BUNDLE.json').read_bytes())
+        if bundle['product_version']!=version: raise ValueError('bundle version mismatch')
+        write_json(installer.state,dict(root=str(root),version=version,compatibility=CONTRACT,
+            platform=host_platform(),package_sha256=bundle['payload_sha256'],files=owned))
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -44,6 +72,7 @@ def main():
         config['sync']={'binary':str(binary),'identity':str(identity),'local_node_id':args.node_id,
                         'peer_id':peer['node_id'],'peer_encryption_public_key':peer['encryption_public_key'],
                         'peer_signing_public_key':peer['signing_public_key'],'exchange_root':str(Path(args.exchange).resolve())}
+    register_bundled_installation(Path(__file__).resolve().parent.parent)
     ArchiveStore(config['root'])
     atomic_write_json(config_path,config)
     if os.name!='nt':config_path.chmod(0o600)

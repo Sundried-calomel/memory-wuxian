@@ -32,6 +32,7 @@ jobs:
         env:
           MW_ENVELOPE_BINARY: ${{ matrix.binary }}
       - run: python build_release.py --platform ${{ matrix.platform }} --binary ${{ matrix.binary }}
+      - run: python tests/smoke_complete_bundle.py --platform ${{ matrix.platform }}
       - uses: actions/upload-artifact@v4
         with:
           name: package-${{ matrix.platform }}

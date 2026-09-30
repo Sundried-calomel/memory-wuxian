@@ -30,4 +30,4 @@ Rules, Skills and selected files synchronize only to explicitly bound destinatio
 stop on unhandled local edits. Publishing a package is not receiving or applying it.
 Only receiving-device ACKs establish delivery. Summary accuracy is not proven by hashes;
 retrieve original evidence when accuracy matters. Keep locks and atomic commit recovery.
-Do not reintroduce old governance, repeated health audits or the unfinished installer.
+The complete distribution bundles stable installer 1.1.0. The normal dashboard entry enables explicit update checks; no background release polling. Do not reintroduce retired governance or installer paths.

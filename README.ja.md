@@ -1,4 +1,4 @@
-# Memory無限 2.20.3
+# Memory無限 2.20.4
 
 [English](README.md) | [中文](README.zh-CN.md)
 
@@ -8,14 +8,14 @@
 ## 起動
 
 Python 3.14 と認証済み Codex CLI が必要です。端末間同期には OneDrive など双方が利用できる共有フォルダーを使用します。
-対応するZIPを展開し、Unixでは `bin/memory-wuxian-envelope` に実行権限を付けてください。
+対応する `-complete.zip` を展開してください。独立バージョン 1.1.0 のインストーラーを同梱し、別途ダウンロードは不要です。短い名前の ZIP は既存インストーラー用の更新ペイロードです。Unixでは `bin/memory-wuxian-envelope` に実行権限を付けてください。
 `python core/configure.py --help` で端末パス、端末ID、明示的に信頼する相手を設定します。
 OSのスケジューラーから毎分 `python core/live.py --config core/live-config.json` を実行します。
 `interval_seconds` は実際のスケジュールに合わせる表示設定です。
 
 状態画面：`python core/dashboard.py --root ARCHIVE --config core/live-config.json --port 8765`。
 読み取り専用ツール：`core/mcp_server.py --root ARCHIVE`。接続方法は [PEER-SETUP](docs/PEER-SETUP.md) を参照してください。
-旧版の収集カーソルは明示的に移行し、初期化しないでください。独立インストーラーは同梱しません。
+旧版の収集カーソルは明示的に移行し、初期化しないでください。通常の状態画面から「更新を確認 / 更新」を利用できます。クリック時のみ確認し、通常の製品更新はインストーラーを変更しません。Windows の既存タスクに対応し、macOS/Linux は停止後に CLI の --offline で更新します。
 
 ## 表示データ
 

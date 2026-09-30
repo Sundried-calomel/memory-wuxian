@@ -1,3 +1,20 @@
+# v2.20.4 — complete distribution with bundled updater
+
+用户下载对应平台的 `-complete.zip` 即可获得产品、安装器 1.1.0 和状态台更新按钮，无须另装安装器。
+
+- 安装器保持独立版本号；本次未修改已发布 1.1.0 的六份 Python 实现。
+- 正常状态台入口自动接入“检查更新 / 升级”，不做后台周期检查。
+- 首次使用完整包时登记程序文件归属；只在这一步核对解压文件，不重复扫描历史。
+- 保留短文件名的程序更新包，兼容现有 1.1.0 安装器。普通更新只改变化的程序文件，不覆盖安装器、配置、密钥或归档。
+- 完整包面向安装和分发；已有安装应使用更新按钮或 CLI，避免手工解压覆盖本机差异。
+
+Requires Python 3.14 and authenticated Codex CLI. Device configuration and scheduler
+setup remain explicit. Windows live updates use existing CoreMaintenance/CoreDashboard
+tasks. macOS/Linux still require stopped services and CLI --offline; no automatic
+service setup or remote-device activation is claimed.
+
+## Previous releases
+
 # v2.20.3
 
 Closes the read-only Codex SQLite connection explicitly on all platforms. The

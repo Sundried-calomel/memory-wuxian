@@ -1,4 +1,4 @@
-# Memory無限 2.20.3
+# Memory無限 2.20.4
 
 [English](README.md) | [日本語](README.ja.md)
 
@@ -8,14 +8,14 @@
 ## 使用
 
 需要 Python 3.14、已登录的 Codex CLI；跨设备交换需要双方可访问的共享目录，例如 OneDrive。
-解压对应平台包，Unix系统为 `bin/memory-wuxian-envelope` 设置可执行权限。
+下载并解压对应平台的 `-complete.zip` 完整包，已附带独立版本为 1.1.0 的安装器，无须另行下载。短文件名 ZIP 是旧安装器兼容的程序更新包。Unix系统为 `bin/memory-wuxian-envelope` 设置可执行权限。
 运行 `python core/configure.py --help` 配置本机路径、设备身份及明确可信的对端。
 按操作系统定时任务每分钟运行 `python core/live.py --config core/live-config.json`。
 `interval_seconds` 应与真实调度间隔一致，不负责安装定时任务。
 
 状态台：`python core/dashboard.py --root ARCHIVE --config core/live-config.json --port 8765`。
 只读工具入口：`core/mcp_server.py --root ARCHIVE`。配对说明见 [PEER-SETUP](docs/PEER-SETUP.md)。
-旧版升级须显式迁移采集位置，不能清零游标；独立安装器不在本发行包内。
+正常启动状态台即可在“系统”页看到“检查更新 / 升级”。仅主动点击时检查；普通程序升级不改动安装器。Windows 使用现有 CoreMaintenance / CoreDashboard 任务暂停和恢复；macOS/Linux 需停机后使用 CLI 的 `--offline` 更新。旧版采集位置迁移仍须显式进行，不能清零游标。
 
 ## 状态台数据
 

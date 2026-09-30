@@ -340,9 +340,18 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args(argv)
     config = _read_live_config(Path(args.config).expanduser().resolve())
-    runtime = MemoryRuntime(args.root)
-    with make_server(runtime, host=args.host, port=args.port,
-                     config=config) as server:
+    product_root=Path(__file__).resolve().parent.parent
+    adapter=product_root/'installer/dashboard.py'
+    if adapter.is_file():
+        from configure import register_bundled_installation
+        register_bundled_installation(product_root)
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('bundled_dashboard',adapter)
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        server=module.integrated_server(product_root,args.root,config,port=args.port)
+    else:
+        server=make_server(MemoryRuntime(args.root),host=args.host,port=args.port,config=config)
+    with server:
         server.serve_forever()
     return 0
 

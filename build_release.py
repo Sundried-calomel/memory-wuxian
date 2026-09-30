@@ -1,4 +1,4 @@
-"""Package only versioned public core files; no device files or native installers."""
+"""Build a compatible update payload and a user-facing complete distribution."""
 import hashlib
 import json
 import zipfile
@@ -50,3 +50,24 @@ with zipfile.ZipFile(archive) as bundle:
 checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
 (dist / (archive.name+'.sha256')).write_text(f'{checksum}  {archive.name}\n', encoding='utf-8')
 print(json.dumps({'package': archive.name, 'files': len(files) + 2, 'sha256': checksum}))
+
+# The updater keeps consuming the original payload name. The complete distribution
+# adds the independently versioned engine without making it an update target.
+installer_version=(root/'installer/VERSION').read_text('utf-8').strip()
+installer_files=['cli.py','package.py','platform_runtime.py','transaction.py','updates.py','dashboard.py','README.md','VERSION']
+complete=dist/f'memory-wuxian-{version}-{args.platform}-complete.zip'
+with zipfile.ZipFile(archive) as payload, zipfile.ZipFile(complete,'w',zipfile.ZIP_DEFLATED) as bundle:
+    for info in payload.infolist(): bundle.writestr(info,payload.read(info.filename))
+    engine_hashes={}
+    for name in installer_files:
+        data=(root/'installer'/name).read_bytes()
+        member='installer/'+name
+        entry=zipfile.ZipInfo(member,date_time=(2026,9,30,0,0,0))
+        entry.compress_type=zipfile.ZIP_DEFLATED;entry.external_attr=0o100644<<16
+        bundle.writestr(entry,data)
+        engine_hashes[member]=hashlib.sha256(data).hexdigest()
+    bundle.writestr('BUNDLE.json',json.dumps(dict(product_version=version,installer_version=installer_version,
+        payload_sha256=checksum,installer_files=engine_hashes),sort_keys=True).encode('utf-8'))
+complete_checksum=hashlib.sha256(complete.read_bytes()).hexdigest()
+(dist/(complete.name+'.sha256')).write_text(f'{complete_checksum}  {complete.name}\n',encoding='utf-8')
+print(json.dumps({'package':complete.name,'product_version':version,'installer_version':installer_version,'sha256':complete_checksum}))
