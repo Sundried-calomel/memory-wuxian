@@ -1,4 +1,4 @@
-# v2.20.5 — complete distribution with bundled updater
+# v2.20.6 — complete distribution with bundled updater
 
 v2.20.4 和 v2.20.5 候选未完成正式发布；本版取消仅服务本机的状态台启动时不必要的主机名反查，修复 macOS 启动阻塞。
 

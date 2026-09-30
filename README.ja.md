@@ -1,4 +1,4 @@
-# Memory無限 2.20.5
+# Memory無限 2.20.6
 
 [English](README.md) | [中文](README.zh-CN.md)
 
