@@ -3,6 +3,7 @@ import importlib
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,11 +11,18 @@ sys.path.insert(0, str(ROOT / 'core'))
 from runtime import MemoryRuntime
 from backup import BackupService
 from environment import EnvironmentService
-from dashboard import status_payload
+from dashboard import status_payload, make_server
 from core_sync import _wire_payload, _GZIP_MAGIC, MAX_PAGE_BYTES
 
 
 class ReleaseChecks(unittest.TestCase):
+    def test_dashboard_loopback_needs_no_reverse_dns(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime=MemoryRuntime(Path(directory)/'archive')
+            with patch('socket.getfqdn',side_effect=AssertionError('unexpected hostname lookup')):
+                with make_server(runtime,port=0) as server:
+                    self.assertEqual(server.server_name,'localhost')
+
     def test_entry_imports(self):
         for path in (ROOT / 'core').glob('*.py'):
             importlib.import_module(path.stem)

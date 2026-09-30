@@ -9,6 +9,7 @@ import sys
 import time
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socketserver import TCPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -17,6 +18,14 @@ from dashboard_data import DashboardData, thread_metadata, process_observation, 
 
 MAX_PATH_CHARS = 8192
 MAX_BODY_BYTES = 65_536
+
+
+class LoopbackServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer's hostname reverse lookup can block before listen() on macOS.
+        TCPServer.server_bind(self)
+        self.server_name='localhost'
+        self.server_port=self.server_address[1]
 
 
 def status_payload(runtime: MemoryRuntime, config: dict | None = None) -> dict:
@@ -329,7 +338,7 @@ def make_server(runtime: MemoryRuntime, *, host="127.0.0.1", port=8765, html_pat
                 return
             self._json(503, {"error": "this candidate exposes no dashboard write actions" if path.startswith("/api/") else "not found"})
 
-    return ThreadingHTTPServer((host, port), Handler)
+    return LoopbackServer(('127.0.0.1', port), Handler)
 
 
 def main(argv=None):
