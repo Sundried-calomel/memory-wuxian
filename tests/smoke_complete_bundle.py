@@ -37,7 +37,8 @@ with tempfile.TemporaryDirectory() as temporary:
     engine={p:(p.read_bytes(),p.stat().st_mtime_ns) for p in (root/'installer').glob('*') if p.is_file()}
     config=root/'core/live-config.json';config.write_text('{}',encoding='utf-8')
     with socket.socket() as sock: sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
-    process=subprocess.Popen([sys.executable,'-B',str(root/'core/dashboard.py'),'--root',str(root/'archive'),
+    bootstrap='import faulthandler,runpy,sys; faulthandler.dump_traceback_later(8,repeat=True); sys.argv=sys.argv[1:]; runpy.run_path(sys.argv[0],run_name="__main__")'
+    process=subprocess.Popen([sys.executable,'-B','-c',bootstrap,str(root/'core/dashboard.py'),'--root',str(root/'archive'),
         '--config',str(config),'--port',str(port)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     def local_get(path):
         # Explicit loopback must not inherit a runner's system HTTP proxy.
@@ -56,6 +57,10 @@ with tempfile.TemporaryDirectory() as temporary:
                 break
             except OSError:
                 if process.poll() is not None or time.monotonic()>deadline:
+                    print('Child pid:',process.pid,'port:',port,'alive:',process.poll() is None,flush=True)
+                    if sys.platform=='darwin':
+                        subprocess.run(['lsof','-nP',f'-iTCP:{port}'],timeout=5)
+                        subprocess.run(['curl','--noproxy','*','--max-time','3',f'http://127.0.0.1:{port}/api/update'],timeout=5)
                     raise RuntimeError('standard dashboard did not expose updates')
                 time.sleep(.1)
         assert status['current']==version and 'candidate' not in status
@@ -63,7 +68,7 @@ with tempfile.TemporaryDirectory() as temporary:
         assert 'data-update-check' in html and 'data-update-install' in html
     finally:
         process.terminate();stdout,stderr=process.communicate(timeout=10)
-        if process.returncode not in {0,1,-15} and stderr: print(stderr.decode('utf-8','replace'))
+        if stderr: print(stderr.decode('utf-8','replace'))
     installer=Installer(root)
     package=read_package(payload,digest(payload.read_bytes()))
     package['files']['README.md']+=b'\nSynthetic compatible update.\n'

@@ -1,5 +1,6 @@
 name: complete-core-release
 on:
+  workflow_dispatch:
   push:
     tags: ['v2.20.*']
 permissions:
@@ -38,6 +39,7 @@ jobs:
           name: package-${{ matrix.platform }}
           path: dist/*
   publish:
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     permissions:
