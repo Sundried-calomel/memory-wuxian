@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -92,6 +93,22 @@ def _prompt_record(record):
         'timestamp','round_number','completes_round','content_sha256')}
 
 
+def resolve_codex(executable):
+    selected = Path(executable).expanduser()
+    if selected.is_file():
+        return str(selected)
+    # Follow only the previously selected desktop installation family.
+    if selected.name.lower() == 'codex.exe' and selected.parent.parent.name == 'bin':
+        candidates = list(selected.parent.parent.glob('*/codex.exe'))
+        if candidates:
+            return str(max(candidates, key=lambda p: p.stat().st_mtime_ns))
+    if not selected.is_absolute():
+        found = shutil.which(str(executable))
+        if found:
+            return found
+    raise FileNotFoundError('Configured Codex CLI is unavailable; select the installed executable')
+
+
 class CodexCLIModel:
     """Explicit Codex CLI adapter using the existing ephemeral, read-only invoke flags."""
 
@@ -110,7 +127,7 @@ class CodexCLIModel:
         schema = {"type": "object", "additionalProperties": False,
                   "required": ["text", "source_refs"],
                   "properties": {"text": {"type": "string", "minLength": 1},
-                                 "source_refs": {"type": "array", "items": {"type": "string"}, "minItems": 1}}}
+                                 "source_refs": {"type": "array", "items": {"type": "string", "enum": source["allowed_refs"]}, "minItems": 1}}}
         prompt = (
             "Summarize only the supplied source. Return JSON with exactly text and source_refs. "
             "Preserve explicit decisions, proposals, unresolved tasks, rule scope, and corrections separately; "
@@ -125,7 +142,7 @@ class CodexCLIModel:
             schema_path = root / "summary-result.schema.json"
             output_path = root / "candidate.json"
             schema_path.write_bytes(_json_bytes(schema))
-            command = [self.executable, "exec", "--ephemeral", "--ignore-user-config",
+            command = [resolve_codex(self.executable), "exec", "--ephemeral", "--ignore-user-config",
                        "-c", 'model_reasoning_effort="medium"', "--skip-git-repo-check",
                        "--sandbox", "read-only", "--output-schema", str(schema_path),
                        "--model", self.model, "--output-last-message", str(output_path), "-"]
@@ -141,6 +158,8 @@ class CodexCLIModel:
             result = json.loads(output_path.read_text(encoding="utf-8"))
             if not isinstance(result, dict):
                 raise ValueError("Codex summary output must be a JSON object")
+            if isinstance(result.get("source_refs"), list) and all(isinstance(ref,str) for ref in result["source_refs"]):
+                result["source_refs"] = list(dict.fromkeys(result["source_refs"]))
             return result
 
 

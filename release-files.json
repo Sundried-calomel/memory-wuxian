@@ -29,5 +29,7 @@
   "core/runtime.py",
   "core/storage.py",
   "core/summary.py",
-  "core/summary_migration.py"
+  "core/summary_migration.py",
+  "core/window.py",
+  "core/token_usage.py"
 ]

@@ -67,9 +67,19 @@ def status_payload(runtime: MemoryRuntime, config: dict | None = None) -> dict:
         for (identifier, day), count in daily_usage.items():
             if identifier in metrics:
                 days.setdefault(day, Counter())['reported_tokens'] += count
-        daily = [dict(date=day, **item, all_devices=dict(item), local=dict(item),
-                      devices=[dict(display_name='local', local=True, **item)])
-                 for day, item in sorted(days.items())]
+        peer_days = data.peer_daily(runtime.store.root)
+        peer_ids = {origin for origin, day in peer_days}
+        daily = []
+        for day in sorted(set(days) | {day for origin, day in peer_days}):
+            local = dict(days.get(day, {}))
+            combined = Counter(local)
+            devices = [dict(display_name=config.get('display_name','local'),local=True,**local)]
+            for origin in sorted(peer_ids):
+                counts = dict(peer_days.get((origin,day),{}))
+                combined.update(counts)
+                name = config.get('peer_display_name',origin) if origin == config.get('sync',{}).get('peer_id') else origin
+                devices.append(dict(node_id=origin,display_name=name,local=False,**counts))
+            daily.append(dict(date=day,**local,all_devices=dict(combined),local=local,devices=devices))
         conversations.sort(key=lambda item: item['last_message_at'], reverse=True)
         active = [item for item in conversations if item['archived'] is not True]
         archived = [item for item in conversations if item['archived'] is True]
@@ -112,9 +122,9 @@ def status_payload(runtime: MemoryRuntime, config: dict | None = None) -> dict:
                 covered_conversations=len(observed), total_conversations=len(conversations),
                 updated_at=max((item['updated_at'] for item in observed), default=None)),
             daily=daily, daily_metrics=dict(complete_token_coverage=bool(observed) and len(observed) == len(conversations)
-                and not any(item['historical'] for item in observed), devices_included=1, stale_devices=[]),
+                and not peer_ids and not any(item['historical'] for item in observed), devices_included=1+len(peer_ids), stale_devices=list(peer_ids) if sync.get("status")=="error" else []),
             collector=dict(mode=mode, live_status=live, **process,
-                fallback_interval_seconds=config.get('interval_seconds'),
+                fallback_interval_seconds=config.get('interval_seconds',60),
                 last_file_event=max((item['last_message_at'] for item in conversations), default=None),
                 last_archive_update=live.get('collection_completed_at') or live.get('completed_at'),
                 wakeups_last_hour=sum((dt.datetime.now(dt.timezone.utc)-dt.datetime.fromisoformat(stamp)).total_seconds()<3600

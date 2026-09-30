@@ -151,6 +151,8 @@ class DirectCollector:
                     return {'appended': 0, 'excluded': True}
                 if cursor.get('session', session) != session:
                     raise ValueError('session identity changed')
+                from token_usage import collect_usage
+                usage_remaining = collect_usage(self.store.root, path, session)
                 cursor['session'] = session
                 layout = 2 if metadata.get('ordinal') == 0 else 1
                 offset = cursor['offset']
@@ -198,10 +200,10 @@ class DirectCollector:
                 handle.seek(max(0, offset - 256))
                 cursor['anchor'] = bytes_sha256(handle.read(min(offset, 256)))
             atomic_write_json(checkpoint, cursor)
-            return {'appended': count, 'offset': offset, 'remaining_bytes': max(0, path.stat().st_size - offset)}
+            return {'appended': count, 'offset': offset, 'usage_remaining_bytes': usage_remaining, 'remaining_bytes': max(0, path.stat().st_size - offset)}
 
     def run_once(self):
-        result = {'appended': 0, 'files': 0, 'errors': {}, 'pending_files': 0, 'remaining_bytes': 0}
+        result = {'appended': 0, 'files': 0, 'errors': {}, 'pending_files': 0, 'remaining_bytes': 0, 'usage_pending_files': 0}
         for folder, directories, files in os.walk(self.sessions, followlinks=False):
             directories[:] = [d for d in directories if not (Path(folder) / d).is_symlink()]
             for name in sorted(files):
@@ -214,6 +216,7 @@ class DirectCollector:
                     item = self.collect(path)
                     result['appended'] += item['appended']
                     result['files'] += 1
+                    result['usage_pending_files'] += int(item.get('usage_remaining_bytes',0)>0)
                     result['pending_files'] += int(item.get('remaining_bytes', 0) > 0)
                     result['remaining_bytes'] += item.get('remaining_bytes', 0)
                 except (ValueError, OSError, KeyError, TypeError) as error:

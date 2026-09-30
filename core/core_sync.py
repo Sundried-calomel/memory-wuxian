@@ -406,7 +406,12 @@ class CoreSyncService:
                 self._queue_file_ack(verified, status="applied", queue_name=Path(item["path"]).name)
                 continue
             ready.append(item)
-        return ready[:limit]
+        # Full snapshots: newest revision per artifact; acknowledge older ones
+        # as superseded only after the new revision commits successfully.
+        newest = {}
+        for item in ready:
+            newest[item['verified']['artifact_id']] = item
+        return list(newest.values())[:limit]
 
     def _queue_file_ack(self, verified, *, status, queue_name=None):
         if status not in {"applied", "superseded"}:
@@ -732,6 +737,7 @@ class CoreSyncService:
             ack_count = self._process_acks(state)
             file_ack_count = self._process_file_acks(state)
             received = 0
+            receive_error = None
             if self.inbox.exists():
                 # The sender's immutable outbox and our inbox are the same
                 # shared file. Skip already-ACKed packages before the bounded
@@ -739,8 +745,13 @@ class CoreSyncService:
                 candidates = [path for path in sorted(self.inbox.glob("*.mwe"))
                               if not safe_target(self.ack_outbox, path.name).exists()]
                 for path in candidates[:self.max_batches]:
-                    self._accept_one(path, state)
-                    received += 1
+                    try:
+                        self._accept_one(path, state)
+                        received += 1
+                    except (ValueError, RuntimeError, OSError) as exc:
+                        receive_error = {'package': path.name, 'error': str(exc),
+                            'expected_sequence': self.peer_index.state(self.peer_id)['last_wire_sequence'] + 1}
+                        break  # Preserve receive ordering without blocking sending.
             queued = []
             for _ in range(self.max_batches):
                 item = self._export_one(state)
@@ -748,7 +759,8 @@ class CoreSyncService:
                     break
                 queued.append(item)
             self._state_save(state)
-            return {**self.status(), "status": "ok", "last_run": {
+            return {**self.status(), "status": "error" if receive_error else "ok",
+                    "receive_error": receive_error, "last_run": {
                     "sent_batches": len(queued), "received_batches": received,
                     "acknowledged_batches": ack_count, "acknowledged_files": file_ack_count,
                     "queued": queued}}

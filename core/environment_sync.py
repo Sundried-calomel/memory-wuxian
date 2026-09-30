@@ -218,8 +218,9 @@ def run_once(store, service, config) -> dict:
                     "revision_id": verified["revision_id"], "acknowledged": True})
             except Exception as exc:
                 status["received"].append({"selection": selection_id,
-                    "state": "error", "error_type": type(exc).__name__, "acknowledged": False})
-        errors = any(x["state"] in {"error", "rejected", "pending-binding"}
+                    "state": "conflict" if isinstance(exc, RuntimeError) else "error",
+                    "error_type": type(exc).__name__, "error": str(exc), "acknowledged": False})
+        errors = any(x["state"] in {"error", "conflict", "rejected", "pending-binding"}
                      for x in status["published"] + status["received"])
         status["state"] = "partial" if errors else "completed"
     except Exception as exc:

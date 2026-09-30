@@ -98,7 +98,7 @@ class EnvironmentService:
                 content = files.get("", files.get(base.name))
                 actual = file_sha256(base) if base.is_file() else None
                 permitted = expected_base if expected_base is not None else old_baseline.get("")
-                if actual != permitted:
+                if actual != permitted and actual != bytes_sha256(content):
                     raise RuntimeError("local target changed since binding/base selection")
                 target_rel = base.relative_to(self.root).as_posix()
                 writes = {target_rel: content}
@@ -132,7 +132,7 @@ class EnvironmentService:
                 for relative, content in files.items():
                     path = safe_target(base, relative)
                     current = file_sha256(path) if path.is_file() else None
-                    if current != old_baseline.get(relative):
+                    if current != old_baseline.get(relative) and current != bytes_sha256(content):
                         raise RuntimeError(f"local target changed since binding: {relative}")
                     writes[(Path(binding["target"]) / relative).as_posix()] = content
                 next_baseline = dict(old_baseline)

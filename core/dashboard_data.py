@@ -18,6 +18,8 @@ class DashboardData:
     def __init__(self):
         self.lock = threading.RLock()
         self.sequence = 0
+        self.peer_rowid = 0
+        self.peer_days = {}
         self.messages = {}
         self.daily = {}
         self.files = {}
@@ -73,6 +75,21 @@ class DashboardData:
         levels.setdefault('1', 0)
         return dict(sorted(levels.items(), key=lambda pair: int(pair[0]))), conversations
 
+    def peer_daily(self, root):
+        path = Path(root) / 'peer-index.sqlite'
+        if not path.exists(): return self.peer_days
+        with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as db:
+            for rowid, origin, payload in db.execute(
+                    "SELECT r.rowid,r.origin,r.payload FROM records r WHERE r.kind='raw' AND r.rowid>? "
+                    "AND NOT EXISTS (SELECT 1 FROM records old WHERE old.origin=r.origin AND old.id=r.id "
+                    "AND old.kind='raw' AND old.rowid<r.rowid) ORDER BY r.rowid", (self.peer_rowid,)):
+                item=json.loads(payload)
+                day=dt.datetime.fromisoformat(item['timestamp'].replace('Z','+00:00')).astimezone().date().isoformat()
+                self.peer_days.setdefault((origin,day),Counter()).update(messages=1,characters=len(item['text']))
+                self.peer_rowid=rowid
+            self.peer_rowid=db.execute('SELECT COALESCE(MAX(rowid),0) FROM records').fetchone()[0]
+        return self.peer_days
+
     def usage(self, config):
         """Expose existing persisted billing telemetry without inventing later usage."""
         root = config.get('legacy_archive_root')
@@ -81,13 +98,13 @@ class DashboardData:
             if source.name == 'raw':
                 root = source.parent
         ledgers = {}
-        directories = [Path(config['root']) / 'imports/codex/token-usage']
+        directories = [Path(config['root']) / 'imports/codex/token-usage', Path(config['root']) / 'token-usage']
         if root:
             directories.insert(0, Path(root) / 'imports/codex/token-usage')
         for directory in directories:
             for path in directory.glob('*.json'):
                 item = self.read_json(path)
-                if item.get('measurement') != 'codex-reported-model-usage':
+                if item.get('measurement') != 'codex-reported-model-usage' or not item.get('reported_usage'):
                     continue
                 # A migrated ledger replaces its old copy; never add both.
                 ledgers[(item.get('session_id'), item.get('segment_id'))] = item
