@@ -1,4 +1,6 @@
-# v2.20.4 — complete distribution with bundled updater
+# v2.20.5 — complete distribution with bundled updater
+
+v2.20.4 未完成正式发布；本版修正 CI 回环请求受到系统代理影响的问题。
 
 用户下载对应平台的 `-complete.zip` 即可获得产品、安装器 1.1.0 和状态台更新按钮，无须另装安装器。
 

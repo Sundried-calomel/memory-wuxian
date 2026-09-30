@@ -1,6 +1,7 @@
 """Check complete delivery, standard dashboard entry and unchanged installer files."""
 import argparse
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -9,7 +10,6 @@ import subprocess
 import sys
 import tempfile
 import time
-from urllib.request import urlopen
 import zipfile
 
 REPO=Path(__file__).resolve().parents[1]
@@ -39,18 +39,27 @@ with tempfile.TemporaryDirectory() as temporary:
     with socket.socket() as sock: sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
     process=subprocess.Popen([sys.executable,'-B',str(root/'core/dashboard.py'),'--root',str(root/'archive'),
         '--config',str(config),'--port',str(port)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    def local_get(path):
+        # Explicit loopback must not inherit a runner's system HTTP proxy.
+        connection=http.client.HTTPConnection('127.0.0.1',port,timeout=2)
+        try:
+            connection.request('GET',path)
+            response=connection.getresponse()
+            if response.status!=200: raise RuntimeError(f'{path}: HTTP {response.status}')
+            return response.read()
+        finally: connection.close()
     try:
         deadline=time.monotonic()+20
         while True:
             try:
-                with urlopen(f'http://127.0.0.1:{port}/api/update',timeout=2) as response: status=json.load(response)
+                status=json.loads(local_get('/api/update'))
                 break
             except OSError:
                 if process.poll() is not None or time.monotonic()>deadline:
                     raise RuntimeError('standard dashboard did not expose updates')
                 time.sleep(.1)
         assert status['current']==version and 'candidate' not in status
-        with urlopen(f'http://127.0.0.1:{port}/',timeout=2) as response: html=response.read().decode('utf-8')
+        html=local_get('/').decode('utf-8')
         assert 'data-update-check' in html and 'data-update-install' in html
     finally:
         process.terminate();stdout,stderr=process.communicate(timeout=10)
