@@ -1,4 +1,4 @@
-"""One scheduled operational tick. No second permanent collection loop."""
+"""One operational tick, optionally repeated by a single adaptive worker."""
 import argparse
 import datetime as dt
 import json
@@ -19,7 +19,12 @@ def sync_environment(runtime, transport, config):
     return run_once(runtime.store,EnvironmentService(settings['root']),
                     {'transport':transport,'environment':settings,'receive_limit':8})
 
-def run_tick(config_path):
+def activity_mode(last_activity, now):
+    age = now - last_activity
+    return ('active', 5) if age < 60 else ('idle', 60) if age < 600 else ('deep-idle', 300)
+
+
+def run_tick(config_path, *, adaptive=False):
     config=json.loads(Path(config_path).read_text('utf-8-sig'))
     root=Path(config['root'])
     model=CodexCLIModel(config['codex'],config['model']) if config.get('auto_summary') else None
@@ -32,11 +37,16 @@ def run_tick(config_path):
                     if (now - dt.datetime.fromisoformat(stamp)).total_seconds() < 3600]
         attempts.append(now.isoformat())
         state.update(attempt_at=now.isoformat(),status='running',pid=os.getpid(),
-                     phase='collection',attempts_last_hour=attempts)
+                     phase='collection',attempts_last_hour=attempts,adaptive_worker=adaptive)
         atomic_write_json(state_path,state)
         try:
             state['collection']=DirectCollector(runtime.store,config['sessions_root']).run_once()
             state['collection_completed_at']=dt.datetime.now(dt.timezone.utc).isoformat()
+            if state['collection']['appended'] or state['collection']['pending_files']:
+                state['last_activity_at'] = time.time()
+            mode, interval = activity_mode(state.get('last_activity_at', 0), time.time())
+            state['collector_mode'] = mode
+            state['poll_interval_seconds'] = interval if adaptive else config.get('interval_seconds',60)
             state['summary_errors']={}
             state['auto_summary']=bool(model)
             state['phase']='summaries'
@@ -100,7 +110,18 @@ def run_tick(config_path):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',required=True)
+    parser.add_argument('--loop',action='store_true',help='single adaptive worker: active 5s, idle 60s, deep idle 300s')
     args=parser.parse_args()
-    print(json.dumps(run_tick(args.config),ensure_ascii=False))
+    while True:
+        try:
+            state=run_tick(args.config,adaptive=args.loop)
+        except Exception:
+            if not args.loop: raise
+            time.sleep(60)
+            continue
+        if not args.loop:
+            print(json.dumps(state,ensure_ascii=False))
+            return
+        time.sleep(state['poll_interval_seconds'])
 
 if __name__=='__main__': main()

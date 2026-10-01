@@ -84,8 +84,8 @@ def status_payload(runtime: MemoryRuntime, config: dict | None = None) -> dict:
         active = [item for item in conversations if item['archived'] is not True]
         archived = [item for item in conversations if item['archived'] is True]
         live = _live_status(runtime.store.root)
-        process = process_observation(live.get('pid')) if live.get('status') == 'running' else {'process_running': False}
-        mode = ('active' if process.get('process_running') else 'idle') if live.get('attempt_at') else 'not-started'
+        process = process_observation(live.get('pid')) if live.get('status') == 'running' or live.get('adaptive_worker') else {'process_running': False}
+        mode = live.get('collector_mode') or (('active' if process.get('process_running') else 'idle') if live.get('attempt_at') else 'not-started')
         if mode == 'idle':
             process.update(cpu_percent=0, memory_bytes=0)
         collection = live.get('collection') or {}
@@ -124,7 +124,7 @@ def status_payload(runtime: MemoryRuntime, config: dict | None = None) -> dict:
             daily=daily, daily_metrics=dict(complete_token_coverage=bool(observed) and len(observed) == len(conversations)
                 and not peer_ids and not any(item['historical'] for item in observed), devices_included=1+len(peer_ids), stale_devices=list(peer_ids) if sync.get("status")=="error" else []),
             collector=dict(mode=mode, live_status=live, **process,
-                fallback_interval_seconds=config.get('interval_seconds',60),
+                fallback_interval_seconds=live.get('poll_interval_seconds',config.get('interval_seconds',60)),
                 last_file_event=max((item['last_message_at'] for item in conversations), default=None),
                 last_archive_update=live.get('collection_completed_at') or live.get('completed_at'),
                 wakeups_last_hour=sum((dt.datetime.now(dt.timezone.utc)-dt.datetime.fromisoformat(stamp)).total_seconds()<3600
@@ -153,7 +153,8 @@ def _live_status(root: Path) -> dict:
         return {key: value.get(key) for key in
                 ("status", "attempt_at", "completed_at", "collection_completed_at", "pid", "phase",
                  "collection", "backup", "backup_pending", "sync", "auto_summary", "summary_errors",
-                 "summary_progress", "attempts_last_hour", "environment", "error")}
+                 "summary_progress", "attempts_last_hour", "environment", "error",
+                 "collector_mode", "poll_interval_seconds", "last_activity_at", "adaptive_worker")}
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
         return {"status": None, "completed_at": None, "collection": None,
                 "backup": None, "sync": None, "auto_summary": None}

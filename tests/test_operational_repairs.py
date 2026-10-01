@@ -15,6 +15,12 @@ from peer_bridge import PeerIndex
 from archive import ArchiveStore
 
 class OperationalRepairs(unittest.TestCase):
+    def test_activity_transitions(self):
+        from live import activity_mode
+        self.assertEqual(activity_mode(1000,1005),('active',5))
+        self.assertEqual(activity_mode(1000,1060),('idle',60))
+        self.assertEqual(activity_mode(1000,1600),('deep-idle',300))
+
     def test_usage_resume_duplicate_and_reset(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);source=root/'source.jsonl'
