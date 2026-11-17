@@ -1,4 +1,8 @@
-# Memory Wuxian 2.20.8
+# Memory Wuxian 2.20.9
+
+Release checks are selected from the previous release diff by scripts/release_checks.py.
+Small patches run changed-area tests; full regression is explicit or justified by shared-core changes.
+Only ZIP assets are published. Installers still verify GitHub asset digests and package manifests.
 
 ## Synchronization fixes
 

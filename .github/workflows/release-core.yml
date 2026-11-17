@@ -1,12 +1,40 @@
 name: complete-core-release
 on:
   workflow_dispatch:
+    inputs:
+      full_checks:
+        description: Explicit full regression (default is changed-area tests)
+        type: boolean
+        default: false
   push:
     tags: ['v2.20.*']
 permissions:
   contents: read
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      tests: ${{ steps.select.outputs.tests }}
+      native: ${{ steps.select.outputs.native }}
+      package: ${{ steps.select.outputs.package }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - id: select
+        env:
+          FULL_CHECKS: ${{ inputs.full_checks }}
+        run: |
+          if [ "$FULL_CHECKS" = "true" ]; then
+            python scripts/release_checks.py --full --output "$GITHUB_OUTPUT"
+          else
+            python scripts/release_checks.py --output "$GITHUB_OUTPUT"
+          fi
   build:
+    needs: plan
     strategy:
       matrix:
         include:
@@ -27,20 +55,19 @@ jobs:
           python-version: '3.14'
       - run: rustup update stable --no-self-update
       - run: cargo +stable build --locked --release --manifest-path native-envelope/Cargo.toml
-      - run: python -m unittest discover -s tests -p test_release.py -v
-      - run: python -m unittest discover -s tests -p test_dashboard_data.py -v
-      - run: python -m unittest discover -s tests -p test_operational_repairs.py -v
-      - run: python -m unittest discover -s tests -p test_environment_autosync.py -v
-      - run: python -m unittest discover -s tests -p test_sync_waiting_mcp.py -v
+      - name: Changed-area regression checks
+        run: python scripts/release_checks.py --run '${{ needs.plan.outputs.tests }}'
       - run: python tests/smoke_native.py
+        if: needs.plan.outputs.native == 'true'
         env:
           MW_ENVELOPE_BINARY: ${{ matrix.binary }}
       - run: python build_release.py --platform ${{ matrix.platform }} --binary ${{ matrix.binary }}
       - run: python tests/smoke_complete_bundle.py --platform ${{ matrix.platform }}
+        if: needs.plan.outputs.package == 'true'
       - uses: actions/upload-artifact@v4
         with:
           name: package-${{ matrix.platform }}
-          path: dist/*
+          path: dist/*.zip
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
@@ -59,5 +86,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           test "${GITHUB_REF_NAME}" = "v$(tr -d '\r\n' < VERSION)"
-          cat dist/*.sha256 > dist/SHA256SUMS.txt
-          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt --verify-tag --latest --target "$GITHUB_SHA" --title "Memory Wuxian $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" dist/*.zip --verify-tag --latest --target "$GITHUB_SHA" --title "Memory Wuxian $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md

@@ -47,3 +47,7 @@ Publishing a package is not receiving or applying it.
 Only receiving-device ACKs establish delivery. Summary accuracy is not proven by hashes;
 retrieve original evidence when accuracy matters. Keep locks and atomic commit recovery.
 The complete distribution bundles stable installer 1.1.0. The normal dashboard entry enables explicit update checks; no background release polling. Do not reintroduce retired governance or installer paths.
+
+For patch releases, use scripts/release_checks.py in the source repository to select
+changed-area tests and one release-tag CI run. Do not add duplicate full test gates
+or standalone checksum lists. Keep installer asset/manifest integrity checks.

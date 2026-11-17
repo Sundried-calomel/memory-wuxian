@@ -1,9 +1,7 @@
 name: installer-engine
 on:
-  push:
-    paths: ['installer/**', 'tests/*installer.py', 'tests/test_updates.py', 'build_release.py', '.github/workflows/installer.yml']
-  pull_request:
-    paths: ['installer/**', 'tests/*installer.py', 'tests/test_updates.py', 'build_release.py', '.github/workflows/installer.yml']
+  # Historical installer reproduction only; release-core owns automatic checks.
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
