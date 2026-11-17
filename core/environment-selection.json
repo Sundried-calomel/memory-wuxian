@@ -8,8 +8,8 @@
       "artifact_id": "global-rule:codex-agents",
       "binding_name": "global-codex-agents",
       "strategy": "whole-file",
-      "files": ["AGENTS.md"],
-      "source": "explicit current global Codex AGENTS.md bytes",
+      "files": ["AGENTS.md", "optional path-keys.json for device-local path references"],
+      "source": "global Codex AGENTS.md with explicitly configured path_bindings replaced in transit",
       "revision": "computed from portable relative filenames and bytes",
       "receiver": "must bind the local global AGENTS.md target before apply"
     },

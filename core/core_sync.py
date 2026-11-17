@@ -15,6 +15,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import zlib
 from pathlib import Path
@@ -121,8 +122,6 @@ class CoreSyncService:
                     "published_sequence": 0, "acknowledged_sequence": 0,
                     "peer_cursor": 0, "sent_summary_ids": [], "pending": [],
                     "pending_files": [], "file_versions": {}}
-        if self.state_path.stat().st_size > 1_000_000:
-            raise ValueError("core sync state is oversized")
         state = json.loads(self.state_path.read_text("utf-8"))
         if state.get("format") != FORMAT or state.get("peer") != self.peer_id:
             raise ValueError("core sync state identity mismatch")
@@ -507,7 +506,27 @@ class CoreSyncService:
     def _read_envelope_file(self, path, *, origin, target, kind):
         if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_ENVELOPE_BYTES:
             raise ValueError("unsafe, missing or oversized queue envelope")
-        return self._open(path.read_bytes(), expected_origin=origin,
+        if sys.platform == 'darwin':
+            import ctypes
+            libc = ctypes.CDLL(None, use_errno=True)
+            get_policy, set_policy = libc.getiopolicy_np, libc.setiopolicy_np
+            get_policy.argtypes, get_policy.restype = [ctypes.c_int, ctypes.c_int], ctypes.c_int
+            set_policy.argtypes, set_policy.restype = [ctypes.c_int] * 3, ctypes.c_int
+            # Darwin resource.h: dataless-file policy=3, thread scope=1, ON=2.
+            # launchd readers may otherwise reject cloud placeholders with EDEADLK.
+            previous = get_policy(3, 1)
+            if previous < 0 or set_policy(3, 1, 2) != 0:
+                code = ctypes.get_errno()
+                raise OSError(code, os.strerror(code), str(path))
+            try:
+                data = path.read_bytes()
+            finally:
+                if set_policy(3, 1, previous) != 0:
+                    code = ctypes.get_errno()
+                    raise OSError(code, os.strerror(code), str(path))
+        else:
+            data = path.read_bytes()
+        return self._open(data, expected_origin=origin,
                           expected_target=target, kind=kind)
 
     def _limited_records(self, source_cursor):
@@ -734,8 +753,18 @@ class CoreSyncService:
             # completions must be visible to an otherwise idle raw stream.
             self.__dict__.pop("_summary_cache", None)
             state = self._state()
-            ack_count = self._process_acks(state)
-            file_ack_count = self._process_file_acks(state)
+            ack_errors = {}
+            ack_counts = {}
+            for channel, process in (("memory", self._process_acks), ("files", self._process_file_acks)):
+                counters = ('acknowledged_batches',) if channel == 'memory' else ('acknowledged_files', 'superseded_files')
+                before = sum(state.get(key, 0) for key in counters)
+                try:
+                    ack_counts[channel] = process(state)
+                except (OSError, ValueError, RuntimeError) as exc:
+                    # Keep the unprocessed ACK for retry; other channels are independent.
+                    ack_counts[channel] = sum(state.get(key, 0) for key in counters) - before
+                    ack_errors[channel] = str(exc)
+            ack_count, file_ack_count = ack_counts['memory'], ack_counts['files']
             received = 0
             receive_error = None
             if self.inbox.exists():
@@ -759,7 +788,8 @@ class CoreSyncService:
                     break
                 queued.append(item)
             self._state_save(state)
-            return {**self.status(), "status": "error" if receive_error else "ok",
+            return {**self.status(), "status": "error" if receive_error or ack_errors else "ok",
+                    "ack_errors": ack_errors,
                     "receive_error": receive_error, "last_run": {
                     "sent_batches": len(queued), "received_batches": received,
                     "acknowledged_batches": ack_count, "acknowledged_files": file_ack_count,

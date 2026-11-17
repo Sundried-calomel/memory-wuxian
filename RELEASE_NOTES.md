@@ -1,4 +1,13 @@
-# v2.20.7 — dashboard and runtime repairs
+# v2.20.8 - environment sync and MCP compatibility
+
+- Missing rule-source mappings now wait without failing unrelated synchronization. No partial-rule ACK is fabricated.
+- Portable AGENTS path templates, automatic one-sided updates, verified content baselines and Git three-way merging; overlapping conflicts retain originals.
+- Accept MCP _meta without relaxing argument validation. Reconnect existing clients after updating.
+- Include macOS cloud-placeholder handling and independent ACK-channel error isolation.
+- Add targeted regression tests to all platform builds. Installer remains 1.1.0.
+- Windows live verification: waiting-source, completed maintenance cycles, fresh MCP stdio status/query passed. Existing chat reconnection and Mac activation are not asserted.
+
+## Previous v2.20.7 changes
 
 - Restore a native WebView dashboard entry (`core/window.py`; requires pywebview).
 - Show one activity mode; hide zero error and pending counts; move usage timestamp to footer.

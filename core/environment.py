@@ -2,11 +2,50 @@
 from __future__ import annotations
 
 import json
+import base64
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Callable, Mapping
 
 from install import ChangedFileInstaller
 from storage import bytes_sha256, exclusive_lock, file_sha256, safe_target
+
+
+def reconcile(current, incoming, baseline, encoded_base=None):
+    """Keep a local-only edit; accept a remote-only edit; merge genuine forks."""
+    actual = bytes_sha256(current) if current is not None else None
+    remote = bytes_sha256(incoming)
+    if actual == remote or actual == baseline:
+        return incoming
+    if remote == baseline:
+        return current
+    if current is None or encoded_base is None:
+        raise RuntimeError('concurrent environment edits; verified base content unavailable')
+    original = base64.b64decode(encoded_base, validate=True)
+    if bytes_sha256(original) != baseline:
+        raise RuntimeError('environment merge base hash mismatch')
+    for data in (original, current, incoming):
+        try:
+            data.decode('utf-8')
+        except UnicodeError as exc:
+            raise RuntimeError('concurrent binary environment edits') from exc
+        if b'\0' in data:
+            raise RuntimeError('concurrent binary environment edits')
+    with tempfile.TemporaryDirectory(prefix='mw-env-merge-') as folder:
+        paths = [Path(folder) / name for name in ('local', 'base', 'remote')]
+        for path, data in zip(paths, (current, original, incoming)):
+            path.write_bytes(data)
+        import os
+        options = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
+        try:
+            result = subprocess.run(['git', 'merge-file', '--stdout', *map(str, paths)],
+                                    capture_output=True, timeout=30, **options)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise RuntimeError('three-way merge unavailable; originals retained') from exc
+        if result.returncode:
+            raise RuntimeError('overlapping environment edits; originals retained')
+        return result.stdout
 
 
 def _managed_body(text: str, name: str):
@@ -73,6 +112,13 @@ class EnvironmentService:
             managed_baseline = bytes_sha256(block.encode("utf-8")) if block is not None else None
         item = {"name": name, "target": relative, "strategy": strategy,
                 "baseline": baseline, "managed_baseline": managed_baseline}
+        item['base_content'] = {}
+        for rel, digest in baseline.items():
+            source = target_path / rel if rel else target_path
+            if source.stat().st_size <= 1024 * 1024:
+                data = source.read_bytes()
+                if bytes_sha256(data) == digest:
+                    item['base_content'][rel] = base64.b64encode(data).decode('ascii')
         with exclusive_lock(self.lock):
             state = self._read()
             state["bindings"][name] = item
@@ -92,17 +138,20 @@ class EnvironmentService:
             base = safe_target(self.root, binding["target"])
             strategy = binding["strategy"]
             old_baseline = binding["baseline"]
+            base_content = dict(binding.get('base_content', {}))
+            incoming_content = {}
             if strategy == "whole-file":
                 if set(files) not in ({""}, {base.name}):
                     raise ValueError("whole-file binding accepts one byte payload under key ''")
                 content = files.get("", files.get(base.name))
                 actual = file_sha256(base) if base.is_file() else None
                 permitted = expected_base if expected_base is not None else old_baseline.get("")
-                if actual != permitted and actual != bytes_sha256(content):
-                    raise RuntimeError("local target changed since binding/base selection")
+                incoming_content[''] = content
+                content = reconcile(base.read_bytes() if base.is_file() else None,
+                                    content, permitted, base_content.get(''))
                 target_rel = base.relative_to(self.root).as_posix()
-                writes = {target_rel: content}
-                next_baseline = {"": bytes_sha256(content)}
+                writes = {target_rel: content} if content is not None else {}
+                next_baseline = {"": bytes_sha256(incoming_content[''])}
             elif strategy == "managed-block":
                 if set(files) != {""} and set(files) != {base.name}:
                     raise ValueError("managed-block binding accepts one UTF-8 block payload")
@@ -129,15 +178,30 @@ class EnvironmentService:
                 if expected_base is not None and expected_base != old_baseline:
                     raise RuntimeError("explicit base does not match registered local baseline")
                 writes = {}
+                resolved = {}
                 for relative, content in files.items():
                     path = safe_target(base, relative)
                     current = file_sha256(path) if path.is_file() else None
-                    if current != old_baseline.get(relative) and current != bytes_sha256(content):
-                        raise RuntimeError(f"local target changed since binding: {relative}")
-                    writes[(Path(binding["target"]) / relative).as_posix()] = content
+                    try:
+                        merged = reconcile(path.read_bytes() if path.is_file() else None,
+                            content, old_baseline.get(relative), base_content.get(relative))
+                    except RuntimeError as exc:
+                        raise RuntimeError(f'{relative}: {exc}') from exc
+                    incoming_content[relative] = content
+                    if merged is not None:
+                        writes[(Path(binding['target']) / relative).as_posix()] = merged
+                        resolved[relative] = merged
+                if strategy == 'skill-tree' and dependency_check(resolved) is not True:
+                    raise RuntimeError('merged Skill dependencies did not validate')
                 next_baseline = dict(old_baseline)
                 next_baseline.update({rel: bytes_sha256(data) for rel, data in files.items()})
             binding["baseline"] = next_baseline
+            for rel, data in incoming_content.items():
+                if len(data) <= 1024 * 1024:
+                    base_content[rel] = base64.b64encode(data).decode('ascii')
+                else:
+                    base_content.pop(rel, None)
+            binding['base_content'] = base_content
             state["bindings"][name] = binding
             registry_bytes = (json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
             # Binding baseline and target files share the same durable changed-file journal.
