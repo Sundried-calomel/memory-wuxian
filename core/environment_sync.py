@@ -30,6 +30,37 @@ MAX_PACKAGE_BYTES = 8 * 1024 * 1024
 _LOCAL_PATH = re.compile(rb"(?i)(?:[a-z]:\\users\\[^\\\s]+|/(?:users|home)/[^/\s]+)")
 _PRIVATE_KEY = re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")
 _TOKEN = re.compile(rb"(?i)\bsk-[A-Za-z0-9_-]{20,}\b")
+_PATH_REF = re.compile(r"\{\{MW_PATH:([a-z][a-z0-9_-]*)\}\}")
+
+
+class WaitingForSource(ValueError):
+    def __init__(self, keys):
+        self.keys = sorted(keys)
+        super().__init__('waiting for source files: ' + ', '.join(self.keys))
+
+
+def path_bindings(config):
+    values = config.get('path_bindings', {})
+    if not isinstance(values, dict) or any(
+        not re.fullmatch(r'[a-z][a-z0-9_-]*', key) or not isinstance(value, str)
+        or not value or '\n' in value or '\r' in value or '{{' in value
+        for key, value in values.items()
+    ):
+        raise ValueError('invalid device-local path_bindings')
+    if len(set(values.values())) != len(values):
+        raise ValueError('path_bindings must have distinct paths')
+    return values
+
+
+def render_agents(files, config):
+    if 'path-keys.json' not in files:
+        return files['AGENTS.md']
+    text = files['AGENTS.md'].decode('utf-8')
+    bindings = path_bindings(config)
+    missing = sorted(set(_PATH_REF.findall(text)) - bindings.keys())
+    if missing:
+        raise WaitingForSource(missing)
+    return _PATH_REF.sub(lambda match: bindings[match[1]], text).encode('utf-8')
 
 
 def _safe_relative(name: str) -> str:
@@ -68,8 +99,18 @@ def validate_files(selection_id: str, files: Mapping[str, bytes]) -> dict[str, b
         normalized[name] = data
 
     if selection_id == "global-codex-agents":
+        if set(normalized) == {"AGENTS.md", "path-keys.json"}:
+            text = normalized['AGENTS.md'].decode('utf-8')
+            keys = sorted(set(_PATH_REF.findall(text)))
+            if json.loads(normalized['path-keys.json']) != {'format': 'memory-wuxian-path-refs-v1', 'keys': keys} or not keys:
+                raise ValueError('invalid AGENTS path reference manifest')
+            if '{{MW_PATH:' in _PATH_REF.sub('', text):
+                raise ValueError('invalid AGENTS path placeholder')
+            return normalized
         if set(normalized) != {"AGENTS.md"}:
             raise ValueError("global AGENTS selection is a single whole-file item")
+        if b'{{MW_PATH:' in normalized['AGENTS.md']:
+            raise ValueError('AGENTS path references require path-keys.json')
         normalized["AGENTS.md"].decode("utf-8")
         return normalized
 
@@ -127,7 +168,17 @@ def collect_selected_files(selection_id: str, local_sources: Mapping[str, str]) 
         path = Path(local_sources["agents_file"])
         if path.is_symlink() or not path.is_file():
             raise ValueError("selected local global AGENTS.md is unavailable")
-        return validate_files(selection_id, {"AGENTS.md": path.read_bytes()})
+        text = path.read_bytes().decode('utf-8')
+        bindings = path_bindings(local_sources)
+        if '{{MW_PATH:' in text:
+            raise ValueError('local AGENTS contains unresolved path references')
+        for key, value in sorted(bindings.items(), key=lambda item: -len(item[1])):
+            text = text.replace(value, '{{MW_PATH:' + key + '}}')
+        files = {'AGENTS.md': text.encode('utf-8')}
+        keys = sorted(set(_PATH_REF.findall(text)))
+        if keys:
+            files['path-keys.json'] = canonical_json_bytes({'format': 'memory-wuxian-path-refs-v1', 'keys': keys})
+        return validate_files(selection_id, files)
     if selection_id == "memory-wuxian-core":
         return collect_core_files(local_sources["core_directory"], local_sources["skill_entry"])
     raise ValueError("unknown local environment selection")
@@ -185,7 +236,8 @@ def run_once(store, service, config) -> dict:
                     "revision_id": revision_id(selection_id, files)})
             except Exception as exc:
                 status["published"].append({"selection": selection_id,
-                                            "state": "error", "error_type": type(exc).__name__})
+                                            "state": "error", "error_type": type(exc).__name__,
+                                            "error": str(exc)[:500]})
 
         for received in core_sync.receive_files(limit=config.get("receive_limit", 32)):
             verified = received.get("verified", {})
@@ -209,20 +261,26 @@ def run_once(store, service, config) -> dict:
                     raise ValueError("local binding strategy does not match selected package")
                 check = (lambda items, sid=selection_id: _dependency_check(sid, items)) \
                     if selected["strategy"] == "skill-tree" else None
-                apply_files = {"": files["AGENTS.md"]} if selected["strategy"] == "whole-file" else files
+                apply_files = {"": render_agents(files, environment_config)} if selected["strategy"] == "whole-file" else files
                 applied = service.apply(selected["binding_name"], apply_files,
                                         dependency_check=check)
                 core_sync.acknowledge_files(received)
                 status["received"].append({"selection": selection_id,
                     "state": applied.get("status", "applied"),
                     "revision_id": verified["revision_id"], "acknowledged": True})
+            except WaitingForSource as exc:
+                status['received'].append({'selection': selection_id,
+                    'state': 'waiting-source', 'missing_sources': exc.keys,
+                    'revision_id': verified['revision_id'], 'acknowledged': False})
             except Exception as exc:
                 status["received"].append({"selection": selection_id,
                     "state": "conflict" if isinstance(exc, RuntimeError) else "error",
-                    "error_type": type(exc).__name__, "error": str(exc), "acknowledged": False})
+                    "error_type": type(exc).__name__, "error": str(exc)[:500], "acknowledged": False})
         errors = any(x["state"] in {"error", "conflict", "rejected", "pending-binding"}
                      for x in status["published"] + status["received"])
         status["state"] = "partial" if errors else "completed"
+        status['waiting_sources'] = sorted({key for item in status['received']
+            for key in item.get('missing_sources', [])})
     except Exception as exc:
         status["state"] = "error"
         status["error_type"] = type(exc).__name__

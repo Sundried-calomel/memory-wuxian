@@ -79,7 +79,9 @@ def dispatch(runtime: MemoryRuntime, request: Any, session: dict[str, bool] | No
     if method == "tools/list":
         return _response({"jsonrpc": "2.0", "id": request_id, "result": {"tools": _TOOLS}})
     params = request.get("params", {})
-    if not isinstance(params, dict) or set(params) - {"name", "arguments"} or not isinstance(params.get("name"), str):
+    if (not isinstance(params, dict) or set(params) - {"name", "arguments", "_meta"}
+            or not isinstance(params.get("name"), str)
+            or ('_meta' in params and not isinstance(params['_meta'], dict))):
         return _response({"jsonrpc": "2.0", "id": request_id, "error": {"code": -32602, "message": "invalid tool call"}})
     name, args = params["name"], params.get("arguments", {})
     if not isinstance(args, dict):

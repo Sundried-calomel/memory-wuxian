@@ -177,7 +177,10 @@ function render(d){
   if(pending)liveRows.push([labels[5],pending,false]);
   if(live.sync?.receive_error)liveRows.push(['同步接收',live.sync.receive_error.error+'；等待序号 '+live.sync.receive_error.expected_sequence,true]);
   if(live.sync?.error)liveRows.push(['同步',live.sync.error,true]);
+  for(const [channel,error] of Object.entries(live.sync?.ack_errors||{}))liveRows.push(['ACK: '+channel,error,true]);
   if(live.environment?.state==='partial'||live.environment?.state==='error')liveRows.push(['环境同步',live.environment.state,true]);
+  if(live.environment?.waiting_sources?.length)liveRows.push(['等待源文件',live.environment.waiting_sources.join(', '),false]);
+  for(const item of [...(live.environment?.published||[]),...(live.environment?.received||[])])if(['error','conflict'].includes(item.state))liveRows.push(['Environment: '+(item.selection||''),item.error||item.error_type,true]);
   if(live.error)liveRows.push(['Error',live.error,true]);
   if(live.summary_errors)Object.entries(live.summary_errors).slice(0,3).forEach(([id,error])=>liveRows.push([id,error,true]));
   document.querySelector('#collector-alerts').innerHTML=(c?.alerts||[]).map(id=>`<div class="collector-alert">${esc(alertCopy[id]||id)}</div>`).join('')+liveRows.map(([label,value,warning])=>`<div class="${warning?'collector-alert':'collector-status'}"><b>${esc(label)}:</b> ${esc(liveValue(value))}</div>`).join('');

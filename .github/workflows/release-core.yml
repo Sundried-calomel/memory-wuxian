@@ -30,6 +30,8 @@ jobs:
       - run: python -m unittest discover -s tests -p test_release.py -v
       - run: python -m unittest discover -s tests -p test_dashboard_data.py -v
       - run: python -m unittest discover -s tests -p test_operational_repairs.py -v
+      - run: python -m unittest discover -s tests -p test_environment_autosync.py -v
+      - run: python -m unittest discover -s tests -p test_sync_waiting_mcp.py -v
       - run: python tests/smoke_native.py
         env:
           MW_ENVELOPE_BINARY: ${{ matrix.binary }}

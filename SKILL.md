@@ -27,7 +27,23 @@ both capture schedulers against the new archive. File-change records retain full
 `core/dashboard.py --root <archive> --config <local-config> --port 8765` serves localhost.
 
 Rules, Skills and selected files synchronize only to explicitly bound destinations;
-stop on unhandled local edits. Publishing a package is not receiving or applying it.
+Global rules use `environment.path_bindings` (stable name to local path) to replace
+device paths with `{{MW_PATH:name}}` references in transit. The accompanying
+`path-keys.json` declares required names. Receivers must configure those names;
+missing mappings block application without changing AGENTS.md or sending an ACK.
+Missing source mappings are reported as `waiting-source`, not a sync failure;
+other selections continue, and the pending selection is retried on later ticks.
+Local AGENTS.md remains rendered and unchanged on publication. Old receivers reject
+the two-file template; upgrade them before receiving it. Never guess remote paths.
+Environment synchronization compares local and incoming files against a verified
+content baseline: accept remote-only edits, retain local-only edits for publication,
+and use Git three-way merge for non-overlapping UTF-8 changes. Missing bases,
+overlapping edits or unavailable merge tooling retain originals and report a conflict.
+Skill trees commit atomically after merged dependency checks. Each accepted incoming
+version and its base content are recorded in the same transaction as changed files.
+The existing adaptive worker checks environment synchronization each completed tick;
+short polling reduces divergence but does not resolve concurrent edits by timestamp.
+Publishing a package is not receiving or applying it.
 Only receiving-device ACKs establish delivery. Summary accuracy is not proven by hashes;
 retrieve original evidence when accuracy matters. Keep locks and atomic commit recovery.
 The complete distribution bundles stable installer 1.1.0. The normal dashboard entry enables explicit update checks; no background release polling. Do not reintroduce retired governance or installer paths.

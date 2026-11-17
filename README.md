@@ -1,4 +1,11 @@
-# Memory Wuxian 2.20.7
+# Memory Wuxian 2.20.8
+
+## Synchronization fixes
+
+Environment sync accepts one-sided edits and uses Git three-way merging for non-overlapping UTF-8 changes. Git is needed only for concurrent merging. Real conflicts retain originals; Skill trees commit atomically. Verified content baselines are saved with updates.
+Missing AGENTS path mappings now show `waiting-source`, not failure. The pending whole rule file is not applied or ACKed; other selections continue. Configure real paths after source files arrive to resume.
+MCP accepts standard `_meta`; existing clients must reconnect after upgrading. Also includes macOS cloud-placeholder support and independent ACK-channel error handling.
+CI does not establish user-device activation or cloud delivery.
 
 [中文](README.zh-CN.md) | [日本語](README.ja.md)
 
