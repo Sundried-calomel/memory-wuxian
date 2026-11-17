@@ -48,7 +48,6 @@ with zipfile.ZipFile(archive) as bundle:
     assert bundle.testzip() is None
     assert set(bundle.namelist()) == {*files, 'MANIFEST.json', 'INSTALL.json'}
 checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
-(dist / (archive.name+'.sha256')).write_text(f'{checksum}  {archive.name}\n', encoding='utf-8')
 print(json.dumps({'package': archive.name, 'files': len(files) + 2, 'sha256': checksum}))
 
 # The updater keeps consuming the original payload name. The complete distribution
@@ -69,5 +68,4 @@ with zipfile.ZipFile(archive) as payload, zipfile.ZipFile(complete,'w',zipfile.Z
     bundle.writestr('BUNDLE.json',json.dumps(dict(product_version=version,installer_version=installer_version,
         payload_sha256=checksum,installer_files=engine_hashes),sort_keys=True).encode('utf-8'))
 complete_checksum=hashlib.sha256(complete.read_bytes()).hexdigest()
-(dist/(complete.name+'.sha256')).write_text(f'{complete_checksum}  {complete.name}\n',encoding='utf-8')
 print(json.dumps({'package':complete.name,'product_version':version,'installer_version':installer_version,'sha256':complete_checksum}))

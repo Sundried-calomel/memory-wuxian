@@ -1,4 +1,13 @@
-# v2.20.8 - environment sync and MCP compatibility
+# v2.20.9 - lean release checks
+
+- Stop generating/publishing standalone checksum sidecars and SHA256SUMS files.
+- Preserve installation checks using GitHub asset digests, package manifests, safe paths, compatibility and transactional recovery.
+- Select regression tests from changes since the previous release. Documentation-only changes do not run behavioral suites; small patches run mapped tests.
+- Run native exchange and complete-install smoke tests only when dependencies change. Shared-core changes retain wider coverage; full regression can be explicitly requested.
+- Disable duplicate automatic installer push/PR workflows. One release-tag pipeline owns automatic validation across supported platforms.
+- No archive migration or runtime behavior change. Installer engine version stays unchanged.
+
+## Previous v2.20.8 changes
 
 - Missing rule-source mappings now wait without failing unrelated synchronization. No partial-rule ACK is fabricated.
 - Portable AGENTS path templates, automatic one-sided updates, verified content baselines and Git three-way merging; overlapping conflicts retain originals.
